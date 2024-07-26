@@ -1,0 +1,19 @@
+<?php
+
+use Slim\App;
+use App\Controllers\OfferingController;
+use App\Models\Offering;
+
+return function (App $app) {
+    $pdo = require __DIR__ . '/../../config/database.php';
+	$offering = new Offering($pdo);
+	$offeringController = new OfferingController($offering);
+
+    $app->get('/offerings', [$offeringController, 'getOfferings']);
+    $app->get('/offerings/{id}', [$offeringController, 'getOfferingById']);
+    $app->get('/categories/{categoryID}/offerings', [$offeringController, 'getOfferingsByCategoryId']);
+    $app->get('/users/{userID}/offerings', [$offeringController, 'getOfferingsByUserId']);
+    $app->post('/offerings', [$offeringController, 'createOffering']);
+    $app->put('/offerings/{id}', [$offeringController, 'updateOfferings']);
+    $app->delete('/offerings/{id}', [$offeringController, 'deleteOfferings']);
+};
