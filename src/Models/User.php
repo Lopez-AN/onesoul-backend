@@ -8,6 +8,7 @@ use App\Exceptions\ValidationException;
 
 #require_once('/../Utils/FormatImg.php');
 
+
 class User {
     protected $db;
 
@@ -15,34 +16,57 @@ class User {
         $this->db = $db;
     }
 
-    public function getUsers() {
+    public function getUsers($paginator) {
         try {
-            $stmt = $this->db->query("SELECT u.*, m.URL FROM Users as u
-            LEFT JOIN Media as m ON u.UserID = m.UserID");
+            $stmt = $this->db->prepare("SELECT u.*, m.URL FROM Users as u
+            LEFT JOIN Media as m ON u.UserID = m.UserID
+            LIMIT :_limit OFFSET :_offset");
+
+            $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
+            $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
+            $stmt->execute();
+
             return $stmt->fetchAll(PDO::FETCH_ASSOC);
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());
         }
     }
 
-    public function getUserById($id) {
+    public function getUserById($paginator, $id) {
         try {
             $stmt = $this->db->prepare("SELECT u.*, m.URL FROM Users as u
-            LEFT JOIN Media as m ON u.UserID = m.UserID WHERE u.UserID = :id");
+            LEFT JOIN Media as m ON u.UserID = m.UserID WHERE u.UserID = :id
+            LIMIT :_limit OFFSET :_offset");
+
             $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+            $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
+            $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
             $stmt->execute();
+
             return $stmt->fetch(PDO::FETCH_ASSOC);
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());
         }
     }
 
-    public function getUsersByType($type) {
+    public function getUsersByType($paginator, $type) {
         try {
-            $stmt = $this->db->prepare("SELECT u.*, m.URL FROM Users as u
-            LEFT JOIN Media as m ON u.UserID = m.UserID WHERE u.UserType = :type");
-            $stmt->bindParam(':type', $type, PDO::PARAM_STR);
+            if($type == 'both'){
+                $stmt = $this->db->prepare("SELECT u.*, m.URL FROM Users as u
+                LEFT JOIN Media as m ON u.UserID = m.UserID
+                LIMIT :_limit OFFSET :_offset");
+            }else{
+                $stmt = $this->db->prepare("SELECT u.*, m.URL FROM Users as u
+                LEFT JOIN Media as m ON u.UserID = m.UserID 
+                WHERE lower(u.UserType) = 'both' OR u.UserType = :type
+                LIMIT :_limit OFFSET :_offset");
+                $stmt->bindParam(':type', $type, PDO::PARAM_STR);
+            }
+
+            $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
+            $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
             $stmt->execute();
+
             return $stmt->fetchAll(PDO::FETCH_ASSOC);
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());

@@ -25,7 +25,7 @@ return function (App $app) {
 
     $app->get('/categories', [$categoryController, 'getCategories']);
     $app->get('/categories/{id}', [$categoryController, 'getCategoryById']);
-    $app->get('/categories/parent[/{id}]', [$categoryController, 'getCategoryByParentId']);
+    $app->get('/categories/parent/{id}', [$categoryController, 'getCategoryByParentId']);
     $app->post('/categories', [$categoryController, 'createCategory']);
     $app->put('/categories/{id}', [$categoryController, 'updateCategory']);
     $app->delete('/categories/{id}', [$categoryController, 'deleteCategory']);

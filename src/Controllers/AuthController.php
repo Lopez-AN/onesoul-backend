@@ -30,7 +30,7 @@ class AuthController{
         }
         $payload = [
           'issued' => time(),
-          'expire' => time() + $GLOBALS['config']['jwt']['lifetime'], // 1 hora de expiración
+          'expire' => time() + $GLOBALS['config']['jwt']['lifetime'],
           'data' => [
             'userID' => $auth[0]['UserID'],
             'FirstName' => $auth[0]['FirstName'],
@@ -50,3 +50,5 @@ class AuthController{
     return $response->withHeader('Content-Type', 'application/json');
   }
 }
+
+

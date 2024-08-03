@@ -13,39 +13,60 @@ class Category {
         $this->db = $db;
     }
 
-    public function getCategories() {
+    public function getCategories($paginator) {
         try {
-            $stmt = $this->db->query("SELECT c.*, m.URL FROM Categories AS c
-	    LEFT JOIN Media as m ON c.CategoryID = m.CategoryID");
+            $stmt = $this->db->prepare("SELECT c.*, m.URL FROM Categories AS c
+            LEFT JOIN Media as m ON c.CategoryID = m.CategoryID
+            LIMIT :_limit OFFSET :_offset");
+
+            $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
+            $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
+            $stmt->execute();
+
             return $stmt->fetchAll(PDO::FETCH_ASSOC);
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());
         }
     }
 
-    public function getCategoryById($id) {
+    public function getCategoryById($paginator, $id) {
        try {
             $stmt = $this->db->prepare("SELECT c.*, m.URL FROM Categories AS c
-	    LEFT JOIN Media as m ON c.CategoryID = m.CategoryID WHERE c.CategoryID = :id");
+	        LEFT JOIN Media as m ON c.CategoryID = m.CategoryID WHERE c.CategoryID = :id
+            LIMIT :_limit OFFSET :_offset");
+
             $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+            $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
+            $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
             $stmt->execute();
+
             return $stmt->fetch(PDO::FETCH_ASSOC);
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());
         }
     }
 
-    public function getCategoryByParentId($id) {
+    public function getCategoryByParentId($paginator, $id) {
         try {
-            if ($id === null) {
-            $stmt = $this->db->query("SELECT c.*, m.URL FROM Categories AS c
-	    LEFT JOIN Media as m ON c.CategoryID = m.CategoryID");
-        } else {
-            $stmt = $this->db->prepare("SELECT c.*, m.URL FROM Categories AS c
-	    LEFT JOIN Media as m ON c.CategoryID = m.CategoryID WHERE c.ParentCategoryID = :id");
-            $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+            if(is_null($id)){
+                $stmt = $this->db->prepare("SELECT c.*, m.URL FROM Categories AS c
+	            LEFT JOIN Media as m ON c.CategoryID = m.CategoryID WHERE c.ParentCategoryID is null
+                LIMIT :_limit OFFSET :_offset");
+
+                $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
+                $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
+            }else{
+                $stmt = $this->db->prepare("SELECT c.*, m.URL FROM Categories AS c
+	            LEFT JOIN Media as m ON c.CategoryID = m.CategoryID WHERE c.ParentCategoryID = :id
+                LIMIT :_limit OFFSET :_offset");
+
+                $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+                $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
+                $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
+            }
+
             $stmt->execute();
-	}
+
             return $stmt->fetchAll(PDO::FETCH_ASSOC);
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());

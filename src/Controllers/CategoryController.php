@@ -9,6 +9,8 @@ use App\Exceptions\DatabaseException;
 use App\Exceptions\NotFoundException;
 use App\Exceptions\ValidationException;
 
+require_once(ROOT . '/src/Utils/Paginator.php');
+
 class CategoryController {
     protected $category;
 
@@ -17,8 +19,10 @@ class CategoryController {
     }
 
     public function getCategories(Request $request, Response $response, $args) {
+        $paginator = paginator($request);
+
         try {
-            $categories = $this->category->getCategories();
+            $categories = $this->category->getCategories($paginator);
             $response->getBody()->write(json_encode($categories));
         } catch (DatabaseException $e) {
             $response = $response->withStatus(500);
@@ -28,9 +32,10 @@ class CategoryController {
     }
 
     public function getCategoryById(Request $request, Response $response, $args) {
+        $paginator = paginator($request);
         $id = $args['id'];
         try {
-            $category = $this->category->getCategoryById($id);
+            $category = $this->category->getCategoryById($paginator,$id);
             if ($category) {
                 $response->getBody()->write(json_encode($category));
             } else {
@@ -47,9 +52,10 @@ class CategoryController {
     }
 
     public function getCategoryByParentId(Request $request, Response $response, $args) {
-	$id = $args['id'] ?? null;
+        $paginator = paginator($request);
+	    $id = $args['id'] == -1 ? null : $args['id'];
         try {
-            $categories = $this->category->getCategoryByParentId($id);
+            $categories = $this->category->getCategoryByParentId($paginator,$id);
             if ($categories) {
                 $response->getBody()->write(json_encode($categories));
             } else {

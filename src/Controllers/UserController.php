@@ -9,6 +9,8 @@ use App\Exceptions\DatabaseException;
 use App\Exceptions\NotFoundException;
 use App\Exceptions\ValidationException;
 
+require_once(ROOT . '/src/Utils/Paginator.php');
+
 class UserController {
     protected $user;
 
@@ -17,8 +19,10 @@ class UserController {
     }
 
     public function getUsers(Request $request, Response $response, $args) {
+        $paginator = paginator($request);
+
         try {
-            $users = $this->user->getUsers();
+            $users = $this->user->getUsers($paginator);
             $response->getBody()->write(json_encode($users));
         } catch (DatabaseException $e) {
             $response = $response->withStatus(500);
@@ -28,9 +32,11 @@ class UserController {
     }
 
     public function getUserById(Request $request, Response $response, $args) {
+        $paginator = paginator($request);
+
         $id = $args['id'];
         try {
-            $user = $this->user->getUserById($id);
+            $user = $this->user->getUserById($paginator, $id);
             if ($user) {
                 $response->getBody()->write(json_encode($user));
             } else {
@@ -47,9 +53,11 @@ class UserController {
     }
 
     public function getUsersByType(Request $request, Response $response, $args) {
+        $paginator = paginator($request);
+
         $type = $args['type'];
         try {
-            $users = $this->user->getUsersByType($type);
+            $users = $this->user->getUsersByType($paginator, $type);
             $response->getBody()->write(json_encode($users));
         } catch (DatabaseException $e) {
             $response = $response->withStatus(500);
