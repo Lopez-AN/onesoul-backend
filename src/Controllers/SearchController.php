@@ -8,6 +8,8 @@ use App\Models\Search;
 use App\Exceptions\DatabaseException;
 use App\Exceptions\NotFoundException;
 
+require_once(ROOT . '/src/Utils/Paginator.php');
+
 class SearchController {
     protected $search;
 
@@ -16,10 +18,11 @@ class SearchController {
     }
 
     public function searchOfferings(Request $request, Response $response, $args) {
+        $paginator = paginator($request);
         $queryParams = $request->getQueryParams();
         $query = $queryParams['query'];
         try {
-            $results = $this->search->searchOfferings($query);
+            $results = $this->search->searchOfferings($paginator, $query);
             $response->getBody()->write(json_encode($results));
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());
@@ -28,10 +31,11 @@ class SearchController {
     }
 
     public function searchUsers(Request $request, Response $response, $args) {
+        $paginator = paginator($request);
         $queryParams = $request->getQueryParams();
         $query = $queryParams['query'];
         try {
-            $results = $this->search->searchUsers($query);
+            $results = $this->search->searchUsers($paginator, $query);
             $response->getBody()->write(json_encode($results));
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());

@@ -9,6 +9,8 @@ use App\Exceptions\DatabaseException;
 use App\Exceptions\NotFoundException;
 use App\Exceptions\ValidationException;
 
+require_once(ROOT . '/src/Utils/Paginator.php');
+
 class OfferingController {
     protected $offering;
 
@@ -17,8 +19,9 @@ class OfferingController {
     }
 
     public function getOfferings(Request $request, Response $response, $args) {
+        $paginator = paginator($request);
         try {
-            $offerings = $this->offering->getOfferings();
+            $offerings = $this->offering->getOfferings($paginator);
             $response->getBody()->write(json_encode($offerings));
         } catch (DatabaseException $e) {
             $response = $response->withStatus(500);
@@ -28,9 +31,10 @@ class OfferingController {
     }
 
     public function getOfferingById(Request $request, Response $response, $args) {
+        $paginator = paginator($request);
         $id = $args['id'];
         try {
-            $offering = $this->offering->getOfferingById($id);
+            $offering = $this->offering->getOfferingById($paginator, $id);
             if ($offering) {
                 $response->getBody()->write(json_encode($offering));
             } else {
@@ -47,9 +51,10 @@ class OfferingController {
     }
 
     public function getOfferingsByCategoryId(Request $request, Response $response, $args) {
+        $paginator = paginator($request);
         $categoryId = $args['categoryID'];
         try {
-            $offerings = $this->offering->getOfferingsByCategoryId($categoryId);
+            $offerings = $this->offering->getOfferingsByCategoryId($paginator, $categoryId);
             $response->getBody()->write(json_encode($offerings));
         } catch (\Exception $e) {
             $response = $response->withStatus(500);
@@ -59,9 +64,10 @@ class OfferingController {
     }
 
     public function getOfferingsByUserId(Request $request, Response $response, $args) {
+        $paginator = paginator($request);
         $userId = $args['userID'];
         try {
-            $offerings = $this->offering->getOfferingsByUserId($userId);
+            $offerings = $this->offering->getOfferingsByUserId($paginator, $userId);
             $response->getBody()->write(json_encode($offerings));
         } catch (\Exception $e) {
             $response = $response->withStatus(500);
@@ -69,7 +75,7 @@ class OfferingController {
         }
         return $response->withHeader('Content-Type', 'application/json');
     }
-    
+
     public function createOffering(Request $request, Response $response, $args) {
         $data = $request->getParsedBody();
         try {

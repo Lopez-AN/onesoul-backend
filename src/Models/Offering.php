@@ -13,10 +13,16 @@ class Offering {
         $this->db = $db;
     }
 
-    public function getOfferings() {
+    public function getOfferings($paginator) {
         try {
-            $stmt = $this->db->query("SELECT o.*, m.URL FROM Offerings AS o
-            LEFT JOIN Media as m ON o.OfferingID = m.OfferingID");
+            $stmt = $this->db->prepare("SELECT o.*, m.URL FROM Offerings AS o
+            LEFT JOIN Media as m ON o.OfferingID = m.OfferingID
+            LIMIT :_limit OFFSET :_offset");
+
+            $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
+            $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
+            $stmt->execute();
+
             return $stmt->fetchAll(PDO::FETCH_ASSOC);
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());
@@ -26,9 +32,14 @@ class Offering {
     public function getOfferingById($id) {
         try {
             $stmt = $this->db->prepare("SELECT o.*, m.URL FROM Offerings AS o
-            LEFT JOIN Media as m ON o.OfferingID = m.OfferingID WHERE o.OfferingID = :id");
+            LEFT JOIN Media as m ON o.OfferingID = m.OfferingID WHERE o.OfferingID = :id
+            LIMIT :_limit OFFSET :_offset");
+
             $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+            $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
+            $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
             $stmt->execute();
+
             return $stmt->fetch(PDO::FETCH_ASSOC);
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());
@@ -39,8 +50,12 @@ class Offering {
         try {
             $stmt = $this->db->prepare("SELECT o.*, m.URL FROM Offerings AS o
             LEFT JOIN Media as m ON o.OfferingID = m.OfferingID WHERE o.CategoryID = :categoryId");
+
             $stmt->bindParam(':categoryId', $categoryId, PDO::PARAM_INT);
+            $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
+            $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
             $stmt->execute();
+
             return $stmt->fetchAll(PDO::FETCH_ASSOC);
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());
@@ -50,9 +65,14 @@ class Offering {
     public function getOfferingsByUserId($userId) {
         try {
             $stmt = $this->db->prepare("SELECT o.*, m.URL FROM Offerings AS o
-            LEFT JOIN Media as m ON o.OfferingID = m.OfferingID WHERE o.UserID = :userId");
+            LEFT JOIN Media as m ON o.OfferingID = m.OfferingID WHERE o.UserID = :userId
+            LIMIT :_limit OFFSET :_offset");
+
             $stmt->bindParam(':userId', $userId, PDO::PARAM_INT);
+            $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
+            $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
             $stmt->execute();
+
             return $stmt->fetchAll(PDO::FETCH_ASSOC);
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());

@@ -12,23 +12,43 @@ class Search {
         $this->pdo = $pdo;
     }
 
-    public function searchOfferings($query) {
+    public function searchOfferings($paginator, $query) {
         try {
             $searchQuery = "%$query%";
-            $stmt = $this->pdo->prepare('SELECT * FROM Offerings WHERE Title LIKE ? OR Description LIKE ? OR Tags LIKE ?');
-            $stmt->execute([$searchQuery, $searchQuery, $searchQuery]);
+            $stmt = $this->pdo->prepare('SELECT * FROM Offerings
+            WHERE Title LIKE :search1 OR Description LIKE :search2 OR Tags LIKE :search3
+            LIMIT :_limit OFFSET :_offset');
+
+            $stmt->bindParam(':search1', $searchQuery, PDO::PARAM_STR);
+            $stmt->bindParam(':search2', $searchQuery, PDO::PARAM_STR);
+            $stmt->bindParam(':search3', $searchQuery, PDO::PARAM_STR);
+            $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
+            $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
+            $stmt->execute();
+
             return $stmt->fetchAll(PDO::FETCH_ASSOC);
+
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());
         }
     }
 
-    public function searchUsers($query) {
+    public function searchUsers($paginator, $query) {
         try {
             $searchQuery = "%$query%";
-            $stmt = $this->pdo->prepare('SELECT * FROM Users WHERE FirstName LIKE ? OR LastName LIKE ? OR Biography LIKE ?');
-            $stmt->execute([$searchQuery, $searchQuery, $searchQuery]);
+            $stmt = $this->pdo->prepare('SELECT * FROM Users
+            WHERE FirstName LIKE :search1 OR LastName LIKE :search2 OR Biography LIKE :search3
+            LIMIT :_limit OFFSET :_offset');
+
+            $stmt->bindParam(':search1', $searchQuery, PDO::PARAM_STR);
+            $stmt->bindParam(':search2', $searchQuery, PDO::PARAM_STR);
+            $stmt->bindParam(':search3', $searchQuery, PDO::PARAM_STR);
+            $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
+            $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
+            $stmt->execute();
+
             return $stmt->fetchAll(PDO::FETCH_ASSOC);
+
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());
         }
