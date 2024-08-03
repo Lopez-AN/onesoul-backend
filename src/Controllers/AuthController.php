@@ -30,7 +30,7 @@ class AuthController{
         }
         $payload = [
           'issued' => time(),
-          'expire' => time() + 3600, // 1 hora de expiración
+          'expire' => time() + $GLOBALS['config']['jwt']['lifetime'], // 1 hora de expiración
           'data' => [
             'userID' => $auth[0]['UserID'],
             'FirstName' => $auth[0]['FirstName'],
