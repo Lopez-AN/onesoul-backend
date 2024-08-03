@@ -5,7 +5,21 @@ use App\Controllers\OfferingController;
 use App\Models\Offering;
 
 return function (App $app) {
-    $pdo = require __DIR__ . '/../../config/database.php';
+    # Proteccion de rutas
+    $app->add(new Tuupola\Middleware\JwtAuthentication([
+        "secret" => $GLOBALS['config']['jwt']['secret'],
+        "rules" => [
+            new Tuupola\Middleware\JwtAuthentication\RequestPathRule([
+                "path" => "/offerings",
+                "ignore" => []
+            ]),
+            new Tuupola\Middleware\JwtAuthentication\RequestMethodRule([
+                "ignore" => ["OPTIONS","GET"]
+            ])
+        ]
+    ]));
+
+    $pdo = require __DIR__ . './../core/database.php';
 	$offering = new Offering($pdo);
 	$offeringController = new OfferingController($offering);
 

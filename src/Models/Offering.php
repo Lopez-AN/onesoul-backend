@@ -15,7 +15,7 @@ class Offering {
 
     public function getOfferings() {
         try {
-            $stmt = $this->db->query("SELECT o.*, m.URL FROM Offerings AS o 
+            $stmt = $this->db->query("SELECT o.*, m.URL FROM Offerings AS o
             LEFT JOIN Media as m ON o.OfferingID = m.OfferingID");
             return $stmt->fetchAll(PDO::FETCH_ASSOC);
         } catch (\PDOException $e) {
@@ -25,7 +25,7 @@ class Offering {
 
     public function getOfferingById($id) {
         try {
-            $stmt = $this->db->prepare("SELECT o.*, m.URL FROM Offerings AS o 
+            $stmt = $this->db->prepare("SELECT o.*, m.URL FROM Offerings AS o
             LEFT JOIN Media as m ON o.OfferingID = m.OfferingID WHERE o.OfferingID = :id");
             $stmt->bindParam(':id', $id, PDO::PARAM_INT);
             $stmt->execute();
@@ -37,7 +37,7 @@ class Offering {
 
     public function getOfferingsByCategoryId($categoryId) {
         try {
-            $stmt = $this->db->prepare("SELECT o.*, m.URL FROM Offerings AS o 
+            $stmt = $this->db->prepare("SELECT o.*, m.URL FROM Offerings AS o
             LEFT JOIN Media as m ON o.OfferingID = m.OfferingID WHERE o.CategoryID = :categoryId");
             $stmt->bindParam(':categoryId', $categoryId, PDO::PARAM_INT);
             $stmt->execute();
@@ -49,7 +49,7 @@ class Offering {
 
     public function getOfferingsByUserId($userId) {
         try {
-            $stmt = $this->db->prepare("SELECT o.*, m.URL FROM Offerings AS o 
+            $stmt = $this->db->prepare("SELECT o.*, m.URL FROM Offerings AS o
             LEFT JOIN Media as m ON o.OfferingID = m.OfferingID WHERE o.UserID = :userId");
             $stmt->bindParam(':userId', $userId, PDO::PARAM_INT);
             $stmt->execute();
@@ -58,11 +58,11 @@ class Offering {
             throw new DatabaseException($e->getMessage());
         }
     }
-    
+
     public function createOffering($data) {
         $this->validateOffering($data);
         try {
-            $stmt = $this->db->prepare("INSERT INTO Offerings (Title, Description, CategoryID, Price, CreatedAt, UpdatedAt) 
+            $stmt = $this->db->prepare("INSERT INTO Offerings (Title, Description, CategoryID, Price, CreatedAt, UpdatedAt)
             VALUES (:Title, :Description, :CategoryID, :Price, :CreatedAt, :UpdatedAt)");
             $stmt->execute($data);
             return $this->getOfferingById($this->db->lastInsertId());
@@ -74,7 +74,7 @@ class Offering {
     public function updateOffering($id, $data) {
         $this->validateOffering($data);
         try {
-            $stmt = $this->db->prepare("UPDATE Offerings SET Title = :Title, Description = :Description, CategoryID = 
+            $stmt = $this->db->prepare("UPDATE Offerings SET Title = :Title, Description = :Description, CategoryID =
             :CategoryID, Price = :Price, CreatedAt = :CreatedAt, UpdatedAt = :UpdatedAt WHERE OfferingID = :OfferingID");
             $data['OfferingID'] = $id;
             $stmt->execute($data);

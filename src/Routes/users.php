@@ -5,7 +5,21 @@ use App\Controllers\UserController;
 use App\Models\User;
 
 return function (App $app) {
-    $pdo = require __DIR__ . '/../../config/database.php';
+    # Proteccion de rutas
+    $app->add(new Tuupola\Middleware\JwtAuthentication([
+        "secret" => $GLOBALS['config']['jwt']['secret'],
+        "rules" => [
+            new Tuupola\Middleware\JwtAuthentication\RequestPathRule([
+                "path" => "/users",
+                "ignore" => []
+            ]),
+            new Tuupola\Middleware\JwtAuthentication\RequestMethodRule([
+                "ignore" => ["OPTIONS"]
+            ])
+        ]
+    ]));
+
+    $pdo = require __DIR__ . './../core/database.php';
     $user = new User($pdo);
     $userController = new UserController($user);
 
