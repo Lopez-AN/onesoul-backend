@@ -2,8 +2,8 @@
 
 require __DIR__ . '/../vendor/autoload.php';
 
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
+//error_reporting(E_ALL);
+//ini_set('display_errors', 1);
 
 # Leo la config
 $GLOBALS['config'] = @json_decode(file_get_contents(__DIR__ . '/../config/config.json'),true);

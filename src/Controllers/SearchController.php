@@ -16,7 +16,8 @@ class SearchController {
     }
 
     public function searchOfferings(Request $request, Response $response, $args) {
-        $query = $args['query'];
+        $queryParams = $request->getQueryParams();
+        $query = $queryParams['query'];
         try {
             $results = $this->search->searchOfferings($query);
             $response->getBody()->write(json_encode($results));
@@ -27,7 +28,8 @@ class SearchController {
     }
 
     public function searchUsers(Request $request, Response $response, $args) {
-        $query = $args['query'];
+        $queryParams = $request->getQueryParams();
+        $query = $queryParams['query'];
         try {
             $results = $this->search->searchUsers($query);
             $response->getBody()->write(json_encode($results));
