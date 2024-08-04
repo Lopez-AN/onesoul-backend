@@ -42,6 +42,11 @@ class User {
             $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
             $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
+            $rs = array_map(function($e){
+                $e['Categories'] = is_null($e['Categories']) ? [] : array_map('trim', explode(",", $e['Categories']));
+                return $e;
+            },$rs);
+
             return [
                 "data" => $rs,
                 "rows" => [
