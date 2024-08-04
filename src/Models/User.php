@@ -18,15 +18,37 @@ class User {
 
     public function getUsers($paginator) {
         try {
-            $stmt = $this->db->prepare("SELECT u.*, m.URL FROM Users as u
+            $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName, u.UserName,
+            u.Email, u.Phone, u.AddressName, u.AddressNumber, u.Floor,
+            u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
+            u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
+            u.LastLogin, u.DeactivationDate, u.UserLevel, u.TermsAndConditions, u.SignedContract,
+            GROUP_CONCAT(DISTINCT c.Name ORDER BY c.Name ASC SEPARATOR ', ') AS Categories,
+            u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating, m.URL as imgURL
+            FROM Users as u
+            LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
+            LEFT JOIN Categories as c ON uc.categoryID = c.categoryID
             LEFT JOIN Media as m ON u.UserID = m.UserID
+            LEFT JOIN Reviews as r ON u.UserID = r.SUserID
+            GROUP BY u.UserID
+            ORDER BY u.UserID
             LIMIT :_limit OFFSET :_offset");
 
             $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
             $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
             $stmt->execute();
 
-            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
+            $total = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            return [
+                "data" => $rs,
+                "rows" => [
+                    "total" => $total['total'],
+                    "fetched" => count($rs)
+                ]
+            ];
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());
         }
@@ -34,8 +56,20 @@ class User {
 
     public function getUserById($paginator, $id) {
         try {
-            $stmt = $this->db->prepare("SELECT u.*, m.URL FROM Users as u
+            $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName, u.UserName,
+            u.Email, u.Phone, u.AddressName, u.AddressNumber, u.Floor,
+            u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
+            u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
+            u.LastLogin, u.DeactivationDate, u.UserLevel, u.TermsAndConditions, u.SignedContract,
+            GROUP_CONCAT(DISTINCT c.Name ORDER BY c.Name ASC SEPARATOR ', ') AS Categories,
+            u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating, m.URL as imgURL
+            FROM Users as u
+            LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
+            LEFT JOIN Categories as c ON uc.categoryID = c.categoryID
             LEFT JOIN Media as m ON u.UserID = m.UserID WHERE u.UserID = :id
+            LEFT JOIN Reviews as r ON u.UserID = r.SUserID
+            GROUP BY u.UserID
+            ORDER BY u.UserID
             LIMIT :_limit OFFSET :_offset");
 
             $stmt->bindParam(':id', $id, PDO::PARAM_INT);
@@ -43,7 +77,17 @@ class User {
             $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
             $stmt->execute();
 
-            return $stmt->fetch(PDO::FETCH_ASSOC);
+            $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
+            $total = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            return [
+                "data" => $rs,
+                "rows" => [
+                    "total" => $total['total'],
+                    "fetched" => count($rs)
+                ]
+            ];
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());
         }
@@ -52,13 +96,36 @@ class User {
     public function getUsersByType($paginator, $type) {
         try {
             if($type == 'both'){
-                $stmt = $this->db->prepare("SELECT u.*, m.URL FROM Users as u
+                $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName, u.UserName,
+                u.Email, u.Phone, u.AddressName, u.AddressNumber, u.Floor,
+                u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
+                u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
+                u.LastLogin, u.DeactivationDate, u.UserLevel, u.TermsAndConditions, u.SignedContract,
+                GROUP_CONCAT(DISTINCT c.Name ORDER BY c.Name ASC SEPARATOR ', ') AS Categories,
+                u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating, m.URL as imgURL
+                FROM Users as u
+                LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
+                LEFT JOIN Categories as c ON uc.categoryID = c.categoryID
                 LEFT JOIN Media as m ON u.UserID = m.UserID
+                LEFT JOIN Reviews as
+                ORDER BY u.UserID
                 LIMIT :_limit OFFSET :_offset");
             }else{
-                $stmt = $this->db->prepare("SELECT u.*, m.URL FROM Users as u
-                LEFT JOIN Media as m ON u.UserID = m.UserID 
+                $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName, u.UserName,
+                u.Email, u.Phone, u.AddressName, u.AddressNumber, u.Floor,
+                u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
+                u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
+                u.LastLogin, u.DeactivationDate, u.UserLevel, u.TermsAndConditions, u.SignedContract,
+                GROUP_CONCAT(DISTINCT c.Name ORDER BY c.Name ASC SEPARATOR ', ') AS Categories,
+                u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating, m.URL as imgURL
+                FROM Users as u
+                LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
+                LEFT JOIN Categories as c ON uc.categoryID = c.categoryID
+                LEFT JOIN Media as m ON u.UserID = m.UserID
+                LEFT JOIN Reviews as r ON u.UserID = r.SUserID
                 WHERE lower(u.UserType) = 'both' OR u.UserType = :type
+                GROUP BY u.UserID
+                ORDER BY u.UserID
                 LIMIT :_limit OFFSET :_offset");
                 $stmt->bindParam(':type', $type, PDO::PARAM_STR);
             }
@@ -67,7 +134,17 @@ class User {
             $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
             $stmt->execute();
 
-            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
+            $total = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            return [
+                "data" => $rs,
+                "rows" => [
+                    "total" => $total['total'],
+                    "fetched" => count($rs)
+                ]
+            ];
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());
         }

@@ -14,7 +14,7 @@ return function (App $app) {
                 "ignore" => []
             ]),
             new Tuupola\Middleware\JwtAuthentication\RequestMethodRule([
-                "ignore" => ["OPTIONS"]
+                "ignore" => ["OPTIONS", "GET"]
             ])
         ]
     ]));

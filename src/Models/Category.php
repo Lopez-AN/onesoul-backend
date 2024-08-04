@@ -15,15 +15,27 @@ class Category {
 
     public function getCategories($paginator) {
         try {
-            $stmt = $this->db->prepare("SELECT c.*, m.URL FROM Categories AS c
+            $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS c.*,m.URL as imgURL
+            FROM Categories AS c
             LEFT JOIN Media as m ON c.CategoryID = m.CategoryID
+            ORDER BY c.CategoryID
             LIMIT :_limit OFFSET :_offset");
 
             $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
             $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
             $stmt->execute();
 
-            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
+            $total = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            return [
+                "data" => $rs,
+                "rows" => [
+                    "total" => $total['total'],
+                    "fetched" => count($rs)
+                ]
+            ];
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());
         }
@@ -31,8 +43,10 @@ class Category {
 
     public function getCategoryById($paginator, $id) {
        try {
-            $stmt = $this->db->prepare("SELECT c.*, m.URL FROM Categories AS c
-	        LEFT JOIN Media as m ON c.CategoryID = m.CategoryID WHERE c.CategoryID = :id
+            $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS c.*, m.URL as imgURL
+            FROM Categories AS c
+	        LEFT JOIN Media as m ON c.CategoryID = m.CategoryID
+            WHERE c.CategoryID = :id
             LIMIT :_limit OFFSET :_offset");
 
             $stmt->bindParam(':id', $id, PDO::PARAM_INT);
@@ -40,7 +54,17 @@ class Category {
             $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
             $stmt->execute();
 
-            return $stmt->fetch(PDO::FETCH_ASSOC);
+            $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
+            $total = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            return [
+                "data" => $rs,
+                "rows" => [
+                    "total" => $total['total'],
+                    "fetched" => count($rs)
+                ]
+            ];
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());
         }
@@ -48,26 +72,31 @@ class Category {
 
     public function getCategoryByParentId($paginator, $id) {
         try {
-            if(is_null($id)){
-                $stmt = $this->db->prepare("SELECT c.*, m.URL FROM Categories AS c
-	            LEFT JOIN Media as m ON c.CategoryID = m.CategoryID WHERE c.ParentCategoryID is null
-                LIMIT :_limit OFFSET :_offset");
+            $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS c.*, m.URL as imgURL
+            FROM Categories AS c
+            LEFT JOIN Media as m ON c.CategoryID = m.CategoryID
+            WHERE (c.ParentCategoryID = :id OR (:id2 IS NULL AND c.ParentCategoryID IS NULL))
+            ORDER BY c.CategoryID
+            LIMIT :_limit OFFSET :_offset");
 
-                $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
-                $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
-            }else{
-                $stmt = $this->db->prepare("SELECT c.*, m.URL FROM Categories AS c
-	            LEFT JOIN Media as m ON c.CategoryID = m.CategoryID WHERE c.ParentCategoryID = :id
-                LIMIT :_limit OFFSET :_offset");
-
-                $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-                $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
-                $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
-            }
+            $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+            $stmt->bindParam(':id2', $id, PDO::PARAM_INT);
+            $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
+            $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
 
             $stmt->execute();
 
-            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
+            $total = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            return [
+                "data" => $rs,
+                "rows" => [
+                    "total" => $total['total'],
+                    "fetched" => count($rs)
+                ]
+            ];
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());
         }

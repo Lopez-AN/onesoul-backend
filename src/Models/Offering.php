@@ -15,24 +15,61 @@ class Offering {
 
     public function getOfferings($paginator) {
         try {
-            $stmt = $this->db->prepare("SELECT o.*, m.URL FROM Offerings AS o
-            LEFT JOIN Media as m ON o.OfferingID = m.OfferingID
+            $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*, m1.URL as imgURL,
+            u.UserID as author_UserID, u.FirstName as author_FirstName,
+            u.LastName as author_LastName, m2.URL as author_imgURL
+            FROM Offerings AS o
+            INNER JOIN Users AS u ON u.UserID = o.UserID
+            LEFT JOIN Media AS m1 ON o.OfferingID = m1.OfferingID
+            LEFT JOIN Media AS m2 ON u.UserID = m2.UserID
+            ORDER BY o.OfferingID
             LIMIT :_limit OFFSET :_offset");
 
             $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
             $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
             $stmt->execute();
 
-            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
+            $total = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            $rs = array_map(function($e){
+                $e['author'] = [
+                    "UserID" => $e['author_UserID'],
+                    "FirstName" => $e['author_FirstName'],
+                    "LastName" => $e['author_LastName'],
+                    "imgURL" => $e['author_imgURL']
+                ];
+                unset($e['author_UserID']);
+                unset($e['author_FirstName']);
+                unset($e['author_LastName']);
+                unset($e['author_imgURL']);
+                return $e;
+            },$rs);
+
+            return [
+                "data" => $rs,
+                "rows" => [
+                    "total" => $total['total'],
+                    "fetched" => count($rs)
+                ]
+            ];
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());
         }
     }
 
-    public function getOfferingById($id) {
+    public function getOfferingById($paginator, $id) {
         try {
-            $stmt = $this->db->prepare("SELECT o.*, m.URL FROM Offerings AS o
-            LEFT JOIN Media as m ON o.OfferingID = m.OfferingID WHERE o.OfferingID = :id
+            $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*, m1.URL as imgURL,
+            u.UserID as author_UserID, u.FirstName as author_FirstName,
+            u.LastName as author_LastName, m2.URL as author_imgURL
+            FROM Offerings AS o
+            INNER JOIN Users AS u ON u.UserID = o.UserID
+            LEFT JOIN Media AS m1 ON o.OfferingID = m1.OfferingID
+            LEFT JOIN Media AS m2 ON u.UserID = m2.UserID
+            WHERE o.OfferingID = :id
+            ORDER BY o.OfferingID
             LIMIT :_limit OFFSET :_offset");
 
             $stmt->bindParam(':id', $id, PDO::PARAM_INT);
@@ -40,32 +77,95 @@ class Offering {
             $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
             $stmt->execute();
 
-            return $stmt->fetch(PDO::FETCH_ASSOC);
+            $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
+            $total = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            $rs = array_map(function($e){
+                $e['author'] = [
+                    "UserID" => $e['author_UserID'],
+                    "FirstName" => $e['author_FirstName'],
+                    "LastName" => $e['author_LastName'],
+                    "imgURL" => $e['author_imgURL']
+                ];
+                unset($e['author_UserID']);
+                unset($e['author_FirstName']);
+                unset($e['author_LastName']);
+                unset($e['author_imgURL']);
+                return $e;
+            },$rs);
+
+            return [
+                "data" => $rs,
+                "rows" => [
+                    "total" => $total['total'],
+                    "fetched" => count($rs)
+                ]
+            ];
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());
         }
     }
 
-    public function getOfferingsByCategoryId($categoryId) {
+    public function getOfferingsByCategoryId($paginator, $categoryId) {
         try {
-            $stmt = $this->db->prepare("SELECT o.*, m.URL FROM Offerings AS o
-            LEFT JOIN Media as m ON o.OfferingID = m.OfferingID WHERE o.CategoryID = :categoryId");
+            $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*, m1.URL as imgURL,
+            u.UserID as author_UserID, u.FirstName as author_FirstName,
+            u.LastName as author_LastName, m2.URL as author_imgURL
+            FROM Offerings AS o
+            INNER JOIN Users AS u ON u.UserID = o.UserID
+            LEFT JOIN Media AS m1 ON o.OfferingID = m1.OfferingID
+            LEFT JOIN Media AS m2 ON u.UserID = m2.UserID
+            WHERE o.CategoryID = :categoryId
+            ORDER BY o.OfferingID
+            LIMIT :_limit OFFSET :_offset");
 
             $stmt->bindParam(':categoryId', $categoryId, PDO::PARAM_INT);
             $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
             $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
             $stmt->execute();
 
-            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
+            $total = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            $rs = array_map(function($e){
+                $e['author'] = [
+                    "UserID" => $e['author_UserID'],
+                    "FirstName" => $e['author_FirstName'],
+                    "LastName" => $e['author_LastName'],
+                    "imgURL" => $e['author_imgURL']
+                ];
+                unset($e['author_UserID']);
+                unset($e['author_FirstName']);
+                unset($e['author_LastName']);
+                unset($e['author_imgURL']);
+                return $e;
+            },$rs);
+
+            return [
+                "data" => $rs,
+                "rows" => [
+                    "total" => $total['total'],
+                    "fetched" => count($rs)
+                ]
+            ];
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());
         }
     }
 
-    public function getOfferingsByUserId($userId) {
+    public function getOfferingsByUserId($paginator, $userId) {
         try {
-            $stmt = $this->db->prepare("SELECT o.*, m.URL FROM Offerings AS o
-            LEFT JOIN Media as m ON o.OfferingID = m.OfferingID WHERE o.UserID = :userId
+            $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*, m1.URL as imgURL,
+            u.UserID as author_UserID, u.FirstName as author_FirstName,
+            u.LastName as author_LastName, m2.URL as author_imgURL
+            FROM Offerings AS o
+            INNER JOIN Users AS u ON u.UserID = o.UserID
+            LEFT JOIN Media AS m1 ON o.OfferingID = m1.OfferingID
+            LEFT JOIN Media AS m2 ON u.UserID = m2.UserID
+            WHERE o.UserID = :userId
+            ORDER BY o.OfferingID
             LIMIT :_limit OFFSET :_offset");
 
             $stmt->bindParam(':userId', $userId, PDO::PARAM_INT);
@@ -73,7 +173,31 @@ class Offering {
             $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
             $stmt->execute();
 
-            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
+            $total = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            $rs = array_map(function($e){
+                $e['author'] = [
+                    "UserID" => $e['author_UserID'],
+                    "FirstName" => $e['author_FirstName'],
+                    "LastName" => $e['author_LastName'],
+                    "imgURL" => $e['author_imgURL']
+                ];
+                unset($e['author_UserID']);
+                unset($e['author_FirstName']);
+                unset($e['author_LastName']);
+                unset($e['author_imgURL']);
+                return $e;
+            },$rs);
+
+            return [
+                "data" => $rs,
+                "rows" => [
+                    "total" => $total['total'],
+                    "fetched" => count($rs)
+                ]
+            ];
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());
         }
