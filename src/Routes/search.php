@@ -25,5 +25,6 @@ return function (App $app) {
 
     $app->get('/search/users', [$searchController, 'searchUsers']);
     $app->get('/search/offerings', [$searchController, 'searchOfferings']);
+    $app->get('/search/categories', [$searchController, 'searchCategories']);
 
 };

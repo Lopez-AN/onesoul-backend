@@ -12,6 +12,38 @@ class Search {
         $this->pdo = $pdo;
     }
 
+    public function searchCategories($paginator, $query) {
+        try {
+            $searchQuery = "%$query%";
+            $stmt = $this->pdo->prepare("SELECT SQL_CALC_FOUND_ROWS c.*,m.URL as imgURL
+            FROM Categories AS c
+            LEFT JOIN Media as m ON c.CategoryID = m.CategoryID
+            WHERE `Name` LIKE :search1 OR `Description` LIKE :search2
+            ORDER BY c.CategoryID
+            LIMIT :_limit OFFSET :_offset");
+
+            $stmt->bindParam(':search1', $searchQuery, PDO::PARAM_STR);
+            $stmt->bindParam(':search2', $searchQuery, PDO::PARAM_STR);
+            $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
+            $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
+            $stmt->execute();
+
+            $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $stmt = $this->pdo->query("SELECT FOUND_ROWS() as total");
+            $total = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            return [
+                "data" => $rs,
+                "rows" => [
+                    "total" => $total['total'],
+                    "fetched" => count($rs)
+                ]
+            ];
+        } catch (\PDOException $e) {
+            throw new DatabaseException($e->getMessage());
+        }
+    }
+
     public function searchOfferings($paginator, $query) {
         try {
             $searchQuery = "%$query%";

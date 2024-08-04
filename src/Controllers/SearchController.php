@@ -17,6 +17,19 @@ class SearchController {
         $this->search = $search;
     }
 
+    public function searchCategories(Request $request, Response $response, $args) {
+        $paginator = paginator($request);
+        $queryParams = $request->getQueryParams();
+        $query = $queryParams['query'];
+        try {
+            $results = $this->search->searchCategories($paginator, $query);
+            $response->getBody()->write(json_encode($results));
+        } catch (\PDOException $e) {
+            throw new DatabaseException($e->getMessage());
+        }
+        return $response->withHeader('Content-Type', 'application/json');
+    }
+
     public function searchOfferings(Request $request, Response $response, $args) {
         $paginator = paginator($request);
         $queryParams = $request->getQueryParams();
