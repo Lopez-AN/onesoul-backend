@@ -29,6 +29,8 @@ The application configuration is stored in ./config/config.json, detailed below 
   "jwt": {
     "secret": "secret to encrypt tokens",
     "lifetime": token lifetime in seconds
+
+
   }
 }
 ```
