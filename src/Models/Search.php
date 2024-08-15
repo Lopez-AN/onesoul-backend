@@ -97,6 +97,11 @@ class Search {
 
     public function searchUsers($paginator, $query) {
         try {
+            $query = explode(" ",$query);
+            $query = array_map(function($e){
+                return trim($e);
+            },$query);
+            $query = implode(" ",$query);
             $searchQuery = "%$query%";
             $stmt = $this->pdo->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName, u.UserName,
             u.Email, u.Phone, u.AddressName, u.AddressNumber, u.Floor,
@@ -111,6 +116,7 @@ class Search {
             LEFT JOIN Media as m ON u.UserID = m.UserID
             LEFT JOIN Reviews as r ON u.UserID = r.SUserID
             WHERE FirstName LIKE :search1 OR LastName LIKE :search2 OR Biography LIKE :search3
+            OR CONCAT(FirstName,' ',LastName) LIKE :search4
             GROUP BY u.userID
             ORDER BY u.UserID
             LIMIT :_limit OFFSET :_offset");
@@ -118,6 +124,7 @@ class Search {
             $stmt->bindParam(':search1', $searchQuery, PDO::PARAM_STR);
             $stmt->bindParam(':search2', $searchQuery, PDO::PARAM_STR);
             $stmt->bindParam(':search3', $searchQuery, PDO::PARAM_STR);
+            $stmt->bindParam(':search4', $searchQuery, PDO::PARAM_STR);
             $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
             $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
             $stmt->execute();
