@@ -23,8 +23,12 @@ class AuthController{
     $password = $data['password'] ?? '';
 
     try {
-        $auth = $this->auth->login($username, $password);
+        $auth = $this->auth->login($username);
         if(empty($auth)){
+          $response->getBody()->write('Invalid credentials');
+          return $response->withStatus(401);
+        }
+        if(!password_verify($password,$auth[0]['PasswordHash'])){
           $response->getBody()->write('Invalid credentials');
           return $response->withStatus(401);
         }

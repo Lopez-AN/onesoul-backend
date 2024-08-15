@@ -12,11 +12,10 @@ class Auth{
     $this->db = $db;
   }
 
-  public function login($username, $password){
+  public function login($username){
     try {
-      $stmt = $this->db->prepare("SELECT u.* FROM Users AS u
-	    WHERE u.UserName = ? AND u.PasswordHash = ?");
-      $stmt->execute([$username, $password]);
+      $stmt = $this->db->prepare("SELECT u.* FROM Users AS u WHERE u.UserName = ?");
+      $stmt->execute([$username]);
       return $stmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
