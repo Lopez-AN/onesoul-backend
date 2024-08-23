@@ -10,4 +10,6 @@ return function (App $app) {
 	  $authController = new AuthController($auth);
 
     $app->post('/login', [$authController, 'login']);
+    $app->post('/login/facebook', [$authController, 'loginFacebook']);
+    $app->post('/login/google', [$authController, 'loginGoogle']);
 };

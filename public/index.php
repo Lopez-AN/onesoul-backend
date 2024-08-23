@@ -28,3 +28,4 @@ $errorMiddleware = $app->addErrorMiddleware(true, true, true);
 (require ROOT . '/src/Routes/auth.php')($app);
 
 $app->run();
+
