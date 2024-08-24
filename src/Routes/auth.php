@@ -12,4 +12,7 @@ return function (App $app) {
     $app->post('/login', [$authController, 'login']);
     $app->post('/login/facebook', [$authController, 'loginFacebook']);
     $app->post('/login/google', [$authController, 'loginGoogle']);
+    // $app->post('/register', [$authController, 'register']);
+    $app->post('/register/facebook', [$authController, 'registerFacebook']);
+    $app->post('/register/google', [$authController, 'registerGoogle']);
 };
