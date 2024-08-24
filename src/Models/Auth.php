@@ -30,11 +30,11 @@ class Auth{
   public function loginGoogle($token){
     $response = $this -> validateToken("https://oauth2.googleapis.com/tokeninfo?id_token=$token");
     if($response === false){
-      return (object)array("http_code" => 401, "data" => "Cant validate token");
+      return (object)array("http_code" => 401, "data" => ["error" => "Invalid token"]);
     }
 
     $user_id = $response -> sub;
-    $user_data = $this -> getUserData($user_id, "google");
+    $user_data = $this -> getUserByOAuthID($user_id, "google");
     if(empty($user_data)){
       return (object)array("http_code" => 404, "data" => array(
          "first_name" => $response -> given_name,
@@ -49,10 +49,10 @@ class Auth{
   public function loginFacebook($user_id, $token){
     $response = $this -> validateToken("https://graph.facebook.com/$user_id?fields=id,first_name,last_name,email,picture.width(640)&access_token=$token");
     if($response === false){
-      return (object)array("http_code" => 401, "data" => "Cant validate token");
+      return (object)array("http_code" => 401, "data" => ["error" => "Invalid token"]);
     }
 
-    $user_data = $this -> getUserData($user_id, "facebook");
+    $user_data = $this -> getUserByOAuthID($user_id, "facebook");
     if(empty($user_data)){
       return (object)array("http_code" => 404, "data" => array(
         "first_name" => $response -> first_name,
@@ -67,14 +67,40 @@ class Auth{
   /*
   * Registro usuario
   */
+  public function register($email, $username, $password){
+    if(!empty($this -> getUserByEmail($email))){
+      return (object)array("http_code" => 409, "data" => ["error" => "A user with this email address already exists"]);
+    }
+
+    if(!empty($this -> getUserByUserName($username))){
+      return (object)array("http_code" => 409, "data" => ["error" => "A user with this username already exists"]);
+    }
+
+    $password_hash = password_hash($password,PASSWORD_BCRYPT); #El password se guarda hasheado (obvio!)
+    $otp_code = rand(100000, 999999); # Codigo que se enviara por mail
+
+    $this -> registerUser((object)array(
+      "email" => $email,
+      "username" => $username,
+      "password_hash" => $password_hash,
+      "otp_code" => $otp_code
+    ));
+
+    # Envio el mail al usuario
+    $this -> sendOtpMail($email, $username, $otp_code);
+
+    $user_data = $this -> getUserByUserName($username);
+    return (object)array("http_code" => 200, "data" => $user_data);
+  }
+
   public function registerGoogle($token){
     $response = $this -> validateToken("https://oauth2.googleapis.com/tokeninfo?id_token=$token");
     if($response === false){
-      return (object)array("http_code" => 401, "data" => "Cant validate token");
+      return (object)array("http_code" => 401, "data" => ["error" => "Invalid token"]);
     }
 
     $user_id = $response -> sub;
-    $user_data = $this -> getUserData($user_id, "google");
+    $user_data = $this -> getUserByOAuthID($user_id, "google");
     if(!empty($user_data)){ # Si el usuario existe lo devuelvo para genera el token
       return (object)array("http_code" => 200, "data" => $user_data);
     }
@@ -87,7 +113,7 @@ class Auth{
 
     # Verifico si hay otro usuario con ese email
     if(!empty($email) && !empty($this -> getUserByEmail($email))){
-      return (object)array("http_code" => 409, "data" => "A user with this email address already exists.");
+      return (object)array("http_code" => 409, "data" => ["error" => "A user with this email address already exists"]);
     }
 
     $this -> registerUserSSO((object)array(
@@ -99,16 +125,16 @@ class Auth{
       "oauth2_service" => "google"
     ));
 
-    $user_data = $this -> getUserData($user_id, "google");
+    $user_data = $this -> getUserByOAuthID($user_id, "google");
     return (object)array("http_code" => 200, "data" => $user_data);
   }
 
   public function registerFacebook($user_id, $token){
     $response = $this -> validateToken("https://graph.facebook.com/$user_id?fields=id,first_name,last_name,email,picture.width(640)&access_token=$token");
     if($response === false){
-      return (object)array("http_code" => 401, "data" => "Cant validate token");
+      return (object)array("http_code" => 401, "data" => ["error" => "Invalid token"]);
     }
-    $user_data = $this -> getUserData($user_id, "facebook");
+    $user_data = $this -> getUserByOAuthID($user_id, "facebook");
     if(!empty($user_data)){ # Si el usuario existe lo devuelvo para genera el token
       return (object)array("http_code" => 200, "data" => $user_data);
     }
@@ -121,7 +147,7 @@ class Auth{
 
     # Verifico si hay otro usuario con ese email
     if(!empty($email) && !empty($this -> getUserByEmail($email))){
-      return (object)array("http_code" => 409, "data" => "A user with this email address already exists.");
+      return (object)array("http_code" => 409, "data" => ["error" => "A user with this email address already exists"]);
     }
 
     $this -> registerUserSSO((object)array(
@@ -133,8 +159,13 @@ class Auth{
       "oauth2_service" => "facebook"
     ));
 
-    $user_data = $this -> getUserData($user_id, "facebook");
+    $user_data = $this -> getUserByOAuthID($user_id, "facebook");
     return (object)array("http_code" => 200, "data" => $user_data);
+  }
+
+  # Envio de codigo OTP por email
+  private function sendOtpMail($email, $username, $otp_cod){
+    // Implementar aca el envio de email para el OTP
   }
 
   # Valida un token generado por el login SSO
@@ -156,37 +187,82 @@ class Auth{
     return json_decode($response);
   }
 
+  # Registra los datos basicos de un usuario en modo por email
+  private function registerUser($userData){
+    try {
+      # Creo el usuario con los datos basicos
+      $stmt = $this->db->prepare("INSERT INTO Users (Email, UserName, PasswordHash, OTP_Code, OTP_Date, ValidatedEmail)
+      VALUES (?,?,?,?,?,0)");
+      $stmt->execute([$userData -> email, $userData -> username, $userData -> password_hash,
+      $userData -> otp_code, date('YmdHis')]);
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
   # Registra los datos basicos de un usuario en los logueos por SSO
   private function registerUserSSO($userData){
     # Creo el usuario con los datos basicos
-    $stmt = $this->db->prepare("INSERT INTO Users (FirstName, LastName, Email, oauth2_id, oauth2_service)
-    VALUES (?,?,?,?,?)");
-    $stmt->execute([$userData -> first_name, $userData -> last_name, $userData -> email,
-    $userData -> oauth2_id, $userData -> oauth2_service]);
+    try {
+      $stmt = $this->db->prepare("INSERT INTO Users (FirstName, LastName, Email, oauth2_id, oauth2_service)
+      VALUES (?,?,?,?,?)");
+      $stmt->execute([$userData -> first_name, $userData -> last_name, $userData -> email,
+      $userData -> oauth2_id, $userData -> oauth2_service]);
 
-    if(!is_null($userData -> picture)){
       # Obtengo el ID del usuario creado
       $userId = $this->db->lastInsertId();
 
-      # Inserto la foto de perfil en la tabla media
-      $stmt = $this->db->prepare("INSERT INTO Media (UserID, `URL`) VALUES (?,?)");
-      $stmt->execute([$userId, $userData -> picture]);
+      if(!is_null($userData -> email)){
+        $stmt = $this->db->prepare("UPDATE Users SET ValidatedEmail = 1 WHERE UserID = ?");
+        $stmt->execute([$userId]);
+      }
+
+      if(!is_null($userData -> picture)){
+        # Inserto la foto de perfil en la tabla media
+        $stmt = $this->db->prepare("INSERT INTO Media (UserID, `URL`) VALUES (?,?)");
+        $stmt->execute([$userId, $userData -> picture]);
+      }
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  # Busca un usuario por username
+  private function getUserByUserName($username){
+    try{
+      $stmt = $this->db->prepare("SELECT u.*,m.URL FROM Users AS u
+      LEFT JOIN Media as m ON u.UserID = m.UserID
+      WHERE u.UserName = ?");
+      $stmt->execute([$username]);
+      return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
     }
   }
 
   # Busca un usuario por email
   private function getUserByEmail($email){
-    $stmt = $this->db->prepare("SELECT u.* FROM Users AS u WHERE u.Email = ?");
-    $stmt->execute([$email]);
-    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    try{
+      $stmt = $this->db->prepare("SELECT u.*,m.URL FROM Users AS u
+      LEFT JOIN Media as m ON u.UserID = m.UserID
+      WHERE u.Email = ?");
+      $stmt->execute([$email]);
+      return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
   }
 
   # Trae los datos del usuario luego de loguearse por SSO
-  private function getUserData($user_id, $service){
-    $stmt = $this->db->prepare("SELECT u.*,m.URL FROM Users AS u
-    LEFT JOIN Media as m ON u.UserID = m.UserID
-    WHERE u.oauth2_id = ? AND u.oauth2_service = ?");
-    $stmt->execute([$user_id, $service]);
-    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+  private function getUserByOAuthID($user_id, $service){
+    try{
+      $stmt = $this->db->prepare("SELECT u.*,m.URL FROM Users AS u
+      LEFT JOIN Media as m ON u.UserID = m.UserID
+      WHERE u.oauth2_id = ? AND u.oauth2_service = ?");
+      $stmt->execute([$user_id, $service]);
+      return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
   }
 }
