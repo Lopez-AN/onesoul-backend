@@ -46,42 +46,56 @@ class AuthController{
   public function loginGoogle(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
     $token = $data['token'] ?? '';
+
     try{
       $auth = $this->auth->loginGoogle($token);
-      if($auth -> http_code != 200){
-        $response->getBody()->write($auth -> data);
-        return $response->withStatus($auth -> http_code);
+      switch($auth -> http_code){
+        case 200: # Logueo correcto
+          $jwt = $this -> JWTgen($auth -> data[0]);
+          $response->getBody()->write(json_encode(['token' => $jwt]));
+        break;
+        case 404: # Usuario no encontrado
+          $response->getBody()->write(json_encode($auth -> data));
+          $response->withStatus($auth -> http_code);
+        break;
+        default: # Otros, ejemplo Token invalido
+          $response->getBody()->write($auth -> data);
+          $response->withStatus($auth -> http_code);
+        break;
       }
-
-      $jwt = $this -> JWTgen($auth -> data[0]);
-      $response->getBody()->write(json_encode(['token' => $jwt]));
-      return $response->withHeader('Content-Type', 'application/json');
     } catch (DatabaseException $e) {
       $response = $response->withStatus(500);
       $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
     }
-    return $response->withHeader('Content-Type', 'application/json');  
+    return $response->withHeader('Content-Type', 'application/json');
   }
 
   public function loginFacebook(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
     $user_id = $data['user_id'] ?? '';
     $token = $data['token'] ?? '';
+
     try{
       $auth = $this->auth->loginFacebook($user_id, $token);
-      if(empty($auth)){
-        $response->getBody()->write('Cant validate token');
-        return $response->withStatus(401);
+      switch($auth -> http_code){
+        case 200: # Logueo correcto
+          $jwt = $this -> JWTgen($auth -> data[0]);
+          $response->getBody()->write(json_encode(['token' => $jwt]));
+        break;
+        case 404: # Usuario no encontrado
+          $response->getBody()->write(json_encode($auth -> data));
+          $response->withStatus($auth -> http_code);
+        break;
+        default: # Otros, ejemplo Token invalido
+          $response->getBody()->write($auth -> data);
+          $response->withStatus($auth -> http_code);
+        break;
       }
-
-      $jwt = $this -> JWTgen($auth -> data[0]);
-      $response->getBody()->write(json_encode(['token' => $jwt]));
-      return $response->withHeader('Content-Type', 'application/json');
     } catch (DatabaseException $e) {
       $response = $response->withStatus(500);
       $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
     }
-    return $response->withHeader('Content-Type', 'application/json');  
+    return $response->withHeader('Content-Type', 'application/json');
   }
 
   private function JWTgen($user){
@@ -102,4 +116,3 @@ class AuthController{
   }
 
 }
-
