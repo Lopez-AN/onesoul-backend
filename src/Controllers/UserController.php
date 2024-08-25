@@ -75,6 +75,25 @@ class UserController
     return $response->withHeader('Content-Type', 'application/json');
   }
 
+  public function getUserByUserName (Request $request, Response $response, $args){
+    $username = $args['username'];
+    try {
+      $user = $this->auth->getUserByEmail($username);
+      if ($user) {
+        $response->getBody()->write(json_encode(empty($user) ? [] : $user[0]));
+      } else {
+        throw new NotFoundException('User not found');
+      }
+    } catch (NotFoundException $e) {
+      $response = $response->withStatus(404);
+      $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
+    } catch (DatabaseException $e) {
+      $response = $response->withStatus(500);
+      $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
+    }
+    return $response->withHeader('Content-Type', 'application/json');
+  }
+
   public function getUsersByType(Request $request, Response $response, $args){
     $paginator = paginator($request);
 

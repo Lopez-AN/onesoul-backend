@@ -29,6 +29,7 @@ return function (App $app) {
   $app->get('/users/{id}', [$userController, 'getUserById']);
   $app->get('/users/type/{type}', [$userController, 'getUsersByType']);
   $app->get('/users/email/{email}', [$userController, 'getUserByEmail']);
+  $app->get('/users/username/{username}', [$userController, 'getUserByUserName']);
   $app->post('/users', [$userController, 'createUser']);
   $app->put('/users/{id}', [$userController, 'updateUser']);
   $app->delete('/users/{id}', [$userController, 'deleteUser']);
