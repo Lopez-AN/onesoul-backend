@@ -241,7 +241,7 @@ class Auth{
   }
 
   # Busca un usuario por email
-  private function getUserByEmail($email){
+  public function getUserByEmail($email){
     try{
       $stmt = $this->db->prepare("SELECT u.*,m.URL FROM Users AS u
       LEFT JOIN Media as m ON u.UserID = m.UserID
