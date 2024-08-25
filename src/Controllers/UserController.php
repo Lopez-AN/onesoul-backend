@@ -75,10 +75,10 @@ class UserController
     return $response->withHeader('Content-Type', 'application/json');
   }
 
-  public function getUserByUserName (Request $request, Response $response, $args){
+  public function getUserByUserName(Request $request, Response $response, $args){
     $username = $args['username'];
     try {
-      $user = $this->auth->getUserByEmail($username);
+      $user = $this->auth->getUserByUserName($username);
       if ($user) {
         $response->getBody()->write(json_encode(empty($user) ? [] : $user[0]));
       } else {
