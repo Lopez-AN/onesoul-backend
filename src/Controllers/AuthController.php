@@ -231,9 +231,10 @@ class AuthController{
         if(time() - $otp_date->getTimestamp() > $GLOBALS['config']['otp_exptime']){
           $response->getBody()->write(json_encode(['error' => "Expired OTP"]));
           $response = $response->withStatus(401);
+        }else{
+          $response->getBody()->write(json_encode(['msg' => "Verified email"]));
+          $response = $response->withStatus(200);
         }
-        $response->getBody()->write(json_encode(['msg' => "Verified email"]));
-        $response = $response->withStatus(200);
       }
     } catch (DatabaseException $e) {
       $response = $response->withStatus(500);
