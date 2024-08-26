@@ -16,4 +16,5 @@ return function (App $app) {
   $app->post('/register', [$authController, 'register']);
   $app->post('/register/facebook', [$authController, 'registerFacebook']);
   $app->post('/register/google', [$authController, 'registerGoogle']);
+  $app->post('/register/otp', [$authController, 'validateOTP']);
 };

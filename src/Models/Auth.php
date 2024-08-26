@@ -15,12 +15,19 @@ class Auth{
   /*
   * Logueo usuario
   */
-  public function login($username){
+  public function login($username, $email){
     try {
-      $stmt = $this->db->prepare("SELECT u.*,m.URL FROM Users AS u
-      LEFT JOIN Media as m ON u.UserID = m.UserID
-      WHERE u.UserName = ?");
-      $stmt->execute([$username]);
+      if($username){
+        $stmt = $this->db->prepare("SELECT u.*,m.URL FROM Users AS u
+        LEFT JOIN Media as m ON u.UserID = m.UserID
+        WHERE u.UserName = ?");
+        $stmt->execute([$username]);
+      }else{
+        $stmt = $this->db->prepare("SELECT u.*,m.URL FROM Users AS u
+        LEFT JOIN Media as m ON u.UserID = m.UserID
+        WHERE u.Email = ?");
+        $stmt->execute([$email]);
+      }
       return $stmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
@@ -161,6 +168,28 @@ class Auth{
 
     $user_data = $this -> getUserByOAuthID($user_id, "facebook");
     return (object)array("http_code" => 200, "data" => $user_data);
+  }
+
+  # Validacion OTP
+  public function validateOTP($user_id, $otp_code){
+    try{
+      $stmt = $this->db->prepare("SELECT u.OTP_Date FROM Users AS u
+      LEFT JOIN Media as m ON u.UserID = m.UserID
+      WHERE u.UserID = ? AND u.OTP_Code = ?");
+      $stmt->execute([$user_id, $otp_code]);
+      $resp = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+      # El OTP es de un solo uso
+      if(!empty($resp)){
+        $stmt = $this->db->prepare("UPDATE Users
+        SET OTP_code = null,OTP_date = null
+        WHERE UserID = ?");
+        $stmt->execute([$user_id]);
+      }
+      return $resp;
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
   }
 
   # Envio de codigo OTP por email
