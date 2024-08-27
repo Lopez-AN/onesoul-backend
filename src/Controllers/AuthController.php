@@ -153,15 +153,16 @@ class AuthController{
   public function registerGoogle(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
     $token = $data['token'] ?? '';
+    $username = $data['username'] ?? '';
 
-    if(empty($token)){
+    if(empty($token) || empty($username)){
       $response->getBody()->write(json_encode(['error' => "Invalid parameters"]));
       $response = $response->withStatus(400);
       return $response->withHeader('Content-Type', 'application/json');
     }
 
     try {
-      $auth = $this->auth->registerGoogle($token);
+      $auth = $this->auth->registerGoogle($token, $username);
       switch($auth->http_code) {
         case 200: // Logueo correcto o usuario existente
           $jwt = $this->JWTgen($auth->data[0]);
@@ -183,15 +184,16 @@ class AuthController{
     $data = $request->getParsedBody();
     $user_id = $data['user_id'] ?? '';
     $token = $data['token'] ?? '';
+    $username = $data['username'] ?? '';
 
-    if(empty($user_id) || empty($token)){
+    if(empty($user_id) || empty($token) || empty($username)){
       $response->getBody()->write(json_encode(['error' => "Invalid parameters"]));
       $response = $response->withStatus(400);
       return $response->withHeader('Content-Type', 'application/json');
     }
 
     try{
-      $auth = $this->auth->registerFacebook($user_id, $token);
+      $auth = $this->auth->registerFacebook($user_id, $token, $username);
       switch($auth->http_code) {
         case 200: // Logueo correcto o usuario existente
           $jwt = $this->JWTgen($auth->data[0]);

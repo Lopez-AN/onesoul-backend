@@ -100,7 +100,7 @@ class Auth{
     return (object)array("http_code" => 200, "data" => $user_data);
   }
 
-  public function registerGoogle($token){
+  public function registerGoogle($token, $username){
     $response = $this -> validateToken("https://oauth2.googleapis.com/tokeninfo?id_token=$token");
     if($response === false){
       return (object)array("http_code" => 401, "data" => ["error" => "Invalid token"]);
@@ -122,6 +122,10 @@ class Auth{
     if(!empty($email) && !empty($this -> getUserByEmail($email))){
       return (object)array("http_code" => 409, "data" => ["error" => "A user with this email address already exists"]);
     }
+   # Verifico si hay otro usuario con ese username
+    if(!empty($this -> getUserByUserName($username))){
+      return (object)array("http_code" => 409, "data" => ["error" => "A user with this username already exists"]);
+    } 
 
     $this -> registerUserSSO((object)array(
       "first_name" => $first_name,
@@ -136,7 +140,7 @@ class Auth{
     return (object)array("http_code" => 200, "data" => $user_data);
   }
 
-  public function registerFacebook($user_id, $token){
+  public function registerFacebook($user_id, $token, $username){
     $response = $this -> validateToken("https://graph.facebook.com/$user_id?fields=id,first_name,last_name,email,picture.width(640)&access_token=$token");
     if($response === false){
       return (object)array("http_code" => 401, "data" => ["error" => "Invalid token"]);
@@ -156,6 +160,10 @@ class Auth{
     if(!empty($email) && !empty($this -> getUserByEmail($email))){
       return (object)array("http_code" => 409, "data" => ["error" => "A user with this email address already exists"]);
     }
+   # Verifico si hay otro usuario con ese username
+    if(!empty($username) && !empty($this -> getUserByUserName($username))){
+      return (object)array("http_code" => 409, "data" => ["error" => "A user with this username already exists"]);
+    } 
 
     $this -> registerUserSSO((object)array(
       "first_name" => $first_name,
