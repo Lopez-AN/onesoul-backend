@@ -125,12 +125,13 @@ class Auth{
    # Verifico si hay otro usuario con ese username
     if(!empty($this -> getUserByUserName($username))){
       return (object)array("http_code" => 409, "data" => ["error" => "A user with this username already exists"]);
-    } 
+    }
 
     $this -> registerUserSSO((object)array(
       "first_name" => $first_name,
       "last_name" => $last_name,
       "email" => $email,
+      "user_name" => $username,
       "picture" => $picture,
       "oauth2_id" => $user_id,
       "oauth2_service" => "google"
@@ -163,12 +164,13 @@ class Auth{
    # Verifico si hay otro usuario con ese username
     if(!empty($username) && !empty($this -> getUserByUserName($username))){
       return (object)array("http_code" => 409, "data" => ["error" => "A user with this username already exists"]);
-    } 
+    }
 
     $this -> registerUserSSO((object)array(
       "first_name" => $first_name,
       "last_name" => $last_name,
       "email" => $email,
+      "user_name" => $username,
       "picture" => $picture,
       "oauth2_id" => $user_id,
       "oauth2_service" => "facebook"
@@ -241,10 +243,10 @@ class Auth{
   private function registerUserSSO($userData){
     # Creo el usuario con los datos basicos
     try {
-      $stmt = $this->db->prepare("INSERT INTO Users (FirstName, LastName, Email, oauth2_id, oauth2_service)
-      VALUES (?,?,?,?,?)");
+      $stmt = $this->db->prepare("INSERT INTO Users (FirstName, LastName, Email, UserName, oauth2_id, oauth2_service)
+      VALUES (?,?,?,?,?,?)");
       $stmt->execute([$userData -> first_name, $userData -> last_name, $userData -> email,
-      $userData -> oauth2_id, $userData -> oauth2_service]);
+      $userData -> user_name, $userData -> oauth2_id, $userData -> oauth2_service]);
 
       # Obtengo el ID del usuario creado
       $userId = $this->db->lastInsertId();
