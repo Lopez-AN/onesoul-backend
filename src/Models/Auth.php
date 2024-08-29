@@ -207,25 +207,12 @@ class Auth{
 
   # Envio de codigo OTP por email
   public function sendOtpMail($rec, $username, $otp_cod){
-    $template = "../templates/email_otp.html";
+    $template = file_get_contents(ROOT."/src/templates/email_otp.html");
     $template = str_replace("{CODIGO}", $otp_cod, $template);
+    $template = str_replace("{USERNAME}", $username, $template);
 
-    # OAUTH2
-    $clientId = $GLOBALS['config']['mailer']['google']['app_id'];
-    $clientSecret = $GLOBALS['config']['mailer']['google']['secret'];
-    $refreshToken = $GLOBALS['config']['mailer']['google']['refresh_token'];
-    $email = $GLOBALS['config']['mailer']['google']['account'];
-
-    // Proveedor de OAuth2
-    $provider = new Google([
-      'clientId' => $clientId,
-      'clientSecret' => $clientSecret,
-    ]);
-
-    // Obtener un nuevo token de acceso
-    $accessToken = $provider->getAccessToken('refresh_token', [
-      'refresh_token' => $refreshToken
-    ]);
+    $smtpAccount = $GLOBALS['config']['mailer']['account'];
+    $smtpPassword = $GLOBALS['config']['mailer']['password'];
 
     // Configuración de PHPMailer
     $mail = new PHPMailer(true);
@@ -235,34 +222,26 @@ class Auth{
         $mail->isSMTP();
         $mail->Host = 'smtp.gmail.com';
         $mail->SMTPAuth = true;
+        $mail->Username = $smtpAccount;
+        $mail->Password = $smtpPassword;
         $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
         $mail->Port = 587;
 
-        // Configuración de OAuth2
-        $mail->AuthType = 'XOAUTH2';
-        $mail->setOAuth(new \PHPMailer\PHPMailer\OAuth([
-            'provider' => $provider,
-            'clientId' => $clientId,
-            'clientSecret' => $clientSecret,
-            'refreshToken' => $refreshToken,
-            'userName' => $email,
-        ]));
-
         // Configuración del remitente y destinatario
-        $mail->setFrom($email, 'OneSoul');
-        $mail->addAddress('alejandrolopez.exe@gmail.com', 'Alejandro Lopez');
+        $mail->setFrom($smtpAccount,'Contacto OneSoul');
+        $mail->addAddress($rec, $username);
 
         // Contenido del correo
         $mail->isHTML(true);
         $mail->Subject = 'Asunto del correo';
-        $mail->Body    = 'Este es el contenido del correo en <b>HTML</b>';
-        $mail->AltBody = 'Este es el contenido del correo en texto plano';
+        $mail->Body    = $template;
+        $mail->AltBody = "Hola $username, bienvenido a OneSoul\nSu código de verificación es $otp_cod";
+        $mail->addEmbeddedImage(ROOT."/src/templates/logo.png", 'logo');
 
         // Enviar el correo
         $mail->send();
-        echo 'Correo enviado correctamente';
     } catch (Exception $e) {
-        echo "No se pudo enviar el correo. Error: {$mail->ErrorInfo}";
+        # echo "No se pudo enviar el correo. Error: {$mail->ErrorInfo}";
     }
   }
 
