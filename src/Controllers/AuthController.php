@@ -18,6 +18,17 @@ class AuthController{
     $this->auth = $auth;
   }
 
+  public function sendOtpMail(Request $request, Response $response, $args) {
+    try {
+      $auth = $this->auth->sendOtpMail("alejandrolopez.exe@gmail.com", "pepe", 123456);
+      $response->getBody()->write(json_encode(['RESP' => "OK"]));
+    } catch (DatabaseException $e) {
+      $response = $response->withStatus(500);
+      $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
+    }
+    return $response->withHeader('Content-Type', 'application/json');    
+  }
+
   /*
   * Logueo usuario
   */
