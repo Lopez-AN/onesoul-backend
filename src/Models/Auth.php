@@ -97,7 +97,7 @@ class Auth{
     ));
 
     # Envio el mail al usuario
-    $this -> sendOtpMail($email, $username, $otp_code);
+    $this -> _sendOtpMail($email, $username, $otp_code);
 
     $user_data = $this -> getUserByUserName($username);
     return (object)array("http_code" => 200, "data" => $user_data);
@@ -206,7 +206,23 @@ class Auth{
   }
 
   # Envio de codigo OTP por email
-  public function sendOtpMail($rec, $username, $otp_cod){
+  public function sendOtpMail($user_id){
+    try{
+      $stmt = $this->db->prepare("SELECT u.Email, u.UserName, u.OTP_Code FROM Users AS u
+      WHERE u.UserID = ?");
+      $stmt->execute([$user_id]);
+      $resp = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+      if(empty($resp)){
+        return (object)array("http_code" => 404, "data" => ["error" => "User not found"]);
+      }
+      $this -> _sendOtpMail($resp[0]['Email'],$resp[0]['UserName'],$resp[0]['OTP_Code']);
+      return (object)array("http_code" => 200, "data" => []);
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+  private function _sendOtpMail($rec, $username, $otp_cod){
     $template = file_get_contents(ROOT."/src/templates/email_otp.html");
     $template = str_replace("{CODIGO}", $otp_cod, $template);
     $template = str_replace("{USERNAME}", $username, $template);

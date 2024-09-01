@@ -19,14 +19,19 @@ class AuthController{
   }
 
   public function sendOtpMail(Request $request, Response $response, $args) {
+    $jwt = $request->getAttribute('jwt');
+
     try {
-      $auth = $this->auth->sendOtpMail("alejandrolopez.exe@gmail.com", "pepe", 123456);
-      $response->getBody()->write(json_encode(['RESP' => "OK"]));
+      $auth = $this->auth->sendOtpMail($jwt['data'] -> id);
+      if($auth->http_code != 200){
+        $response->getBody()->write(json_encode($auth->data));
+        $response = $response->withStatus($auth->http_code);
+      }
     } catch (DatabaseException $e) {
       $response = $response->withStatus(500);
       $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
     }
-    return $response->withHeader('Content-Type', 'application/json');    
+    return $response->withHeader('Content-Type', 'application/json');
   }
 
   /*
