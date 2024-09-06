@@ -4,7 +4,6 @@ namespace App\Models;
 
 use PDO;
 use App\Exceptions\DatabaseException;
-use League\OAuth2\Client\Provider\Google;
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
@@ -40,79 +39,116 @@ class Auth{
   public function loginGoogle($token){
     $response = $this -> validateToken("https://oauth2.googleapis.com/tokeninfo?id_token=$token");
     if($response === false){
-      return (object)array("http_code" => 401, "data" => ["error" => "Invalid token"]);
+      return (object)["http_code" => 401,
+        "error" => [
+          "code" => "SSO_INVALID_TOKEN",
+          "desc" => "Invalid Google token"
+        ]
+      ];
     }
 
     $user_id = $response -> sub;
     $user_data = $this -> getUserByOAuthID($user_id, "google");
     if(empty($user_data)){
-      return (object)array("http_code" => 404, "data" => array(
-         "first_name" => $response -> given_name,
-         "last_name" => $response -> family_name,
-         "picture" => $response -> picture,
-         "email" => $response -> email
-      ));
+      return (object)["http_code" => 404,
+        "error" => [
+          "code" => "USER_NOT_FOUND",
+          "desc" => "No user associated with the specified Google account was found"
+        ],
+        "data" => [
+          "first_name" => $response -> given_name,
+          "last_name" => $response -> family_name,
+          "picture" => $response -> picture,
+          "email" => $response -> email
+        ]
+      ];
     }
-    return (object)array("http_code" => 200, "data" => $user_data);
+    return (object)["http_code" => 200, "data" => $user_data];
   }
 
   public function loginFacebook($user_id, $token){
     $response = $this -> validateToken("https://graph.facebook.com/$user_id?fields=id,first_name,last_name,email,picture.width(640)&access_token=$token");
     if($response === false){
-      return (object)array("http_code" => 401, "data" => ["error" => "Invalid token"]);
+      return (object)["http_code" => 401,
+        "error" => [
+          "code" => "SSO_INVALID_TOKEN",
+          "desc" => "Invalid Facebook token"
+        ]
+      ];
     }
 
     $user_data = $this -> getUserByOAuthID($user_id, "facebook");
     if(empty($user_data)){
-      return (object)array("http_code" => 404, "data" => array(
-        "first_name" => $response -> first_name,
-        "last_name" => $response -> last_name,
-        "picture" => $response -> picture -> data -> url,
-        "email" => $response -> email
-     ));
+      return (object)["http_code" => 404,
+        "error" => [
+          "code" => "USER_NOT_FOUND",
+          "desc" => "No user associated with the specified Facebook account was found"
+        ],
+        "data" => [
+          "first_name" => $response -> first_name,
+          "last_name" => $response -> last_name,
+          "picture" => $response -> picture -> data -> url,
+          "email" => $response -> email
+        ]
+      ];
     }
-    return (object)array("http_code" => 200, "data" => $user_data);
+    return (object)["http_code" => 200, "data" => $user_data];
   }
 
   /*
   * Registro usuario
-  */  
+  */
   public function register($email, $username, $password){
     if(!empty($this -> getUserByEmail($email))){
-      return (object)array("http_code" => 409, "data" => ["error" => "A user with this email address already exists"]);
+      return (object)["http_code" => 409,
+        "error" => [
+          "code" => "DUPLICATED_EMAIL",
+          "desc" => "A user with the specified email address already exists"
+        ]
+      ];
     }
 
     if(!empty($this -> getUserByUserName($username))){
-      return (object)array("http_code" => 409, "data" => ["error" => "A user with this username already exists"]);
+      return (object)["http_code" => 409,
+        "error" => [
+          "code" => "DUPLICATED_USERNAME",
+          "desc" => "A user with the specified username already exists"
+        ]
+      ];
     }
 
     $password_hash = password_hash($password,PASSWORD_BCRYPT); #El password se guarda hasheado (obvio!)
     $otp_code = rand(100000, 999999); # Codigo que se enviara por mail
 
-    $this -> registerUser((object)array(
+    $this -> registerUser((object)[
       "email" => $email,
       "username" => $username,
       "password_hash" => $password_hash,
       "otp_code" => $otp_code
-    ));
+    ]);
 
     # Envio el mail al usuario
     $this -> _sendOtpMail($email, $username, $otp_code);
 
     $user_data = $this -> getUserByUserName($username);
-    return (object)array("http_code" => 200, "data" => $user_data);
+    return (object)["http_code" => 200, "data" => $user_data];
   }
 
   public function registerGoogle($token, $username){
     $response = $this -> validateToken("https://oauth2.googleapis.com/tokeninfo?id_token=$token");
     if($response === false){
-      return (object)array("http_code" => 401, "data" => ["error" => "Invalid token"]);
+      return (object)["http_code" => 401,
+        "error" => [
+          "code" => "SSO_INVALID_TOKEN",
+          "desc" => "Invalid Google token"
+        ]
+      ];
     }
 
     $user_id = $response -> sub;
     $user_data = $this -> getUserByOAuthID($user_id, "google");
     if(!empty($user_data)){ # Si el usuario existe lo devuelvo para genera el token
-      return (object)array("http_code" => 200, "data" => $user_data);
+      return (object)["http_code" => 200, "data" => $user_data];
     }
 
     # Fix por posibles campos nulos
@@ -123,14 +159,24 @@ class Auth{
 
     # Verifico si hay otro usuario con ese email
     if(!empty($email) && !empty($this -> getUserByEmail($email))){
-      return (object)array("http_code" => 409, "data" => ["error" => "A user with this email address already exists"]);
+      return (object)["http_code" => 409,
+        "error" => [
+          "code" => "DUPLICATED_EMAIL",
+          "desc" => "A user with the specified email address already exists"
+        ]
+      ];
     }
    # Verifico si hay otro usuario con ese username
     if(!empty($this -> getUserByUserName($username))){
-      return (object)array("http_code" => 409, "data" => ["error" => "A user with this username already exists"]);
+      return (object)["http_code" => 409,
+        "error" => [
+          "code" => "DUPLICATED_USERNAME",
+          "desc" => "A user with the specified username already exists"
+        ]
+      ];
     }
 
-    $this -> registerUserSSO((object)array(
+    $this -> registerUserSSO((object)[
       "first_name" => $first_name,
       "last_name" => $last_name,
       "email" => $email,
@@ -138,20 +184,26 @@ class Auth{
       "picture" => $picture,
       "oauth2_id" => $user_id,
       "oauth2_service" => "google"
-    ));
+    ]);
 
     $user_data = $this -> getUserByOAuthID($user_id, "google");
-    return (object)array("http_code" => 200, "data" => $user_data);
+    return (object)["http_code" => 200, "data" => $user_data];
   }
 
   public function registerFacebook($user_id, $token, $username){
     $response = $this -> validateToken("https://graph.facebook.com/$user_id?fields=id,first_name,last_name,email,picture.width(640)&access_token=$token");
     if($response === false){
-      return (object)array("http_code" => 401, "data" => ["error" => "Invalid token"]);
+      return (object)["http_code" => 401,
+        "error" => [
+          "code" => "SSO_INVALID_TOKEN",
+          "desc" => "Invalid Facebook token"
+        ]
+      ];
     }
+
     $user_data = $this -> getUserByOAuthID($user_id, "facebook");
     if(!empty($user_data)){ # Si el usuario existe lo devuelvo para genera el token
-      return (object)array("http_code" => 200, "data" => $user_data);
+      return (object)["http_code" => 200, "data" => $user_data];
     }
 
     # Fix por posibles campos nulos
@@ -162,14 +214,24 @@ class Auth{
 
     # Verifico si hay otro usuario con ese email
     if(!empty($email) && !empty($this -> getUserByEmail($email))){
-      return (object)array("http_code" => 409, "data" => ["error" => "A user with this email address already exists"]);
+      return (object)["http_code" => 409,
+        "error" => [
+          "code" => "DUPLICATED_EMAIL",
+          "desc" => "A user with the specified email address already exists"
+        ]
+      ];
     }
    # Verifico si hay otro usuario con ese username
     if(!empty($username) && !empty($this -> getUserByUserName($username))){
-      return (object)array("http_code" => 409, "data" => ["error" => "A user with this username already exists"]);
+      return (object)["http_code" => 409,
+        "error" => [
+          "code" => "DUPLICATED_USERNAME",
+          "desc" => "A user with the specified username already exists"
+        ]
+      ];
     }
 
-    $this -> registerUserSSO((object)array(
+    $this -> registerUserSSO((object)[
       "first_name" => $first_name,
       "last_name" => $last_name,
       "email" => $email,
@@ -177,10 +239,10 @@ class Auth{
       "picture" => $picture,
       "oauth2_id" => $user_id,
       "oauth2_service" => "facebook"
-    ));
+    ]);
 
     $user_data = $this -> getUserByOAuthID($user_id, "facebook");
-    return (object)array("http_code" => 200, "data" => $user_data);
+    return (object)["http_code" => 200, "data" => $user_data];
   }
 
   # Validacion OTP
@@ -214,10 +276,15 @@ class Auth{
       $resp = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
       if(empty($resp)){
-        return (object)array("http_code" => 404, "data" => ["error" => "User not found"]);
+        return (object)["http_code" => 404,
+          "error" => [
+            "code" => "USER_NOT_FOUND",
+            "desc" => "No user was found with the specified ID"
+          ]
+        ];
       }
       $this -> _sendOtpMail($resp[0]['Email'],$resp[0]['UserName'],$resp[0]['OTP_Code']);
-      return (object)array("http_code" => 200, "data" => []);
+      return (object)["http_code" => 200, "data" => []];
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
@@ -232,36 +299,35 @@ class Auth{
 
     // Configuración de PHPMailer
     $mail = new PHPMailer(true);
-
     try {
-        // Configuración del servidor SMTP
-        $mail->isSMTP();
-        $mail->Host = 'smtp.gmail.com';
-        $mail->SMTPAuth = true;
-        $mail->Username = $smtpAccount;
-        $mail->Password = $smtpPassword;
-        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-        $mail->Port = 587;
+      // Configuración del servidor SMTP
+      $mail->isSMTP();
+      $mail->Host = 'smtp.gmail.com';
+      $mail->SMTPAuth = true;
+      $mail->Username = $smtpAccount;
+      $mail->Password = $smtpPassword;
+      $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+      $mail->Port = 587;
 
-        // Configuración del remitente y destinatario
-        $mail->setFrom($smtpAccount,'Contacto OneSoul');
-        $mail->addAddress($rec, $username);
+      // Configuración del remitente y destinatario
+      $mail->setFrom($smtpAccount,'Contacto OneSoul');
+      $mail->addAddress($rec, $username);
 
-        // Contenido del correo
-        $mail->isHTML(true);
-        $mail->Subject = 'Complete su registro en OneSoul';
-        $mail->Body    = $template;
-        $mail->AltBody = "Hola $username, bienvenido a OneSoul\nSu código de verificaci&oacute;n es $otp_cod";
-        $mail->addEmbeddedImage(ROOT."/src/templates/logo.png", 'logo');
+      // Contenido del correo
+      $mail->isHTML(true);
+      $mail->Subject = 'Complete su registro en OneSoul';
+      $mail->Body    = $template;
+      $mail->AltBody = "Hola $username, bienvenido a OneSoul\nSu código de verificaci&oacute;n es $otp_cod";
+      $mail->addEmbeddedImage(ROOT."/src/templates/logo.png", 'logo');
 
-        // Enviar el correo
-        $mail->send();
+      // Enviar el correo
+      $mail->send();
     } catch (Exception $e) {
-        # echo "No se pudo enviar el correo. Error: {$mail->ErrorInfo}";
+      # echo "No se pudo enviar el correo. Error: {$mail->ErrorInfo}";
     }
   }
 
-  # Valida un token generado por el login SSO
+  # Valida un token generado por el login SSO o reCaptcha
   private function validateToken($url){
     $ch = curl_init();
 
@@ -361,24 +427,32 @@ class Auth{
 
   public function validateReCaptcha($recaptchaToken, $clientIp) {
     $secret = $GLOBALS['config']['recaptcha']['secret'];
-    $min_score = $GLOBALS['config']['recaptcha']['min_score'];
+    $minScore = $GLOBALS['config']['recaptcha']['min_score'];
     $url = "https://www.google.com/recaptcha/api/siteverify?secret=$secret&response=$recaptchaToken&remoteip=$clientIp";
 
     // Hacer la petición a la API de reCAPTCHA
-    $response = file_get_contents($url);
-    $result = json_decode($response, true);
-
-    // Si falla la validación
-    if (!$result || !$result['success']) {
-        return (object)array("http_code" => 400, "data" => ["error" => "Cant validate reCaptcha"]);
+    $response = $this -> validateToken($url);
+    if($response === false || !$response['success']){
+      return (object)["http_code" => 401,
+        "error" => [
+          "code" => "RECAPTCHA_INVALID_TOKEN",
+          "desc" => "Invalid reCaptcha token"
+        ]
+      ];
     }
+
     // Si el score es muy bajo
-    if ($result['min_score'] < $min_score) {
-        return (object)array("http_code" => 400, "data" => ["error" => "reCaptcha score is too low"]);
+    if ($response['min_score'] < $minScore) {
+      return (object)["http_code" => 401,
+        "error" => [
+          "code" => "RECAPTCHA_LOW_SCORE",
+          "desc" => "reCaptcha score is too low"
+        ]
+      ];
     }
 
     // Validación exitosa
-    return (object)array("http_code" => 200, "data" => []);
+    return (object)["http_code" => 200, "data" => []];
   }
 }
 
