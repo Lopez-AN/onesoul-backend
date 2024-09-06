@@ -76,7 +76,7 @@ class Auth{
 
   /*
   * Registro usuario
-  */
+  */  
   public function register($email, $username, $password){
     if(!empty($this -> getUserByEmail($email))){
       return (object)array("http_code" => 409, "data" => ["error" => "A user with this email address already exists"]);
@@ -358,4 +358,27 @@ class Auth{
       throw new DatabaseException($e->getMessage());
     }
   }
+
+  public function validateReCaptcha($recaptchaToken, $clientIp) {
+    $secret = $GLOBALS['config']['recaptcha']['secret'];
+    $min_score = $GLOBALS['config']['recaptcha']['min_score'];
+    $url = "https://www.google.com/recaptcha/api/siteverify?secret=$secret&response=$recaptchaToken&remoteip=$clientIp";
+
+    // Hacer la petición a la API de reCAPTCHA
+    $response = file_get_contents($url);
+    $result = json_decode($response, true);
+
+    // Si falla la validación
+    if (!$result || !$result['success']) {
+        return (object)array("http_code" => 400, "data" => ["error" => "Cant validate reCaptcha"]);
+    }
+    // Si el score es muy bajo
+    if ($result['min_score'] < $min_score) {
+        return (object)array("http_code" => 400, "data" => ["error" => "reCaptcha score is too low"]);
+    }
+
+    // Validación exitosa
+    return (object)array("http_code" => 200, "data" => []);
+  }
 }
+

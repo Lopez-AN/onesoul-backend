@@ -135,11 +135,23 @@ class AuthController{
   /*
   * Registro usuario
   */
+
   public function register(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
     $email = $data['email'] ?? '';
     $username = $data['username'] ?? '';
     $password = $data['password'] ?? '';
+    $recaptchaToken = $data['recaptchaToken'] ?? '';
+    $clientIp = $request->getServerParams()['REMOTE_ADDR'];
+
+    if (empty($recaptchaToken)) {
+      return $response->withStatus(400)->withJson(["error" => "Missing reCaptcha token"]);
+    }
+    
+    $validation = $this->auth->validateReCaptcha($recaptchaToken);
+    if ($validation->http_code !== 200) {
+        return $response->withStatus($validation->http_code)->withJson($validation->data);
+    }
 
     if(empty($email) || empty($username) || empty($password)){
       $response->getBody()->write(json_encode(['error' => "Invalid parameters"]));
@@ -170,6 +182,17 @@ class AuthController{
     $data = $request->getParsedBody();
     $token = $data['token'] ?? '';
     $username = $data['username'] ?? '';
+    $recaptchaToken = $data['recaptchaToken'] ?? '';
+    $clientIp = $request->getServerParams()['REMOTE_ADDR'];
+
+    if (empty($recaptchaToken)) {
+      return $response->withStatus(400)->withJson(["error" => "Missing reCaptcha token"]);
+    }
+    
+    $validation = $this->auth->validateReCaptcha($recaptchaToken);
+    if ($validation->http_code !== 200) {
+        return $response->withStatus($validation->http_code)->withJson($validation->data);
+    }
 
     if(empty($token) || empty($username)){
       $response->getBody()->write(json_encode(['error' => "Invalid parameters"]));
@@ -201,6 +224,17 @@ class AuthController{
     $user_id = $data['user_id'] ?? '';
     $token = $data['token'] ?? '';
     $username = $data['username'] ?? '';
+    $recaptchaToken = $data['recaptchaToken'] ?? '';
+    $clientIp = $request->getServerParams()['REMOTE_ADDR'];
+
+    if (empty($recaptchaToken)) {
+      return $response->withStatus(400)->withJson(["error" => "Missing reCaptcha token"]);
+    }
+    
+    $validation = $this->auth->validateReCaptcha($recaptchaToken);
+    if ($validation->http_code !== 200) {
+        return $response->withStatus($validation->http_code)->withJson($validation->data);
+    }
 
     if(empty($user_id) || empty($token) || empty($username)){
       $response->getBody()->write(json_encode(['error' => "Invalid parameters"]));
@@ -231,6 +265,18 @@ class AuthController{
     $data = $request->getParsedBody();
     $user_id = $data['user_id'] ?? '';
     $otp_code = $data['otp_code'] ?? '';
+    $recaptchaToken = $data['recaptchaToken'] ?? '';
+    $clientIp = $request->getServerParams()['REMOTE_ADDR'];
+
+    if (empty($recaptchaToken)) {
+      return $response->withStatus(400)->withJson(["error" => "Missing reCaptcha token"]);
+    }
+    
+    $validation = $this->auth->validateReCaptcha($recaptchaToken);
+    
+    if ($validation->http_code !== 200) {
+        return $response->withStatus($validation->http_code)->withJson($validation->data);
+    }
 
     if(empty($user_id) || empty($otp_code)){
       $response->getBody()->write(json_encode(['error' => "Invalid parameters"]));
@@ -279,4 +325,17 @@ class AuthController{
     $secret = $GLOBALS['config']['jwt']['secret'];
     return JWT::encode($payload, $secret, 'HS256');
   }
+
+  public function validateReCaptcha(Request $request, Response $response, $args) {
+    $data = $request->getParsedBody();
+    $recaptchaToken = $data['recaptcha_token'] ?? '';
+
+    if (empty($recaptchaToken)) {
+        return $response->withStatus(400)->withJson(["error" => "Missing reCaptcha token"]);
+    }
+
+    $validation = $this->auth->validateReCaptcha($recaptchaToken);
+    return $response->withStatus($validation->http_code)->withJson($validation->data);
+}
+
 }

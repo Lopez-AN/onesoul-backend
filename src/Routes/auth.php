@@ -36,4 +36,5 @@ return function (App $app) {
   $app->post('/register/google', [$authController, 'registerGoogle']);
   $app->post('/register/otp', [$authController, 'validateOTP']);
   $app->get('/register/send_otp_mail', [$authController, 'sendOtpMail']);
+  $app->post('/recaptcha', [$authController, 'validateReCaptcha']);
 };
