@@ -118,17 +118,17 @@ class Auth{
     }
 
     $password_hash = password_hash($password,PASSWORD_BCRYPT); #El password se guarda hasheado (obvio!)
-    $otp_code = rand(100000, 999999); # Codigo que se enviara por mail
+    $otpCode = rand(100000, 999999); # Codigo que se enviara por mail
 
     $this -> registerUser((object)[
       "email" => $email,
       "username" => $username,
       "password_hash" => $password_hash,
-      "otp_code" => $otp_code
+      "otp_code" => $otpCode
     ]);
 
     # Envio el mail al usuario
-    $this -> _sendOtpMail($email, $username, $otp_code);
+    $this -> _sendOtpMail($email, $username, $otpCode);
 
     $user_data = $this -> getUserByUserName($username);
     return (object)["http_code" => 200, "data" => $user_data];
@@ -246,12 +246,12 @@ class Auth{
   }
 
   # Validacion OTP
-  public function validateOTP($user_id, $otp_code){
+  public function validateOTP($user_id, $otpCode){
     try{
       $stmt = $this->db->prepare("SELECT u.OTP_Date FROM Users AS u
       LEFT JOIN Media as m ON u.UserID = m.UserID
       WHERE u.UserID = ? AND u.OTP_Code = ?");
-      $stmt->execute([$user_id, $otp_code]);
+      $stmt->execute([$user_id, $otpCode]);
       $resp = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
       # El OTP es de un solo uso
@@ -270,7 +270,7 @@ class Auth{
   # Envio de codigo OTP por email
   public function sendOtpMail($user_id){
     try{
-      $stmt = $this->db->prepare("SELECT u.Email, u.UserName, u.OTP_Code FROM Users AS u
+      $stmt = $this->db->prepare("SELECT u.Email, u.UserName FROM Users AS u
       WHERE u.UserID = ?");
       $stmt->execute([$user_id]);
       $resp = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -283,7 +283,13 @@ class Auth{
           ]
         ];
       }
-      $this -> _sendOtpMail($resp[0]['Email'],$resp[0]['UserName'],$resp[0]['OTP_Code']);
+
+      # Genero un nuevo codigo OTP y lo grabo en el usuario
+      $otpCode = rand(100000, 999999); # Codigo que se enviara por mail
+      $stmt = $this->db->prepare("UPDATE Users SET OTP_Code = ?, OTP_Date = ? WHERE UserID = ?");
+      $stmt->execute([$otpCode, date("YmdHis"), $user_id]);
+
+      $this -> _sendOtpMail($resp[0]['Email'],$resp[0]['UserName'],$otpCode);
       return (object)["http_code" => 200, "data" => []];
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
@@ -432,7 +438,7 @@ class Auth{
 
     // Hacer la petición a la API de reCAPTCHA
     $response = $this -> validateToken($url);
-    if($response === false || !$response['success']){
+    if($response === false || empty($response -> success)){
       return (object)["http_code" => 401,
         "error" => [
           "code" => "RECAPTCHA_INVALID_TOKEN",
@@ -442,7 +448,7 @@ class Auth{
     }
 
     // Si el score es muy bajo
-    if ($response['min_score'] < $minScore) {
+    if ($response -> score < $minScore) {
       return (object)["http_code" => 401,
         "error" => [
           "code" => "RECAPTCHA_LOW_SCORE",

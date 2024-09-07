@@ -16,27 +16,6 @@ class AuthController{
     $this->auth = $auth;
   }
 
-  public function sendOtpMail(Request $request, Response $response, $args) {
-    $jwt = $request->getAttribute('jwt');
-
-    try {
-      $auth = $this->auth->sendOtpMail($jwt['data'] -> id);
-      if($auth->http_code != 200){
-        $response->getBody()->write(json_encode($auth->error));
-        $response = $response->withStatus($auth->http_code);
-      }
-    } catch (DatabaseException $e) {
-      $response->getBody()->write(json_encode([
-        "error" => [
-          "code" => "INTERNAL_SERVER_ERROR",
-          "desc" => $e->getMessage()
-        ]
-      ]));
-      $response = $response->withStatus(500);
-    }
-    return $response->withHeader('Content-Type', 'application/json');
-  }
-
   /*
   * Logueo usuario
   */
@@ -174,12 +153,14 @@ class AuthController{
     $email = $data['email'] ?? '';
     $username = $data['username'] ?? '';
     $password = $data['password'] ?? '';
-    $recaptchaToken = $data['recaptchaToken'] ?? '';
+    $recaptchaToken = $data['recaptcha_token'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
     $validation = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
     if ($validation->http_code !== 200) {
-      return $response->withStatus($validation->http_code)->withJson($validation->data);
+      $response->getBody()->write(json_encode($validation->error));
+      $response = $response->withStatus($validation->http_code);
+      return $response->withHeader('Content-Type', 'application/json');
     }
 
     if(empty($email) || empty($username) || empty($password) || empty($recaptchaToken)){
@@ -221,7 +202,7 @@ class AuthController{
     $data = $request->getParsedBody();
     $token = $data['token'] ?? '';
     $username = $data['username'] ?? '';
-    $recaptchaToken = $data['recaptchaToken'] ?? '';
+    $recaptchaToken = $data['recaptcha_token'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
     if (empty($recaptchaToken)) {
@@ -230,7 +211,9 @@ class AuthController{
 
     $validation = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
     if ($validation->http_code !== 200) {
-      return $response->withStatus($validation->http_code)->withJson($validation->error);
+      $response->getBody()->write(json_encode($validation->error));
+      $response = $response->withStatus($validation->http_code);
+      return $response->withHeader('Content-Type', 'application/json');
     }
 
     if(empty($token) || empty($username) || empty($recaptchaToken)){
@@ -273,7 +256,7 @@ class AuthController{
     $user_id = $data['user_id'] ?? '';
     $token = $data['token'] ?? '';
     $username = $data['username'] ?? '';
-    $recaptchaToken = $data['recaptchaToken'] ?? '';
+    $recaptchaToken = $data['recaptcha_token'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
     if(empty($user_id) || empty($token) || empty($username) || empty($recaptchaToken)){
@@ -289,7 +272,9 @@ class AuthController{
 
     $validation = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
     if ($validation->http_code !== 200) {
-      return $response->withStatus($validation->http_code)->withJson($validation->error);
+      $response->getBody()->write(json_encode($validation->error));
+      $response = $response->withStatus($validation->http_code);
+      return $response->withHeader('Content-Type', 'application/json');
     }
 
     try{
@@ -316,14 +301,47 @@ class AuthController{
     return $response->withHeader('Content-Type', 'application/json');
   }
 
-  public function validateOTP(Request $request, Response $response, $args) {
+  public function sendOtpMail(Request $request, Response $response, $args) {
+    $jwt = $request->getAttribute('jwt');
+
     $data = $request->getParsedBody();
-    $user_id = $data['user_id'] ?? '';
-    $otp_code = $data['otp_code'] ?? '';
-    $recaptchaToken = $data['recaptchaToken'] ?? '';
+    $recaptchaToken = $data['recaptcha_token'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
-    if(empty($user_id) || empty($otp_code) || empty($recaptchaToken)){
+    $validation = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
+    if ($validation->http_code !== 200) {
+      $response->getBody()->write(json_encode($validation->error));
+      $response = $response->withStatus($validation->http_code);
+      return $response->withHeader('Content-Type', 'application/json');
+    }
+
+    try {
+      $auth = $this->auth->sendOtpMail($jwt['data'] -> id);
+      if($auth->http_code != 200){
+        $response->getBody()->write(json_encode($auth->error));
+        $response = $response->withStatus($auth->http_code);
+      }
+    } catch (DatabaseException $e) {
+      $response->getBody()->write(json_encode([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]));
+      $response = $response->withStatus(500);
+    }
+    return $response->withHeader('Content-Type', 'application/json');
+  }
+
+  public function validateOTP(Request $request, Response $response, $args) {
+    $jwt = $request->getAttribute('jwt');
+
+    $data = $request->getParsedBody();
+    $otp_code = $data['otp_code'] ?? '';
+    $recaptchaToken = $data['recaptcha_token'] ?? '';
+    $clientIp = $request->getServerParams()['REMOTE_ADDR'];
+
+    if(empty($otp_code) || empty($recaptchaToken)){
       $response->getBody()->write(json_encode([
         "error" => [
           "code" => "INVALID_PARAMETERS",
@@ -336,11 +354,13 @@ class AuthController{
 
     $validation = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
     if ($validation->http_code !== 200) {
-      return $response->withStatus($validation->http_code)->withJson($validation->error);
+      $response->getBody()->write(json_encode($validation->error));
+      $response = $response->withStatus($validation->http_code);
+      return $response->withHeader('Content-Type', 'application/json');
     }
 
     try {
-      $auth = $this->auth->validateOTP($user_id, $otp_code);
+      $auth = $this->auth->validateOTP($jwt['data'] -> id, $otp_code);
       if(empty($auth)){
         $response->getBody()->write(json_encode([
           "error" => [
@@ -361,7 +381,7 @@ class AuthController{
           ]));
           $response = $response->withStatus(401);
         }else{
-          $response->getBody()->write(json_encode(['msg' => "Verified email"]));
+          $response->getBody()->write(json_encode([]));
           $response = $response->withStatus(200);
         }
       }
