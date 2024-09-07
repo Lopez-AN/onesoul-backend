@@ -189,17 +189,70 @@ class User {
     }
 
     public function updateUser($id, $data) {
-        $this->validateUser($data);
         try {
-            $stmt = $this->db->prepare("UPDATE Users SET FirstName = :FirstName, LastName = :LastName, UserName = :UserName, 
-            PasswordHash = :PasswordHash, Email = :Email, Phone = :Phone, AddressName = :AddressName, AddressNumber = 
-            :AddressNumber, Floor = :Floor, Department = :Department, Cp = :Cp, City = :City, State = :State, CountryCode = 
-            :CountryCode, DateOfBirth = :DateOfBirth, Gender = :Gender, Biography = :Biography, ValidatedEmail = :ValidatedEmail, 
-            TwoFactorAuth = :TwoFactorAuth, UserType = :UserType, RegistrationDate = :RegistrationDate, LastLogin = :LastLogin, 
-            DeactivationDate = :DeactivationDate, UserLevel = :UserLevel, TermsAndConditions = :TermsAndConditions, SignedContract
-             = :SignedContract, LegalDocuments = :LegalDocuments WHERE UserID = :UserID");
-            $data['UserID'] = $id;
-            $stmt->execute($data);
+            // Verificar si el usuario existe
+            $resp = $this->getUserById($id);
+            if (empty($resp['data'])) {
+                return (object)[
+                    "http_code" => 404,
+                    "error" => [
+                        "code" => "USER_NOT_FOUND",
+                        "desc" => "No user was found with the specified ID"
+                    ]
+                ];
+            }
+
+            // Verificar si hay campos para actualizar
+            if (empty($data)) {
+                return (object)[
+                    "http_code" => 400,
+                    "error" => [
+                        "code" => "INVALID_PARAMETERS",
+                        "desc" => "Parameters are missing or invalid"
+                    ]
+                ];
+            }
+
+            // Lista de campos permitidos para actualizar
+            $allowedFields = [
+                'FirstName', 'LastName', 'Email', 'Phone',
+                'AddressName', 'AddressNumber', 'Floor', 'Department',
+                'Cp', 'City', 'State', 'CountryCode', 'DateOfBirth',
+                'Gender', 'Biography', 'UserType', 'TermsAndConditions',
+                'SignedContract', 'LegalDocuments', 'shortDescription'
+            ];
+
+            // Filtrar y preparar los campos a actualizar
+            $fields = [];
+            foreach ($data as $key => $value) {
+                if (!in_array($key, $allowedFields)) {
+                    return (object)[
+                        "http_code" => 400,
+                        "error" => [
+                            "code" => "INVALID_UPDATE_KEY",
+                            "desc" => "Key $key present in the JSON is not supported"
+                        ]
+                    ];
+                }
+                $fields[] = "$key = :$key";
+            }
+
+            // Construir la consulta SQL para la actualización
+            $sql = "UPDATE Users SET " . implode(", ", $fields) . " WHERE UserID = :UserID";
+            $stmt = $this->db->prepare($sql);
+
+            // Vincular parámetros y manejar valores NULL
+            foreach ($data as $key => $value) {
+                $stmt->bindValue(":$key", $value === null ? null : $value, $value === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
+            }
+
+            // Vincular el ID del usuario
+            $stmt->bindValue(':UserID', $id, PDO::PARAM_INT);
+
+            // Ejecutar la consulta
+            $stmt->execute();
+
+            // Devolver los datos actualizados del usuario
             return $this->getUserById($id);
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());

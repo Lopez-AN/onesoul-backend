@@ -124,24 +124,48 @@ class UserController
     return $response->withHeader('Content-Type', 'application/json');
   }
 
-  public function updateUser(Request $request, Response $response, $args){
-    $id = $args['id'];
+  public function updateUser(Request $request, Response $response, $args) {
+    $userId = $args['id'];
     $data = $request->getParsedBody();
-    try {
-      $user = $this->user->updateUser($id, $data);
-      $response->getBody()->write(json_encode($user));
-    } catch (ValidationException $e) {
-      $response = $response->withStatus(422);
-      $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
-    } catch (NotFoundException $e) {
-      $response = $response->withStatus(404);
-      $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
-    } catch (DatabaseException $e) {
-      $response = $response->withStatus(500);
-      $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
+
+    // Obtener el token y validar que el usuario es el propietario o administrador
+    $jwt = $this->auth->getTokenData($request);
+    if (!$jwt) {
+        return $response->withStatus(401)->withJson(['error' => [
+            'code' => 'INVALID_TOKEN',
+            'desc' => 'Token inválido o no proporcionado'
+        ]]);
     }
-    return $response->withHeader('Content-Type', 'application/json');
-  }
+
+    // Verificar que el usuario es el propietario o administrador
+    if ($jwt['id'] != $userId && $jwt['user_type'] != 'admin') {
+        return $response->withStatus(403)->withJson([
+            'error' => [
+                'code' => 'UNAUTHORIZED',
+                'desc' => 'No tienes permisos para modificar este usuario.'
+            ]
+        ]);
+    }
+
+    // Llamar al método de actualización en el modelo
+    try {
+        $result = $this->user->updateUser($userId, $data);
+
+        // Revisar si hubo un error en el proceso
+        if (isset($result->error)) {
+            return $response->withStatus($result->http_code)->withJson(['error' => $result->error]);
+        }
+
+        // Retornar el usuario actualizado
+        return $response->withStatus(200)->withJson($result);
+    } catch (DatabaseException $e) {
+        return $response->withStatus(500)->withJson(['error' => [
+            'code' => 'INTERNAL_SERVER_ERROR',
+            'desc' => $e->getMessage()
+        ]]);
+    }
+}
+
 
   public function deleteUser(Request $request, Response $response, $args){
     $id = $args['id'];
