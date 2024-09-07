@@ -59,9 +59,9 @@ class User {
         }
     }
 
-    public function getUserById($paginator, $id) {
+    public function getUserById($id) {
         try {
-            $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName, u.UserName,
+            $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName, u.UserName,
             u.Email, u.Phone, u.AddressName, u.AddressNumber, u.Floor,
             u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
             u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
@@ -71,25 +71,21 @@ class User {
             FROM Users as u
             LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
             LEFT JOIN Categories as c ON uc.categoryID = c.categoryID
-            LEFT JOIN Media as m ON u.UserID = m.UserID WHERE u.UserID = :id
-            LEFT JOIN Reviews as r ON u.UserID = r.SUserID
+            LEFT JOIN Media as m ON u.UserID = m.UserID
+            LEFT JOIN Reviews as r ON u.UserID = r.GUserID
+            WHERE u.UserID = :id
             GROUP BY u.UserID
-            ORDER BY u.UserID
-            LIMIT :_limit OFFSET :_offset");
+            ORDER BY u.UserID");
 
             $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-            $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
-            $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
             $stmt->execute();
 
             $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
-            $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
-            $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
             return [
                 "data" => $rs,
                 "rows" => [
-                    "total" => $total['total'],
+                    "total" => 1,
                     "fetched" => count($rs)
                 ]
             ];

@@ -36,9 +36,8 @@ class UserController
   }
 
   public function getUserById(Request $request, Response $response, $args){
-    $paginator = paginator($request);
-
     $id = $args['id'];
+
     try {
       $user = $this->user->getUserById($paginator, $id);
       if ($user) {
@@ -128,26 +127,25 @@ class UserController
     $userId = $args['id'];
     $data = $request->getParsedBody();
 
-    // Obtener el token y validar que el usuario es el propietario o administrador
-    $jwt = $this->auth->getTokenData($request);
-    if (!$jwt) {
-        return $response->withStatus(401)->withJson(['error' => [
-            'code' => 'INVALID_TOKEN',
-            'desc' => 'Token inválido o no proporcionado'
-        ]]);
-    }
+    // Obtener el token 
+    // $jwt = $this->auth->getTokenData($request);
+    // if (!$jwt) {
+    //     return $response->withStatus(401)->withJson(['error' => [
+    //         'code' => 'INVALID_TOKEN',
+    //         'desc' => 'Token inválido o no proporcionado'
+    //     ]]);
+    // }
 
-    // Verificar que el usuario es el propietario o administrador
-    if ($jwt['id'] != $userId && $jwt['user_type'] != 'admin') {
-        return $response->withStatus(403)->withJson([
-            'error' => [
-                'code' => 'UNAUTHORIZED',
-                'desc' => 'No tienes permisos para modificar este usuario.'
-            ]
-        ]);
-    }
+    // // // Verificar que el usuario es el propietario o administrador
+    // // if ($jwt['id'] != $userId && $jwt['user_type'] != 'admin') {
+    // //     return $response->withStatus(403)->withJson([
+    // //         'error' => [
+    // //             'code' => 'UNAUTHORIZED',
+    // //             'desc' => 'No tienes permisos para modificar este usuario.'
+    // //         ]
+    // //     ]);
+    // }
 
-    // Llamar al método de actualización en el modelo
     try {
         $result = $this->user->updateUser($userId, $data);
 
