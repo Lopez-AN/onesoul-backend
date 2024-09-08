@@ -107,22 +107,6 @@ class UserController
     return $response->withHeader('Content-Type', 'application/json');
   }
 
-  public function createUser(Request $request, Response $response, $args){
-    $data = $request->getParsedBody();
-    try {
-      $user = $this->user->createUser($data);
-      $response = $response->withStatus(201);
-      $response->getBody()->write(json_encode($user));
-    } catch (ValidationException $e) {
-      $response = $response->withStatus(422);
-      $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
-    } catch (DatabaseException $e) {
-      $response = $response->withStatus(500);
-      $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
-    }
-    return $response->withHeader('Content-Type', 'application/json');
-  }
-
   public function updateUser(Request $request, Response $response, $args) {
     $userId = $args['id'];
     $data = $request->getParsedBody();

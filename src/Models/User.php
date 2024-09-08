@@ -145,39 +145,6 @@ class User {
         }
     }
 
-    public function createUser($data) {
-#        if(isset($data['imgBase64']) && !empty($data['imgBase64'])){
-#            $img = base64_decode($data['imgBase64']);
-#            $ext = imgFormat();
-#            if($ext != NULL){
-#                file_put_contents("/usr/share/img/users/".$data['userid'].".$ext");
-#            }
-#        }
-
-#        if(isset($data['imgURL']) && !empty($data['imgURL'])){
-#            $img = @file_get_contents($data['imgURL']);
-#            $ext = imgFormat();
-#            if($ext != NULL){
-#                file_put_contents("/usr/share/img/users/".$data['userid'].".$ext");
-#            }
-#        }
-
-        $this->validateUser($data);
-        try {
-            $stmt = $this->db->prepare("INSERT INTO Users (FirstName, LastName, UserName, PasswordHash, Email, Phone, 
-            AddressName, AddressNumber, Floor, Department, Cp, City, State, CountryCode, DateOfBirth, Gender, Biography, 
-            ValidatedEmail, TwoFactorAuth, UserType, RegistrationDate, LastLogin, DeactivationDate, UserLevel, 
-            TermsAndConditions, SignedContract, LegalDocuments) VALUES (:FirstName, :LastName, :UserName, :PasswordHash, 
-            :Email, :Phone, :AddressName, :AddressNumber, :Floor, :Department, :Cp, :City, :State, :CountryCode, :DateOfBirth, 
-            :Gender, :Biography, :ValidatedEmail, :TwoFactorAuth, :UserType, :RegistrationDate, :LastLogin, :DeactivationDate, 
-            :UserLevel, :TermsAndConditions, :SignedContract, :LegalDocuments)");
-            $stmt->execute($data);
-            return $this->getUserById($this->db->lastInsertId());
-        } catch (\PDOException $e) {
-            throw new DatabaseException($e->getMessage());
-        }
-    }
-
     public function updateUser($id, $data) {
         try {
             // Verificar si el usuario existe
