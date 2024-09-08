@@ -108,37 +108,43 @@ class UserController
   }
 
   public function updateUser(Request $request, Response $response, $args) {
-    $jwt = $request->getAttribute('jwt');
-
-    /* 
-      para leer aca el token usa por ejemplo
-
-      $jwt['data'] -> UserID,
-      $jwt['data'] -> UserLevel,
-      ETc...
-    */
-
-
     $userId = $args['id'];
     $data = $request->getParsedBody();
+    $jwt = $request->getAttribute('jwt');
 
     try {
-        $result = $this->user->updateUser($userId, $data);
+      $useridtoken = $this->user->updateUser($jwt['data'] -> UserID);
+      $usertypetoken = $this->user->updateUser($jwt['data'] -> UserType);
 
-        // Revisar si hubo un error en el proceso
-        if (isset($result->error)) {
-            return $response->withStatus($result->http_code)->withJson(['error' => $result->error]);
-        }
+      // Verificar si el usuario autenticado es el mismo que el que se intenta modificar, o si es un administrador
+      if ($userIdFromToken != $userId && $userTypeFromToken != 'admin') {
+        return $response->withStatus(403)->withJson([
+          "error" => [
+            "code" => "UNAUTHORIZED",
+            "desc" => "No tienes permisos para modificar este usuario."
+          ]
+        ]);
+      }
 
-        // Retornar el usuario actualizado
-        return $response->withStatus(200)->withJson($result);
+      $result = $this->user->updateUser($userId, $data);
+
+      // Revisar si hubo un error en el proceso
+      if (isset($result->error)) {
+        return $response->withStatus($result->http_code)->withJson(['error' => $result->error]);
+      }
+
+      // Retornar el usuario actualizado
+      return $response->withStatus(200)->withJson($result);
+
     } catch (DatabaseException $e) {
-        return $response->withStatus(500)->withJson(['error' => [
-            'code' => 'INTERNAL_SERVER_ERROR',
-            'desc' => $e->getMessage()
-        ]]);
+      return $response->withStatus(500)->withJson([
+        'error' => [
+          'code' => 'INTERNAL_SERVER_ERROR',
+          'desc' => $e->getMessage()
+        ]
+      ]);
     }
-}
+  }
 
 
   public function deleteUser(Request $request, Response $response, $args){
