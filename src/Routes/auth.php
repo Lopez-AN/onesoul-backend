@@ -13,7 +13,8 @@ return function (App $app) {
       new Tuupola\Middleware\JwtAuthentication\RequestPathRule([
         "path" => [
           "/register/otp",
-          "/register/send_otp_mail"
+          "/register/send_otp_mail",
+          "/auth/refresh_token"
         ],
         "ignore" => []
       ]),
@@ -39,4 +40,5 @@ return function (App $app) {
   $app->post('/register/otp', [$authController, 'validateOTP']);
   $app->post('/register/send_otp_mail', [$authController, 'sendOtpMail']);
   $app->post('/recaptcha', [$authController, 'validateReCaptcha']);
+  $app->get('/auth/refresh_token', [$authController, 'refreshToken']);
 };

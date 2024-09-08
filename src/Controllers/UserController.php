@@ -125,7 +125,7 @@ class UserController
         ]);
       }
       // Verificar si el usuario autenticado es el mismo que el que se intenta modificar, o si es un administrador
-      if ($useridtoken != $userId && $usertypetoken != 'admin') {
+      if ($useridtoken != $userId && $usertypetoken != 'Admin') {
         return $response->withStatus(403)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",

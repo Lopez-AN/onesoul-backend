@@ -426,6 +426,41 @@ class AuthController{
     return $response->withHeader('Content-Type', 'application/json');
   }
 
+  public function refreshToken(Request $request, Response $response, $args){
+    $jwt = $request->getAttribute('jwt');
+    $userID = $jwt['data'] -> UserID;
+    $userData = $this->user->getUserById($userID);
+
+    if(empty($userData)){
+      $response->getBody()->write(json_encode([
+      "error" => [
+          "code" => "INVALID_PARAMETERS",
+          "desc" => "Parameters are missing or invalid"
+          ]
+      ]));
+      return $response->withStatus(404)->withHeader('Content-Type', 'application/json'); 
+    }
+
+    // Verificar si la cuenta está desactivada
+    $deactivationDate = $userData['DeactivationDate'];
+    if (!is_null($deactivationDate) && strtotime($deactivationDate) <= time()) {
+      $response->getBody()->write(json_encode([
+        "error" => [
+          "code" => "USER_DISABLED",
+          "desc" => "The specified user is disabled"
+        ]
+      ]));
+      return $response->withStatus(401)->withHeader('Content-Type', 'application/json');
+    }
+
+    $token = $this->JWTgen($userData);
+    $response->getBody()->write(json_encode([
+      'token' => $token,
+      'userData' => $userData
+    ]));
+    return $response->withHeader('Content-Type', 'application/json');
+  }
+
   # Generador de token JWT
   private function JWTgen($user){
     $payload = [

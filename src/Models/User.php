@@ -82,7 +82,31 @@ class User {
 
             $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-            return empty($rs) ? [] : $rs[0];
+            if (empty($rs)) {
+                return (object)[
+                    "http_code" => 404,
+                    "error" => [
+                        "code" => "USER_NOT_FOUND",
+                        "desc" => "No user was found with the specified ID"
+                    ]
+                ];
+            }
+    
+            $user = $rs[0]; 
+    
+            // Verificar si la cuenta está desactivada
+            if (!is_null($user['DeactivationDate']) && strtotime($user['DeactivationDate']) <= time()) {
+                return (object)[
+                    "http_code" => 401,
+                    "error" => [
+                        "code" => "USER_DISABLED",
+                        "desc" => "The specified user is disabled"
+                    ]
+                ];
+            }
+    
+            return $user;
+
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());
         }
