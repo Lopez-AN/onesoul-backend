@@ -82,13 +82,7 @@ class User {
 
             $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-            return [
-                "data" => $rs,
-                "rows" => [
-                    "total" => 1,
-                    "fetched" => count($rs)
-                ]
-            ];
+            return empty($rs) ? [] : $rs[0];
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());
         }

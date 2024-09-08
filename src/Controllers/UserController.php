@@ -39,7 +39,7 @@ class UserController
     $id = $args['id'];
 
     try {
-      $user = $this->user->getUserById($paginator, $id);
+      $user = $this->user->getUserById($id);
       if ($user) {
         $response->getBody()->write(json_encode($user));
       } else {

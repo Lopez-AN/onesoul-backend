@@ -5,14 +5,18 @@ namespace App\Controllers;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use App\Models\Auth;
+use App\Models\User;
 use App\Exceptions\DatabaseException;
 use Firebase\JWT\JWT;
 use \DateTime;
 
 class AuthController{
+
+  protected $user;
   protected $auth;
 
-  public function __construct(Auth $auth){
+  public function __construct(User $user, Auth $auth){
+    $this->user = $user;
     $this->auth = $auth;
   }
 
@@ -48,7 +52,11 @@ class AuthController{
         $response = $response->withStatus(401);
       }else{
         $jwt = $this -> JWTgen($auth[0]);
-        $response->getBody()->write(json_encode(['token' => $jwt]));
+        $userData = $this->user->getUserById($auth[0]['UserID']);
+        $response->getBody()->write(json_encode([
+          'token' => $jwt,
+          'userData' => $userData
+        ]));
       }
     } catch (DatabaseException $e) {
       $response->getBody()->write(json_encode([
@@ -81,8 +89,12 @@ class AuthController{
       $auth = $this->auth->loginGoogle($token);
       switch($auth->http_code) {
         case 200: // Logueo correcto
-          $jwt = $this->JWTgen($auth->data[0]);
-          $response->getBody()->write(json_encode(['token' => $jwt]));
+          $jwt = $this -> JWTgen($auth -> data[0]);
+          $userData = $this->user->getUserById($auth -> data[0]['UserID']);
+          $response->getBody()->write(json_encode([
+            'token' => $jwt,
+            'userData' => $userData
+          ]));
         break;
         case 404: // Usuario no encontrado
           $response->getBody()->write(json_encode([$auth->error, $auth->data]));
@@ -125,8 +137,12 @@ class AuthController{
       $auth = $this->auth->loginFacebook($user_id, $token);
       switch($auth->http_code) {
         case 200: // Logueo correcto
-          $jwt = $this->JWTgen($auth->data[0]);
-          $response->getBody()->write(json_encode(['token' => $jwt]));
+          $jwt = $this -> JWTgen($auth -> data[0]);
+          $userData = $this->user->getUserById($auth -> data[0]['UserID']);
+          $response->getBody()->write(json_encode([
+            'token' => $jwt,
+            'userData' => $userData
+          ]));
         break;
         case 404: // Usuario no encontrado
           $response->getBody()->write(json_encode([$auth->error, $auth->data]));
@@ -183,8 +199,12 @@ class AuthController{
       $auth = $this->auth->register($email, $username, $password);
       switch($auth->http_code) {
         case 200: // Logueo correcto o usuario existente
-          $jwt = $this->JWTgen($auth->data[0]);
-          $response->getBody()->write(json_encode(['token' => $jwt]));
+          $jwt = $this -> JWTgen($auth -> data[0]);
+          $userData = $this->user->getUserById($auth -> data[0]['UserID']);
+          $response->getBody()->write(json_encode([
+            'token' => $jwt,
+            'userData' => $userData
+          ]));
         break;
         default: // Otros, ejemplo Token inválido
           $response->getBody()->write(json_encode($auth->error));
@@ -232,8 +252,12 @@ class AuthController{
       $auth = $this->auth->registerGoogle($token, $username);
       switch($auth->http_code) {
         case 200: // Logueo correcto o usuario existente
-          $jwt = $this->JWTgen($auth->data[0]);
-          $response->getBody()->write(json_encode(['token' => $jwt]));
+          $jwt = $this -> JWTgen($auth -> data[0]);
+          $userData = $this->user->getUserById($auth -> data[0]['UserID']);
+          $response->getBody()->write(json_encode([
+            'token' => $jwt,
+            'userData' => $userData
+          ]));
         break;
         default: // Otros, ejemplo Token inválido
           $response->getBody()->write(json_encode($auth->error));
@@ -282,8 +306,12 @@ class AuthController{
       $auth = $this->auth->registerFacebook($user_id, $token, $username);
       switch($auth->http_code) {
         case 200: // Logueo correcto o usuario existente
-          $jwt = $this->JWTgen($auth->data[0]);
-          $response->getBody()->write(json_encode(['token' => $jwt]));
+          $jwt = $this -> JWTgen($auth -> data[0]);
+          $userData = $this->user->getUserById($auth -> data[0]['UserID']);
+          $response->getBody()->write(json_encode([
+            'token' => $jwt,
+            'userData' => $userData
+          ]));
         break;
         default: // Otros, ejemplo Token inválido
           $response->getBody()->write(json_encode($auth->error));
@@ -317,7 +345,7 @@ class AuthController{
     }
 
     try {
-      $auth = $this->auth->sendOtpMail($jwt['data'] -> id);
+      $auth = $this->auth->sendOtpMail($jwt['data'] -> UserID);
       if($auth->http_code != 200){
         $response->getBody()->write(json_encode($auth->error));
         $response = $response->withStatus($auth->http_code);
@@ -361,7 +389,7 @@ class AuthController{
     }
 
     try {
-      $auth = $this->auth->validateOTP($jwt['data'] -> id, $otp_code);
+      $auth = $this->auth->validateOTP($jwt['data'] -> UserID, $otp_code);
       if(empty($auth)){
         $response->getBody()->write(json_encode([
           "error" => [
@@ -404,13 +432,12 @@ class AuthController{
       'issued' => time(),
       'expire' => time() + $GLOBALS['config']['jwt']['lifetime'],
       'data' => [
-        'id' => $user['UserID'],
-        'username' => $user['UserName'],
-        'first_name' => $user['FirstName'],
-        'last_name' => $user['LastName'],
-        'email' => $user['Email'],
-        'user_type' => $user['UserType'],
-        'profile_photo' => $user['URL']
+        'UserID' => $user['UserID'],
+        'UserName' => $user['UserName'],
+        'UserType' => $user['UserType'],
+        'UserLevel' => $user['UserLevel'],
+        'ValidatedEmail' => $user['ValidatedEmail'],
+        'TwoFactorAuth' => $user['TwoFactorAuth']
       ]
     ];
     $secret = $GLOBALS['config']['jwt']['secret'];

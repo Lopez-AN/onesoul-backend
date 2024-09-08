@@ -2,6 +2,7 @@
 
 use Slim\App;
 use App\Controllers\AuthController;
+use App\Models\User;
 use App\Models\Auth;
 
 return function (App $app) {
@@ -24,8 +25,9 @@ return function (App $app) {
   ]));
 
   $pdo = require __DIR__ . './../core/database.php';
+  $user = new User($pdo);
   $auth = new Auth($pdo);
-  $authController = new AuthController($auth);
+  $authController = new AuthController($user, $auth);
 
   $app->post('/login', [$authController, 'login']);
   $app->post('/login/facebook', [$authController, 'loginFacebook']);
