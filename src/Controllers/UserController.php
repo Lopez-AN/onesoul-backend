@@ -108,27 +108,19 @@ class UserController
   }
 
   public function updateUser(Request $request, Response $response, $args) {
+    $jwt = $request->getAttribute('jwt');
+
+    /* 
+      para leer aca el token usa por ejemplo
+
+      $jwt['data'] -> UserID,
+      $jwt['data'] -> UserLevel,
+      ETc...
+    */
+
+
     $userId = $args['id'];
     $data = $request->getParsedBody();
-
-    // Obtener el token 
-    // $jwt = $this->auth->getTokenData($request);
-    // if (!$jwt) {
-    //     return $response->withStatus(401)->withJson(['error' => [
-    //         'code' => 'INVALID_TOKEN',
-    //         'desc' => 'Token inválido o no proporcionado'
-    //     ]]);
-    // }
-
-    // // // Verificar que el usuario es el propietario o administrador
-    // // if ($jwt['id'] != $userId && $jwt['user_type'] != 'admin') {
-    // //     return $response->withStatus(403)->withJson([
-    // //         'error' => [
-    // //             'code' => 'UNAUTHORIZED',
-    // //             'desc' => 'No tienes permisos para modificar este usuario.'
-    // //         ]
-    // //     ]);
-    // }
 
     try {
         $result = $this->user->updateUser($userId, $data);

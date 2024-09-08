@@ -21,7 +21,7 @@ return function (App $app) {
         "ignore" => ["OPTIONS"]
       ])
     ],
-    "attribute" => "jwt", // Asegúrate de que el atributo se llame 'jwt'
+    "attribute" => "jwt", // Este atributo lo podes usar para leer el token desde el controller
   ]));
 
   $pdo = require __DIR__ . './../core/database.php';
