@@ -149,7 +149,7 @@ class User {
         try {
             // Verificar si el usuario existe
             $resp = $this->getUserById($id);
-            if (empty($resp['data'])) {
+            if (empty($resp)) {
                 return (object)[
                     "http_code" => 404,
                     "error" => [

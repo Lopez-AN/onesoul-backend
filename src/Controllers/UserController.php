@@ -111,22 +111,21 @@ class UserController
     $userId = $args['id'];
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
-
     try {
       $useridtoken = $jwt['data'] -> UserID;
       $usertypetoken = $jwt['data'] -> UserType;
-      
+
       // Asegúrate de que el token contiene las propiedades necesarias
-      if (!isset($jwt['data']->UserID) || !isset($jwt['data']->UserType)) {
+      if (!property_exists($jwt['data'],'UserID') || !property_exists($jwt['data'],'UserType')) {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
-            "desc" => "Token inválido."
+            "desc" => "Invalid token"
           ]
         ]);
       }
       // Verificar si el usuario autenticado es el mismo que el que se intenta modificar, o si es un administrador
-      if ($userIdFromToken != $userId && $userTypeFromToken != 'admin') {
+      if ($useridtoken != $userId && $usertypetoken != 'admin') {
         return $response->withStatus(403)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
