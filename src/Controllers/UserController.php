@@ -113,8 +113,8 @@ class UserController
     $jwt = $request->getAttribute('jwt');
 
     try {
-      $useridtoken = $this->user->updateUser($jwt['data'] -> UserID);
-      $usertypetoken = $this->user->updateUser($jwt['data'] -> UserType);
+      $useridtoken = $jwt['data'] -> UserID;
+      $usertypetoken = $jwt['data'] -> UserType;
 
       // Verificar si el usuario autenticado es el mismo que el que se intenta modificar, o si es un administrador
       if ($userIdFromToken != $userId && $userTypeFromToken != 'admin') {
