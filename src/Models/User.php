@@ -91,9 +91,9 @@ class User {
                     ]
                 ];
             }
-    
-            $user = $rs[0]; 
-    
+
+            $user = $rs[0];
+
             // Verificar si la cuenta está desactivada
             if (!is_null($user['DeactivationDate']) && strtotime($user['DeactivationDate']) <= time()) {
                 return (object)[
@@ -104,8 +104,11 @@ class User {
                     ]
                 ];
             }
-    
-            return $user;
+
+            return (object)[
+                "http_code" => 200,
+                "data" => $user
+            ];
 
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());
@@ -173,14 +176,8 @@ class User {
         try {
             // Verificar si el usuario existe
             $resp = $this->getUserById($id);
-            if (empty($resp)) {
-                return (object)[
-                    "http_code" => 404,
-                    "error" => [
-                        "code" => "USER_NOT_FOUND",
-                        "desc" => "No user was found with the specified ID"
-                    ]
-                ];
+            if($resp -> http_code != 200){
+                return $resp;
             }
 
             // Verificar si hay campos para actualizar

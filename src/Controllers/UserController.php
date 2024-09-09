@@ -38,19 +38,25 @@ class UserController
   public function getUserById(Request $request, Response $response, $args){
     $id = $args['id'];
 
-    try {
+    try{
       $user = $this->user->getUserById($id);
-      if ($user) {
-        $response->getBody()->write(json_encode($user));
-      } else {
-        throw new NotFoundException('User not found');
+      switch($user->http_code) {
+        case 200: // Logueo correcto o usuario existente
+          $response->getBody()->write(json_encode($user->data));
+        break;
+        default: // Otros, ejemplo Token inválido
+          $response->getBody()->write(json_encode($user->error));
+          $response = $response->withStatus($user->http_code);
+        break;
       }
-    } catch (NotFoundException $e) {
-      $response = $response->withStatus(404);
-      $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
     } catch (DatabaseException $e) {
+      $response->getBody()->write(json_encode([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]));
       $response = $response->withStatus(500);
-      $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
     }
     return $response->withHeader('Content-Type', 'application/json');
   }
@@ -110,7 +116,19 @@ class UserController
   public function updateUser(Request $request, Response $response, $args) {
     $userId = $args['id'];
     $data = $request->getParsedBody();
+
     $jwt = $request->getAttribute('jwt');
+    if(!isset($jwt['data']) || !property_exists($jwt['data'],'UserID') || !property_exists($jwt['data'],'UserType')){
+      $response->getBody()->write(json_encode([
+        "error" => [
+          "code" => "INVALID_TOKEN",
+          "desc" => "Invalid JWT token"
+        ]
+      ]));
+      $response = $response->withStatus(400);
+      return $response->withHeader('Content-Type', 'application/json');
+    }
+
     try {
       $useridtoken = $jwt['data'] -> UserID;
       $usertypetoken = $jwt['data'] -> UserType;
@@ -126,7 +144,7 @@ class UserController
       }
       // Verificar si el usuario autenticado es el mismo que el que se intenta modificar, o si es un administrador
       if ($useridtoken != $userId && $usertypetoken != 'Admin') {
-        return $response->withStatus(403)->withJson([
+        return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
             "desc" => "No tienes permisos para modificar este usuario."
@@ -142,7 +160,7 @@ class UserController
       }
 
       // Retornar el usuario actualizado
-      return $response->withStatus(200)->withJson($result);
+      return $response->withStatus(200)->withJson($result -> data);
 
     } catch (DatabaseException $e) {
       return $response->withStatus(500)->withJson([

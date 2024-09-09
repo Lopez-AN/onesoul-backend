@@ -55,7 +55,7 @@ class AuthController{
         $userData = $this->user->getUserById($auth[0]['UserID']);
         $response->getBody()->write(json_encode([
           'token' => $jwt,
-          'userData' => $userData
+          'userData' => $userData -> data
         ]));
       }
     } catch (DatabaseException $e) {
@@ -93,7 +93,7 @@ class AuthController{
           $userData = $this->user->getUserById($auth -> data[0]['UserID']);
           $response->getBody()->write(json_encode([
             'token' => $jwt,
-            'userData' => $userData
+            'userData' => $userData -> data
           ]));
         break;
         case 404: // Usuario no encontrado
@@ -141,7 +141,7 @@ class AuthController{
           $userData = $this->user->getUserById($auth -> data[0]['UserID']);
           $response->getBody()->write(json_encode([
             'token' => $jwt,
-            'userData' => $userData
+            'userData' => $userData -> data
           ]));
         break;
         case 404: // Usuario no encontrado
@@ -203,7 +203,7 @@ class AuthController{
           $userData = $this->user->getUserById($auth -> data[0]['UserID']);
           $response->getBody()->write(json_encode([
             'token' => $jwt,
-            'userData' => $userData
+            'userData' => $userData -> data
           ]));
         break;
         default: // Otros, ejemplo Token inválido
@@ -256,7 +256,7 @@ class AuthController{
           $userData = $this->user->getUserById($auth -> data[0]['UserID']);
           $response->getBody()->write(json_encode([
             'token' => $jwt,
-            'userData' => $userData
+            'userData' => $userData -> data
           ]));
         break;
         default: // Otros, ejemplo Token inválido
@@ -310,7 +310,7 @@ class AuthController{
           $userData = $this->user->getUserById($auth -> data[0]['UserID']);
           $response->getBody()->write(json_encode([
             'token' => $jwt,
-            'userData' => $userData
+            'userData' => $userData -> data
           ]));
         break;
         default: // Otros, ejemplo Token inválido
@@ -332,6 +332,16 @@ class AuthController{
 
   public function sendOtpMail(Request $request, Response $response, $args) {
     $jwt = $request->getAttribute('jwt');
+    if(!isset($jwt['data']) || !property_exists($jwt['data'],'UserID')){
+      $response->getBody()->write(json_encode([
+        "error" => [
+          "code" => "INVALID_TOKEN",
+          "desc" => "Invalid JWT token"
+        ]
+      ]));
+      $response = $response->withStatus(400);
+      return $response->withHeader('Content-Type', 'application/json');
+    }
 
     $data = $request->getParsedBody();
     $recaptchaToken = $data['recaptcha_token'] ?? '';
@@ -364,6 +374,16 @@ class AuthController{
 
   public function validateOTP(Request $request, Response $response, $args) {
     $jwt = $request->getAttribute('jwt');
+    if(!isset($jwt['data']) || !property_exists($jwt['data'],'UserID')){
+      $response->getBody()->write(json_encode([
+        "error" => [
+          "code" => "INVALID_TOKEN",
+          "desc" => "Invalid JWT token"
+        ]
+      ]));
+      $response = $response->withStatus(400);
+      return $response->withHeader('Content-Type', 'application/json');
+    }
 
     $data = $request->getParsedBody();
     $otp_code = $data['otp_code'] ?? '';
@@ -428,35 +448,30 @@ class AuthController{
 
   public function refreshToken(Request $request, Response $response, $args){
     $jwt = $request->getAttribute('jwt');
+    if(!isset($jwt['data']) || !property_exists($jwt['data'],'UserID')){
+      $response->getBody()->write(json_encode([
+        "error" => [
+          "code" => "INVALID_TOKEN",
+          "desc" => "Invalid JWT token"
+        ]
+      ]));
+      $response = $response->withStatus(400);
+      return $response->withHeader('Content-Type', 'application/json');
+    }
+
     $userID = $jwt['data'] -> UserID;
     $userData = $this->user->getUserById($userID);
 
-    if(empty($userData)){
-      $response->getBody()->write(json_encode([
-      "error" => [
-          "code" => "INVALID_PARAMETERS",
-          "desc" => "Parameters are missing or invalid"
-          ]
-      ]));
-      return $response->withStatus(404)->withHeader('Content-Type', 'application/json'); 
+    if ($userData->http_code !== 200) {
+      $response->getBody()->write(json_encode($userData->error));
+      $response = $response->withStatus($userData->http_code);
+      return $response->withHeader('Content-Type', 'application/json');
     }
 
-    // Verificar si la cuenta está desactivada
-    $deactivationDate = $userData['DeactivationDate'];
-    if (!is_null($deactivationDate) && strtotime($deactivationDate) <= time()) {
-      $response->getBody()->write(json_encode([
-        "error" => [
-          "code" => "USER_DISABLED",
-          "desc" => "The specified user is disabled"
-        ]
-      ]));
-      return $response->withStatus(401)->withHeader('Content-Type', 'application/json');
-    }
-
-    $token = $this->JWTgen($userData);
+    $token = $this->JWTgen($userData -> data);
     $response->getBody()->write(json_encode([
       'token' => $token,
-      'userData' => $userData
+      'userData' => $userData -> data
     ]));
     return $response->withHeader('Content-Type', 'application/json');
   }

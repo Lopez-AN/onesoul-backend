@@ -56,10 +56,10 @@ class Auth{
           "desc" => "No user associated with the specified Google account was found"
         ],
         "data" => [
-          "first_name" => $response -> given_name,
-          "last_name" => $response -> family_name,
-          "picture" => $response -> picture,
-          "email" => $response -> email
+          "first_name" => !empty($response -> given_name) ? $response -> given_name : null,
+          "last_name" => !empty($response -> family_name) ? $response -> family_name : null,
+          "email" => !empty($response -> email) ? $response -> email : null,
+          "picture" => !empty($response -> picture) ? $response -> picture : null
         ]
       ];
     }
@@ -85,10 +85,10 @@ class Auth{
           "desc" => "No user associated with the specified Facebook account was found"
         ],
         "data" => [
-          "first_name" => $response -> first_name,
-          "last_name" => $response -> last_name,
-          "picture" => $response -> picture -> data -> url,
-          "email" => $response -> email
+          "first_name" => !empty($response -> first_name) ? $response -> first_name : null,
+          "last_name" => !empty($response -> last_name) ? $response -> last_name : null,
+          "email" => !empty($response -> email) ? $response -> email : null,
+          "picture" => !empty($response -> picture -> data -> url) ? $response -> picture -> data -> url : null
         ]
       ];
     }
@@ -356,8 +356,8 @@ class Auth{
   private function registerUser($userData){
     try {
       # Creo el usuario con los datos basicos
-      $stmt = $this->db->prepare("INSERT INTO Users (Email, UserName, PasswordHash, OTP_Code, OTP_Date, ValidatedEmail)
-      VALUES (?,?,?,?,?,0)");
+      $stmt = $this->db->prepare("INSERT INTO Users (Email, UserName, PasswordHash, OTP_Code, OTP_Date, ValidatedEmail, RegistrationDate)
+      VALUES (?,?,?,?,?,0,?)");
       $stmt->execute([$userData -> email, $userData -> username, $userData -> password_hash,
       $userData -> otp_code, date('YmdHis')]);
     } catch (\PDOException $e) {
@@ -369,10 +369,10 @@ class Auth{
   private function registerUserSSO($userData){
     # Creo el usuario con los datos basicos
     try {
-      $stmt = $this->db->prepare("INSERT INTO Users (FirstName, LastName, Email, UserName, oauth2_id, oauth2_service)
-      VALUES (?,?,?,?,?,?)");
+      $stmt = $this->db->prepare("INSERT INTO Users (FirstName, LastName, Email, UserName, oauth2_id, oauth2_service, RegistrationDate)
+      VALUES (?,?,?,?,?,?,?)");
       $stmt->execute([$userData -> first_name, $userData -> last_name, $userData -> email,
-      $userData -> user_name, $userData -> oauth2_id, $userData -> oauth2_service]);
+      $userData -> user_name, $userData -> oauth2_id, $userData -> oauth2_service, date('YmdHis')]);
 
       # Obtengo el ID del usuario creado
       $userId = $this->db->lastInsertId();
