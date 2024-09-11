@@ -356,10 +356,10 @@ class Auth{
   private function registerUser($userData){
     try {
       # Creo el usuario con los datos basicos
-      $stmt = $this->db->prepare("INSERT INTO Users (Email, UserName, PasswordHash, OTP_Code, OTP_Date, ValidatedEmail, RegistrationDate)
-      VALUES (?,?,?,?,?,0,?)");
+      $stmt = $this->db->prepare("INSERT INTO Users (Email, UserName, PasswordHash, OTP_Code, OTP_Date, RegistrationDate, ValidatedEmail)
+      VALUES (?,?,?,?,?,?,0)");
       $stmt->execute([$userData -> email, $userData -> username, $userData -> password_hash,
-      $userData -> otp_code, date('YmdHis')]);
+        $userData -> otp_code, date('YmdHis'), date('YmdHis')]);
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
