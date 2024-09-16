@@ -247,7 +247,7 @@ class User {
         }
     }
 
-    public function updateProfilePhoto($userId, $filePath)  {
+    public function updateProfilePhoto($userId, $fileURL)  {
         try {
             $stmt = $this->db->prepare("SELECT u.UserID,m.MediaID FROM Users as u
             LEFT JOIN Media as m ON u.UserID = m.UserID WHERE u.UserID = :id");
@@ -266,13 +266,13 @@ class User {
             if(!is_null($rs[0]['MediaID'])){
                 $stmt = $this->db->prepare("UPDATE Media SET `URL` = :filePath
                 WHERE `UserID` = :userID");
-                $stmt->bindParam(':filePath', $filePath, PDO::PARAM_STR);
+                $stmt->bindParam(':filePath', $fileURL, PDO::PARAM_STR);
                 $stmt->bindParam(':userID', $userId, PDO::PARAM_INT);
                 $stmt->execute();
             }else{
                 $stmt = $this->db->prepare("INSERT INTO Media (`URL`,`UserID`)
                 VALUES (:filePath,:userID)");
-                $stmt->bindParam(':filePath', $filePath, PDO::PARAM_STR);
+                $stmt->bindParam(':filePath', $fileURL, PDO::PARAM_STR);
                 $stmt->bindParam(':userID', $userId, PDO::PARAM_INT);
                 $stmt->execute();
             }

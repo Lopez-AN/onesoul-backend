@@ -228,10 +228,13 @@ class UserController
       $uploadDirectory = $GLOBALS['config']['media_folder']['path'];
       $fileName = $uploadedFile->getClientFilename();
       $fileExtension = pathinfo($fileName, PATHINFO_EXTENSION);
-      $filePath = $uploadDirectory . "/user/" . $userId . "." . $fileExtension;
+      $filePath = $uploadDirectory."/user/".$userId.".".$fileExtension;
+
       $uploadedFile->moveTo($filePath);
 
-      $result = $this->user->updateProfilePhoto($userId, $filePath);
+      $fileURL = $GLOBALS['config']['media_folder']['url']."/user/".$userId.".".$fileExtension;
+
+      $result = $this->user->updateProfilePhoto($userId, $fileURL);
       if($result->http_code != 200){
         return $response->withStatus($result->http_code)->withJson($result->error);
       }
