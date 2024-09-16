@@ -172,10 +172,10 @@ class User {
         }
     }
 
-    public function updateUser($id, $data) {
+    public function updateUser($userId, $data) {
         try {
             // Verificar si el usuario existe
-            $resp = $this->getUserById($id);
+            $resp = $this->getUserById($userId);
             if($resp -> http_code != 200){
                 return $resp;
             }
@@ -208,7 +208,7 @@ class User {
                         "http_code" => 400,
                         "error" => [
                             "code" => "INVALID_UPDATE_KEY",
-                            "desc" => "Key $key present in the JSON is not supported"
+                            "desc" => "Key '$key' present in the JSON is not supported"
                         ]
                     ];
                 }
@@ -225,13 +225,13 @@ class User {
             }
 
             // Vincular el ID del usuario
-            $stmt->bindValue(':UserID', $id, PDO::PARAM_INT);
+            $stmt->bindValue(':UserID', $userId, PDO::PARAM_INT);
 
             // Ejecutar la consulta
             $stmt->execute();
 
             // Devolver los datos actualizados del usuario
-            return $this->getUserById($id);
+            return $this->getUserById($userId);
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());
         }
@@ -242,6 +242,43 @@ class User {
             $stmt = $this->db->prepare("DELETE FROM Users WHERE UserID = :id");
             $stmt->bindParam(':id', $id, PDO::PARAM_INT);
             $stmt->execute();
+        } catch (\PDOException $e) {
+            throw new DatabaseException($e->getMessage());
+        }
+    }
+
+    public function updateProfilePhoto($userId, $filePath)  {
+        try {
+            $stmt = $this->db->prepare("SELECT u.UserID,m.MediaID FROM Users as u
+            LEFT JOIN Media as m ON u.UserID = m.UserID WHERE u.UserID = :id");
+            $stmt->bindParam(':id', $userId, PDO::PARAM_INT);
+            $stmt->execute();
+
+            $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            if(empty($rs)){
+                return (object)["http_code" => 404,
+                    "error" => [
+                        "code" => "USER_NOT_FOUND",
+                        "desc" => "No user was found with the specified ID"
+                    ]
+                ];
+            }
+            if(!is_null($rs[0]['MediaID'])){
+                $stmt = $this->db->prepare("UPDATE Media SET `URL` = :filePath
+                WHERE `UserID` = :userID");
+                $stmt->bindParam(':filePath', $filePath, PDO::PARAM_STR);
+                $stmt->bindParam(':userID', $userId, PDO::PARAM_INT);
+                $stmt->execute();
+            }else{
+                $stmt = $this->db->prepare("INSERT INTO Media (`URL`,`UserID`)
+                VALUES (:filePath,:userID)");
+                $stmt->bindParam(':filePath', $filePath, PDO::PARAM_STR);
+                $stmt->bindParam(':userID', $userId, PDO::PARAM_INT);
+                $stmt->execute();
+            }
+
+            // Devolver los datos actualizados del usuario
+            return $this->getUserById($userId);
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());
         }

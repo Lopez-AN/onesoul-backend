@@ -168,7 +168,6 @@ class AuthController{
   /*
   * Registro usuario
   */
-
   public function register(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
     $email = $data['email'] ?? '';

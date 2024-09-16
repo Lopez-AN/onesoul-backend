@@ -17,7 +17,8 @@ class UserController
   protected $user;
   protected $auth;
 
-  public function __construct(User $user, Auth $auth){
+  public function __construct(User $user, Auth $auth)
+  {
     $this->user = $user;
     $this->auth = $auth;
   }
@@ -38,16 +39,16 @@ class UserController
   public function getUserById(Request $request, Response $response, $args){
     $id = $args['id'];
 
-    try{
+    try {
       $user = $this->user->getUserById($id);
-      switch($user->http_code) {
+      switch ($user->http_code) {
         case 200: // Logueo correcto o usuario existente
           $response->getBody()->write(json_encode($user->data));
-        break;
+          break;
         default: // Otros, ejemplo Token inválido
           $response->getBody()->write(json_encode($user->error));
           $response = $response->withStatus($user->http_code);
-        break;
+          break;
       }
     } catch (DatabaseException $e) {
       $response->getBody()->write(json_encode([
@@ -113,28 +114,23 @@ class UserController
     return $response->withHeader('Content-Type', 'application/json');
   }
 
-  public function updateUser(Request $request, Response $response, $args) {
+  public function updateUser(Request $request, Response $response, $args){
     $userId = $args['id'];
     $data = $request->getParsedBody();
 
     $jwt = $request->getAttribute('jwt');
-    if(!isset($jwt['data']) || !property_exists($jwt['data'],'UserID') || !property_exists($jwt['data'],'UserType')){
-      $response->getBody()->write(json_encode([
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+      return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
           "desc" => "Invalid JWT token"
         ]
-      ]));
-      $response = $response->withStatus(400);
-      return $response->withHeader('Content-Type', 'application/json');
+      ]);
     }
 
     try {
-      $useridtoken = $jwt['data'] -> UserID;
-      $usertypetoken = $jwt['data'] -> UserType;
-
-      // Asegúrate de que el token contiene las propiedades necesarias
-      if (!property_exists($jwt['data'],'UserID') || !property_exists($jwt['data'],'UserType')) {
+      # Ver si estan las propiedades del token jwt
+      if (!property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
@@ -142,38 +138,34 @@ class UserController
           ]
         ]);
       }
-      // Verificar si el usuario autenticado es el mismo que el que se intenta modificar, o si es un administrador
-      if ($useridtoken != $userId && $usertypetoken != 'Admin') {
+      # Verificar si el usuario autenticado es el mismo que el que se intenta modificar, o si es un administrador
+      if ($jwt['data']->UserID != $userId && $jwt['data']->UserType != 'Admin') {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
-            "desc" => "No tienes permisos para modificar este usuario."
+            "desc" => "You do not have permission to modify this user"
           ]
         ]);
       }
 
       $result = $this->user->updateUser($userId, $data);
-
-      // Revisar si hubo un error en el proceso
-      if (isset($result->error)) {
-        return $response->withStatus($result->http_code)->withJson(['error' => $result->error]);
+      if($result->http_code != 200){
+        return $response->withStatus($result->http_code)->withJson($result->error);
       }
 
-      // Retornar el usuario actualizado
-      return $response->withStatus(200)->withJson($result -> data);
-
+      # Retornar el usuario actualizado
+      return $response->withStatus(200)->withJson($result->data);
     } catch (DatabaseException $e) {
       return $response->withStatus(500)->withJson([
-        'error' => [
-          'code' => 'INTERNAL_SERVER_ERROR',
-          'desc' => $e->getMessage()
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
         ]
       ]);
     }
   }
 
-
-  public function deleteUser(Request $request, Response $response, $args){
+  public function deleteUser(Request $request, Response $response, $args)  {
     $id = $args['id'];
     try {
       $this->user->deleteUser($id);
@@ -186,5 +178,73 @@ class UserController
       $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
     }
     return $response->withHeader('Content-Type', 'application/json');
+  }
+
+  public function updateProfilePhoto(Request $request, Response $response, $args)  {
+    $userId = $args['id'];
+    $jwt = $request->getAttribute('jwt');
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+      return $response->withStatus(401)->withJson([
+        "error" => [
+          "code" => "INVALID_TOKEN",
+          "desc" => "Invalid JWT token"
+        ]
+      ]);
+    }
+
+    try {
+      # Ver si estan las propiedades del token jwt
+      if (!property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "UNAUTHORIZED",
+            "desc" => "Invalid token"
+          ]
+        ]);
+      }
+      # Verificar si el usuario autenticado es el mismo que el que se intenta modificar, o si es un administrador
+      if ($jwt['data']->UserID != $userId && $jwt['data']->UserType != 'Admin') {
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "UNAUTHORIZED",
+            "desc" => "You do not have permission to modify this user"
+          ]
+        ]);
+      }
+
+      # Obtengo el archivo del body del request
+      $uploadedFiles = $request->getUploadedFiles();
+      $uploadedFile = $uploadedFiles['profilePhoto'] ?? null;
+
+      if (!$uploadedFile || $uploadedFile->getError() !== UPLOAD_ERR_OK) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "UPLOAD_ERROR",
+            "desc" => "Cannot read the attached file"
+          ]
+        ]);
+      }
+
+      $uploadDirectory = $GLOBALS['config']['media_folder']['path'];
+      $fileName = $uploadedFile->getClientFilename();
+      $fileExtension = pathinfo($fileName, PATHINFO_EXTENSION);
+      $filePath = $uploadDirectory . "/user/" . $userId . "." . $fileExtension;
+      $uploadedFile->moveTo($filePath);
+
+      $result = $this->user->updateProfilePhoto($userId, $filePath);
+      if($result->http_code != 200){
+        return $response->withStatus($result->http_code)->withJson($result->error);
+      }
+
+      # Retornar el usuario actualizado
+      return $response->withStatus(200)->withJson($result->data);
+    } catch (Exception $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
   }
 }
