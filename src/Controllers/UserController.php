@@ -251,4 +251,59 @@ class UserController
       ]);
     }
   }
+
+  public function deleteProfilePhoto(Request $request, Response $response, $args) {
+    $userId = $args['id'];
+    $jwt = $request->getAttribute('jwt');
+
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+      return $response->withStatus(401)->withJson([
+        "error" => [
+          "code" => "INVALID_TOKEN",
+          "desc" => "Invalid JWT token"
+        ]
+      ]);
+    }
+
+    try {
+      # Verificar si el usuario autenticado es el mismo que el que se intenta modificar, o si es un administrador
+      if ($jwt['data']->UserID != $userId && $jwt['data']->UserType != 'Admin') {
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "UNAUTHORIZED",
+            "desc" => "You do not have permission to delete this user's profile photo"
+          ]
+        ]);
+      }
+
+      $result = $this->user->deleteProfilePhoto($userId);
+
+      if ($result->http_code != 200) {
+        return $response->withStatus($result->http_code)->withJson($result->error);
+      }
+
+      # Obtener la URL de la foto eliminada 
+      $media = $result->media ?? null;
+
+      # Eliminar la foto del directorio de medios
+      if ($media && !empty($media['URL'])) {
+        $filePath = $GLOBALS['config']['media_folder']['path'] . '/user/' . basename($media['URL']);
+          if (file_exists($filePath)) {
+            unlink($filePath); // Eliminar el archivo del sistema
+          }
+      }
+
+      return $response->withStatus(200)->withJson([
+        "message" => "Profile photo deleted successfully"
+      ]);
+
+    } catch (Exception $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
 }

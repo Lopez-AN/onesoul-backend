@@ -284,6 +284,39 @@ class User {
         }
     }
 
+    public function deleteProfilePhoto($userId) {
+        try {
+            # Seleccionar el MediaID para eliminar la entrada
+            $stmt = $this->db->prepare("SELECT m.MediaID, m.URL FROM Media as m WHERE m.UserID = :id");
+            $stmt->bindParam(':id', $userId, PDO::PARAM_INT);
+            $stmt->execute();
+            $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+            if (empty($rs[0]['MediaID'])) {
+                return (object)[
+                    "http_code" => 404,
+                    "error" => [
+                        "code" => "PHOTO_NOT_FOUND",
+                        "desc" => "No profile photo found for this user"
+                    ]
+                ];
+            }
+      
+            # Eliminar la entrada en la tabla Media
+            $stmt = $this->db->prepare("DELETE FROM Media WHERE MediaID = :mediaID");
+            $stmt->bindParam(':mediaID', $rs['MediaID'], PDO::PARAM_INT);
+            $stmt->execute();
+    
+            return (object)[
+                "http_code" => 200,
+                "message" => "Profile photo deleted"
+            ];
+    
+        } catch (\PDOException $e) {
+            throw new DatabaseException($e->getMessage());
+        }
+    }
+
     private function validateUser($data) {
         if (empty($data['UserName'])) {
             throw new ValidationException('Username is required');
