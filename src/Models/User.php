@@ -247,9 +247,9 @@ class User {
         }
     }
 
-    public function updateProfilePhoto($userId, $fileURL)  {
+    public function updateProfilePhoto($userId, $fileURL, $filePath)  {
         try {
-            $stmt = $this->db->prepare("SELECT u.UserID,m.MediaID FROM Users as u
+            $stmt = $this->db->prepare("SELECT u.UserID,m.MediaID,m.Path FROM Users as u
             LEFT JOIN Media as m ON u.UserID = m.UserID WHERE u.UserID = :id");
             $stmt->bindParam(':id', $userId, PDO::PARAM_INT);
             $stmt->execute();
@@ -263,16 +263,23 @@ class User {
                     ]
                 ];
             }
-            if(!is_null($rs[0]['MediaID'])){
-                $stmt = $this->db->prepare("UPDATE Media SET `URL` = :filePath
+            if(!is_null($rs[0]['Path'])){
+                $stmt = $this->db->prepare("UPDATE Media SET `URL` = :fileURL, `Path` = :filePath
                 WHERE `UserID` = :userID");
-                $stmt->bindParam(':filePath', $fileURL, PDO::PARAM_STR);
+                $stmt->bindParam(':fileURL', $fileURL, PDO::PARAM_STR);
+                $stmt->bindParam(':filePath', $filePath, PDO::PARAM_STR);
                 $stmt->bindParam(':userID', $userId, PDO::PARAM_INT);
                 $stmt->execute();
+
+                # Borro la imagen anterior si existe en el sistema de archivos
+                if(file_exists($rs[0]['Path'])){
+                    unlink($rs[0]['Path']);
+                }
             }else{
-                $stmt = $this->db->prepare("INSERT INTO Media (`URL`,`UserID`)
-                VALUES (:filePath,:userID)");
-                $stmt->bindParam(':filePath', $fileURL, PDO::PARAM_STR);
+                $stmt = $this->db->prepare("INSERT INTO Media (`URL`,`UserID`,`Path`)
+                VALUES (:fileURL,:userID,:filePath)");
+                $stmt->bindParam(':fileURL', $fileURL, PDO::PARAM_STR);
+                $stmt->bindParam(':filePath', $filePath, PDO::PARAM_STR);
                 $stmt->bindParam(':userID', $userId, PDO::PARAM_INT);
                 $stmt->execute();
             }

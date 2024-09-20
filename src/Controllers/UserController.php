@@ -235,7 +235,7 @@ class UserController
 
       $fileURL = $GLOBALS['config']['media_folder']['url']."/user/".$imgID.".".$fileExtension;
 
-      $result = $this->user->updateProfilePhoto($userId, $fileURL);
+      $result = $this->user->updateProfilePhoto($userId, $fileURL, $filePath);
       if($result->http_code != 200){
         return $response->withStatus($result->http_code)->withJson($result->error);
       }
