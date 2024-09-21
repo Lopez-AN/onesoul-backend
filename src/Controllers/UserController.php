@@ -28,74 +28,75 @@ class UserController
 
     try {
       $users = $this->user->getUsers($paginator);
-      $response->getBody()->write(json_encode($users));
-    } catch (DatabaseException $e) {
-      $response = $response->withStatus(500);
-      $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
+      return $response->withStatus(200)->withJson($users);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
     }
-    return $response->withHeader('Content-Type', 'application/json');
   }
 
   public function getUserById(Request $request, Response $response, $args){
     $id = $args['id'];
 
     try {
-      $user = $this->user->getUserById($id);
-      switch ($user->http_code) {
-        case 200: // Logueo correcto o usuario existente
-          $response->getBody()->write(json_encode($user->data));
-          break;
-        default: // Otros, ejemplo Token inválido
-          $response->getBody()->write(json_encode($user->error));
-          $response = $response->withStatus($user->http_code);
-          break;
+      $result = $this->user->getUserById($id);
+      if($result->http_code != 200){
+        return $response->withStatus($result->http_code)->withJson($result->error);
       }
-    } catch (DatabaseException $e) {
-      $response->getBody()->write(json_encode([
+      return $response->withStatus(200)->withJson($result->data);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
           "desc" => $e->getMessage()
         ]
-      ]));
-      $response = $response->withStatus(500);
+      ]);
     }
-    return $response->withHeader('Content-Type', 'application/json');
   }
 
   public function getUserByEmail(Request $request, Response $response, $args){
     $email = $args['email'];
     try {
-      $user = $this->auth->getUserByEmail($email);
-      if ($user) {
-        $response->getBody()->write(json_encode(empty($user) ? [] : $user[0]));
-      } else {
-        throw new NotFoundException('User not found');
+      $result = $this->auth->getUserByEmail($email);
+      if(!$result) {
+        return $response->withStatus(404)->withJson((object)["error" => [
+          "code" => "USER_NOT_FOUND",
+          "desc" => "No user associated with the specified email"
+        ]]);
       }
-    } catch (NotFoundException $e) {
-      $response = $response->withStatus(404);
-      $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
-    } catch (DatabaseException $e) {
-      $response = $response->withStatus(500);
-      $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
+      return $response->withStatus(200)->withJson($result[0]);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
     }
-    return $response->withHeader('Content-Type', 'application/json');
   }
 
   public function getUserByUserName(Request $request, Response $response, $args){
     $username = $args['username'];
     try {
-      $user = $this->auth->getUserByUserName($username);
-      if ($user) {
-        $response->getBody()->write(json_encode(empty($user) ? [] : $user[0]));
-      } else {
-        throw new NotFoundException('User not found');
+      $result = $this->auth->getUserByUserName($username);
+      if(!$result) {
+        return $response->withStatus(404)->withJson((object)["error" => [
+          "code" => "USER_NOT_FOUND",
+          "desc" => "No user associated with the specified username"
+        ]]);
       }
-    } catch (NotFoundException $e) {
-      $response = $response->withStatus(404);
-      $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
-    } catch (DatabaseException $e) {
-      $response = $response->withStatus(500);
-      $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
+      return $response->withStatus(200)->withJson($result[0]);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
     }
     return $response->withHeader('Content-Type', 'application/json');
   }
@@ -106,12 +107,15 @@ class UserController
     $type = $args['type'];
     try {
       $users = $this->user->getUsersByType($paginator, $type);
-      $response->getBody()->write(json_encode($users));
-    } catch (DatabaseException $e) {
-      $response = $response->withStatus(500);
-      $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
+      return $response->withStatus(200)->withJson($users);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
     }
-    return $response->withHeader('Content-Type', 'application/json');
   }
 
   public function updateUser(Request $request, Response $response, $args){
@@ -152,10 +156,9 @@ class UserController
       if($result->http_code != 200){
         return $response->withStatus($result->http_code)->withJson($result->error);
       }
-
       # Retornar el usuario actualizado
       return $response->withStatus(200)->withJson($result->data);
-    } catch (DatabaseException $e) {
+    } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
@@ -168,16 +171,19 @@ class UserController
   public function deleteUser(Request $request, Response $response, $args)  {
     $id = $args['id'];
     try {
-      $this->user->deleteUser($id);
-      $response = $response->withStatus(204);
-    } catch (NotFoundException $e) {
-      $response = $response->withStatus(404);
-      $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
-    } catch (DatabaseException $e) {
-      $response = $response->withStatus(500);
-      $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
+      $result = $this->user->deleteUser($id);
+      if($result -> http_code != 200){
+        return $response->withStatus($result -> http_code)->withJson($result->error);
+      }
+      return $response->withStatus(200)->withJson($result->data);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
     }
-    return $response->withHeader('Content-Type', 'application/json');
   }
 
   public function updateProfilePhoto(Request $request, Response $response, $args)  {
@@ -225,24 +231,14 @@ class UserController
         ]);
       }
 
-      $uploadDirectory = $GLOBALS['config']['media_folder']['path'];
-      $fileName = $uploadedFile->getClientFilename();
-      $fileExtension = pathinfo($fileName, PATHINFO_EXTENSION);
-      $imgID = uniqid();
-      $filePath = $uploadDirectory."/user/".$imgID.".".$fileExtension;
-
-      $uploadedFile->moveTo($filePath);
-
-      $fileURL = $GLOBALS['config']['media_folder']['url']."/user/".$imgID.".".$fileExtension;
-
-      $result = $this->user->updateProfilePhoto($userId, $fileURL, $filePath);
+      $result = $this->user->updateProfilePhoto($userId, $uploadedFile);
       if($result->http_code != 200){
         return $response->withStatus($result->http_code)->withJson($result->error);
       }
 
       # Retornar el usuario actualizado
       return $response->withStatus(200)->withJson($result->data);
-    } catch (Exception $e) {
+    } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
@@ -277,27 +273,11 @@ class UserController
       }
 
       $result = $this->user->deleteProfilePhoto($userId);
-
       if ($result->http_code != 200) {
         return $response->withStatus($result->http_code)->withJson($result->error);
       }
-
-      # Obtener la URL de la foto eliminada 
-      $media = $result->media ?? null;
-
-      # Eliminar la foto del directorio de medios
-      if ($media && !empty($media['URL'])) {
-        $filePath = $GLOBALS['config']['media_folder']['path'] . '/user/' . basename($media['URL']);
-          if (file_exists($filePath)) {
-            unlink($filePath); // Eliminar el archivo del sistema
-          }
-      }
-
-      return $response->withStatus(200)->withJson([
-        "message" => "Profile photo deleted successfully"
-      ]);
-
-    } catch (Exception $e) {
+      return $response->withStatus(200)->withJson($result -> data);
+    } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",

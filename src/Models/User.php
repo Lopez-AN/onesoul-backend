@@ -4,10 +4,6 @@ namespace App\Models;
 
 use PDO;
 use App\Exceptions\DatabaseException;
-use App\Exceptions\ValidationException;
-
-#require_once('/../Utils/FormatImg.php');
-
 
 class User {
     protected $db;
@@ -160,7 +156,7 @@ class User {
             $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
             $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
-            return [
+            return (object)[
                 "data" => $rs,
                 "rows" => [
                     "total" => $total['total'],
@@ -239,21 +235,43 @@ class User {
 
     public function deleteUser($id) {
         try {
+            $stmt = $this->db->prepare("SELECT UserID FROM Users WHERE UserID = :id");
+            $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+            $stmt->execute();
+            $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            if (empty($rs)) {
+                return (object)[
+                    "http_code" => 404,
+                    "error" => [
+                        "code" => "USER_NOT_FOUND",
+                        "desc" => "No user was found with the specified ID"
+                    ]
+                ];
+            }
             $stmt = $this->db->prepare("DELETE FROM Users WHERE UserID = :id");
             $stmt->bindParam(':id', $id, PDO::PARAM_INT);
             $stmt->execute();
+
+            return (object)[
+                "http_code" => 200,
+                "data" => [
+                    "message" => "User deleted"
+                ]
+            ];
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());
         }
     }
 
-    public function updateProfilePhoto($userId, $fileURL, $filePath)  {
+    public function updateProfilePhoto($userId, $uploadedFile)  {
+        $fileWritten = false; # Indica que se grabo el archivo en el FS
         try {
+            # Busco al usuario y si tenia imagen antes
             $stmt = $this->db->prepare("SELECT u.UserID,m.MediaID,m.Path FROM Users as u
             LEFT JOIN Media as m ON u.UserID = m.UserID WHERE u.UserID = :id");
             $stmt->bindParam(':id', $userId, PDO::PARAM_INT);
             $stmt->execute();
-
             $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
             if(empty($rs)){
                 return (object)["http_code" => 404,
@@ -263,7 +281,33 @@ class User {
                     ]
                 ];
             }
-            if(!is_null($rs[0]['Path'])){
+
+            # Extraigo el nombre del archivo y su extension
+            $fileName = $uploadedFile->getClientFilename();
+            $fileExtension = pathinfo($fileName, PATHINFO_EXTENSION);
+            $imgID = uniqid(); #Le doy un ID unico a la imagen
+
+            # Directorio destino
+            $uploadDirectory = $GLOBALS['config']['media_folder']['path'];
+
+            # El archivo destino se guarda con ID unico
+            $filePath = $uploadDirectory."/user/".$imgID.".".$fileExtension;
+
+            #Grabo el archivo en el FS
+            $uploadedFile->moveTo($filePath);
+            $fileWritten = true;
+
+            # Genero la URL del archivo
+            $fileURL = $GLOBALS['config']['media_folder']['url']."/user/".$imgID.".".$fileExtension;
+
+            # Borro las imagenes que tuviera antes (si son locales)
+            foreach($rs as $r){
+                if(!is_null($r['Path']) && is_file($r['Path'])){
+                    unlink($r['Path']);
+                }
+            }
+
+            if(!is_null($rs[0]['MediaID'])){
                 $stmt = $this->db->prepare("UPDATE Media SET `URL` = :fileURL, `Path` = :filePath
                 WHERE `UserID` = :userID");
                 $stmt->bindParam(':fileURL', $fileURL, PDO::PARAM_STR);
@@ -287,18 +331,24 @@ class User {
             // Devolver los datos actualizados del usuario
             return $this->getUserById($userId);
         } catch (\PDOException $e) {
+            # Si hubo algun error de DB y se llego a grabar el archivo en el FS borrarlo
+            if($fileWritten && file_exists($rs[0]['Path'])){
+                unlink($filePath);
+            }
             throw new DatabaseException($e->getMessage());
+        } catch (Exception $e) {
+            throw new Exception($e->getMessage());
         }
     }
 
     public function deleteProfilePhoto($userId) {
         try {
             # Seleccionar el MediaID para eliminar la entrada
-            $stmt = $this->db->prepare("SELECT m.MediaID, m.URL FROM Media as m WHERE m.UserID = :id");
+            $stmt = $this->db->prepare("SELECT m.MediaID, m.URL, m.Path FROM Media as m WHERE m.UserID = :id");
             $stmt->bindParam(':id', $userId, PDO::PARAM_INT);
             $stmt->execute();
             $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
+
             if (empty($rs[0]['MediaID'])) {
                 return (object)[
                     "http_code" => 404,
@@ -308,28 +358,26 @@ class User {
                     ]
                 ];
             }
-      
             # Eliminar la entrada en la tabla Media
             $stmt = $this->db->prepare("DELETE FROM Media WHERE MediaID = :mediaID");
-            $stmt->bindParam(':mediaID', $rs['MediaID'], PDO::PARAM_INT);
+            $stmt->bindParam(':mediaID', $rs[0]['MediaID'], PDO::PARAM_INT);
             $stmt->execute();
-    
+
+            # Si existe el archivo local lo borro
+            if (!is_null($rs[0]['Path']) && file_exists($rs[0]['Path'])) {
+                unlink($rs[0]['Path']); // Eliminar el archivo del sistema
+            }
+
             return (object)[
                 "http_code" => 200,
-                "message" => "Profile photo deleted"
+                "data" => [
+                    "message" => "Profile photo deleted"
+                ]
             ];
-    
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());
-        }
-    }
-
-    private function validateUser($data) {
-        if (empty($data['UserName'])) {
-            throw new ValidationException('Username is required');
-        }
-        if (empty($data['Email'])) {
-            throw new ValidationException('Email is required');
+        } catch (Exception $e) {
+            throw new Exception($e->getMessage());
         }
     }
 }
