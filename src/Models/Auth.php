@@ -99,6 +99,17 @@ class Auth{
   * Registro usuario
   */
   public function register($email, $username, $password){
+    //Validación de fortaleza de contraseña
+    if(!$this->passwordComplexity($password)) {
+      return (object)[
+        "http_code" => 400,
+        "error" => [
+          "code" => "WEAK_PASSWORD",
+          "desc" => "Password doesn't meet complexity requirements"
+        ]
+      ];
+    }
+
     if(!empty($this -> getUserByEmail($email))){
       return (object)["http_code" => 409,
         "error" => [
@@ -132,6 +143,82 @@ class Auth{
 
     $user_data = $this -> getUserByUserName($username);
     return (object)["http_code" => 200, "data" => $user_data];
+  }
+
+  private function passwordComplexity($password): bool {
+    $password = trim($password);
+    
+    // Requerimiento 1: mínimo 8 caracteres
+    if (strlen($password) < 8) {
+        return false;
+    }
+
+    $points = 0;
+
+    // Requerimiento 2: Validar las reglas con expresiones regulares
+    if (preg_match('/[A-Z]/', $password)) {
+        $points++;
+    }
+    if (preg_match('/[a-z]/', $password)) {
+        $points++;
+    }
+    if (preg_match('/[0-9]/', $password)) {
+        $points++;
+    }
+    if (preg_match('/\W/', $password)) {
+        $points++;
+    }
+
+    // Debe tener al menos 3 puntos para ser considerada segura
+    return $points >= 3;
+  }
+
+  public function resetPassword($email, $newPassword) {
+  // Primero, verifica que el email existe en el sistema
+  $user = $this->getUserByEmail($email);
+  if (empty($user)) {
+      return (object)[
+          "http_code" => 404,
+          "error" => [
+              "code" => "USER_NOT_FOUND",
+              "desc" => "No user found with the specified email address"
+          ]
+      ];
+  }
+
+  // Validación de fortaleza de la nueva contraseña
+  if (!$this->passwordComplexity($newPassword)) {
+      return (object)[
+          "http_code" => 400,
+          "error" => [
+              "code" => "WEAK_PASSWORD",
+              "desc" => "Password doesn't meet complexity requirements"
+          ]
+      ];
+  }
+
+  // Actualizar la contraseña en la base de datos
+    $newPasswordHash = password_hash($newPassword, PASSWORD_BCRYPT);
+    $otpCode = rand(100000, 999999); # Codigo que se enviara por mail
+
+    $user_id = $user[0]['UserID'];
+    
+    # Envio el mail al usuario
+    $this->sendOtpMail($user_id);
+    $this->updateUserPassword($email, $newPasswordHash);
+
+    return (object)[
+      "http_code" => 200,
+      "message" => "Password has been reset successfully"
+    ];
+  }
+
+  private function updateUserPassword($email, $newPasswordHash) {
+    //Actualización de la contraseña en la base de datos
+    $stmt = $this->db->prepare("UPDATE Users SET PasswordHash = :password_hash WHERE Email = :email");
+    $stmt->bindParam(':password_hash', $newPasswordHash);
+    $stmt->bindParam(':email', $email);
+    $stmt->execute();
   }
 
   public function registerGoogle($token, $username){

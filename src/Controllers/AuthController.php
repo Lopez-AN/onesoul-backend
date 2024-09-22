@@ -205,7 +205,11 @@ class AuthController{
             'userData' => $userData -> data
           ]));
         break;
-        default: // Otros, ejemplo Token inválido
+        case 400: // Contraseña débil
+          $response->getbody()->write(json_encode($auth->error));
+          $response = $response->withStatus(400);
+        break;
+        default: //Otros errores
           $response->getBody()->write(json_encode($auth->error));
           $response = $response->withStatus($auth->http_code);
         break;
@@ -220,6 +224,55 @@ class AuthController{
       $response = $response->withStatus(500);
     }
     return $response->withHeader('Content-Type', 'application/json');
+  }
+
+  public function resetPassword(Request $request, Response $response, $args) {
+    // $jwt = $request->getAttribute('jwt');
+    // if(!isset($jwt['data']) || !property_exists($jwt['data'],'UserID')){
+    //   $response->getBody()->write(json_encode([
+    //     "error" => [
+    //       "code" => "INVALID_TOKEN",
+    //       "desc" => "Invalid JWT token"
+    //     ]
+    //   ]));
+    //   $response = $response->withStatus(400);
+    //   return $response->withHeader('Content-Type', 'application/json');
+    // }
+
+    $data = $request->getParsedBody();
+    $email = $data['email'] ?? '';
+    $newPassword = $data['new_password'] ?? '';
+
+    if (empty($email) || empty($newPassword)) {
+        $response->getBody()->write(json_encode([
+            "error" => [
+                "code" => "INVALID_PARAMETERS",
+                "desc" => "Parameters are missing or invalid"
+            ]
+        ]));
+      return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+    }
+
+    // Llamada al modelo para resetear la contraseña
+    try {
+      $result = $this->auth->resetPassword($email, $newPassword);
+        if ($result->http_code === 200) {
+          $response->getBody()->write(json_encode([
+              "message" => "Password has been reset successfully"
+          ]));
+        } else {
+          $response->getBody()->write(json_encode($result->error));
+        }
+      return $response->withStatus($result->http_code)->withHeader('Content-Type', 'application/json');
+    } catch (Exception $e) {
+        $response->getBody()->write(json_encode([
+            "error" => [
+                "code" => "INTERNAL_SERVER_ERROR",
+                "desc" => $e->getMessage()
+            ]
+        ]));
+      return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
   }
 
   public function registerGoogle(Request $request, Response $response, $args) {

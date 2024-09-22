@@ -33,8 +33,8 @@ return function (App $app) {
   $app->post('/login', [$authController, 'login']);
   $app->post('/login/facebook', [$authController, 'loginFacebook']);
   $app->post('/login/google', [$authController, 'loginGoogle']);
-
   $app->post('/register', [$authController, 'register']);
+  $app->post('/auth/password_reset', [$authController, 'resetPassword']);
   $app->post('/register/facebook', [$authController, 'registerFacebook']);
   $app->post('/register/google', [$authController, 'registerGoogle']);
   $app->post('/register/otp', [$authController, 'validateOTP']);
