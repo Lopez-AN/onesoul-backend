@@ -42,7 +42,8 @@ class AuthController{
 
     try {
       $auth = $this->auth->login($username, $email);
-      if(empty($auth) || !password_verify($password,$auth[0]['PasswordHash'])){
+
+      if(empty($auth)){
         $response->getBody()->write(json_encode([
           "error" => [
             "code" => "USER_INVALID_CREDENTIALS",
@@ -50,14 +51,45 @@ class AuthController{
           ]
         ]));
         $response = $response->withStatus(401);
-      }else{
-        $jwt = $this -> JWTgen($auth[0]);
-        $userData = $this->user->getUserById($auth[0]['UserID']);
+      }
+      
+      $user = $auth[0];
+
+      //Verificar si el usuario esta bloqueado
+      if (!is_null($user['locked_until']) && strtotime($user['locked_until']) > time()) {
         $response->getBody()->write(json_encode([
+          "error" => [
+            "code" => "USER_LOCKED",
+            "desc" => "Account is temporaly locked until " . $user['locked_until']
+          ]
+        ]));
+        return $response->withStatus(403)->withHeader('Content-Type', 'application/json');
+      }
+      
+      if (!password_verify($password, $user['PasswordHash'])) {
+        $failedAttempts = $user['failed_login_attempts'] + 1;
+        $lockTime = $this->calculateLockTime($failedAttempts);
+  
+        $this->auth->updateFailedLogin($user['UserID'], $failedAttempts, $lockTime);
+  
+        $response->getBody()->write(json_encode([
+          "error" => [
+            "code" => "USER_INVALID_CREDENTIALS",
+            "desc" => "Invalid credentials"
+          ]
+        ]));
+        return $response->withStatus(401)->withHeader('Content-Type', 'application/json');
+      }
+
+      // Login exitoso, resetear intentos fallidos y bloqueo
+      $this->auth->updateFailedLogin($user['UserID'], 0, null);
+
+      $jwt = $this -> JWTgen($auth[0]);
+      $userData = $this->user->getUserById($auth[0]['UserID']);
+      $response->getBody()->write(json_encode([
           'token' => $jwt,
           'userData' => $userData -> data
-        ]));
-      }
+      ]));
     } catch (DatabaseException $e) {
       $response->getBody()->write(json_encode([
         "error" => [
@@ -68,6 +100,20 @@ class AuthController{
       $response = $response->withStatus(500);
     }
     return $response->withHeader('Content-Type', 'application/json');
+  }
+
+  // Función para calcular los tiempos de bloqueo
+  private function calculateLockTime($failedAttempts) {
+    $lockTime = null;
+    switch ($failedAttempts) {
+      case 5: $lockTime = "+1 minute"; break;
+      case 6: $lockTime = "+2 minutes"; break;
+      case 7: $lockTime = "+4 minutes"; break;
+      case 8: $lockTime = "+8 minutes"; break;
+      case 9: $lockTime = "+15 minutes"; break;
+      case 10: $lockTime = "+30 minutes"; break;
+    }
+    return $lockTime ? date("Y-m-d H:m:s", strtotime($lockTime)) : null;
   }
 
   public function loginGoogle(Request $request, Response $response, $args) {
@@ -227,18 +273,6 @@ class AuthController{
   }
 
   public function resetPassword(Request $request, Response $response, $args) {
-    // $jwt = $request->getAttribute('jwt');
-    // if(!isset($jwt['data']) || !property_exists($jwt['data'],'UserID')){
-    //   $response->getBody()->write(json_encode([
-    //     "error" => [
-    //       "code" => "INVALID_TOKEN",
-    //       "desc" => "Invalid JWT token"
-    //     ]
-    //   ]));
-    //   $response = $response->withStatus(400);
-    //   return $response->withHeader('Content-Type', 'application/json');
-    // }
-
     $data = $request->getParsedBody();
     $email = $data['email'] ?? '';
     $newPassword = $data['new_password'] ?? '';
@@ -253,7 +287,7 @@ class AuthController{
       return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
     }
 
-    // Llamada al modelo para resetear la contraseña
+    // Llamada para resetear la contraseña
     try {
       $result = $this->auth->resetPassword($email, $newPassword);
         if ($result->http_code === 200) {

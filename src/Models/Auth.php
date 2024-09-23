@@ -36,6 +36,16 @@ class Auth{
     }
   }
 
+  public function updateFailedLogin($userId, $failedAttempts, $lockedUntil = null) {
+    try {
+      $stmt = $this->db->prepare("UPDATE Users SET failed_login_attempts = ?, 
+      locked_until = ? WHERE UserID = ?");
+      $stmt->execute([$failedAttempts, $lockedUntil, $userId]);
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
   public function loginGoogle($token){
     $response = $this -> validateToken("https://oauth2.googleapis.com/tokeninfo?id_token=$token");
     if($response === false){
@@ -174,9 +184,9 @@ class Auth{
   }
 
   public function resetPassword($email, $newPassword) {
-  // Primero, verifica que el email existe en el sistema
-  $user = $this->getUserByEmail($email);
-  if (empty($user)) {
+    // Primero, verifica que el email existe en el sistema
+    $user = $this->getUserByEmail($email);
+    if (empty($user)) {
       return (object)[
           "http_code" => 404,
           "error" => [
@@ -184,10 +194,10 @@ class Auth{
               "desc" => "No user found with the specified email address"
           ]
       ];
-  }
+    }
 
-  // Validación de fortaleza de la nueva contraseña
-  if (!$this->passwordComplexity($newPassword)) {
+    // Validación de fortaleza de la nueva contraseña
+    if (!$this->passwordComplexity($newPassword)) {
       return (object)[
           "http_code" => 400,
           "error" => [
@@ -195,9 +205,9 @@ class Auth{
               "desc" => "Password doesn't meet complexity requirements"
           ]
       ];
-  }
+    }
 
-  // Actualizar la contraseña en la base de datos
+    // Actualizar la contraseña en la base de datos
     $newPasswordHash = password_hash($newPassword, PASSWORD_BCRYPT);
     $otpCode = rand(100000, 999999); # Codigo que se enviara por mail
 
