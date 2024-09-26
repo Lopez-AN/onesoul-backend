@@ -10,6 +10,9 @@ use App\Exceptions\DatabaseException;
 use Firebase\JWT\JWT;
 use \DateTime;
 
+//Definir zona horaria
+date_default_timezone_set('America/Argentina/Buenos_Aires');
+
 class AuthController{
 
   protected $user;
@@ -56,7 +59,7 @@ class AuthController{
       $user = $auth[0];
 
       //Verificar si el usuario esta bloqueado
-      if (!is_null($user['locked_until']) && strtotime($user['locked_until']) > time()) {
+      if (!is_null($user['locked_until']) && strtotime($user['locked_until']) > date()) {
         $response->getBody()->write(json_encode([
           "error" => [
             "code" => "USER_LOCKED",
@@ -113,7 +116,7 @@ class AuthController{
       case 9: $lockTime = "+15 minutes"; break;
       case 10: $lockTime = "+30 minutes"; break;
     }
-    return $lockTime ? date("Y-m-d H:m:s", strtotime($lockTime)) : null;
+    return $lockTime ? date("Y-m-d H:i:s", strtotime($lockTime)) : null;
   }
 
   public function loginGoogle(Request $request, Response $response, $args) {
