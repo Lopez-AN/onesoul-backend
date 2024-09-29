@@ -286,4 +286,76 @@ class UserController
       ]);
     }
   }
+
+  public function updateUserCategories(Request $request, Response $response, $args) {
+    $userId = $args['id'];
+    $jwt = $request->getAttribute('jwt');
+    
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+      return $response->withStatus(401)->withJson([
+        "error" => [
+          "code" => "INVALID_TOKEN",
+          "desc" => "Invalid JWT token"
+        ]
+      ]);
+    }
+
+    # Verificar si el usuario autenticado es el mismo que el que se intenta modificar, o si es un administrador
+    if ($jwt['data']->UserID != $userId && $jwt['data']->UserType != 'Admin') {
+      return $response->withStatus(401)->withJson([
+        "error" => [
+          "code" => "UNAUTHORIZED",
+          "desc" => "You do not have permission to modify this user's categories"
+        ]
+      ]);
+    }
+
+    $data = $request->getParsedBody();
+    $categories = $data['categories'] ?? [];
+
+    if (!is_array($categories)) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_DATA",
+          "desc" => "Categories should be an array"
+        ]
+      ]);
+    }
+
+    try {
+      # Obtener las categorías actuales del usuario
+      $existingCategories = $this->user->getUserCategories($userId);
+      $existingCategoryIds = array_column($existingCategories, 'CategoryID');
+
+      # Categorías a agregar y eliminar
+      $categoriesToAdd = array_diff($categories, $existingCategoryIds);
+      $categoriesToDelete = array_diff($existingCategoryIds, $categories);
+
+      # Agregar nuevas asociaciones
+      if (!empty($categoriesToAdd)) {
+        foreach ($categoriesToAdd as $categoryId) {
+          $this->user->addUserCategory($userId, $categoryId);
+        }
+      }
+
+      # Eliminar asociaciones que no están en el array enviado
+      if (!empty($categoriesToDelete)) {
+        foreach ($categoriesToDelete as $categoryId) {
+          $this->user->deleteUserCategory($userId, $categoryId);
+        }
+      }
+
+      return $response->withStatus(200)->withJson([
+        "message" => "User categories updated successfully"
+      ]);
+
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
 }

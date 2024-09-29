@@ -23,7 +23,7 @@ class User {
             u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating, m.URL as imgURL
             FROM Users as u
             LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
-            LEFT JOIN Categories as c ON uc.categoryID = c.categoryID
+            LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
             LEFT JOIN Media as m ON u.UserID = m.UserID
             LEFT JOIN Reviews as r ON u.UserID = r.SUserID
             GROUP BY u.UserID
@@ -66,9 +66,9 @@ class User {
             u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating, m.URL as imgURL
             FROM Users as u
             LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
-            LEFT JOIN Categories as c ON uc.categoryID = c.categoryID
+            LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
             LEFT JOIN Media as m ON u.UserID = m.UserID
-            LEFT JOIN Reviews as r ON u.UserID = r.GUserID
+            LEFT JOIN Reviews as r ON u.UserID = r.GUserID OR u.UserID = r.SUserID
             WHERE u.UserID = :id
             GROUP BY u.UserID
             ORDER BY u.UserID");
@@ -113,7 +113,7 @@ class User {
 
     public function getUsersByType($paginator, $type) {
         try {
-            if($type == 'both'){
+            if($type == 'Guide'){
                 $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName, u.UserName,
                 u.Email, u.Phone, u.AddressName, u.AddressNumber, u.Floor,
                 u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
@@ -122,10 +122,10 @@ class User {
                 GROUP_CONCAT(DISTINCT c.Name ORDER BY c.Name ASC SEPARATOR ', ') AS Categories,
                 u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating, m.URL as imgURL
                 FROM Users as u
-                LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
-                LEFT JOIN Categories as c ON uc.categoryID = c.categoryID
+                LEFT JOIN UsersCategories as uc ON uc.UserID = u.UserID
+                LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
                 LEFT JOIN Media as m ON u.UserID = m.UserID
-                LEFT JOIN Reviews as
+                LEFT JOIN Reviews as r ON u.UserID = r.GUserID
                 ORDER BY u.UserID
                 LIMIT :_limit OFFSET :_offset");
             }else{
@@ -137,11 +137,11 @@ class User {
                 GROUP_CONCAT(DISTINCT c.Name ORDER BY c.Name ASC SEPARATOR ', ') AS Categories,
                 u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating, m.URL as imgURL
                 FROM Users as u
-                LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
-                LEFT JOIN Categories as c ON uc.categoryID = c.categoryID
+                LEFT JOIN UsersCategories as uc ON uc.UserID = u.UserID
+                LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
                 LEFT JOIN Media as m ON u.UserID = m.UserID
                 LEFT JOIN Reviews as r ON u.UserID = r.SUserID
-                WHERE lower(u.UserType) = 'both' OR u.UserType = :type
+                WHERE u.UserType = :type
                 GROUP BY u.UserID
                 ORDER BY u.UserID
                 LIMIT :_limit OFFSET :_offset");
@@ -379,5 +379,29 @@ class User {
         } catch (Exception $e) {
             throw new Exception($e->getMessage());
         }
+    }
+
+    public function getUserCategories($userId) {
+        $query = "SELECT CategoryID FROM UsersCategories WHERE UserID = :userId";
+        $stmt = $this->db->prepare($query);
+        $stmt->bindParam(':userId', $userId);
+        $stmt->execute();
+        return $stmt->fetchAll(\PDO::FETCH_ASSOC);
+    }
+
+    public function addUserCategory($userId, $categoryId) {
+        $query = "INSERT INTO UsersCategories (UserID, CategoryID) VALUES (:userId, :categoryId)";
+        $stmt = $this->db->prepare($query);
+        $stmt->bindParam(':userId', $userId);
+        $stmt->bindParam(':categoryId', $categoryId);
+        $stmt->execute();
+    }
+
+    public function deleteUserCategory($userId, $categoryId) {
+        $query = "DELETE FROM UsersCategories WHERE UserID = :userId AND CategoryID = :categoryId";
+        $stmt = $this->db->prepare($query);
+        $stmt->bindParam(':userId', $userId);
+        $stmt->bindParam(':categoryId', $categoryId);
+        $stmt->execute();
     }
 }

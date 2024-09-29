@@ -35,4 +35,5 @@ return function (App $app) {
   $app->delete('/users/profile_photo/{id}', [$userController, 'deleteProfilePhoto']);
   $app->put('/users/{id}', [$userController, 'updateUser']);
   $app->delete('/users/{id}', [$userController, 'deleteUser']);
+  $app->post('/users/categories/{id}', [$userController, 'updateUserCategories']);
 };

@@ -111,13 +111,13 @@ class Search {
             GROUP_CONCAT(DISTINCT c.Name ORDER BY c.Name ASC SEPARATOR ', ') AS Categories,
             u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating, m.URL as imgURL
             FROM Users as u
-            LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
-            LEFT JOIN Categories as c ON uc.categoryID = c.categoryID
+            LEFT JOIN UsersCategories as uc ON uc.UserID = u.UserID
+            LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
             LEFT JOIN Media as m ON u.UserID = m.UserID
-            LEFT JOIN Reviews as r ON u.UserID = r.SUserID
+            LEFT JOIN Reviews as r ON u.UserID = r.SUserID OR u.UserID = r.GUserID
             WHERE FirstName LIKE :search1 OR LastName LIKE :search2 OR Biography LIKE :search3
             OR CONCAT(FirstName,' ',LastName) LIKE :search4
-            GROUP BY u.userID
+            GROUP BY u.UserID
             ORDER BY u.UserID
             LIMIT :_limit OFFSET :_offset");
 
