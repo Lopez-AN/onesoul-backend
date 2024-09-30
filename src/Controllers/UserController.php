@@ -98,7 +98,6 @@ class UserController
         ]
       ]);
     }
-    return $response->withHeader('Content-Type', 'application/json');
   }
 
   public function getUsersByType(Request $request, Response $response, $args){
@@ -290,7 +289,7 @@ class UserController
   public function updateUserCategories(Request $request, Response $response, $args) {
     $userId = $args['id'];
     $jwt = $request->getAttribute('jwt');
-    
+
     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
       return $response->withStatus(401)->withJson([
         "error" => [
@@ -345,10 +344,11 @@ class UserController
         }
       }
 
-      return $response->withStatus(200)->withJson([
-        "message" => "User categories updated successfully"
-      ]);
-
+      $result = $this->user->getUserById($userId);
+      if($result->http_code != 200){
+        return $response->withStatus($result->http_code)->withJson($result->error);
+      }
+      return $response->withStatus(200)->withJson($result->data);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [

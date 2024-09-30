@@ -19,7 +19,7 @@ class User {
             u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
             u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
             u.LastLogin, u.DeactivationDate, u.UserLevel, u.TermsAndConditions, u.SignedContract,
-            GROUP_CONCAT(DISTINCT c.Name ORDER BY c.Name ASC SEPARATOR ', ') AS Categories,
+            GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
             u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating, m.URL as imgURL
             FROM Users as u
             LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
@@ -39,7 +39,12 @@ class User {
             $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
             $rs = array_map(function($e){
-                $e['Categories'] = is_null($e['Categories']) ? [] : array_map('trim', explode(",", $e['Categories']));
+                $e['Categories'] = is_null($e['Categories']) ? [] : array_map(
+                    function($a){
+                        $a = explode(":", $a);
+                        return ["id" => intval($a[0]), "name" => $a[1]];
+                    },explode(",",$e['Categories'])
+                );
                 return $e;
             },$rs);
 
@@ -62,7 +67,7 @@ class User {
             u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
             u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
             u.LastLogin, u.DeactivationDate, u.UserLevel, u.TermsAndConditions, u.SignedContract,
-            GROUP_CONCAT(DISTINCT c.Name ORDER BY c.Name ASC SEPARATOR ', ') AS Categories,
+            GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
             u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating, m.URL as imgURL
             FROM Users as u
             LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
@@ -77,6 +82,16 @@ class User {
             $stmt->execute();
 
             $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            $rs = array_map(function($e){
+                $e['Categories'] = is_null($e['Categories']) ? [] : array_map(
+                    function($a){
+                        $a = explode(":", $a);
+                        return ["id" => intval($a[0]), "name" => $a[1]];
+                    },explode(",",$e['Categories'])
+                );
+                return $e;
+            },$rs);
 
             if (empty($rs)) {
                 return (object)[
@@ -119,7 +134,7 @@ class User {
                 u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
                 u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
                 u.LastLogin, u.DeactivationDate, u.UserLevel, u.TermsAndConditions, u.SignedContract,
-                GROUP_CONCAT(DISTINCT c.Name ORDER BY c.Name ASC SEPARATOR ', ') AS Categories,
+                GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
                 u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating, m.URL as imgURL
                 FROM Users as u
                 LEFT JOIN UsersCategories as uc ON uc.UserID = u.UserID
@@ -134,7 +149,7 @@ class User {
                 u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
                 u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
                 u.LastLogin, u.DeactivationDate, u.UserLevel, u.TermsAndConditions, u.SignedContract,
-                GROUP_CONCAT(DISTINCT c.Name ORDER BY c.Name ASC SEPARATOR ', ') AS Categories,
+                GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
                 u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating, m.URL as imgURL
                 FROM Users as u
                 LEFT JOIN UsersCategories as uc ON uc.UserID = u.UserID
@@ -155,6 +170,16 @@ class User {
             $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
             $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
             $total = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            $rs = array_map(function($e){
+                $e['Categories'] = is_null($e['Categories']) ? [] : array_map(
+                    function($a){
+                        $a = explode(":", $a);
+                        return ["id" => intval($a[0]), "name" => $a[1]];
+                    },explode(",",$e['Categories'])
+                );
+                return $e;
+            },$rs);
 
             return (object)[
                 "data" => $rs,

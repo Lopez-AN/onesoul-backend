@@ -38,7 +38,7 @@ class Auth{
 
   public function updateFailedLogin($userId, $failedAttempts, $lockedUntil = null) {
     try {
-      $stmt = $this->db->prepare("UPDATE Users SET failed_login_attempts = ?, 
+      $stmt = $this->db->prepare("UPDATE Users SET failed_login_attempts = ?,
       locked_until = ? WHERE UserID = ?");
       $stmt->execute([$failedAttempts, $lockedUntil, $userId]);
     } catch (\PDOException $e) {
@@ -157,7 +157,7 @@ class Auth{
 
   private function passwordComplexity($password): bool {
     $password = trim($password);
-    
+
     // Requerimiento 1: mínimo 8 caracteres
     if (strlen($password) < 8) {
         return false;
@@ -212,7 +212,7 @@ class Auth{
     $otpCode = rand(100000, 999999); # Codigo que se enviara por mail
 
     $user_id = $user[0]['UserID'];
-    
+
     # Envio el mail al usuario
     $this->sendOtpMail($user_id);
     $this->updateUserPassword($email, $newPasswordHash);
@@ -354,7 +354,7 @@ class Auth{
       # El OTP es de un solo uso
       if(!empty($resp)){
         $stmt = $this->db->prepare("UPDATE Users
-        SET OTP_code = null,OTP_date = null
+        SET OTP_code = null,OTP_date = null, ValidatedEmail = 1
         WHERE UserID = ?");
         $stmt->execute([$user_id]);
       }
@@ -492,11 +492,33 @@ class Auth{
   # Busca un usuario por username
   public function getUserByUserName($username){
     try{
-      $stmt = $this->db->prepare("SELECT u.*,m.URL FROM Users AS u
+      $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName, u.UserName,
+      u.Email, u.Phone, u.AddressName, u.AddressNumber, u.Floor,
+      u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
+      u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
+      u.LastLogin, u.DeactivationDate, u.UserLevel, u.TermsAndConditions, u.SignedContract,
+      GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
+      u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating, m.URL as imgURL
+      FROM Users as u
+      LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
+      LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
       LEFT JOIN Media as m ON u.UserID = m.UserID
-      WHERE u.UserName = ?");
+      LEFT JOIN Reviews as r ON u.UserID = r.SUserID
+      WHERE u.UserName = ? GROUP BY u.UserID ORDER BY u.UserID");
       $stmt->execute([$username]);
-      return $stmt->fetchAll(PDO::FETCH_ASSOC);
+      $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+      $rs = array_map(function($e){
+        $e['Categories'] = is_null($e['Categories']) ? [] : array_map(
+            function($a){
+                $a = explode(":", $a);
+                return ["id" => intval($a[0]), "name" => $a[1]];
+            },explode(",",$e['Categories'])
+        );
+        return $e;
+      },$rs);
+
+      return $rs;
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
@@ -505,11 +527,34 @@ class Auth{
   # Busca un usuario por email
   public function getUserByEmail($email){
     try{
-      $stmt = $this->db->prepare("SELECT u.*,m.URL FROM Users AS u
+      $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName, u.UserName,
+      u.Email, u.Phone, u.AddressName, u.AddressNumber, u.Floor,
+      u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
+      u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
+      u.LastLogin, u.DeactivationDate, u.UserLevel, u.TermsAndConditions, u.SignedContract,
+      GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
+      u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating, m.URL as imgURL
+      FROM Users as u
+      LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
+      LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
       LEFT JOIN Media as m ON u.UserID = m.UserID
-      WHERE u.Email = ?");
+      LEFT JOIN Reviews as r ON u.UserID = r.SUserID
+      WHERE u.Email = ? GROUP BY u.UserID ORDER BY u.UserID");
       $stmt->execute([$email]);
-      return $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+      $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+      $rs = array_map(function($e){
+        $e['Categories'] = is_null($e['Categories']) ? [] : array_map(
+            function($a){
+                $a = explode(":", $a);
+                return ["id" => intval($a[0]), "name" => $a[1]];
+            },explode(",",$e['Categories'])
+        );
+        return $e;
+      },$rs);
+
+      return $rs;
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }

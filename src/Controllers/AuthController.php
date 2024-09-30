@@ -55,7 +55,7 @@ class AuthController{
         ]));
         $response = $response->withStatus(401);
       }
-      
+
       $user = $auth[0];
 
       //Verificar si el usuario esta bloqueado
@@ -68,13 +68,13 @@ class AuthController{
         ]));
         return $response->withStatus(403)->withHeader('Content-Type', 'application/json');
       }
-      
+
       if (!password_verify($password, $user['PasswordHash'])) {
         $failedAttempts = $user['failed_login_attempts'] + 1;
         $lockTime = $this->calculateLockTime($failedAttempts);
-  
+
         $this->auth->updateFailedLogin($user['UserID'], $failedAttempts, $lockTime);
-  
+
         $response->getBody()->write(json_encode([
           "error" => [
             "code" => "USER_INVALID_CREDENTIALS",
