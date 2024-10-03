@@ -247,9 +247,17 @@ class User {
 
             // Vincular el ID del usuario
             $stmt->bindValue(':UserID', $userId, PDO::PARAM_INT);
+            $stmt->execute(); // Ejecutar la consulta
 
-            // Ejecutar la consulta
-            $stmt->execute();
+            // Si cambio el mail se marca el email como no validado
+            if(isset($data['Email'])){
+                if($data['Email'] != $resp -> data['Email']){
+                    $stmt = $this->db->prepare("UPDATE Users SET ValidatedEmail = 0 WHERE UserID = :UserID");
+                    // Vincular el ID del usuario
+                    $stmt->bindValue(':UserID', $userId, PDO::PARAM_INT);
+                    $stmt->execute(); // Ejecutar la consulta
+                }
+            }
 
             // Devolver los datos actualizados del usuario
             return $this->getUserById($userId);
