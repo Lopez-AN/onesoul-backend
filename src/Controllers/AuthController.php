@@ -30,9 +30,9 @@ class AuthController{
     $data = $request->getParsedBody();
     $email = $data['email'] ?? '';
     $username = $data['username'] ?? '';
-    $password = $data['password'] ?? '';
+    $newPassword = $data['newPassword'] ?? '';
 
-    if((empty($email) && empty($username)) || empty($password)){
+    if((empty($email) && empty($username)) || empty($newPassword)){
       $response->getBody()->write(json_encode([
         "error" => [
           "code" => "USER_INVALID_CREDENTIALS",
@@ -69,7 +69,7 @@ class AuthController{
         return $response->withStatus(403)->withHeader('Content-Type', 'application/json');
       }
 
-      if (!password_verify($password, $user['PasswordHash'])) {
+      if (!password_verify($newPassword, $user['PasswordHash'])) {
         $failedAttempts = $user['failed_login_attempts'] + 1;
         $lockTime = $this->calculateLockTime($failedAttempts);
 
@@ -275,32 +275,26 @@ class AuthController{
     return $response->withHeader('Content-Type', 'application/json');
   }
 
-  public function resetPassword(Request $request, Response $response, $args) {
+  public function requestPasswordReset(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
     $email = $data['email'] ?? '';
-    $newPassword = $data['new_password'] ?? '';
 
-    if (empty($email) || empty($newPassword)) {
+    if (empty($email)) {
         $response->getBody()->write(json_encode([
             "error" => [
                 "code" => "INVALID_PARAMETERS",
-                "desc" => "Parameters are missing or invalid"
+                "desc" => "Email is required"
             ]
         ]));
-      return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+        return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
     }
 
-    // Llamada para resetear la contraseña
     try {
-      $result = $this->auth->resetPassword($email, $newPassword);
-        if ($result->http_code === 200) {
-          $response->getBody()->write(json_encode([
-              "message" => "Password has been reset successfully"
-          ]));
-        } else {
-          $response->getBody()->write(json_encode($result->error));
-        }
-      return $response->withStatus($result->http_code)->withHeader('Content-Type', 'application/json');
+        $this->auth->sendOtpMailByEmail($email);  // Envía OTP
+        $response->getBody()->write(json_encode([
+            "message" => "OTP sent to email"
+        ]));
+        return $response->withStatus(200)->withHeader('Content-Type', 'application/json');
     } catch (Exception $e) {
         $response->getBody()->write(json_encode([
             "error" => [
@@ -308,6 +302,57 @@ class AuthController{
                 "desc" => $e->getMessage()
             ]
         ]));
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    }
+  }
+
+  public function validateOtpAndResetPassword(Request $request, Response $response, $args) {
+    $data = $request->getParsedBody();
+    $email = $data['email'] ?? '';
+    $otpCode = $data['otpCode'] ?? '';
+    $newPassword = $data['newPassword'] ?? '';
+
+    if (empty($email) || empty($otpCode) || empty($newPassword)) {
+      $response->getBody()->write(json_encode([
+          "error" => [
+              "code" => "INVALID_PARAMETERS",
+              "desc" => "Email, OTP and new password are required"
+          ]
+      ]));
+      return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+    }
+
+    try {
+      $validOtp = $this->auth->validateOtpByEmail($email, $otpCode); // Verifica OTP
+
+      if (!$validOtp) {
+          $response->getBody()->write(json_encode([
+              "error" => [
+                  "code" => "INVALID_OTP",
+                  "desc" => "OTP is invalid or expired"
+              ]
+          ]));
+          return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+      }
+
+      $resetResponse =$this->auth->resetPassword($email, $newPassword);  // Resetea la contraseña
+      if ($resetResponse->http_code !== 200) {
+        // Si la contraseña no cumple con los requisitos
+        $response->getBody()->write(json_encode($resetResponse));
+        return $response->withStatus($resetResponse->http_code)->withHeader('Content-Type', 'application/json');
+      }
+
+      $response->getBody()->write(json_encode([
+          "message" => "Password reset successfully"
+      ]));
+      return $response->withStatus(200)->withHeader('Content-Type', 'application/json');
+    } catch (Exception $e) {
+      $response->getBody()->write(json_encode([
+          "error" => [
+              "code" => "INTERNAL_SERVER_ERROR",
+              "desc" => $e->getMessage()
+          ]
+      ]));
       return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
     }
   }

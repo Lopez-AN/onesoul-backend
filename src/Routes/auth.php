@@ -41,4 +41,6 @@ return function (App $app) {
   $app->post('/register/send_otp_mail', [$authController, 'sendOtpMail']);
   $app->post('/recaptcha', [$authController, 'validateReCaptcha']);
   $app->get('/auth/refresh_token', [$authController, 'refreshToken']);
+  $app->post('/auth/request_password_reset', [$authController, 'requestPasswordReset']);
+  $app->post('/auth/validate_otp_reset_password', [$authController, 'validateOtpAndResetPassword']);
 };
