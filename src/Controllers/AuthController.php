@@ -30,9 +30,9 @@ class AuthController{
     $data = $request->getParsedBody();
     $email = $data['email'] ?? '';
     $username = $data['username'] ?? '';
-    $newPassword = $data['newPassword'] ?? '';
+    $password = $data['password'] ?? '';
 
-    if((empty($email) && empty($username)) || empty($newPassword)){
+    if((empty($email) && empty($username)) || empty($password)){
       $response->getBody()->write(json_encode([
         "error" => [
           "code" => "USER_INVALID_CREDENTIALS",
@@ -69,7 +69,7 @@ class AuthController{
         return $response->withStatus(403)->withHeader('Content-Type', 'application/json');
       }
 
-      if (!password_verify($newPassword, $user['PasswordHash'])) {
+      if (!password_verify($password, $user['PasswordHash'])) {
         $failedAttempts = $user['failed_login_attempts'] + 1;
         $lockTime = $this->calculateLockTime($failedAttempts);
 
@@ -221,11 +221,11 @@ class AuthController{
     $data = $request->getParsedBody();
     $email = $data['email'] ?? '';
     $username = $data['username'] ?? '';
-    $password = $data['password'] ?? '';
+    $newPassword = $data['newPassword'] ?? '';
     $recaptchaToken = $data['recaptcha_token'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
-    if(empty($email) || empty($username) || empty($password) || empty($recaptchaToken)){
+    if(empty($email) || empty($username) || empty($newPassword) || empty($recaptchaToken)){
       $response->getBody()->write(json_encode([
         "error" => [
           "code" => "INVALID_PARAMETERS",
@@ -244,7 +244,7 @@ class AuthController{
     }
 
     try {
-      $auth = $this->auth->register($email, $username, $password);
+      $auth = $this->auth->register($email, $username, $newPassword);
       switch($auth->http_code) {
         case 200: // Logueo correcto o usuario existente
           $jwt = $this -> JWTgen($auth -> data[0]);
@@ -278,19 +278,46 @@ class AuthController{
   public function requestPasswordReset(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
     $email = $data['email'] ?? '';
+    $username = $data['username'] ?? '';
+    // $recaptchaToken = $data['recaptcha_token'] ?? '';
+    // $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
-    if (empty($email)) {
-        $response->getBody()->write(json_encode([
-            "error" => [
-                "code" => "INVALID_PARAMETERS",
-                "desc" => "Email is required"
-            ]
-        ]));
-        return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+    if (empty($email) && empty($username)) {
+      $response->getBody()->write(json_encode([
+        "error" => [
+          "code" => "INVALID_PARAMETERS",
+          "desc" => "Email or Username is required"
+        ]
+      ]));
+      return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
     }
 
+    if (!empty($email)) {
+      $_SESSION['email'] = $email;  // Almacena el email en la sesión
+    } elseif (!empty($username)) {
+      $_SESSION['username'] = $username;  // Almacena el username en la sesión
+    }
+
+    // if(empty($recaptchaToken)){
+    //   $response->getBody()->write(json_encode([
+    //     "error" => [
+    //       "code" => "INVALID_PARAMETERS",
+    //       "desc" => "Parameters are missing or invalid"
+    //     ]
+    //   ]));
+    //   $response = $response->withStatus(400);
+    //   return $response->withHeader('Content-Type', 'application/json');
+    // }
+
+    // $validation = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
+    // if ($validation->http_code !== 200) {
+    //   $response->getBody()->write(json_encode($validation->error));
+    //   $response = $response->withStatus($validation->http_code);
+    //   return $response->withHeader('Content-Type', 'application/json');
+    // } 
+
     try {
-        $this->auth->sendOtpMailByEmail($email);  // Envía OTP
+        $this->auth->sendOtpMailByEmail($email, $username);  // Envía OTP
         $response->getBody()->write(json_encode([
             "message" => "OTP sent to email"
         ]));
@@ -306,52 +333,179 @@ class AuthController{
     }
   }
 
-  public function validateOtpAndResetPassword(Request $request, Response $response, $args) {
+  public function validateOtpByEmail(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
-    $email = $data['email'] ?? '';
+    $email = $data['email'] ?? '';    // ESTO SE GUARDARIA EN UNA $_SESSION?? 
+    $username = $data['username'] ?? '';    // ESTO SE GUARDARIA EN UNA $_SESSION?? 
     $otpCode = $data['otpCode'] ?? '';
-    $newPassword = $data['newPassword'] ?? '';
 
-    if (empty($email) || empty($otpCode) || empty($newPassword)) {
+    if (empty($email) && empty($username)) {
       $response->getBody()->write(json_encode([
           "error" => [
               "code" => "INVALID_PARAMETERS",
-              "desc" => "Email, OTP and new password are required"
+              "desc" => "Email or Username is required"
           ]
       ]));
       return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
     }
 
-    try {
-      $validOtp = $this->auth->validateOtpByEmail($email, $otpCode); // Verifica OTP
-
-      if (!$validOtp) {
+    // Si solo hay username, obtener el email
+    if (!empty($username)) {
+      $user = $this->auth->getUserByUserName($username);
+      if (!$user) {
           $response->getBody()->write(json_encode([
               "error" => [
-                  "code" => "INVALID_OTP",
-                  "desc" => "OTP is invalid or expired"
+                  "code" => "USER_NOT_FOUND",
+                  "desc" => "User not found"
               ]
           ]));
-          return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+          return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
       }
+      $email = $user[0]['Email'];  // Asigna el email del usuario encontrado
+    }
 
-      $resetResponse =$this->auth->resetPassword($email, $newPassword);  // Resetea la contraseña
+    if (empty($otpCode)) {
+      $response->getBody()->write(json_encode([
+          "error" => [
+              "code" => "INVALID_PARAMETERS",
+              "desc" => "OTP is required"
+          ]
+      ]));
+      return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+    }
+
+
+    try {
+      // Llamar a la validación del OTP
+      $validOtp = $this->auth->validateOTPByEmail($email, $otpCode);
+  
+      if (is_object($validOtp) && isset($validOtp->error)) {
+        return $response->withStatus($validOtp->http_code)->withHeader('Content-Type', 'application/json')
+        ->write(json_encode($validOtp));
+      }
+  
+      // OTP válido
+      return $response->withStatus(200)->withHeader('Content-Type', 'application/json')
+        ->write(json_encode([
+        "message" => "OTP validated successfully"
+        ]));
+      } catch (DatabaseException $e) {
+        return $response->withStatus(500)->withHeader('Content-Type', 'application/json')
+          ->write(json_encode([
+          "error" => [
+            "code" => "INTERNAL_SERVER_ERROR",
+            "desc" => $e->getMessage()
+          ]
+        ]));
+      }
+    //   $validOtp = $this->auth->validateOtpByEmail($email, $otpCode); // Verifica OTP
+    //   if (empty($validOtp)) {
+    //     $response->getBody()->write(json_encode([
+    //       "error" => [
+    //         "code" => "INVALID_OTP",
+    //         "desc" => "The specified OTP code is invalid"
+    //       ]
+    //     ]));
+    //     return $response->withStatus(401)->withHeader('Content-Type', 'application/json');
+    //   } else {
+    //     $otp_date = new DateTime($user[0]['OTP_Date']);
+    //     $now = new DateTime();
+    //     $interval = $now->diff($otp_date);
+    //     if ($interval->h >= 1) { 
+    //       $response->getBody()->write(json_encode([
+    //         "error" => [
+    //           "code" => "EXPIRED_OTP",
+    //           "desc" => "OTP has expired"
+    //         ]
+    //       ]));
+    //       $response = $response->withStatus(401);
+    //     }else{
+    //       $response->getBody()->write(json_encode([
+    //         "message" => "OTP validated successfully"
+    //       ]));
+    //       $response = $response->withStatus(200);
+    //     }
+    //   }
+    // } catch (Exception $e) {
+    //   $response->getBody()->write(json_encode([
+    //     "error" => [
+    //       "code" => "INTERNAL_SERVER_ERROR",
+    //       "desc" => $e->getMessage()
+    //     ]
+    //   ]));
+    //   return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+    // }
+  }
+  
+  // Resetear contraseña
+  public function resetPassword(Request $request, Response $response, $args) {
+    $data = $request->getParsedBody();
+    $email = $data['email'] ?? '';    // ESTO SE GUARDARIA EN UNA $_SESSION?? 
+    $username = $data['username'] ?? '';    // ESTO SE GUARDARIA EN UNA $_SESSION?? 
+    $newPassword = $data['newPassword'] ?? '';
+    // $recaptchaToken = $data['recaptcha_token'] ?? '';
+    // $clientIp = $request->getServerParams()['REMOTE_ADDR'];
+
+    // $validation = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
+    // if ($validation->http_code !== 200) {
+    //   $response->getBody()->write(json_encode($validation->error));
+    //   $response = $response->withStatus($validation->http_code);
+    //   return $response->withHeader('Content-Type', 'application/json');
+    // } 
+
+    
+    if (empty($email) && empty($username)) { // || empty($recaptchaToken)
+      $response->getBody()->write(json_encode([
+        "error" => [
+          "code" => "INVALID_PARAMETERS",
+          "desc" => "Parameters are missing or invalid"
+        ]
+      ]));
+      return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+    }
+
+    if (empty($newPassword)) {
+      $response->getBody()->write(json_encode([
+        "error" => [
+          "code" => "INVALID_PARAMETERS",
+          "desc" => "New password is required"
+        ]
+      ]));
+      return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+    }
+
+    try {
+        // Si solo hay username, obtener el email
+        if (!empty($username)) {
+          $user = $this->auth->getUserByUserName($username);
+          if (!$user) {
+              $response->getBody()->write(json_encode([
+                  "error" => [
+                      "code" => "USER_NOT_FOUND",
+                      "desc" => "User not found"
+                  ]
+              ]));
+              return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
+          }
+          $email = $user[0]['Email'];
+        }
+
+      $resetResponse = $this->auth->resetPassword($email, $newPassword);
       if ($resetResponse->http_code !== 200) {
-        // Si la contraseña no cumple con los requisitos
         $response->getBody()->write(json_encode($resetResponse));
         return $response->withStatus($resetResponse->http_code)->withHeader('Content-Type', 'application/json');
       }
 
       $response->getBody()->write(json_encode([
-          "message" => "Password reset successfully"
+        "message" => "Password reset successfully"
       ]));
       return $response->withStatus(200)->withHeader('Content-Type', 'application/json');
     } catch (Exception $e) {
       $response->getBody()->write(json_encode([
-          "error" => [
-              "code" => "INTERNAL_SERVER_ERROR",
-              "desc" => $e->getMessage()
-          ]
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
       ]));
       return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
     }
@@ -464,7 +618,7 @@ class AuthController{
     return $response->withHeader('Content-Type', 'application/json');
   }
 
-  public function sendOtpMail(Request $request, Response $response, $args) {
+  public function sendOtpMailJWT(Request $request, Response $response, $args) {
     $jwt = $request->getAttribute('jwt');
     if(!isset($jwt['data']) || !property_exists($jwt['data'],'UserID')){
       $response->getBody()->write(json_encode([
@@ -489,7 +643,7 @@ class AuthController{
     }
 
     try {
-      $auth = $this->auth->sendOtpMail($jwt['data'] -> UserID);
+      $auth = $this->auth->sendOtpMailJWT($jwt['data'] -> UserID);
       if($auth->http_code != 200){
         $response->getBody()->write(json_encode($auth->error));
         $response = $response->withStatus($auth->http_code);
@@ -506,7 +660,7 @@ class AuthController{
     return $response->withHeader('Content-Type', 'application/json');
   }
 
-  public function validateOTP(Request $request, Response $response, $args) {
+  public function validateOTPJWT(Request $request, Response $response, $args) {
     $jwt = $request->getAttribute('jwt');
     if(!isset($jwt['data']) || !property_exists($jwt['data'],'UserID')){
       $response->getBody()->write(json_encode([
@@ -520,11 +674,11 @@ class AuthController{
     }
 
     $data = $request->getParsedBody();
-    $otp_code = $data['otp_code'] ?? '';
-    $recaptchaToken = $data['recaptcha_token'] ?? '';
-    $clientIp = $request->getServerParams()['REMOTE_ADDR'];
+    $otpCode = $data['otpCode'] ?? '';
+    // $recaptchaToken = $data['recaptcha_token'] ?? '';
+    // $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
-    if(empty($otp_code) || empty($recaptchaToken)){
+    if(empty($otpCode)){ //  || empty($recaptchaToken)
       $response->getBody()->write(json_encode([
         "error" => [
           "code" => "INVALID_PARAMETERS",
@@ -535,49 +689,72 @@ class AuthController{
       return $response->withHeader('Content-Type', 'application/json');
     }
 
-    $validation = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
-    if ($validation->http_code !== 200) {
-      $response->getBody()->write(json_encode($validation->error));
-      $response = $response->withStatus($validation->http_code);
-      return $response->withHeader('Content-Type', 'application/json');
-    }
+    // $validation = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
+    // if ($validation->http_code !== 200) {
+    //   $response->getBody()->write(json_encode($validation->error));
+    //   $response = $response->withStatus($validation->http_code);
+    //   return $response->withHeader('Content-Type', 'application/json');
+    // }
 
     try {
-      $auth = $this->auth->validateOTP($jwt['data'] -> UserID, $otp_code);
-      if(empty($auth)){
-        $response->getBody()->write(json_encode([
-          "error" => [
-            "code" => "INVALID_OTP",
-            "desc" => "The specified OTP code is invalid"
-          ]
-        ]));
-        $response = $response->withStatus(401);
-      }else{
-        # Los otp expiran luego del tiempo configurado
-        $otp_date = new DateTime($auth[0]['OTP_Date']);
-        if(time() - $otp_date->getTimestamp() > $GLOBALS['config']['otp_exptime']){
-          $response->getBody()->write(json_encode([
-            "error" => [
-              "code" => "EXPIRED_OTP",
-              "desc" => "The specified OTP code is expired"
-            ]
-          ]));
-          $response = $response->withStatus(401);
-        }else{
-          $response->getBody()->write(json_encode([]));
-          $response = $response->withStatus(200);
-        }
+      // Llamar a la validación del OTP
+      $validOtp = $this->auth->validateOTPJWT($jwt['data']->UserID, $otpCode);
+
+      if (is_object($validOtp) && isset($validOtp->error)) {
+          return $response->withStatus($validOtp->http_code)->withHeader('Content-Type', 'application/json')
+              ->write(json_encode($validOtp));
       }
+
+      // OTP válido
+      return $response->withStatus(200)->withHeader('Content-Type', 'application/json')
+          ->write(json_encode([
+              "message" => "OTP validated successfully"
+          ]));
     } catch (DatabaseException $e) {
-      $response = $response->withStatus(500);
-      $response->getBody()->write(json_encode([
-        "error" => [
-          "code" => "INTERNAL_SERVER_ERROR",
-          "desc" => $e->getMessage()
-        ]
-      ]));
+      return $response->withStatus(500)->withHeader('Content-Type', 'application/json')
+          ->write(json_encode([
+              "error" => [
+                  "code" => "INTERNAL_SERVER_ERROR",
+                  "desc" => $e->getMessage()
+              ]
+          ]));
     }
-    return $response->withHeader('Content-Type', 'application/json');
+    // try {
+    //   $auth = $this->auth->validateOTPJWT($jwt['data'] -> UserID, $otpCode);
+    //   if(empty($auth))
+    //     $response->getBody()->write(json_encode([
+    //       "error" => [
+    //         "code" => "INVALID_OTP",
+    //         "desc" => "The specified OTP code is invalid"
+    //       ]
+    //     ]));
+    //     $response = $response->withStatus(401);
+      // }else{
+      //   # Los otp expiran luego del tiempo configurado
+      //   $otp_date = new DateTime($auth[0]['OTP_Date']);
+      //   if(time() - $otp_date->getTimestamp() > $GLOBALS['config']['otp_exptime']){
+      //     $response->getBody()->write(json_encode([
+      //       "error" => [
+      //         "code" => "EXPIRED_OTP",
+      //         "desc" => "The specified OTP code is expired"
+      //       ]
+      //     ]));
+      //     $response = $response->withStatus(401);
+      //   }else{
+      //     $response->getBody()->write(json_encode([]));
+      //     $response = $response->withStatus(200);
+      //   }
+      // }
+    // } catch (DatabaseException $e) {
+    //   $response = $response->withStatus(500);
+    //   $response->getBody()->write(json_encode([
+    //     "error" => [
+    //       "code" => "INTERNAL_SERVER_ERROR",
+    //       "desc" => $e->getMessage()
+    //     ]
+    //   ]));
+    // }
+    // return $response->withHeader('Content-Type', 'application/json');
   }
 
   public function refreshToken(Request $request, Response $response, $args){

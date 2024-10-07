@@ -146,7 +146,7 @@ class Auth{
       "email" => $email,
       "username" => $username,
       "password_hash" => $password_hash,
-      "otp_code" => $otpCode
+      "otpCode" => $otpCode
     ]);
 
     # Envio el mail al usuario
@@ -295,30 +295,54 @@ class Auth{
     return (object)["http_code" => 200, "data" => $user_data];
   }
 
-  # Validacion OTP
-  public function validateOTP($user_id, $otpCode){
+  # Validacion OTP desde el JWT
+  public function validateOTPJWT($user_id, $otpCode){
     try{
+      $otp_exptime = $GLOBALS['config']['otp_exptime'];
       $stmt = $this->db->prepare("SELECT u.OTP_Date FROM Users AS u
       LEFT JOIN Media as m ON u.UserID = m.UserID
       WHERE u.UserID = ? AND u.OTP_Code = ?");
       $stmt->execute([$user_id, $otpCode]);
-      $resp = $stmt->fetchAll(PDO::FETCH_ASSOC);
+      $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-      # El OTP es de un solo uso
-      if(!empty($resp)){
-        $stmt = $this->db->prepare("UPDATE Users
-        SET OTP_code = null,OTP_date = null, ValidatedEmail = 1
-        WHERE UserID = ?");
-        $stmt->execute([$user_id]);
+      if(empty($user)){
+        return (object)["http_code" => 404,
+          "error" => [
+            "code" => "USER_NOT_FOUND",
+            "desc" => "No user was found with the specified data."
+          ]
+        ];
       }
-      return $resp;
+      
+      // Verificar si el OTP ha expirado
+      $otpDate = new DateTime($user['OTP_Date']);
+      $now = new DateTime();
+      $interval_in_seconds = $now->getTimestamp() - $otpDate->getTimestamp();
+    
+      // Comparar el intervalo con otp_exptime
+      if ($interval_in_seconds > $otp_exptime) {
+        return (object)[
+          "http_code" => 400,
+          "error" => [
+            "code" => "EXPIRED_OTP",
+            "desc" => "OTP has expired"
+          ]
+        ];
+      }
+
+      // Limpiar el OTP después de validarlo
+      $stmt = $this->db->prepare("UPDATE Users SET OTP_Code = NULL, OTP_Date = NULL, ValidatedEmail = 1 WHERE UserID = ?");
+      $stmt->execute([$user_id]);
+
+      // OTP válido
+      return true;    
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
   }
 
-  # Envio de codigo OTP por email
-  public function sendOtpMail($user_id){
+  # Envio de codigo OTP por email desde el JWT
+  public function sendOtpMailJWT($user_id){
     try{
       $stmt = $this->db->prepare("SELECT u.Email, u.UserName FROM Users AS u
       WHERE u.UserID = ?");
@@ -327,11 +351,11 @@ class Auth{
 
       if(empty($resp)){
         return (object)["http_code" => 404,
-          "error" => [
-            "code" => "USER_NOT_FOUND",
-            "desc" => "No user was found with the specified ID"
-          ]
-        ];
+        "error" => [
+          "code" => "USER_NOT_FOUND",
+          "desc" => "No user was found with the specified data."
+        ]
+      ];
       }
 
       # Genero un nuevo codigo OTP y lo grabo en el usuario
@@ -345,9 +369,44 @@ class Auth{
       throw new DatabaseException($e->getMessage());
     }
   }
-  private function _sendOtpMail($rec, $username, $otp_cod){
+
+  # Envio de codigo OTP por email sin iniciar sesión
+  public function sendOtpMailByEmail($email = null, $username = null) {
+    try{
+      if (!empty($email)) {
+        $user = $this->getUserByEmail($email);
+        if ($user) {
+          $username = $user[0]['UserName']; // Obtengo el username del usuario
+        }
+      } elseif (!empty($username)) {
+        $user = $this->getUserByUserName($username);
+        if ($user) {
+          $email = $user[0]['Email'];  // Obtengo el email del usuario
+        }
+      }
+    
+      if (empty($user)) {
+        return (object)["http_code" => 404,
+          "error" => [
+            "code" => "USER_NOT_FOUND",
+            "desc" => "No user was found with the specified Email or Username"
+          ]
+        ];
+      }
+
+      $otpCode = rand(100000, 999999);
+      $stmt = $this->db->prepare("UPDATE Users SET OTP_Code = ?, OTP_Date = ? WHERE Email = ?");
+      $stmt->execute([$otpCode, date('Y-m-d H:i:s'), $email]);
+
+      $this->_sendOtpMail($email, $username, $otpCode); 
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  private function _sendOtpMail($rec, $username, $otpCode){
     $template = file_get_contents(ROOT."/src/templates/email_otp.html");
-    $template = str_replace("{CODIGO}", $otp_cod, $template);
+    $template = str_replace("{CODIGO}", $otpCode, $template);
     $template = str_replace("{USERNAME}", $username, $template);
 
     $smtpAccount = $GLOBALS['config']['mailer']['account'];
@@ -373,13 +432,85 @@ class Auth{
       $mail->isHTML(true);
       $mail->Subject = 'Complete su registro en OneSoul';
       $mail->Body    = $template;
-      $mail->AltBody = "Hola $username, bienvenido a OneSoul\nSu código de verificaci&oacute;n es $otp_cod";
+      $mail->AltBody = "Hola $username, bienvenido a OneSoul\nSu código de verificaci&oacute;n es $otpCode";
       $mail->addEmbeddedImage(ROOT."/src/templates/logo.png", 'logo');
 
       // Enviar el correo
       $mail->send();
     } catch (Exception $e) {
       # echo "No se pudo enviar el correo. Error: {$mail->ErrorInfo}";
+    }
+  }
+
+  public function validateOtpByEmail($email, $otpCode) {
+    try{
+      $otp_exptime = $GLOBALS['config']['otp_exptime'];
+      $stmt = $this->db->prepare("SELECT OTP_Date FROM Users WHERE Email = ? AND OTP_Code = ?");
+      $stmt->execute([$email, $otpCode]);
+      $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+      if (empty($user)) {
+        return (object)["http_code" => 404,
+          "error" => [
+            "code" => "USER_NOT_FOUND",
+            "desc" => "No user was found with the specified data."
+          ]
+        ];
+      }
+
+      // Verificar si el OTP ha expirado
+      $otpDate = new DateTime($user['OTP_Date']);
+      $now = new DateTime();
+      $interval_in_seconds = $now->getTimestamp() - $otpDate->getTimestamp();
+
+      // Comparar el intervalo con otp_exptime
+      if ($interval_in_seconds > $otp_exptime) {
+        return (object)[
+          "http_code" => 400,
+          "error" => [
+            "code" => "EXPIRED_OTP",
+            "desc" => "OTP has expired"
+          ]
+        ];
+      }
+      
+      // Limpiar el OTP después de validarlo
+      $stmt = $this->db->prepare("UPDATE Users SET OTP_Code = NULL, OTP_Date = NULL, ValidatedEmail = 1 WHERE UserID = ?");
+      $stmt->execute([$email]);
+
+      // OTP válido
+      return true;    
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  public function resetPassword($email, $newPassword) {
+  // Validar la fortaleza de la nueva contraseña
+  if (!$this->passwordComplexity($newPassword)) {
+      return (object)[
+          "http_code" => 400,
+          "error" => [
+              "code" => "WEAK_PASSWORD",
+              "desc" => "Password doesn't meet complexity requirements"
+          ]
+      ];
+  }
+
+  // Encripta la nueva contraseña
+  $newPasswordHash = password_hash($newPassword, PASSWORD_BCRYPT);
+
+  // Actualiza la contraseña en la base de datos
+  try {
+      $stmt = $this->db->prepare("UPDATE Users SET PasswordHash = ? WHERE Email = ?");
+      $stmt->execute([$newPasswordHash, $email]);
+
+      return (object)[
+          "http_code" => 200,
+          "message" => "Password has been reset successfully"
+      ];
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
     }
   }
 
@@ -409,7 +540,7 @@ class Auth{
       $stmt = $this->db->prepare("INSERT INTO Users (Email, UserName, PasswordHash, OTP_Code, OTP_Date, RegistrationDate, ValidatedEmail)
       VALUES (?,?,?,?,?,?,0)");
       $stmt->execute([$userData -> email, $userData -> username, $userData -> password_hash,
-        $userData -> otp_code, date('YmdHis'), date('YmdHis')]);
+        $userData -> otpCode, date('YmdHis'), date('YmdHis')]);
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
@@ -554,74 +685,6 @@ class Auth{
 
     // Validación exitosa
     return (object)["http_code" => 200, "data" => []];
-  }
-
-  public function sendOtpMailByEmail($email) {
-    $user = $this->getUserByEmail($email);
-    if (empty($user)) {
-        throw new Exception("User not found");
-    }
-
-    $otpCode = rand(100000, 999999);
-    $stmt = $this->db->prepare("UPDATE Users SET OTP_Code = ?, OTP_Date = ? WHERE Email = ?");
-    $stmt->execute([$otpCode, date('Y-m-d H:i:s'), $email]);
-
-    $username= $user[0]['UserName'];
-
-    $this->_sendOtpMail($email, $username, $otpCode);  // Usa la función de envío de mail que ya tienes
-  }
-
-  public function validateOtpByEmail($email, $otpCode) {
-    $stmt = $this->db->prepare("SELECT OTP_Date FROM Users WHERE Email = ? AND OTP_Code = ?");
-    $stmt->execute([$email, $otpCode]);
-    $user = $stmt->fetch(PDO::FETCH_ASSOC);
-
-    if (empty($user)) {
-        return false;
-    }
-
-    $otpDate = new DateTime($user['OTP_Date']);
-    $now = new DateTime();
-    $interval = $now->diff($otpDate);
-
-    if ($interval->i > 10) {  // OTP válido por 10 minutos
-        return false;
-    }
-
-    // Limpia el OTP después de validarlo
-    $stmt = $this->db->prepare("UPDATE Users SET OTP_Code = NULL, OTP_Date = NULL WHERE Email = ?");
-    $stmt->execute([$email]);
-
-    return true;
-  }
-
-  public function resetPassword($email, $newPassword) {
-  // Validar la fortaleza de la nueva contraseña
-  if (!$this->passwordComplexity($newPassword)) {
-      return (object)[
-          "http_code" => 400,
-          "error" => [
-              "code" => "WEAK_PASSWORD",
-              "desc" => "Password doesn't meet complexity requirements"
-          ]
-      ];
-  }
-
-  // Encripta la nueva contraseña
-  $newPasswordHash = password_hash($newPassword, PASSWORD_BCRYPT);
-
-  // Actualiza la contraseña en la base de datos
-  try {
-      $stmt = $this->db->prepare("UPDATE Users SET PasswordHash = ? WHERE Email = ?");
-      $stmt->execute([$newPasswordHash, $email]);
-
-      return (object)[
-          "http_code" => 200,
-          "message" => "Password has been reset successfully"
-      ];
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
   }
 }
 
