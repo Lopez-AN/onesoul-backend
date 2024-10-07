@@ -306,6 +306,22 @@ class Auth{
       $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
       if(empty($user)){
+        // Incrementar los intentos fallidos
+        $this->incrementOtpAttempts($email);
+          
+        // Verificar si ya ha alcanzado el límite de intentos fallidos
+        if ($this->getOtpAttempts($email) > 3) {
+          // Resetear OTP y contador de intentos
+          $this->resetOtp($email);
+          return (object)[
+            "http_code" => 400,
+            "error" => [
+              "code" => "OTP_MAX_ATTEMPTS",
+              "desc" => "Maximum OTP attempts reached. Please request a new OTP."
+            ]
+          ];
+        }
+
         return (object)["http_code" => 404,
           "error" => [
             "code" => "USER_NOT_FOUND",
@@ -321,21 +337,22 @@ class Auth{
     
       // Comparar el intervalo con otp_exptime
       if ($interval_in_seconds > $otp_exptime) {
+        //Resetear OTP y contador de intentos
+        $this->resetOtp($email);
         return (object)[
           "http_code" => 400,
           "error" => [
             "code" => "EXPIRED_OTP",
-            "desc" => "OTP has expired"
+            "desc" => "OTP has expired. Please request a new OTP."
           ]
         ];
       }
 
-      // Limpiar el OTP después de validarlo
-      $stmt = $this->db->prepare("UPDATE Users SET OTP_Code = NULL, OTP_Date = NULL, ValidatedEmail = 1 WHERE UserID = ?");
-      $stmt->execute([$user_id]);
-
+      // Si el OTP es válido, resetear el OTP y los intentos
+      $this->resetOtp($email);
+    
       // OTP válido
-      return true;    
+      return true;
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
@@ -445,11 +462,27 @@ class Auth{
   public function validateOtpByEmail($email, $otpCode) {
     try{
       $otp_exptime = $GLOBALS['config']['otp_exptime'];
-      $stmt = $this->db->prepare("SELECT OTP_Date FROM Users WHERE Email = ? AND OTP_Code = ?");
+      $stmt = $this->db->prepare("SELECT OTP_Date, OTP_attemps FROM Users WHERE Email = ? AND OTP_Code = ?");
       $stmt->execute([$email, $otpCode]);
       $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
       if (empty($user)) {
+        // Incrementar los intentos fallidos
+        $this->incrementOtpAttempts($email);
+            
+        // Verificar si ya ha alcanzado el límite de intentos fallidos
+        if ($this->getOtpAttempts($email) > 3) {
+          // Resetear OTP y contador de intentos
+          $this->resetOtp($email);
+          return (object)[
+            "http_code" => 400,
+              "error" => [
+              "code" => "OTP_MAX_ATTEMPTS",
+              "desc" => "Maximum OTP attempts reached. Please request a new OTP."
+            ]
+          ];
+        }
+
         return (object)["http_code" => 404,
           "error" => [
             "code" => "USER_NOT_FOUND",
@@ -465,24 +498,47 @@ class Auth{
 
       // Comparar el intervalo con otp_exptime
       if ($interval_in_seconds > $otp_exptime) {
+        // Resetear OTP y contador de intentos
+        $this->resetOtp($email);
         return (object)[
           "http_code" => 400,
           "error" => [
             "code" => "EXPIRED_OTP",
-            "desc" => "OTP has expired"
+            "desc" => "OTP has expired. Plese request a new OTP."
           ]
         ];
       }
-      
-      // Limpiar el OTP después de validarlo
-      $stmt = $this->db->prepare("UPDATE Users SET OTP_Code = NULL, OTP_Date = NULL, ValidatedEmail = 1 WHERE UserID = ?");
-      $stmt->execute([$email]);
 
+      // Si el OTP es válido, resetear el OTP y los intentos
+      $this->resetOtp($email);
+      
       // OTP válido
-      return true;    
+      return true; 
+
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
+  }
+
+  private function incrementOtpAttempts($email) {
+    // Incrementar el contador de intentos fallidos
+    $stmt = $this->db->prepare("UPDATE Users SET OTP_attemps = IFNULL(OTP_attemps, 0) + 1 WHERE Email = ?");
+    $stmt->execute([$email]);
+  }
+
+  private function getOtpAttempts($email) {
+    // Obtener el número de intentos fallidos
+    $stmt = $this->db->prepare("SELECT OTP_attemps FROM Users WHERE Email = ?");
+    $stmt->execute([$email]);
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    return $user['OTP_attemps'] ?? 0;
+  }
+
+  private function resetOtp($email) {
+    // Resetear el OTP y el contador de intentos fallidos
+    $stmt = $this->db->prepare("UPDATE Users SET OTP_Code = NULL, OTP_Date = NULL, OTP_attemps = NULL WHERE Email = ?");
+    $stmt->execute([$email]);
   }
 
   public function resetPassword($email, $newPassword) {
