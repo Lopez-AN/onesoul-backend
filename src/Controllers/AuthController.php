@@ -279,8 +279,8 @@ class AuthController{
     $data = $request->getParsedBody();
     $email = $data['email'] ?? '';
     $username = $data['username'] ?? '';
-    $recaptchaToken = $data['recaptcha_token'] ?? '';
-    $clientIp = $request->getServerParams()['REMOTE_ADDR'];
+    // $recaptchaToken = $data['recaptcha_token'] ?? '';
+    // $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
     if (empty($email) && empty($username)) {
       $response->getBody()->write(json_encode([
@@ -292,44 +292,51 @@ class AuthController{
       return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
     }
 
-    if (!empty($email)) {
-      $_SESSION['email'] = $email;  // Almacena el email en la sesión
-    } elseif (!empty($username)) {
-      $_SESSION['username'] = $username;  // Almacena el username en la sesión
-    }
+    // if(empty($recaptchaToken)){
+    //   $response->getBody()->write(json_encode([
+    //     "error" => [
+    //       "code" => "INVALID_PARAMETERS",
+    //       "desc" => "Parameters are missing or invalid"
+    //     ]
+    //   ]));
+    //   $response = $response->withStatus(400);
+    //   return $response->withHeader('Content-Type', 'application/json');
+    // }
 
-    if(empty($recaptchaToken)){
-      $response->getBody()->write(json_encode([
-        "error" => [
-          "code" => "INVALID_PARAMETERS",
-          "desc" => "Parameters are missing or invalid"
-        ]
-      ]));
-      $response = $response->withStatus(400);
-      return $response->withHeader('Content-Type', 'application/json');
-    }
-
-    $validation = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
-    if ($validation->http_code !== 200) {
-      $response->getBody()->write(json_encode($validation->error));
-      $response = $response->withStatus($validation->http_code);
-      return $response->withHeader('Content-Type', 'application/json');
-    } 
+    // $validation = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
+    // if ($validation->http_code !== 200) {
+    //   $response->getBody()->write(json_encode($validation->error));
+    //   $response = $response->withStatus($validation->http_code);
+    //   return $response->withHeader('Content-Type', 'application/json');
+    // } 
 
     try {
-        $this->auth->sendOtpMailByEmail($email, $username);  // Envía OTP
+      $auth = $this->auth->sendOtpMailByEmail($email, $username);
+
+      // Si el usuario no fue encontrado, devolver el error
+      if (is_object($auth) && isset($auth->error)) {
         $response->getBody()->write(json_encode([
-            "message" => "OTP sent to email"
+          "error" => [
+            "code" => "USER_NOT_FOUND",
+            "desc" => "No user was found with the specified Email/Username"
+          ]
         ]));
-        return $response->withStatus(200)->withHeader('Content-Type', 'application/json');
+        return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
+      }
+
+      // OTP enviado exitosamente
+      return $response->withStatus(200)->withHeader('Content-Type', 'application/json')
+        ->write(json_encode([
+            "message" => "OTP sent to email"
+      ]));
     } catch (Exception $e) {
         $response->getBody()->write(json_encode([
             "error" => [
-                "code" => "INTERNAL_SERVER_ERROR",
-                "desc" => $e->getMessage()
+              "code" => "INTERNAL_SERVER_ERROR",
+              "desc" => $e->getMessage()
             ]
         ]));
-        return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+      return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
     }
   }
 
@@ -417,7 +424,7 @@ class AuthController{
     } 
 
     
-    if (empty($email) && empty($username)) || empty($recaptchaToken) { 
+    if (empty($email) && empty($username) || empty($recaptchaToken)) { 
       $response->getBody()->write(json_encode([
         "error" => [
           "code" => "INVALID_PARAMETERS",
@@ -641,7 +648,7 @@ class AuthController{
     $recaptchaToken = $data['recaptcha_token'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
-    if(empty($otpCode)) || empty($recaptchaToken) {   
+    if(empty($otpCode) || empty($recaptchaToken)) {   
       $response->getBody()->write(json_encode([
         "error" => [
           "code" => "INVALID_PARAMETERS",
