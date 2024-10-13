@@ -81,7 +81,11 @@ class OfferingController {
         try {
             $offering = $this->offering->createOffering($data);
             $response = $response->withStatus(201);
-            $response->getBody()->write(json_encode($offering));
+            $message = [
+                'message' => "Offering created successfully",
+                'offering' => $offering
+            ];
+            $response->getBody()->write(json_encode($message));
         } catch (ValidationException $e) {
             $response = $response->withStatus(422);
             $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
@@ -97,7 +101,12 @@ class OfferingController {
         $data = $request->getParsedBody();
         try {
             $offering = $this->offering->updateOffering($id, $data);
-            $response->getBody()->write(json_encode($offering));
+            $response = $response->withStatus(200);
+            $message = [
+                'message' => "Offering updated successfully",
+                'offering' => $offering
+            ];
+            $response->getBody()->write(json_encode($message));
         } catch (ValidationException $e) {
             $response = $response->withStatus(422);
             $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
@@ -115,7 +124,8 @@ class OfferingController {
         $id = $args['id'];
         try {
             $this->offering->deleteOffering($id);
-            $response = $response->withStatus(204);
+            $response = $response->withStatus(200);
+            $response->getBody()->write(json_encode(['message' => 'Offering deleted successfully']));
         } catch (NotFoundException $e) {
             $response = $response->withStatus(404);
             $response->getBody()->write(json_encode(['message' => $e->getMessage()]));

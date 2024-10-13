@@ -28,6 +28,6 @@ return function (App $app) {
     $app->get('/categories/{categoryID}/offerings', [$offeringController, 'getOfferingsByCategoryId']);
     $app->get('/users/{userID}/offerings', [$offeringController, 'getOfferingsByUserId']);
     $app->post('/offerings', [$offeringController, 'createOffering']);
-    $app->put('/offerings/{id}', [$offeringController, 'updateOfferings']);
-    $app->delete('/offerings/{id}', [$offeringController, 'deleteOfferings']);
+    $app->put('/offerings/{id}', [$offeringController, 'updateOffering']);
+    $app->delete('/offerings/{id}', [$offeringController, 'deleteOffering']);
 };

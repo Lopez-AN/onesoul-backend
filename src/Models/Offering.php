@@ -205,11 +205,16 @@ class Offering {
 
     public function createOffering($data) {
         $this->validateOffering($data);
+        $paginator = (object) [
+            'limit' => 1,   // Limita a un solo registro
+            'offset' => 0   // No usa ningún desplazamiento
+        ];
+
         try {
-            $stmt = $this->db->prepare("INSERT INTO Offerings (Title, Description, CategoryID, Price, CreatedAt, UpdatedAt)
-            VALUES (:Title, :Description, :CategoryID, :Price, :CreatedAt, :UpdatedAt)");
+            $stmt = $this->db->prepare("INSERT INTO Offerings (Title, Description, CategoryID, CreationDate, ModificationDate, Tags, SKU, Stock, ServiceType)
+            VALUES (:Title, :Description, :CategoryID, :CreationDate, :ModificationDate, :Tags, :SKU, :Stock, :ServiceType)");
             $stmt->execute($data);
-            return $this->getOfferingById($this->db->lastInsertId());
+            return $this->getOfferingById($paginator, $this->db->lastInsertId());
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());
         }
@@ -217,12 +222,20 @@ class Offering {
 
     public function updateOffering($id, $data) {
         $this->validateOffering($data);
+        $paginator = (object) [
+            'limit' => 1,   // Limita a un solo registro
+            'offset' => 0   // No usa ningún desplazamiento
+        ];
+
         try {
-            $stmt = $this->db->prepare("UPDATE Offerings SET Title = :Title, Description = :Description, CategoryID =
-            :CategoryID, Price = :Price, CreatedAt = :CreatedAt, UpdatedAt = :UpdatedAt WHERE OfferingID = :OfferingID");
+            $stmt = $this->db->prepare("UPDATE Offerings SET Title = :Title, Description = :Description, CategoryID = :CategoryID, 
+            UserID = :UserID, Status = :Status, CreationDate = :CreationDate, ModificationDate = :ModificationDate, 
+            AverageRating = :AverageRating, TotalReviews = :TotalReviews, IsActive = :IsActive, Tags = :Tags, SKU =:SKU, 
+            Stock = :Stock, ServiceType =:ServiceType
+            WHERE OfferingID = :OfferingID");
             $data['OfferingID'] = $id;
             $stmt->execute($data);
-            return $this->getOfferingById($id);
+            return $this->getOfferingById($paginator, $id);
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());
         }

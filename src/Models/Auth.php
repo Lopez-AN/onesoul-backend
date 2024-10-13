@@ -426,8 +426,8 @@ class Auth{
     $template = str_replace("{CODIGO}", $otpCode, $template);
     $template = str_replace("{USERNAME}", $username, $template);
 
-    $smtpAccount = $GLOBALS['config']['mailer']['account'];
-    $smtpPassword = $GLOBALS['config']['mailer']['password'];
+    $smtpAccount = $GLOBALS['config']['mailer']['google']['account'];
+    $smtpPassword = $GLOBALS['config']['mailer']['google']['secret'];
 
     // Configuración de PHPMailer
     $mail = new PHPMailer(true);

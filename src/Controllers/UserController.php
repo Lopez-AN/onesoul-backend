@@ -169,7 +169,36 @@ class UserController
 
   public function deleteUser(Request $request, Response $response, $args)  {
     $id = $args['id'];
+    $jwt = $request->getAttribute('jwt');
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+      return $response->withStatus(401)->withJson([
+        "error" => [
+          "code" => "INVALID_TOKEN",
+          "desc" => "Invalid JWT token"
+        ]
+      ]);
+    }
+
     try {
+      # Ver si estan las propiedades del token jwt
+      if (!property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "UNAUTHORIZED",
+            "desc" => "Invalid token"
+          ]
+        ]);
+      }
+      # Verificar si el usuario autenticado es el mismo que el que se intenta modificar, o si es un administrador
+      if ($jwt['data']->UserID != $userId && $jwt['data']->UserType != 'Admin') {
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "UNAUTHORIZED",
+            "desc" => "You do not have permission to modify this user"
+          ]
+        ]);
+      }
+
       $result = $this->user->deleteUser($id);
       if($result -> http_code != 200){
         return $response->withStatus($result -> http_code)->withJson($result->error);

@@ -225,7 +225,7 @@ class AuthController{
     $recaptchaToken = $data['recaptcha_token'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
-    if(empty($email) || empty($username) || empty($newPassword) || empty($recaptchaToken)){
+    if(empty($email) || empty($username) || empty($newPassword) || empty($recaptchaToken)){  
       $response->getBody()->write(json_encode([
         "error" => [
           "code" => "INVALID_PARAMETERS",
@@ -279,8 +279,8 @@ class AuthController{
     $data = $request->getParsedBody();
     $email = $data['email'] ?? '';
     $username = $data['username'] ?? '';
-    // $recaptchaToken = $data['recaptcha_token'] ?? '';
-    // $clientIp = $request->getServerParams()['REMOTE_ADDR'];
+    $recaptchaToken = $data['recaptcha_token'] ?? '';
+    $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
     if (empty($email) && empty($username)) {
       $response->getBody()->write(json_encode([
@@ -292,23 +292,23 @@ class AuthController{
       return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
     }
 
-    // if(empty($recaptchaToken)){
-    //   $response->getBody()->write(json_encode([
-    //     "error" => [
-    //       "code" => "INVALID_PARAMETERS",
-    //       "desc" => "Parameters are missing or invalid"
-    //     ]
-    //   ]));
-    //   $response = $response->withStatus(400);
-    //   return $response->withHeader('Content-Type', 'application/json');
-    // }
+    if(empty($recaptchaToken)){
+      $response->getBody()->write(json_encode([
+        "error" => [
+          "code" => "INVALID_PARAMETERS",
+          "desc" => "Parameters are missing or invalid"
+        ]
+      ]));
+      $response = $response->withStatus(400);
+      return $response->withHeader('Content-Type', 'application/json');
+    }
 
-    // $validation = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
-    // if ($validation->http_code !== 200) {
-    //   $response->getBody()->write(json_encode($validation->error));
-    //   $response = $response->withStatus($validation->http_code);
-    //   return $response->withHeader('Content-Type', 'application/json');
-    // } 
+    $validation = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
+    if ($validation->http_code !== 200) {
+      $response->getBody()->write(json_encode($validation->error));
+      $response = $response->withStatus($validation->http_code);
+      return $response->withHeader('Content-Type', 'application/json');
+    } 
 
     try {
       $auth = $this->auth->sendOtpMailByEmail($email, $username);
@@ -342,8 +342,8 @@ class AuthController{
 
   public function validateOtpByEmail(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
-    $email = $data['email'] ?? '';    // ESTO SE GUARDARIA EN UNA $_SESSION?? 
-    $username = $data['username'] ?? '';    // ESTO SE GUARDARIA EN UNA $_SESSION?? 
+    $email = $data['email'] ?? '';    
+    $username = $data['username'] ?? '';    
     $otpCode = $data['otpCode'] ?? '';
 
     if (empty($email) && empty($username)) {
@@ -410,8 +410,8 @@ class AuthController{
   // Resetear contraseña
   public function resetPassword(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
-    $email = $data['email'] ?? '';    // ESTO SE GUARDARIA EN UNA $_SESSION?? 
-    $username = $data['username'] ?? '';    // ESTO SE GUARDARIA EN UNA $_SESSION?? 
+    $email = $data['email'] ?? '';    
+    $username = $data['username'] ?? '';   
     $newPassword = $data['newPassword'] ?? '';
     $recaptchaToken = $data['recaptcha_token'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
@@ -671,15 +671,15 @@ class AuthController{
       $validOtp = $this->auth->validateOTPJWT($jwt['data']->UserID, $otpCode);
 
       if (is_object($validOtp) && isset($validOtp->error)) {
-          return $response->withStatus($validOtp->http_code)->withHeader('Content-Type', 'application/json')
-              ->write(json_encode($validOtp));
+        return $response->withStatus($validOtp->http_code)->withHeader('Content-Type', 'application/json')
+        ->write(json_encode($validOtp));
       }
 
       // OTP válido
       return $response->withStatus(200)->withHeader('Content-Type', 'application/json')
-          ->write(json_encode([
-              "message" => "OTP validated successfully"
-          ]));
+      ->write(json_encode([
+        "message" => "OTP validated successfully"
+      ]));
     } catch (DatabaseException $e) {
       return $response->withStatus(500)->withHeader('Content-Type', 'application/json')
           ->write(json_encode([

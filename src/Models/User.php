@@ -330,8 +330,13 @@ class User {
             $uploadedFile->moveTo($filePath);
             $fileWritten = true;
 
+            // Aquí optimizamos la imagen usando la función optimizeImage
+            $optimizedPath = optimizeImage($filePath); 
+            unlink($filePath); 
+            $filePath = $optimizedPath; 
+
             # Genero la URL del archivo
-            $fileURL = $GLOBALS['config']['media_folder']['url']."/user/".$imgID.".".$fileExtension;
+            $fileURL = $GLOBALS['config']['media_folder']['url']."/user/".$imgID.".webp";
 
             # Borro las imagenes que tuviera antes (si son locales)
             foreach($rs as $r){

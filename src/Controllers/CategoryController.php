@@ -75,8 +75,12 @@ class CategoryController {
         $data = $request->getParsedBody();
         try {
             $category = $this->category->createCategory($data);
-            $response = $response->withStatus(201);
-            $response->getBody()->write(json_encode($category));
+            $response = $response->withStatus(200);
+            $message = [
+                'message' => "Category created successfully",
+                'category' => $category
+            ];
+            $response->getBody()->write(json_encode($message));
         } catch (ValidationException $e) {
             $response = $response->withStatus(422);
             $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
@@ -92,7 +96,12 @@ class CategoryController {
         $data = $request->getParsedBody();
         try {
             $category = $this->category->updateCategory($id, $data);
-            $response->getBody()->write(json_encode($category));
+            $response = $response->withStatus(200);
+            $message = [
+                'message' => "Category updated successfully",
+                'category' => $category
+            ];
+            $response->getBody()->write(json_encode($message));
         } catch (ValidationException $e) {
             $response = $response->withStatus(422);
             $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
@@ -110,7 +119,11 @@ class CategoryController {
         $id = $args['id'];
         try {
             $this->category->deleteCategory($id);
-            $response = $response->withStatus(204);
+            $response = $response->withStatus(200);
+            $message = [
+                'message' => "Category updated successfully"
+            ];
+            $response->getBody()->write(json_encode($message));
         } catch (NotFoundException $e) {
             $response = $response->withStatus(404);
             $response->getBody()->write(json_encode(['message' => $e->getMessage()]));

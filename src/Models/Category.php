@@ -104,10 +104,16 @@ class Category {
 
     public function createCategory($data) {
         $this->validateCategory($data);
+        $paginator = (object) [
+            'limit' => 1,   // Limita a un solo registro
+            'offset' => 0   // No usa ningún desplazamiento
+        ];
+
         try {
-            $stmt = $this->db->prepare("INSERT INTO Categories (CategoryName, Description, ParentCategoryID) VALUES (:CategoryName, :Description, :ParentCategoryID)");
+            $stmt = $this->db->prepare("INSERT INTO Categories (ParentCategoryID, Name, Description, CreationDate, ModificationDate, IsActive) 
+            VALUES (:ParentCategoryID, :Name, :Description, :CreationDate, :ModificationDate, :IsActive)");
             $stmt->execute($data);
-            return $this->getCategoryById($this->db->lastInsertId());
+            return $this->getCategoryById($paginator, $this->db->lastInsertId());
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());
         }
@@ -115,11 +121,17 @@ class Category {
 
     public function updateCategory($id, $data) {
         $this->validateCategory($data);
+        $paginator = (object) [
+            'limit' => 1,   // Limita a un solo registro
+            'offset' => 0   // No usa ningún desplazamiento
+        ];
         try {
-            $stmt = $this->db->prepare("UPDATE Categories SET CategoryName = :CategoryName, Description = :Description, ParentCategoryID = :ParentCategoryID WHERE CategoryID = :CategoryID");
+            $stmt = $this->db->prepare("UPDATE Categories SET ParentCategoryID = :ParentCategoryID, Name = :Name, 
+            Description = :Description, CreationDate = :CreationDate, ModificationDate = :ModificationDate, IsActive = :IsActive
+            WHERE CategoryID = :CategoryID");
             $data['CategoryID'] = $id;
             $stmt->execute($data);
-            return $this->getCategoryById($id);
+            return $this->getCategoryById($paginator, $id);
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());
         }
@@ -136,7 +148,7 @@ class Category {
     }
 
     private function validateCategory($data) {
-        if (empty($data['CategoryName'])) {
+        if (empty($data['Name'])) {
             throw new ValidationException('Category name is required');
         }
         // Agregar más validaciones según sea necesario
