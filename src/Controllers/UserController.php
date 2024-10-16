@@ -45,7 +45,7 @@ class UserController
     try {
       $result = $this->user->getUserById($id);
       if($result->http_code != 200){
-        return $response->withStatus($result->http_code)->withJson($result->error);
+        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
       return $response->withStatus(200)->withJson($result->data);
     } catch (\Throwable $e) {
@@ -68,7 +68,7 @@ class UserController
           "desc" => "No user associated with the specified email"
         ]]);
       }
-      return $response->withStatus(200)->withJson($result[0]);
+      return $response->withStatus(200)->withJson($result);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -89,7 +89,7 @@ class UserController
           "desc" => "No user associated with the specified username"
         ]]);
       }
-      return $response->withStatus(200)->withJson($result[0]);
+      return $response->withStatus(200)->withJson($result);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -153,7 +153,7 @@ class UserController
 
       $result = $this->user->updateUser($userId, $data);
       if($result->http_code != 200){
-        return $response->withStatus($result->http_code)->withJson($result->error);
+        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
       # Retornar el usuario actualizado
       return $response->withStatus(200)->withJson($result->data);
@@ -190,7 +190,7 @@ class UserController
         ]);
       }
       # Verificar si el usuario autenticado es el mismo que el que se intenta modificar, o si es un administrador
-      if ($jwt['data']->UserID != $userId && $jwt['data']->UserType != 'Admin') {
+      if ($jwt['data']->UserID != $id && $jwt['data']->UserType != 'Admin') {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
@@ -201,7 +201,7 @@ class UserController
 
       $result = $this->user->deleteUser($id);
       if($result -> http_code != 200){
-        return $response->withStatus($result -> http_code)->withJson($result->error);
+        return $response->withStatus($result -> http_code)->withJson(["error" => $result->error]);
       }
       return $response->withStatus(200)->withJson($result->data);
     } catch (\Throwable $e) {
@@ -261,7 +261,7 @@ class UserController
 
       $result = $this->user->updateProfilePhoto($userId, $uploadedFile);
       if($result->http_code != 200){
-        return $response->withStatus($result->http_code)->withJson($result->error);
+        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
 
       # Retornar el usuario actualizado
@@ -302,7 +302,7 @@ class UserController
 
       $result = $this->user->deleteProfilePhoto($userId);
       if ($result->http_code != 200) {
-        return $response->withStatus($result->http_code)->withJson($result->error);
+        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
       return $response->withStatus(200)->withJson($result -> data);
     } catch (\Throwable $e) {
@@ -375,7 +375,7 @@ class UserController
 
       $result = $this->user->getUserById($userId);
       if($result->http_code != 200){
-        return $response->withStatus($result->http_code)->withJson($result->error);
+        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
       return $response->withStatus(200)->withJson($result->data);
     } catch (\Throwable $e) {

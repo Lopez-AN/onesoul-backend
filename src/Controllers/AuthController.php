@@ -6,11 +6,9 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use App\Models\Auth;
 use App\Models\User;
-use App\Exceptions\DatabaseException;
 use Firebase\JWT\JWT;
-use \DateTime;
 
-//Definir zona horaria
+#Definir zona horaria
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 
 class AuthController{
@@ -33,90 +31,70 @@ class AuthController{
     $password = $data['password'] ?? '';
 
     if((empty($email) && empty($username)) || empty($password)){
-      $response->getBody()->write(json_encode([
+      return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "USER_INVALID_CREDENTIALS",
           "desc" => "Invalid credentials"
         ]
-      ]));
-      $response = $response->withStatus(400);
-      return $response->withHeader('Content-Type', 'application/json');
+      ]);
     }
 
     try {
-      $auth = $this->auth->login($username, $email);
-
-      if(empty($auth)){
-        $response->getBody()->write(json_encode([
+      $result = $this->auth->login($username, $email);
+      if(empty($result)){
+        return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "USER_INVALID_CREDENTIALS",
             "desc" => "Invalid credentials"
           ]
-        ]));
-        $response = $response->withStatus(401);
+        ]);
       }
 
-      $user = $auth[0];
+      $user = $result[0];
 
-      //Verificar si el usuario esta bloqueado
-      if (!is_null($user['locked_until']) && strtotime($user['locked_until']) > date()) {
-        $response->getBody()->write(json_encode([
+      # Verificar si el usuario esta bloqueado
+      if (!is_null($user['locked_until']) && strtotime($user['locked_until']) > time()) {
+        return $response->withStatus(403)->withJson([
           "error" => [
             "code" => "USER_LOCKED",
             "desc" => "Account is temporaly locked until " . $user['locked_until']
           ]
-        ]));
-        return $response->withStatus(403)->withHeader('Content-Type', 'application/json');
+        ]);
       }
 
       if (!password_verify($password, $user['PasswordHash'])) {
+        # Logueo fallido actualizar contador de erroneos y tiempo bloqueo si corresponde
         $failedAttempts = $user['failed_login_attempts'] + 1;
         $lockTime = $this->calculateLockTime($failedAttempts);
 
         $this->auth->updateFailedLogin($user['UserID'], $failedAttempts, $lockTime);
 
-        $response->getBody()->write(json_encode([
+        return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "USER_INVALID_CREDENTIALS",
             "desc" => "Invalid credentials"
           ]
-        ]));
-        return $response->withStatus(401)->withHeader('Content-Type', 'application/json');
+        ]);
       }
 
-      // Login exitoso, resetear intentos fallidos y bloqueo
+      # Login exitoso, resetear intentos fallidos y bloqueo
       $this->auth->updateFailedLogin($user['UserID'], 0, null);
 
-      $jwt = $this -> JWTgen($auth[0]);
-      $userData = $this->user->getUserById($auth[0]['UserID']);
-      $response->getBody()->write(json_encode([
-          'token' => $jwt,
-          'userData' => $userData -> data
-      ]));
-    } catch (DatabaseException $e) {
-      $response->getBody()->write(json_encode([
+      $jwt = $this -> JWTgen($result[0]);
+      $userData = $this->user->getUserById($result[0]['UserID']);
+
+      return $response->withStatus(200)->withJson([
+        "token" => $jwt,
+        "userData" => $userData -> data
+      ]);
+    } catch (\Exception $e) {
+      return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
-          "desc" => $e->getMessage()
+           "desc" => $e->getMessage()
         ]
-      ]));
-      $response = $response->withStatus(500);
+      ]);
     }
-    return $response->withHeader('Content-Type', 'application/json');
-  }
-
-  // Función para calcular los tiempos de bloqueo
-  private function calculateLockTime($failedAttempts) {
-    $lockTime = null;
-    switch ($failedAttempts) {
-      case 5: $lockTime = "+1 minute"; break;
-      case 6: $lockTime = "+2 minutes"; break;
-      case 7: $lockTime = "+4 minutes"; break;
-      case 8: $lockTime = "+8 minutes"; break;
-      case 9: $lockTime = "+15 minutes"; break;
-      case 10: $lockTime = "+30 minutes"; break;
-    }
-    return $lockTime ? date("Y-m-d H:i:s", strtotime($lockTime)) : null;
   }
 
   public function loginGoogle(Request $request, Response $response, $args) {
@@ -124,46 +102,37 @@ class AuthController{
     $token = $data['token'] ?? '';
 
     if(empty($token)){
-      $response->getBody()->write(json_encode([
+      return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "INVALID_PARAMETERS",
           "desc" => "Parameters are missing or invalid"
         ]
-      ]));
-      $response = $response->withStatus(400);
-      return $response->withHeader('Content-Type', 'application/json');
+      ]);
     }
 
     try {
-      $auth = $this->auth->loginGoogle($token);
-      switch($auth->http_code) {
-        case 200: // Logueo correcto
-          $jwt = $this -> JWTgen($auth -> data[0]);
-          $userData = $this->user->getUserById($auth -> data[0]['UserID']);
-          $response->getBody()->write(json_encode([
+      $result = $this->auth->loginGoogle($token);
+      switch($result->http_code) {
+        case 200: # Logueo correcto
+          $jwt = $this -> JWTgen(user: $result -> data[0]);
+          $userData = $this->user->getUserById($result -> data[0]['UserID']);
+          return $response->withStatus(200)->withJson([
             'token' => $jwt,
             'userData' => $userData -> data
-          ]));
-        break;
-        case 404: // Usuario no encontrado
-          $response->getBody()->write(json_encode([$auth->error, $auth->data]));
-          $response = $response->withStatus(404);
-        break;
-        default: // Otros, ejemplo Token inválido
-          $response->getBody()->write(json_encode($auth->error));
-          $response = $response->withStatus($auth->http_code);
-        break;
+          ]);
+        case 404: # Usuario no encontrado
+          return $response->withStatus(404)->withJson([$result->error, $result->data]);
+        default: # Otros, ejemplo Token inválido
+          return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
-    } catch (DatabaseException $e) {
-      $response->getBody()->write(json_encode([
+    } catch (\Exception $e) {
+      return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
-          "desc" => $e->getMessage()
+           "desc" => $e->getMessage()
         ]
-      ]));
-      $response = $response->withStatus(500);
+      ]);
     }
-    return $response->withHeader('Content-Type', 'application/json');
   }
 
   public function loginFacebook(Request $request, Response $response, $args) {
@@ -172,46 +141,37 @@ class AuthController{
     $token = $data['token'] ?? '';
 
     if(empty($user_id) || empty($token)){
-      $response->getBody()->write(json_encode([
+      return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "INVALID_PARAMETERS",
           "desc" => "Parameters are missing or invalid"
         ]
-      ]));
-      $response = $response->withStatus(400);
-      return $response->withHeader('Content-Type', 'application/json');
+      ]);
     }
 
     try{
-      $auth = $this->auth->loginFacebook($user_id, $token);
-      switch($auth->http_code) {
-        case 200: // Logueo correcto
-          $jwt = $this -> JWTgen($auth -> data[0]);
-          $userData = $this->user->getUserById($auth -> data[0]['UserID']);
-          $response->getBody()->write(json_encode([
+      $result = $this->auth->loginFacebook($user_id, $token);
+      switch($result->http_code) {
+        case 200: # Logueo correcto
+          $jwt = $this -> JWTgen($result -> data[0]);
+          $userData = $this->user->getUserById($result -> data[0]['UserID']);
+          return $response->withStatus(200)->withJson([
             'token' => $jwt,
             'userData' => $userData -> data
-          ]));
-        break;
-        case 404: // Usuario no encontrado
-          $response->getBody()->write(json_encode([$auth->error, $auth->data]));
-          $response = $response->withStatus(404);
-        break;
-        default: // Otros, ejemplo Token inválido
-          $response->getBody()->write(json_encode($auth->error));
-          $response = $response->withStatus($auth->http_code);
-        break;
+          ]);
+        case 404: # Usuario no encontrado
+          return $response->withStatus(404)->withJson([$result->error, $result->data]);
+        default: # Otros, ejemplo Token inválido
+          return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
-    } catch (DatabaseException $e) {
-      $response->getBody()->write(json_encode([
+    } catch (\Exception $e) {
+      return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
-          "desc" => $e->getMessage()
+           "desc" => $e->getMessage()
         ]
-      ]));
-      $response = $response->withStatus(500);
+      ]);
     }
-    return $response->withHeader('Content-Type', 'application/json');
   }
 
   /*
@@ -221,263 +181,44 @@ class AuthController{
     $data = $request->getParsedBody();
     $email = $data['email'] ?? '';
     $username = $data['username'] ?? '';
-    $newPassword = $data['newPassword'] ?? '';
+    $password = $data['password'] ?? '';
     $recaptchaToken = $data['recaptcha_token'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
-    if(empty($email) || empty($username) || empty($newPassword) || empty($recaptchaToken)){  
-      $response->getBody()->write(json_encode([
+    if(empty($email) || empty($username) || empty($password) || empty($recaptchaToken)){
+      return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "INVALID_PARAMETERS",
           "desc" => "Parameters are missing or invalid"
         ]
-      ]));
-      $response = $response->withStatus(400);
-      return $response->withHeader('Content-Type', 'application/json');
+      ]);
     }
 
-    $validation = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
-    if ($validation->http_code !== 200) {
-      $response->getBody()->write(json_encode($validation->error));
-      $response = $response->withStatus($validation->http_code);
-      return $response->withHeader('Content-Type', 'application/json');
+    $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
+    if ($result->http_code !== 200) {
+      return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
     }
 
     try {
-      $auth = $this->auth->register($email, $username, $newPassword);
-      switch($auth->http_code) {
-        case 200: // Logueo correcto o usuario existente
-          $jwt = $this -> JWTgen($auth -> data[0]);
-          $userData = $this->user->getUserById($auth -> data[0]['UserID']);
-          $response->getBody()->write(json_encode([
+      $result = $this->auth->register($email, $username, $password);
+      switch($result->http_code) {
+        case 200: # Logueo correcto o usuario existente
+          $jwt = $this -> JWTgen($result -> data);
+          $userData = $this->user->getUserById($result -> data['UserID']);
+          return $response->withStatus(200)->withJson([
             'token' => $jwt,
             'userData' => $userData -> data
-          ]));
-        break;
-        case 400: // Contraseña débil
-          $response->getbody()->write(json_encode($auth->error));
-          $response = $response->withStatus(400);
-        break;
-        default: //Otros errores
-          $response->getBody()->write(json_encode($auth->error));
-          $response = $response->withStatus($auth->http_code);
-        break;
+          ]);
+        default: #errores
+          return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
-    } catch (DatabaseException $e) {
-      $response->getBody()->write(json_encode([
+    } catch (\Exception $e) {
+      return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
-          "desc" => $e->getMessage()
+           "desc" => $e->getMessage()
         ]
-      ]));
-      $response = $response->withStatus(500);
-    }
-    return $response->withHeader('Content-Type', 'application/json');
-  }
-
-  public function requestPasswordReset(Request $request, Response $response, $args) {
-    $data = $request->getParsedBody();
-    $email = $data['email'] ?? '';
-    $username = $data['username'] ?? '';
-    $recaptchaToken = $data['recaptcha_token'] ?? '';
-    $clientIp = $request->getServerParams()['REMOTE_ADDR'];
-
-    if (empty($email) && empty($username)) {
-      $response->getBody()->write(json_encode([
-        "error" => [
-          "code" => "INVALID_PARAMETERS",
-          "desc" => "Email or Username is required"
-        ]
-      ]));
-      return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
-    }
-
-    if(empty($recaptchaToken)){
-      $response->getBody()->write(json_encode([
-        "error" => [
-          "code" => "INVALID_PARAMETERS",
-          "desc" => "Parameters are missing or invalid"
-        ]
-      ]));
-      $response = $response->withStatus(400);
-      return $response->withHeader('Content-Type', 'application/json');
-    }
-
-    $validation = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
-    if ($validation->http_code !== 200) {
-      $response->getBody()->write(json_encode($validation->error));
-      $response = $response->withStatus($validation->http_code);
-      return $response->withHeader('Content-Type', 'application/json');
-    } 
-
-    try {
-      $auth = $this->auth->sendOtpMailByEmail($email, $username);
-
-      // Si el usuario no fue encontrado, devolver el error
-      if (is_object($auth) && isset($auth->error)) {
-        $response->getBody()->write(json_encode([
-          "error" => [
-            "code" => "USER_NOT_FOUND",
-            "desc" => "No user was found with the specified Email/Username"
-          ]
-        ]));
-        return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
-      }
-
-      // OTP enviado exitosamente
-      return $response->withStatus(200)->withHeader('Content-Type', 'application/json')
-        ->write(json_encode([
-            "message" => "OTP sent to email"
-      ]));
-    } catch (Exception $e) {
-        $response->getBody()->write(json_encode([
-            "error" => [
-              "code" => "INTERNAL_SERVER_ERROR",
-              "desc" => $e->getMessage()
-            ]
-        ]));
-      return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
-    }
-  }
-
-  public function validateOtpByEmail(Request $request, Response $response, $args) {
-    $data = $request->getParsedBody();
-    $email = $data['email'] ?? '';    
-    $username = $data['username'] ?? '';    
-    $otpCode = $data['otpCode'] ?? '';
-
-    if (empty($email) && empty($username)) {
-      $response->getBody()->write(json_encode([
-          "error" => [
-              "code" => "INVALID_PARAMETERS",
-              "desc" => "Email or Username is required"
-          ]
-      ]));
-      return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
-    }
-
-    // Si solo hay username, obtener el email
-    if (!empty($username)) {
-      $user = $this->auth->getUserByUserName($username);
-      if (!$user) {
-          $response->getBody()->write(json_encode([
-              "error" => [
-                  "code" => "USER_NOT_FOUND",
-                  "desc" => "User not found"
-              ]
-          ]));
-          return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
-      }
-      $email = $user[0]['Email'];  // Asigna el email del usuario encontrado
-    }
-
-    if (empty($otpCode)) {
-      $response->getBody()->write(json_encode([
-          "error" => [
-              "code" => "INVALID_PARAMETERS",
-              "desc" => "OTP is required"
-          ]
-      ]));
-      return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
-    }
-
-
-    try {
-      // Llamar a la validación del OTP
-      $validOtp = $this->auth->validateOTPByEmail($email, $otpCode);
-  
-      if (is_object($validOtp) && isset($validOtp->error)) {
-        return $response->withStatus($validOtp->http_code)->withHeader('Content-Type', 'application/json')
-        ->write(json_encode($validOtp));
-      }
-  
-      // OTP válido
-      return $response->withStatus(200)->withHeader('Content-Type', 'application/json')
-        ->write(json_encode([
-        "message" => "OTP validated successfully"
-        ]));
-      } catch (DatabaseException $e) {
-        return $response->withStatus(500)->withHeader('Content-Type', 'application/json')
-          ->write(json_encode([
-          "error" => [
-            "code" => "INTERNAL_SERVER_ERROR",
-            "desc" => $e->getMessage()
-          ]
-        ]));
-      }
-  }
-  
-  // Resetear contraseña
-  public function resetPassword(Request $request, Response $response, $args) {
-    $data = $request->getParsedBody();
-    $email = $data['email'] ?? '';    
-    $username = $data['username'] ?? '';   
-    $newPassword = $data['newPassword'] ?? '';
-    $recaptchaToken = $data['recaptcha_token'] ?? '';
-    $clientIp = $request->getServerParams()['REMOTE_ADDR'];
-
-    $validation = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
-    if ($validation->http_code !== 200) {
-      $response->getBody()->write(json_encode($validation->error));
-      $response = $response->withStatus($validation->http_code);
-      return $response->withHeader('Content-Type', 'application/json');
-    } 
-
-    
-    if (empty($email) && empty($username) || empty($recaptchaToken)) { 
-      $response->getBody()->write(json_encode([
-        "error" => [
-          "code" => "INVALID_PARAMETERS",
-          "desc" => "Parameters are missing or invalid"
-        ]
-      ]));
-      return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
-    }
-
-    if (empty($newPassword)) {
-      $response->getBody()->write(json_encode([
-        "error" => [
-          "code" => "INVALID_PARAMETERS",
-          "desc" => "New password is required"
-        ]
-      ]));
-      return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
-    }
-
-    try {
-        // Si solo hay username, obtener el email
-        if (!empty($username)) {
-          $user = $this->auth->getUserByUserName($username);
-          if (!$user) {
-              $response->getBody()->write(json_encode([
-                  "error" => [
-                      "code" => "USER_NOT_FOUND",
-                      "desc" => "User not found"
-                  ]
-              ]));
-              return $response->withStatus(404)->withHeader('Content-Type', 'application/json');
-          }
-          $email = $user[0]['Email'];
-        }
-
-      $resetResponse = $this->auth->resetPassword($email, $newPassword);
-      if ($resetResponse->http_code !== 200) {
-        $response->getBody()->write(json_encode($resetResponse));
-        return $response->withStatus($resetResponse->http_code)->withHeader('Content-Type', 'application/json');
-      }
-
-      $response->getBody()->write(json_encode([
-        "message" => "Password reset successfully"
-      ]));
-      return $response->withStatus(200)->withHeader('Content-Type', 'application/json');
-    } catch (Exception $e) {
-      $response->getBody()->write(json_encode([
-        "error" => [
-          "code" => "INTERNAL_SERVER_ERROR",
-          "desc" => $e->getMessage()
-        ]
-      ]));
-      return $response->withStatus(500)->withHeader('Content-Type', 'application/json');
+      ]);
     }
   }
 
@@ -489,49 +230,40 @@ class AuthController{
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
     if(empty($token) || empty($username) || empty($recaptchaToken)){
-      $response->getBody()->write(json_encode([
+      return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "INVALID_PARAMETERS",
           "desc" => "Parameters are missing or invalid"
         ]
-      ]));
-      $response = $response->withStatus(400);
-      return $response->withHeader('Content-Type', 'application/json');
+      ]);
     }
 
-    $validation = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
-    if ($validation->http_code !== 200) {
-      $response->getBody()->write(json_encode($validation->error));
-      $response = $response->withStatus($validation->http_code);
-      return $response->withHeader('Content-Type', 'application/json');
+    $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
+    if ($result->http_code !== 200) {
+      return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
     }
 
     try {
-      $auth = $this->auth->registerGoogle($token, $username);
-      switch($auth->http_code) {
-        case 200: // Logueo correcto o usuario existente
-          $jwt = $this -> JWTgen($auth -> data[0]);
-          $userData = $this->user->getUserById($auth -> data[0]['UserID']);
-          $response->getBody()->write(json_encode([
-            'token' => $jwt,
-            'userData' => $userData -> data
-          ]));
-        break;
-        default: // Otros, ejemplo Token inválido
-          $response->getBody()->write(json_encode($auth->error));
-          $response = $response->withStatus($auth->http_code);
-        break;
+      $result = $this->auth->registerGoogle($token, $username);
+      switch($result->http_code) {
+        case 200: # Logueo correcto o usuario existente
+          $jwt = $this -> JWTgen($result -> data[0]);
+          $userData = $this->user->getUserById($result -> data[0]['UserID']);
+          return $response->withStatus(200)->withJson([
+            "token" => $jwt,
+            "userData" => $userData -> data
+          ]);
+        default: # Otros, ejemplo Token inválido
+          return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
-    } catch (DatabaseException $e) {
-      $response->getBody()->write(json_encode([
+    } catch (\Exception $e) {
+      return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
-          "desc" => $e->getMessage()
+           "desc" => $e->getMessage()
         ]
-      ]));
-      $response = $response->withStatus(500);
+      ]);
     }
-    return $response->withHeader('Content-Type', 'application/json');
   }
 
   public function registerFacebook(Request $request, Response $response, $args) {
@@ -543,206 +275,280 @@ class AuthController{
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
     if(empty($user_id) || empty($token) || empty($username) || empty($recaptchaToken)){
-      $response->getBody()->write(json_encode([
+      return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "INVALID_PARAMETERS",
           "desc" => "Parameters are missing or invalid"
         ]
-      ]));
-      $response = $response->withStatus(400);
-      return $response->withHeader('Content-Type', 'application/json');
+      ]);
     }
 
-    $validation = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
-    if ($validation->http_code !== 200) {
-      $response->getBody()->write(json_encode($validation->error));
-      $response = $response->withStatus($validation->http_code);
-      return $response->withHeader('Content-Type', 'application/json');
+    $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
+    if ($result->http_code !== 200) {
+      return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
     }
 
     try{
-      $auth = $this->auth->registerFacebook($user_id, $token, $username);
-      switch($auth->http_code) {
-        case 200: // Logueo correcto o usuario existente
-          $jwt = $this -> JWTgen($auth -> data[0]);
-          $userData = $this->user->getUserById($auth -> data[0]['UserID']);
-          $response->getBody()->write(json_encode([
+      $result = $this->auth->registerFacebook($user_id, $token, $username);
+      switch($result->http_code) {
+        case 200: # Logueo correcto o usuario existente
+          $jwt = $this -> JWTgen($result -> data[0]);
+          $userData = $this->user->getUserById($result -> data[0]['UserID']);
+          return $response->withStatus(200)->withJson([
             'token' => $jwt,
             'userData' => $userData -> data
-          ]));
-        break;
-        default: // Otros, ejemplo Token inválido
-          $response->getBody()->write(json_encode($auth->error));
-          $response = $response->withStatus($auth->http_code);
-        break;
+          ]);
+        default: # errores
+          return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
-    } catch (DatabaseException $e) {
-      $response->getBody()->write(json_encode([
+    } catch (\Exception $e) {
+      return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
-          "desc" => $e->getMessage()
+           "desc" => $e->getMessage()
         ]
-      ]));
-      $response = $response->withStatus(500);
+      ]);
     }
-    return $response->withHeader('Content-Type', 'application/json');
   }
 
-  public function sendOtpMailJWT(Request $request, Response $response, $args) {
+  public function sendOtpMail(Request $request, Response $response, $args) {
     $jwt = $request->getAttribute('jwt');
     if(!isset($jwt['data']) || !property_exists($jwt['data'],'UserID')){
-      $response->getBody()->write(json_encode([
+      return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
           "desc" => "Invalid JWT token"
         ]
-      ]));
-      $response = $response->withStatus(400);
-      return $response->withHeader('Content-Type', 'application/json');
+      ]);
     }
 
     $data = $request->getParsedBody();
     $recaptchaToken = $data['recaptcha_token'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
-    $validation = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
-    if ($validation->http_code !== 200) {
-      $response->getBody()->write(json_encode($validation->error));
-      $response = $response->withStatus($validation->http_code);
-      return $response->withHeader('Content-Type', 'application/json');
+    $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
+    if ($result->http_code !== 200) {
+      return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
     }
 
     try {
-      $auth = $this->auth->sendOtpMailJWT($jwt['data'] -> UserID);
-      if($auth->http_code != 200){
-        $response->getBody()->write(json_encode($auth->error));
-        $response = $response->withStatus($auth->http_code);
+      $result = $this->auth->sendOtpMail($jwt['data'] -> UserID);
+      if($result->http_code !== 200){
+        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
-    } catch (DatabaseException $e) {
-      $response->getBody()->write(json_encode([
+      return $response->withStatus(200)->withJson(["message" => "OTP code sent successfully"]);
+    } catch (\Exception $e) {
+      return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
-          "desc" => $e->getMessage()
+           "desc" => $e->getMessage()
         ]
-      ]));
-      $response = $response->withStatus(500);
+      ]);
     }
-    return $response->withHeader('Content-Type', 'application/json');
   }
 
-  public function validateOTPJWT(Request $request, Response $response, $args) {
+
+  public function validateOTP(Request $request, Response $response, $args) {
     $jwt = $request->getAttribute('jwt');
     if(!isset($jwt['data']) || !property_exists($jwt['data'],'UserID')){
-      $response->getBody()->write(json_encode([
+      return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
           "desc" => "Invalid JWT token"
         ]
-      ]));
-      $response = $response->withStatus(400);
-      return $response->withHeader('Content-Type', 'application/json');
+      ]);
     }
 
     $data = $request->getParsedBody();
-    $otpCode = $data['otpCode'] ?? '';
+    $otpCode = $data['otp_code'] ?? '';
     $recaptchaToken = $data['recaptcha_token'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
-    if(empty($otpCode) || empty($recaptchaToken)) {   
-      $response->getBody()->write(json_encode([
+    if(empty($otpCode) || empty($recaptchaToken)) {
+      return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "INVALID_PARAMETERS",
           "desc" => "Parameters are missing or invalid"
         ]
-      ]));
-      $response = $response->withStatus(400);
-      return $response->withHeader('Content-Type', 'application/json');
+      ]);
     }
 
-    $validation = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
-    if ($validation->http_code !== 200) {
-      $response->getBody()->write(json_encode($validation->error));
-      $response = $response->withStatus($validation->http_code);
-      return $response->withHeader('Content-Type', 'application/json');
+    $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
+    if ($result->http_code !== 200) {
+      return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
     }
+
 
     try {
-      // Llamar a la validación del OTP
-      $validOtp = $this->auth->validateOTPJWT($jwt['data']->UserID, $otpCode);
-
-      if (is_object($validOtp) && isset($validOtp->error)) {
-        return $response->withStatus($validOtp->http_code)->withHeader('Content-Type', 'application/json')
-        ->write(json_encode($validOtp));
+      # Llamar a la validación del OTP
+      $result = $this->auth->validateOTP($jwt['data']->UserID, $otpCode);
+      if ($result->http_code !== 200) {
+        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
 
-      // OTP válido
-      return $response->withStatus(200)->withHeader('Content-Type', 'application/json')
-      ->write(json_encode([
-        "message" => "OTP validated successfully"
-      ]));
-    } catch (DatabaseException $e) {
-      return $response->withStatus(500)->withHeader('Content-Type', 'application/json')
-          ->write(json_encode([
-              "error" => [
-                  "code" => "INTERNAL_SERVER_ERROR",
-                  "desc" => $e->getMessage()
-              ]
-          ]));
+      # OTP válido
+      return $response->withStatus(200)->withJson([
+        "message" => "OTP code validated successfully"
+      ]);
+    } catch (\Exception $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+           "desc" => $e->getMessage()
+        ]
+      ]);
     }
-    // try {
-    //   $auth = $this->auth->validateOTPJWT($jwt['data'] -> UserID, $otpCode);
-    //   if(empty($auth)){
-    //     $response->getBody()->write(json_encode([
-    //       "error" => [
-    //         "code" => "INVALID_OTP",
-    //         "desc" => "The specified OTP code is invalid"
-    //       ]
-    //     ]));
-    //     $response = $response->withStatus(401);
-      // }else{
-      //     $response->getBody()->write(json_encode([]));
-      //     $response = $response->withStatus(200);
-      // }
-    // } catch (DatabaseException $e) {
-    //   $response = $response->withStatus(500);
-    //   $response->getBody()->write(json_encode([
-    //     "error" => [
-    //       "code" => "INTERNAL_SERVER_ERROR",
-    //       "desc" => $e->getMessage()
-    //     ]
-    //   ]));
-    // }
-    // return $response->withHeader('Content-Type', 'application/json');
   }
 
   public function refreshToken(Request $request, Response $response, $args){
     $jwt = $request->getAttribute('jwt');
     if(!isset($jwt['data']) || !property_exists($jwt['data'],'UserID')){
-      $response->getBody()->write(json_encode([
+      return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
           "desc" => "Invalid JWT token"
         ]
-      ]));
-      $response = $response->withStatus(400);
-      return $response->withHeader('Content-Type', 'application/json');
+      ]);
     }
 
     $userID = $jwt['data'] -> UserID;
     $userData = $this->user->getUserById($userID);
 
     if ($userData->http_code !== 200) {
-      $response->getBody()->write(json_encode($userData->error));
-      $response = $response->withStatus($userData->http_code);
-      return $response->withHeader('Content-Type', 'application/json');
+      return $response->withStatus($userData->http_code)->withJson($userData->error);
     }
 
     $token = $this->JWTgen($userData -> data);
-    $response->getBody()->write(json_encode([
+    return $response->withStatus(200)->withJson([
       'token' => $token,
       'userData' => $userData -> data
-    ]));
-    return $response->withHeader('Content-Type', 'application/json');
+    ]);
+  }
+
+  public function validateReCaptcha(Request $request, Response $response, $args) {
+    $data = $request->getParsedBody();
+    $recaptchaToken = $data['recaptcha_token'] ?? '';
+    $clientIp = $request->getServerParams()['REMOTE_ADDR'];
+
+    if (empty($recaptchaToken)) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_RECAPTCHA_TOKEN",
+          "desc" => "Missing reCaptcha token"
+        ]
+      ]);
+    }
+
+    $validation = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
+    return $response->withStatus($validation->http_code)->withJson($validation->data);
+  }
+
+  # Solicitar reseteo de contraseña
+  public function requestPasswordReset(Request $request, Response $response, $args) {
+    $data = $request->getParsedBody();
+    $email = $data['email'] ?? '';
+    $username = $data['username'] ?? '';
+    $recaptchaToken = $data['recaptcha_token'] ?? '';
+    $clientIp = $request->getServerParams()['REMOTE_ADDR'];
+
+    if((empty($email) && empty($username)) || empty($recaptchaToken)){
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_PARAMETERS",
+          "desc" => "Parameters are missing or invalid"
+        ]
+      ]);
+    }
+    $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
+    if ($result->http_code !== 200) {
+      return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+    }
+
+    try {
+      #Busco por mail o username
+      $result = !empty($email) ?
+        $this->auth->getUserByEmail($email) : $this->auth->getUserByUserName($username);
+      if (empty($result)) {
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "USER_NOT_FOUND",
+            "desc" => "No user was found with the specified Email/Username"
+          ]
+        ]);
+      }
+
+      $result = $this->auth->sendOtpMail($result['UserID']);
+      if($result->http_code !== 200){
+        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+      }
+      return $response->withStatus(200)->withJson(["message" => "OTP code sent successfully"]);
+    } catch (\Exception $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+           "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  # Resetear contraseña
+  public function resetPassword(Request $request, Response $response, $args) {
+    $data = $request->getParsedBody();
+    $email = $data['email'] ?? '';
+    $username = $data['username'] ?? '';
+    $password = $data['password'] ?? '';
+    $otpCode = $data['otp_code'] ?? '';
+    $recaptchaToken = $data['recaptcha_token'] ?? '';
+    $clientIp = $request->getServerParams()['REMOTE_ADDR'];
+
+    $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
+    if ($result->http_code !== 200) {
+      return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+    }
+
+    if ((empty($email) && empty($username)) || empty($recaptchaToken) || empty($password) || empty($otpCode)) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_PARAMETERS",
+          "desc" => "Parameters are missing or invalid"
+        ]
+      ]);
+    }
+
+    try {
+      #Busco por mail o username
+      $result = !empty($email) ?
+        $this->auth->getUserByEmail($email) : $this->auth->getUserByUserName($username);
+      if (empty($result)) {
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "USER_NOT_FOUND",
+            "desc" => "No user was found with the specified Email/Username"
+          ]
+        ]);
+      }
+      $userID = $result['UserID'];
+
+      # Llamar a la validación del OTP
+      $result = $this->auth->validateOTP($userID, $otpCode, false);
+      if ($result->http_code !== 200) {
+        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+      }
+
+      $result = $this->auth->resetPassword($userID, $password);
+      if($result->http_code !== 200){
+        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+      }
+      return $response->withStatus(200)->withJson(["message" => "Password was reset successfully"]);
+    } catch (\Exception $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+           "desc" => $e->getMessage()
+        ]
+      ]);
+    }
   }
 
   # Generador de token JWT
@@ -763,15 +569,17 @@ class AuthController{
     return JWT::encode($payload, $secret, 'HS256');
   }
 
-  public function validateReCaptcha(Request $request, Response $response, $args) {
-    $data = $request->getParsedBody();
-    $recaptchaToken = $data['recaptcha_token'] ?? '';
-
-    if (empty($recaptchaToken)) {
-      return $response->withStatus(400)->withJson(["error" => "Missing reCaptcha token"]);
+  # Función para calcular los tiempos de bloqueo
+  private function calculateLockTime($failedAttempts) {
+    $lockTime = null;
+    switch ($failedAttempts) {
+      case 5: $lockTime = "+1 minute"; break;
+      case 6: $lockTime = "+2 minutes"; break;
+      case 7: $lockTime = "+4 minutes"; break;
+      case 8: $lockTime = "+8 minutes"; break;
+      case 9: $lockTime = "+15 minutes"; break;
+      case 10: $lockTime = "+30 minutes"; break;
     }
-
-    $validation = $this->auth->validateReCaptcha($recaptchaToken);
-    return $response->withStatus($validation->http_code)->withJson($validation->data);
+    return $lockTime ? date("Y-m-d H:i:s", strtotime($lockTime)) : null;
   }
 }
