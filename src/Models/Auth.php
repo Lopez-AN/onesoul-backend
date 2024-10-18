@@ -377,6 +377,9 @@ class Auth{
         $this->resetOtp($userId);
       }
 
+      $stmt = $this->db->prepare("UPDATE Users SET ValidatedEmail = 1 WHERE UserID = ?");
+      $stmt->execute([$userId]);
+
       # OTP válido
       return (object)["http_code" => 200,"data" => []];
     } catch (\PDOException $e) {
@@ -653,7 +656,6 @@ class Auth{
   }
 
   public function validateReCaptcha($recaptchaToken, $clientIp) {
-    return (object)["http_code" => 200, "data" => []];
     $secret = $GLOBALS['config']['recaptcha']['secret'];
     $minScore = $GLOBALS['config']['recaptcha']['min_score'];
     $url = "https://www.google.com/recaptcha/api/siteverify?secret=$secret&response=$recaptchaToken&remoteip=$clientIp";

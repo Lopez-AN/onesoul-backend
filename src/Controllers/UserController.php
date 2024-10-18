@@ -11,6 +11,7 @@ use App\Exceptions\NotFoundException;
 use App\Exceptions\ValidationException;
 
 require_once(ROOT . '/src/Utils/Paginator.php');
+require_once(ROOT . '/src/Utils/OptimizeImg.php');
 
 class UserController
 {

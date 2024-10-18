@@ -3,7 +3,7 @@
 function optimizeImage($file, $maxWidth = 1024, $maxHeight = 1024, $webp = true) {
     // Obtener la información de la imagen
     list($width, $height, $type) = getimagesize($file);
-    
+
     // Verificar el tipo de imagen
     if (!in_array($type, [IMAGETYPE_JPEG, IMAGETYPE_PNG, IMAGETYPE_GIF, IMAGETYPE_WEBP])) {
         throw new Exception('El archivo no es un formato de imagen válido.');

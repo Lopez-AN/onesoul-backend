@@ -5,6 +5,8 @@ namespace App\Models;
 use PDO;
 use App\Exceptions\DatabaseException;
 
+
+
 class User {
     protected $db;
 
