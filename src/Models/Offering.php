@@ -204,17 +204,41 @@ class Offering {
     }
 
     public function createOffering($data) {
-        $this->validateOffering($data);
         $paginator = (object) [
             'limit' => 1,   // Limita a un solo registro
             'offset' => 0   // No usa ningún desplazamiento
         ];
+        
+        if (empty($data)) {
+            return (object)[
+                "http_code" => 400,
+                "error" => [
+                    "code" => "INVALID_PARAMETERS",
+                    "desc" => "Parameters are missing or invalid"
+                ]
+            ];
+        }
 
         try {
-            $stmt = $this->db->prepare("INSERT INTO Offerings (Title, Description, CategoryID, CreationDate, ModificationDate, Tags, SKU, Stock, ServiceType)
-            VALUES (:Title, :Description, :CategoryID, :CreationDate, :ModificationDate, :Tags, :SKU, :Stock, :ServiceType)");
-            $stmt->execute($data);
-            return $this->getOfferingById($paginator, $this->db->lastInsertId());
+            $stmt = $this->db->prepare("INSERT INTO Offerings (Title, Description, CategoryID, UserID, Status, CreationDate, 
+            TotalReviews, IsActive, Tags, SKU, Stock, ServiceType) VALUES (:Title, :Description, :CategoryID, :UserID, :Status,
+             :CreationDate, :TotalReviews, :IsActive, :Tags, :SKU, :Stock, :ServiceType)");
+            $stmt->execute([
+                ":Title" => $data['Title'],
+                ":Description" => $data['Description'],
+                ":CategoryID" => $data['CategoryID'],
+                ":UserID" => $data['UserID'],
+                ":Status" => $data['Status'],
+                ":CreationDate" => $data['CreationDate'],
+                ":TotalReviews" => $data['TotalReviews'],
+                ":IsActive" => $data['IsActive'],
+                ":Tags" => json_encode($data['Tags']),
+                ":SKU" => $data['SKU'] ?? null,
+                ":Stock" => $data['Stock'] ?? null,
+                ":ServiceType" => $data['ServiceType'],
+            ]);
+            $offeringID = $this->db->lastInsertId();
+            return $this->getOfferingById($paginator, $offeringID);
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());
         }
@@ -256,4 +280,16 @@ class Offering {
             throw new ValidationException('Title is required');
         }
     }
+
+    // Función para verificar suscripción de usuario a la categoría
+    public function checkUserCategorySubscription($userID, $categoryID) {
+        try {
+            $stmt = $this->db->prepare("SELECT COUNT(*) FROM UsersCategories WHERE UserID = :userID AND CategoryID = :categoryID");
+            $stmt->execute([':userID' => $userID, ':categoryID' => $categoryID]);
+            return $stmt->fetchColumn() > 0;
+        } catch (\PDOException $e) {
+            throw new DatabaseException($e->getMessage());
+        }
+    }
+
 }

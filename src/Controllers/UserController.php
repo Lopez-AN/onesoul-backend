@@ -12,6 +12,7 @@ use App\Exceptions\ValidationException;
 
 require_once(ROOT . '/src/Utils/Paginator.php');
 require_once(ROOT . '/src/Utils/OptimizeImg.php');
+require_once(ROOT . '/src/Utils/PerspectiveText.php');
 
 class UserController
 {
@@ -151,6 +152,22 @@ class UserController
           ]
         ]);
       }
+
+      // Valida contenido con Perspective API
+      if ($this->containsInappropriateContent($data['Biography'])) {
+        return $response->withStatus(400)->withJson([
+          "code" => "INAPPROPRIATE_CONTENT",
+            "desc" => "Please remove inappropriate content and try again."
+        ]);
+      }
+
+      // Valida contenido con Perspective API
+      if ($this->containsInappropriateContent($data['shortDescription'])) {
+        return $response->withStatus(400)->withJson([
+          "code" => "INAPPROPRIATE_CONTENT",
+            "desc" => "Please remove inappropriate content and try again."
+        ]);
+      }      
 
       $result = $this->user->updateUser($userId, $data);
       if($result->http_code != 200){
@@ -387,5 +404,9 @@ class UserController
         ]
       ]);
     }
+  }
+
+  private function containsInappropriateContent($text) {
+    return validateContentWithPerspective($text);
   }
 }
