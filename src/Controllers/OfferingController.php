@@ -187,6 +187,61 @@ class OfferingController {
         return $response->withHeader('Content-Type', 'application/json');
     }
 
+    public function updateOfferingMedia(Request $request, Response $response, $args)  {
+        $jwt = $request->getAttribute('jwt');
+        $userId = $jwt['data']->UserID;
+        $offeringId = $args['offeringId'];
+
+        if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+          return $response->withStatus(401)->withJson([
+            "error" => [
+              "code" => "INVALID_TOKEN",
+              "desc" => "Invalid JWT token"
+            ]
+          ]);
+        }
+    
+        try {
+          # Verificar si el usuario autenticado es el mismo que el que se intenta modificar, o si es un administrador
+          if ($jwt['data']->UserID != $userId && $jwt['data']->UserType != 'Admin') {
+            return $response->withStatus(401)->withJson([
+              "error" => [
+                "code" => "UNAUTHORIZED",
+                "desc" => "You do not have permission to modify this user"
+              ]
+            ]);
+          }
+    
+          # Obtengo el archivo del body del request
+          $uploadedFiles = $request->getUploadedFiles();
+          $uploadedFile = $uploadedFiles['media'] ?? null;
+    
+          if (!$uploadedFile || $uploadedFile->getError() !== UPLOAD_ERR_OK) {
+            return $response->withStatus(400)->withJson([
+              "error" => [
+                "code" => "UPLOAD_ERROR",
+                "desc" => "Cannot read the attached file"
+              ]
+            ]);
+          }
+    
+          $result = $this->offering->updateOfferingMedia($offeringId, $uploadedFile);
+          if($result->http_code != 200){
+            return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+          }
+    
+          # Retornar el usuario actualizado
+          return $response->withStatus(200)->withJson($result->data);
+        } catch (\Throwable $e) {
+          return $response->withStatus(500)->withJson([
+            "error" => [
+              "code" => "INTERNAL_SERVER_ERROR",
+              "desc" => $e->getMessage()
+            ]
+          ]);
+        }
+      }
+
     // Función para verificar que el usuario esté suscrito a la categoría
     private function userBelongsToCategory($userID, $categoryID) {
         return $this->offering->checkUserCategorySubscription($userID, $categoryID);

@@ -31,4 +31,5 @@ return function (App $app) {
     $app->post('/offerings', [$offeringController, 'createOffering']);
     $app->put('/offerings/{id}', [$offeringController, 'updateOffering']);
     $app->delete('/offerings/{id}', [$offeringController, 'deleteOffering']);
+    $app->post('/offerings/{ID}/media', [$offeringController, 'updateOfferingMedia']);
 };
