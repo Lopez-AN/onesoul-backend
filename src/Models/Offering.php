@@ -245,20 +245,48 @@ class Offering {
     }
 
     public function updateOffering($id, $data) {
-        $this->validateOffering($data);
         $paginator = (object) [
             'limit' => 1,   // Limita a un solo registro
             'offset' => 0   // No usa ningún desplazamiento
         ];
 
+        if (empty($data)) {
+            return (object)[
+                "http_code" => 400,
+                "error" => [
+                    "code" => "INVALID_PARAMETERS",
+                    "desc" => "Parameters are missing or invalid"
+                ]
+            ];
+        }
+
         try {
+            $stmt = $this->db->prepare("SELECT * FROM Offerings WHERE OfferingID = :id AND Status != 'Deleted'");
+            $stmt->execute(['id' => $id]);
+            if (!$stmt->fetch()) {
+                throw new NotFoundException("The specified offering does not exist");
+            }
+
+            $status = ($data['Status'] === 'Active' && (!empty($data['Approved']) && $data['Approved'] == 1)) ? 'Active' : 'Pending';
+            $modificationDate = date("YmdHis");
+
+            // Actualización del offering
             $stmt = $this->db->prepare("UPDATE Offerings SET Title = :Title, Description = :Description, CategoryID = :CategoryID, 
-            UserID = :UserID, Status = :Status, CreationDate = :CreationDate, ModificationDate = :ModificationDate, 
-            AverageRating = :AverageRating, TotalReviews = :TotalReviews, IsActive = :IsActive, Tags = :Tags, SKU =:SKU, 
-            Stock = :Stock, ServiceType =:ServiceType
-            WHERE OfferingID = :OfferingID");
-            $data['OfferingID'] = $id;
-            $stmt->execute($data);
+            Status = :Status, ModificationDate = :ModificationDate, Tags = :Tags, SKU = :SKU, Stock = :Stock, 
+            ServiceType = :ServiceType WHERE OfferingID = :id");
+            $stmt->execute([
+                ":id" => $id,
+                ":Title" => $data['Title'],
+                ":Description" => $data['Description'],
+                ":CategoryID" => $data['CategoryID'],
+                ":Status" => $status,
+                ":ModificationDate" => $modificationDate,
+                ":Tags" => json_encode($data['Tags']),
+                ":SKU" => $data['SKU'] ?? null,
+                ":Stock" => $data['Stock'] ?? null,
+                ":ServiceType" => $data['ServiceType']
+            ]);
+
             return $this->getOfferingById($paginator, $id);
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());
@@ -275,13 +303,7 @@ class Offering {
         }
     }
 
-    private function validateOffering($data) {
-        if (empty($data['Title'])) {
-            throw new ValidationException('Title is required');
-        }
-    }
-
-    public function updateOfferingMedia($offeringId, $uploadedFile)  {
+    public function updateOfferingMedia($id, $uploadedFile)  {
         $paginator = (object) [
             'limit' => 1,   // Limita a un solo registro
             'offset' => 0   // No usa ningún desplazamiento
@@ -291,8 +313,8 @@ class Offering {
         try {
             # Busco al usuario y si tenia imagen antes
             $stmt = $this->db->prepare("SELECT o.OfferingID,m.MediaID,m.Path FROM Offerings as o
-            LEFT JOIN Media as m ON o.OfferingID = m.OfferingID WHERE o.OfferingID = :offeringId");
-            $stmt->bindParam(':offeringId', $offeringId, PDO::PARAM_INT);
+            LEFT JOIN Media as m ON o.OfferingID = m.OfferingID WHERE o.OfferingID = :id");
+            $stmt->bindParam(':id', $id, PDO::PARAM_INT);
             $stmt->execute();
             $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
             if(empty($rs)){
@@ -330,8 +352,8 @@ class Offering {
             }
             
             // Validar cantidad de archivos existentes
-            $stmt = $this->db->prepare("SELECT COUNT(*) AS count, MediaType FROM Media WHERE OfferingID = :offeringId GROUP BY MediaType");
-            $stmt->bindParam(':offeringId', $offeringId, PDO::PARAM_INT);
+            $stmt = $this->db->prepare("SELECT COUNT(*) AS count, MediaType FROM Media WHERE OfferingID = :id GROUP BY MediaType");
+            $stmt->bindParam(':id', $id, PDO::PARAM_INT);
             $stmt->execute();
             $mediaCounts = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -369,7 +391,7 @@ class Offering {
 
             if(!is_null($rs[0]['MediaID'])){
                 $stmt = $this->db->prepare("UPDATE Media SET `URL` = :fileURL, `Path` = :filePath, `MediaType` = :mediaType
-                WHERE `OfferingID` = :offeringId");
+                WHERE `OfferingID` = :id");
                 $stmt->bindParam(':fileURL', $fileURL, PDO::PARAM_STR);
                 $stmt->bindParam(':filePath', $filePath, PDO::PARAM_STR);
                 $mediaType = $this->isImage($mimeType) ? 'image' : 'video';
@@ -382,17 +404,17 @@ class Offering {
                 }
             }else{
                 $stmt = $this->db->prepare("INSERT INTO Media (`URL`,`OfferingID`,`Path`,`MediaType`)
-                VALUES (:fileURL,:offeringId,:filePath,:mediaType)");
+                VALUES (:fileURL,:id,:filePath,:mediaType)");
                 $stmt->bindParam(':fileURL', $fileURL, PDO::PARAM_STR);
                 $stmt->bindParam(':filePath', $filePath, PDO::PARAM_STR);
-                $stmt->bindParam(':offeringId', $userId, PDO::PARAM_INT);
+                $stmt->bindParam(':id', $id, PDO::PARAM_INT);
                 $mediaType = $this->isImage($mimeType) ? 'image' : 'video';
                 $stmt->bindParam(':mediaType', $mediaType, PDO::PARAM_STR);
                 $stmt->execute();
             }
 
             // Devolver los datos actualizados del usuario
-            return $this->getOfferingById($paginator, $offeringId);
+            return $this->getOfferingById($paginator, $id);
         } catch (\PDOException $e) {
             # Si hubo algun error de DB y se llego a grabar el archivo en el FS borrarlo
             if($fileWritten && file_exists($rs[0]['Path'])){
