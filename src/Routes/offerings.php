@@ -14,7 +14,7 @@ return function (App $app) {
                 "ignore" => []
             ]),
             new Tuupola\Middleware\JwtAuthentication\RequestMethodRule([
-                "ignore" => ["OPTIONS","GET"]
+                "ignore" => ["OPTIONS"]
             ])
             ],
         "attribute" => "jwt", // Este atributo lo podes usar para leer el token desde el controller
@@ -29,7 +29,9 @@ return function (App $app) {
     $app->get('/categories/{categoryID}/offerings', [$offeringController, 'getOfferingsByCategoryId']);
     $app->get('/users/{userID}/offerings', [$offeringController, 'getOfferingsByUserId']);
     $app->post('/offerings', [$offeringController, 'createOffering']);
+    $app->get('/offerings/approve/{id}', [$offeringController, 'approveOffering']);
     $app->put('/offerings/{id}', [$offeringController, 'updateOffering']);
     $app->delete('/offerings/{id}', [$offeringController, 'deleteOffering']);
     $app->post('/offerings/{id}/media', [$offeringController, 'updateOfferingMedia']);
+    $app->delete('/offerings/{id}/media/{mediaID}', [$offeringController, 'deleteOfferingMedia']);
 };

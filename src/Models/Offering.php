@@ -244,6 +244,21 @@ class Offering {
         }
     }
 
+    public function approveOfferingById($id) {
+        $paginator = (object) [
+            'limit' => 1,   // Limita a un solo registro
+            'offset' => 0   // No usa ningún desplazamiento
+        ];
+
+        try {
+            $stmt = $this->db->prepare("UPDATE Offerings SET Status = 'Active', IsActive = 1, Approved = 1 WHERE OfferingID = :id AND Status != 'Deleted'");
+            $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+            $stmt->execute();
+        } catch (\PDOException $e) {
+            throw new DatabaseException($e->getMessage());
+        }
+    }
+
     public function updateOffering($id, $data) {
         $paginator = (object) [
             'limit' => 1,   // Limita a un solo registro
@@ -294,8 +309,12 @@ class Offering {
     }
 
     public function deleteOffering($id) {
+        $paginator = (object) [
+            'limit' => 1,   // Limita a un solo registro
+            'offset' => 0   // No usa ningún desplazamiento
+        ];
         try {
-            $stmt = $this->db->prepare("DELETE FROM Offerings WHERE OfferingID = :id");
+            $stmt = $this->db->prepare("UPDATE Offerings SET Status = 'Deleted', IsActive = 0 WHERE OfferingID = :id");
             $stmt->bindParam(':id', $id, PDO::PARAM_INT);
             $stmt->execute();
         } catch (\PDOException $e) {
@@ -303,126 +322,207 @@ class Offering {
         }
     }
 
-    public function updateOfferingMedia($id, $uploadedFile)  {
+    // public function updateOfferingMedia($id, $uploadedFile)  {
+    //     $paginator = (object) [
+    //         'limit' => 1,   // Limita a un solo registro
+    //         'offset' => 0   // No usa ningún desplazamiento
+    //     ];
+        
+    //     $fileWritten = false; # Indica que se grabo el archivo en el FS
+    //     try {
+    //         # Busco al usuario y si tenia imagen antes
+    //         $stmt = $this->db->prepare("SELECT o.OfferingID,m.MediaID,m.Path FROM Offerings as o
+    //         LEFT JOIN Media as m ON o.OfferingID = m.OfferingID WHERE o.OfferingID = :id");
+    //         $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+    //         $stmt->execute();
+    //         $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    //         if(empty($rs)){
+    //             return (object)["http_code" => 404,
+    //                 "error" => [
+    //                     "code" => "OFFERING_NOT_FOUND",
+    //                     "desc" => "No offering was found with the specified ID"
+    //                 ]
+    //             ];
+    //         }
+
+    //         $fileSize = $uploadedFile->getSize();
+    //         $fileContent = $uploadedFile->getStream()->getContents();
+        
+    //         // Validar tamaño
+    //         if (($fileSize > 5 * 1024 * 1024 && $this->isImage($fileContent)) || $fileSize > 50 * 1024 * 1024) {
+    //             return ['success' => false, 'error' => [
+    //                 "code" => "MEDIA_TOO_BIG",
+    //                 "desc" => "Maximum size is 5MB for photos and 50MB for videos"
+    //             ]];
+    //         }
+
+    //         // Validar formato
+    //         $tempFilePath = tempnam(sys_get_temp_dir(), 'uploaded');
+    //         file_put_contents($tempFilePath, $fileContent);
+    //         $mimeType = finfo_file(finfo_open(FILEINFO_MIME_TYPE), $tempFilePath);
+    //         unlink($tempFilePath);  
+
+    //         $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'video/mp4', 'video/x-matroska'];
+    //         if (!in_array($mimeType, $allowedTypes)) {
+    //             return ['success' => false, 'error' => [
+    //                 "code" => "MEDIA_FORMAT_INVALID",
+    //                 "desc" => "Allowed formats are JPEG, PNG, GIF, WEBP, MP4, MKV"
+    //             ]];
+    //         }
+            
+    //         // Validar cantidad de archivos existentes
+    //         $stmt = $this->db->prepare("SELECT COUNT(*) AS count, MediaType FROM Media WHERE OfferingID = :id GROUP BY MediaType");
+    //         $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+    //         $stmt->execute();
+    //         $mediaCounts = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    //         foreach ($mediaCounts as $mediaCount) {
+    //             if ($this->isImage($mimeType) && $mediaCount['MediaType'] == 'image' && $mediaCount['count'] >= 2 ||
+    //                 !$this->isImage($mimeType) && $mediaCount['MediaType'] == 'video' && $mediaCount['count'] >= 2) {
+    //                 return ['success' => false, 'error' => [
+    //                     "code" => "MEDIA_TOO_MANY",
+    //                     "desc" => "Cannot add more photos or videos to this offering"
+    //                 ]];
+    //             }
+    //         }
+
+    //         $fileExtension = pathinfo($uploadedFile->getClientFilename(), PATHINFO_EXTENSION);
+    //         $imgID = uniqid();
+    //         # Directorio destino
+    //         $uploadDirectory = $GLOBALS['config']['media_folder']['path'];
+
+    //         # El archivo destino se guarda con ID unico
+    //         $filePath = $uploadDirectory."/offering/".$imgID.".".$fileExtension;
+
+    //         #Grabo el archivo en el FS
+    //         $uploadedFile->moveTo($filePath);
+    //         $fileWritten = true;
+
+    //         # Genero la URL del archivo
+    //         $fileURL = $GLOBALS['config']['media_folder']['url']."/offering/".$imgID.".".$fileExtension;
+
+    //         # Borro las imagenes que tuviera antes (si son locales)
+    //         foreach($rs as $r){
+    //             if(!is_null($r['Path']) && is_file($r['Path'])){
+    //                 unlink($r['Path']);
+    //             }
+    //         }
+
+    //         if(!is_null($rs[0]['MediaID'])){
+    //             $stmt = $this->db->prepare("UPDATE Media SET `URL` = :fileURL, `Path` = :filePath, `MediaType` = :mediaType
+    //             WHERE `OfferingID` = :id");
+    //             $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+    //             $stmt->bindParam(':fileURL', $fileURL, PDO::PARAM_STR);
+    //             $stmt->bindParam(':filePath', $filePath, PDO::PARAM_STR);
+    //             $mediaType = $this->isImage($mimeType) ? 'image' : 'video';
+    //             $stmt->bindParam(':mediaType', $mediaType, PDO::PARAM_STR);
+    //             $stmt->execute();
+
+    //             # Borro la imagen anterior si existe en el sistema de archivos
+    //             if(file_exists($rs[0]['Path'])){
+    //                 unlink($rs[0]['Path']);
+    //             }
+    //         }else{
+    //             $stmt = $this->db->prepare("INSERT INTO Media (`URL`,`OfferingID`,`Path`,`MediaType`)
+    //             VALUES (:fileURL,:id,:filePath,:mediaType)");
+    //             $stmt->bindParam(':fileURL', $fileURL, PDO::PARAM_STR);
+    //             $stmt->bindParam(':filePath', $filePath, PDO::PARAM_STR);
+    //             $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+    //             $mediaType = $this->isImage($mimeType) ? 'image' : 'video';
+    //             $stmt->bindParam(':mediaType', $mediaType, PDO::PARAM_STR);
+    //             $stmt->execute();
+    //         }
+
+    //         // Devolver los datos actualizados del usuario
+    //         return $this->getOfferingById($paginator, $id);
+    //     } catch (\PDOException $e) {
+    //         # Si hubo algun error de DB y se llego a grabar el archivo en el FS borrarlo
+    //         if($fileWritten && file_exists($rs[0]['Path'])){
+    //             unlink($filePath);
+    //         }
+    //         throw new DatabaseException($e->getMessage());
+    //     } catch (Exception $e) {
+    //         throw new Exception($e->getMessage());
+    //     }
+    // }
+
+    public function getMediaByOfferingId($id) {
+        try {
+            $stmt = $this->db->prepare("SELECT MediaID, Path FROM Media WHERE OfferingID = :id");
+            $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+            $stmt->execute();
+            return $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (\PDOException $e) {
+            throw new DatabaseException($e->getMessage());
+        }
+    }
+    
+    public function getMediaCountByType($id) {
+        try {
+            $stmt = $this->db->prepare("SELECT MediaType, COUNT(*) as count FROM Media WHERE OfferingID = :id GROUP BY MediaType");
+            $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+            $stmt->execute();
+            $mediaCounts = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+            // Organizar resultados en un arreglo asociativo
+            $counts = ['image' => 0, 'video' => 0];
+            foreach ($mediaCounts as $mediaCount) {
+                if ($mediaCount['MediaType'] == 'image') {
+                    $counts['image'] = $mediaCount['count'];
+                } elseif ($mediaCount['MediaType'] == 'video') {
+                    $counts['video'] = $mediaCount['count'];
+                }
+            }
+            return $counts;
+        } catch (\PDOException $e) {
+            throw new DatabaseException($e->getMessage());
+        }
+    }    
+    
+    public function updateOfferingMedia($id, $fileURL, $filePath, $mediaType, $mediaID = null) {
+        try {
+            if ($mediaID) {
+                // Actualizar el registro existente
+                $stmt = $this->db->prepare("UPDATE Media SET URL = :fileURL, Path = :filePath, MediaType = :mediaType WHERE MediaID = :mediaID AND OfferingID = :id");
+                $stmt->bindParam(':mediaID', $mediaID, PDO::PARAM_INT);
+            } else {
+                // Insertar un nuevo registro si no existe mediaId
+                $stmt = $this->db->prepare("INSERT INTO Media (URL, OfferingID, Path, MediaType) VALUES (:fileURL, :id, :filePath, :mediaType)");
+            }
+    
+            $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+            $stmt->bindParam(':fileURL', $fileURL, PDO::PARAM_STR);
+            $stmt->bindParam(':filePath', $filePath, PDO::PARAM_STR);
+            $stmt->bindParam(':mediaType', $mediaType, PDO::PARAM_STR);
+            $stmt->execute();
+        } catch (\PDOException $e) {
+            throw new DatabaseException($e->getMessage());
+        }
+    }
+    
+    public function getMediaById($id, $mediaID) {
+        try {
+            $stmt = $this->db->prepare("SELECT * FROM Media WHERE MediaID = :mediaID AND OfferingID = :id");
+            $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+            $stmt->bindParam(':mediaID', $mediaID, PDO::PARAM_INT);
+            $stmt->execute();
+            return $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (\PDOException $e) {
+            throw new DatabaseException($e->getMessage());
+        }
+    }
+
+    public function deleteOfferingMedia($mediaID) {
         $paginator = (object) [
             'limit' => 1,   // Limita a un solo registro
             'offset' => 0   // No usa ningún desplazamiento
         ];
-        
-        $fileWritten = false; # Indica que se grabo el archivo en el FS
         try {
-            # Busco al usuario y si tenia imagen antes
-            $stmt = $this->db->prepare("SELECT o.OfferingID,m.MediaID,m.Path FROM Offerings as o
-            LEFT JOIN Media as m ON o.OfferingID = m.OfferingID WHERE o.OfferingID = :id");
-            $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+            $stmt = $this->db->prepare("DELETE FROM Media WHERE MediaID = :mediaID");
+            $stmt->bindParam(':mediaID', $mediaID, PDO::PARAM_INT);
             $stmt->execute();
-            $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
-            if(empty($rs)){
-                return (object)["http_code" => 404,
-                    "error" => [
-                        "code" => "OFFERING_NOT_FOUND",
-                        "desc" => "No offering was found with the specified ID"
-                    ]
-                ];
-            }
-
-            $fileSize = $uploadedFile->getSize();
-            $fileContent = $uploadedFile->getStream()->getContents();
-        
-            // Validar tamaño
-            if (($fileSize > 5 * 1024 * 1024 && $this->isImage($fileContent)) || $fileSize > 50 * 1024 * 1024) {
-                return ['success' => false, 'error' => [
-                    "code" => "MEDIA_TOO_BIG",
-                    "desc" => "Maximum size is 5MB for photos and 50MB for videos"
-                ]];
-            }
-
-            // Validar formato
-            $tempFilePath = tempnam(sys_get_temp_dir(), 'uploaded');
-            file_put_contents($tempFilePath, $fileContent);
-            $mimeType = finfo_file(finfo_open(FILEINFO_MIME_TYPE), $tempFilePath);
-            unlink($tempFilePath);  
-
-            $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'video/mp4', 'video/x-matroska'];
-            if (!in_array($mimeType, $allowedTypes)) {
-                return ['success' => false, 'error' => [
-                    "code" => "MEDIA_FORMAT_INVALID",
-                    "desc" => "Allowed formats are JPEG, PNG, GIF, WEBP, MP4, MKV"
-                ]];
-            }
-            
-            // Validar cantidad de archivos existentes
-            $stmt = $this->db->prepare("SELECT COUNT(*) AS count, MediaType FROM Media WHERE OfferingID = :id GROUP BY MediaType");
-            $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-            $stmt->execute();
-            $mediaCounts = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-            foreach ($mediaCounts as $mediaCount) {
-                if ($this->isImage($mimeType) && $mediaCount['MediaType'] == 'image' && $mediaCount['count'] >= 2 ||
-                    !$this->isImage($mimeType) && $mediaCount['MediaType'] == 'video' && $mediaCount['count'] >= 2) {
-                    return ['success' => false, 'error' => [
-                        "code" => "MEDIA_TOO_MANY",
-                        "desc" => "Cannot add more photos or videos to this offering"
-                    ]];
-                }
-            }
-
-            $fileExtension = pathinfo($uploadedFile->getClientFilename(), PATHINFO_EXTENSION);
-            $imgID = uniqid();
-            # Directorio destino
-            $uploadDirectory = $GLOBALS['config']['media_folder']['path'];
-
-            # El archivo destino se guarda con ID unico
-            $filePath = $uploadDirectory."/offering/".$imgID.".".$fileExtension;
-
-            #Grabo el archivo en el FS
-            $uploadedFile->moveTo($filePath);
-            $fileWritten = true;
-
-            # Genero la URL del archivo
-            $fileURL = $GLOBALS['config']['media_folder']['url']."/offering/".$imgID.".".$fileExtension;
-
-            # Borro las imagenes que tuviera antes (si son locales)
-            foreach($rs as $r){
-                if(!is_null($r['Path']) && is_file($r['Path'])){
-                    unlink($r['Path']);
-                }
-            }
-
-            if(!is_null($rs[0]['MediaID'])){
-                $stmt = $this->db->prepare("UPDATE Media SET `URL` = :fileURL, `Path` = :filePath, `MediaType` = :mediaType
-                WHERE `OfferingID` = :id");
-                $stmt->bindParam(':fileURL', $fileURL, PDO::PARAM_STR);
-                $stmt->bindParam(':filePath', $filePath, PDO::PARAM_STR);
-                $mediaType = $this->isImage($mimeType) ? 'image' : 'video';
-                $stmt->bindParam(':mediaType', $mediaType, PDO::PARAM_STR);
-                $stmt->execute();
-
-                # Borro la imagen anterior si existe en el sistema de archivos
-                if(file_exists($rs[0]['Path'])){
-                    unlink($rs[0]['Path']);
-                }
-            }else{
-                $stmt = $this->db->prepare("INSERT INTO Media (`URL`,`OfferingID`,`Path`,`MediaType`)
-                VALUES (:fileURL,:id,:filePath,:mediaType)");
-                $stmt->bindParam(':fileURL', $fileURL, PDO::PARAM_STR);
-                $stmt->bindParam(':filePath', $filePath, PDO::PARAM_STR);
-                $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-                $mediaType = $this->isImage($mimeType) ? 'image' : 'video';
-                $stmt->bindParam(':mediaType', $mediaType, PDO::PARAM_STR);
-                $stmt->execute();
-            }
-
-            // Devolver los datos actualizados del usuario
-            return $this->getOfferingById($paginator, $id);
         } catch (\PDOException $e) {
-            # Si hubo algun error de DB y se llego a grabar el archivo en el FS borrarlo
-            if($fileWritten && file_exists($rs[0]['Path'])){
-                unlink($filePath);
-            }
             throw new DatabaseException($e->getMessage());
-        } catch (Exception $e) {
-            throw new Exception($e->getMessage());
         }
     }
 
@@ -437,7 +537,7 @@ class Offering {
         }
     }
 
-    private function isImage($mimeType) {
-        return in_array($mimeType, ['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
-    }
+    // private function isImage($mimeType) {
+    //     return in_array($mimeType, ['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+    // }
 }
