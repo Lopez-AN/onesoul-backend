@@ -684,6 +684,42 @@ class Auth{
     # Validación exitosa
     return (object)["http_code" => 200, "data" => []];
   }
+
+  public function mfaSet($userID, $secret){
+    try {
+      # Creo el usuario con los datos basicos
+      $stmt = $this->db->prepare("UPDATE Users
+        SET mfaSecret = ?, TwoFactorAuth = 1 WHERE UserID = ?");
+      $stmt->execute([$secret, $userID]);
+      $stmt->fetch(PDO::FETCH_ASSOC);
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  public function mfaCheck($userID){
+    try {
+      # Creo el usuario con los datos basicos
+      $stmt = $this->db->prepare("SELECT mfaSecret
+        FROM Users WHERE UserID = ? AND mfaSecret IS NOT NULL");
+      $stmt->execute([$userID]);
+      return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  public function mfaDel($userID){
+    try {
+      # Creo el usuario con los datos basicos
+      $stmt = $this->db->prepare("UPDATE Users
+        SET mfaSecret = null, TwoFactorAuth = 0 WHERE UserID = ?");
+      $stmt->execute([$userID]);
+      $stmt->fetch(PDO::FETCH_ASSOC);
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
 }
 
 

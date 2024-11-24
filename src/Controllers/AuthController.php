@@ -551,6 +551,231 @@ class AuthController{
     }
   }
 
+  # Solicita el QR para asociar un MFA
+  public function mfaReq(Request $request, Response $response, $args){
+    $jwt = $request->getAttribute('jwt');
+    if(!isset($jwt['data']) || !property_exists($jwt['data'],'UserID')){
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_TOKEN",
+          "desc" => "Invalid JWT token"
+        ]
+      ]);
+    }
+
+    $userID = $jwt['data'] -> UserID;
+    $userData = $this->user->getUserById($userID);
+
+    if ($userData->http_code !== 200) {
+      return $response->withStatus($userData->http_code)->withJson($userData->error);
+    }
+
+    $userName = $userData -> data['UserName'];
+    if($userData -> data['TwoFactorAuth']){
+      return $response->withStatus(401)->withJson([
+        "error" => [
+          "code" => "MFA_ALREADY_SET",
+          "desc" => "The user already have mfa configured"
+        ]
+      ]);
+    }
+
+    # Genero el QR y el secret
+    try{
+      $g2fa = new \PragmaRX\Google2FA\Google2FA();
+      $secret = $g2fa -> generateSecretKey();
+      $qr = $g2fa -> getQRCodeUrl("OneSoul.app", $userName,	$secret);
+      return $response->withStatus($userData->http_code)->withJson([
+        "secret" => $secret,
+        "qr" => $qr,
+      ]);
+    } catch (\Exception $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+           "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  public function mfaSet(Request $request, Response $response, $args){
+    $jwt = $request->getAttribute('jwt');
+    if(!isset($jwt['data']) || !property_exists($jwt['data'],'UserID')){
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_TOKEN",
+          "desc" => "Invalid JWT token"
+        ]
+      ]);
+    }
+
+    $userID = $jwt['data'] -> UserID;
+    $userData = $this->user->getUserById($userID);
+
+    if ($userData->http_code !== 200) {
+      return $response->withStatus($userData->http_code)->withJson($userData->error);
+    }
+
+    if($userData -> data['TwoFactorAuth']){
+      return $response->withStatus(401)->withJson([
+        "error" => [
+          "code" => "MFA_ALREADY_SET",
+          "desc" => "The user already have mfa configured"
+        ]
+      ]);
+    }
+
+    $data = $request->getParsedBody();
+    $secret = $data['secret'] ?? '';
+    $code = $data['code'] ?? '';
+
+    if(empty($secret) && empty($code)){
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_PARAMETERS",
+          "desc" => "Parameters are missing or invalid"
+        ]
+      ]);
+    }
+
+    # Chequeo el codigo contra el secret
+    try{
+      $g2fa = new \PragmaRX\Google2FA\Google2FA();
+      if(!$g2fa -> verifyKey($secret, $code)){
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "INVALID_MFA_CODE",
+            "desc" => "Cannot verify provided mfa code"
+          ]
+        ]);
+      }
+
+      $this->auth->mfaSet($userID,$secret);
+      return $response->withStatus(200)->withJson(["message" => "MFA is set"]);
+    } catch (\Exception $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+           "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  public function mfaDel(Request $request, Response $response, $args){
+    $jwt = $request->getAttribute('jwt');
+    if(!isset($jwt['data']) || !property_exists($jwt['data'],'UserID')){
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_TOKEN",
+          "desc" => "Invalid JWT token"
+        ]
+      ]);
+    }
+
+    $userID = $jwt['data'] -> UserID;
+    $userData = $this->user->getUserById($userID);
+
+    if ($userData->http_code !== 200) {
+      return $response->withStatus($userData->http_code)->withJson($userData->error);
+    }
+
+    if(!$userData -> data['TwoFactorAuth']){
+      return $response->withStatus(401)->withJson([
+        "error" => [
+          "code" => "MFA_NOT_SET",
+          "desc" => "The user does not have mfa configured"
+        ]
+      ]);
+    }
+
+    try{
+      $this->auth->mfaDel($userID);
+      return $response->withStatus(200)->withJson(["message" => "MFA unset"]);
+    } catch (\Exception $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+           "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  public function mfaCheck(Request $request, Response $response, $args){
+    $jwt = $request->getAttribute('jwt');
+    if(!isset($jwt['data']) || !property_exists($jwt['data'],'UserID')){
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_TOKEN",
+          "desc" => "Invalid JWT token"
+        ]
+      ]);
+    }
+
+    $userID = $jwt['data'] -> UserID;
+    $code = $args['code'];
+
+    if(empty($code) || !is_numeric($code)){
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_PARAMETERS",
+          "desc" => "Parameters are missing or invalid"
+        ]
+      ]);
+    }
+
+    try{
+      $result = $this->auth->mfaCheck($userID);
+      if(empty($result)){
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "USER_NOT_FOUND",
+            "desc" => "No user was found with the specified ID"
+          ]
+        ]);
+      }
+      if($result[0]['mfaSecret'] === null){
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "MFA_NOT_SET",
+            "desc" => "The user does not have mfa configured"
+          ]
+        ]);
+      }
+    } catch (\Exception $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+           "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+
+    # Chequeo el codigo contra el secret
+    try{
+      $g2fa = new \PragmaRX\Google2FA\Google2FA();
+      if(!$g2fa -> verifyKey($result[0]['mfaSecret'], $code)){
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "INVALID_MFA_CODE",
+            "desc" => "Cannot verify provided mfa code"
+          ]
+        ]);
+      }
+
+      return $response->withStatus(200)->withJson(["message" => "MFA verified"]);
+    } catch (\Exception $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+           "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
   # Generador de token JWT
   private function JWTgen($user){
     $payload = [

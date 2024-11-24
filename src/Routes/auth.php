@@ -14,7 +14,11 @@ return function (App $app) {
         "path" => [
           "/register/otp",
           "/register/send_otp_mail",
-          "/auth/refresh_token"
+          "/auth/refresh_token",
+          "/auth/mfa_req",
+          "/auth/mfa_set",
+          "/auth/mfa_check",
+          "/auth/mfa_del"
         ],
         "ignore" => []
       ]),
@@ -42,4 +46,8 @@ return function (App $app) {
   $app->get('/auth/refresh_token', [$authController, 'refreshToken']);
   $app->post('/auth/request_password_reset', [$authController, 'requestPasswordReset']);
   $app->post('/auth/password_reset', [$authController, 'resetPassword']);
+  $app->get('/auth/mfa_req', [$authController, 'mfaReq']);
+  $app->post('/auth/mfa_set', [$authController, 'mfaSet']);
+  $app->delete('/auth/mfa_del', [$authController, 'mfaDel']);
+  $app->get('/auth/mfa_check/{code}', [$authController, 'mfaCheck']);
 };
