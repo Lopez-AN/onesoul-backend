@@ -11,8 +11,8 @@ function optimizeImage($file, $maxWidth = 1024, $maxHeight = 1024, $webp = true)
 
     // Calcular el nuevo tamaño manteniendo la relación de aspecto
     $ratio = min($maxWidth / $width, $maxHeight / $height);
-    $newWidth = $width * $ratio;
-    $newHeight = $height * $ratio;
+    $newWidth = (int)($width * $ratio);
+    $newHeight = (int)($height * $ratio);
 
     // Crear la imagen redimensionada (por defecto WEBP)
     $newImage = imagecreatetruecolor($newWidth, $newHeight);
