@@ -6,9 +6,6 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use App\Models\User;
 use App\Models\Auth;
-use App\Exceptions\DatabaseException;
-use App\Exceptions\NotFoundException;
-use App\Exceptions\ValidationException;
 
 require_once(ROOT . '/src/Utils/Paginator.php');
 require_once(ROOT . '/src/Utils/OptimizeImg.php');
@@ -154,12 +151,22 @@ class UserController
       }
 
       // Valida contenido con Perspective API
-      if ($this->containsInappropriateContent($data['Biography']) || 
-      $this->containsInappropriateContent($data['shortDescription'])) {
-        return $response->withStatus(400)->withJson([
-          "code" => "INAPPROPRIATE_CONTENT",
-            "desc" => "Please remove inappropriate content and try again."
-        ]);
+      if(!empty($data['Biography'])){
+        if ($this->containsInappropriateContent($data['Biography'])) {
+          return $response->withStatus(400)->withJson([
+            "code" => "INAPPROPRIATE_CONTENT",
+              "desc" => "Please remove inappropriate content and try again."
+          ]);
+        }
+      }
+
+      if(!empty($data['shortDescription'])){
+        if ($this->containsInappropriateContent($data['shortDescription'])) {
+          return $response->withStatus(400)->withJson([
+            "code" => "INAPPROPRIATE_CONTENT",
+              "desc" => "Please remove inappropriate content and try again."
+          ]);
+        }
       }
 
       $result = $this->user->updateUser($userId, $data);
