@@ -11,12 +11,24 @@ return function (App $app) {
         "rules" => [
             new Tuupola\Middleware\JwtAuthentication\RequestPathRule([
                 "path" => "/offerings",
-                "ignore" => []
+                "ignore" => ["GET"]  // Ignora la autenticación JWT solo para GET en /offerings
+            ]),
+            new Tuupola\Middleware\JwtAuthentication\RequestPathRule([
+                "path" => "/offerings/{id}",
+                "ignore" => ["GET"]  // Ignora la autenticación JWT solo para GET en /offerings/{id}
+            ]),
+            new Tuupola\Middleware\JwtAuthentication\RequestPathRule([
+                "path" => "/categories/{categoryID}/offerings",
+                "ignore" => ["GET"]  // Ignora la autenticación JWT solo para GET en /categories/{categoryID}/offerings
+            ]),
+            new Tuupola\Middleware\JwtAuthentication\RequestPathRule([
+                "path" => "/users/{userID}/offerings",
+                "ignore" => ["GET"]  // Ignora la autenticación JWT solo para GET en /users/{userID}/offerings
             ]),
             new Tuupola\Middleware\JwtAuthentication\RequestMethodRule([
                 "ignore" => ["OPTIONS"]
             ])
-            ],
+        ],
         "attribute" => "jwt", // Este atributo lo podes usar para leer el token desde el controller
     ]));
 
