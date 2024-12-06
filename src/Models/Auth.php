@@ -720,6 +720,41 @@ class Auth{
       throw new DatabaseException($e->getMessage());
     }
   }
+
+  public function validateMfaId($userId, $mfaId) {
+    try {
+      $stmt = $this->db->prepare("SELECT * FROM UserBrowser WHERE UserID = ? AND mfa_id = ?");
+      $stmt->execute([$userId, $mfaId]);
+      return $stmt->fetch(PDO::FETCH_ASSOC) !== false;
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  public function storeBrowserData($userId, $request) {
+    // Obtener información del navegador desde el encabezado User-Agent
+    $userAgent = $request->getHeader('User-Agent')[0];
+    $parser = new \WhichBrowser\Parser($userAgent);
+
+    // Detalles del navegador y del dispositivo
+    $browser = $parser->browser->getName();        
+    $version = $parser->browser->getVersion();    
+    $os = $parser->os->getName();                
+    $device = $parser->device->type;            
+    $ip = $request->getAttribute('ip_address');  
+    $expiry = date('Y-m-d H:i:s', strtotime('+90 days')); 
+
+    try {
+      // Insertar los datos del navegador en la tabla UserBrowser
+      $stmt = $this->db->prepare("
+        INSERT INTO UserBrowser (UserID, mfa_id, browser, version, os, device, ip, expiry)
+        VALUES (?, UUID(), ?, ?, ?, ?, ?, ?)
+      ");
+      $stmt->execute([$userId, $browser, $version, $os, $device, $ip, $expiry]);
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
 }
 
 
