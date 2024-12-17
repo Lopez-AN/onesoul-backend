@@ -29,8 +29,8 @@ class AuthController{
     $email = $data['email'] ?? '';
     $username = $data['username'] ?? '';
     $password = $data['password'] ?? '';
-    // $mfa_id = $data['mfa_id'] ?? '';
-    // $mfa_code = $data['mfa_code'] ?? '';
+    $mfa_id = $data['mfa_id'] ?? '';
+    $mfa_code = $data['mfa_code'] ?? '';
 
 
     // Validar credenciales básicas
@@ -57,44 +57,6 @@ class AuthController{
 
       $user = $result[0];
 
-      # Verificar si el usuario esta bloqueado
-      if (!is_null($user['locked_until']) && strtotime($user['locked_until']) > time()) {
-        return $response->withStatus(403)->withJson([
-          "error" => [
-            "code" => "USER_LOCKED",
-            "desc" => "Account is temporaly locked until " . $user['locked_until']
-          ]
-        ]);
-      }
-
-      // // Validar MFA (mfa_id o mfa_code)
-      // if (!empty($mfa_id)) {
-      //   if (!$this->auth->validateMfaId($user['UserID'], $mfa_id)) {
-      //     return $response->withStatus(403)->withJson([
-      //       "error" => [
-      //         "code" => "INVALID_MFA_ID",
-      //         "desc" => "MFA ID is not valid"
-      //       ]
-      //     ]);
-      //   }
-      // } elseif (!empty($mfa_code)) {
-      //   if (!$this->auth->mfaCheck($user['UserID'], $mfa_code)) {
-      //     return $response->withStatus(401)->withJson([
-      //       "error" => [
-      //         "code" => "INVALID_MFA_CODE",
-      //         "desc" => "MFA code is invalid"
-      //       ]
-      //     ]);
-      //   }
-      // } else {
-      //   return $response->withStatus(400)->withJson([
-      //     "error" => [
-      //       "code" => "MFA_REQUIRED",
-      //       "desc" => "MFA validation is required"
-      //     ]
-      //   ]);
-      // }
-
       if (!password_verify($password, $user['PasswordHash'])) {
         # Logueo fallido actualizar contador de erroneos y tiempo bloqueo si corresponde
         $failedAttempts = $user['failed_login_attempts'] + 1;
@@ -110,18 +72,66 @@ class AuthController{
         ]);
       }
 
+      # Verificar si el usuario esta bloqueado
+      if (!is_null($user['locked_until']) && strtotime($user['locked_until']) > time()) {
+        return $response->withStatus(403)->withJson([
+          "error" => [
+            "code" => "USER_LOCKED",
+            "desc" => "Account is temporaly locked until " . $user['locked_until']
+          ]
+        ]);
+      }
+
+      $newMfaId = null;
+      if($user['TwoFactorAuth'] == 1){
+        // Validar MFA (mfa_id o mfa_code)
+        if (!empty($mfa_id)) {
+          if (!$this->auth->validateMfaId($user['UserID'], $mfa_id)) {
+            return $response->withStatus(403)->withJson([
+              "error" => [
+                "code" => "INVALID_MFA_ID",
+                "desc" => "MFA ID is not valid"
+              ]
+            ]);
+          }
+        } elseif (!empty($mfa_code)) {
+          if ($this->auth->mfaCheck($user['UserID'], $mfa_code) -> http_code != 200){
+            return $response->withStatus(401)->withJson([
+              "error" => [
+                "code" => "INVALID_MFA_CODE",
+                "desc" => "MFA code is invalid"
+              ]
+            ]);
+          }
+        } else {
+          return $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "MFA_REQUIRED",
+              "desc" => "MFA validation is required"
+            ]
+          ]);
+        }
+        if(empty($mfa_id)){
+          $newMfaId = uniqid();
+        }
+      }
+
       # Login exitoso, resetear intentos fallidos y bloqueo
       $this->auth->updateFailedLogin($user['UserID'], 0, null);
 
       $jwt = $this -> JWTgen($result[0]);
 
-      // Guardar datos del navegador
-      // $this->auth->storeBrowserData($user['UserID'], $request);
+      // Si se esta vinculando un nuevo navegador guardarlo
+      if($newMfaId !== null){
+        // Guardar datos del navegador
+        $this->auth->storeBrowserData($user['UserID'], $request, $newMfaId);
+      }
 
       $userData = $this->user->getUserById($result[0]['UserID']);
 
       return $response->withStatus(200)->withJson([
         "token" => $jwt,
+        "mfaID" => $newMfaId,
         "userData" => $userData -> data
       ]);
     } catch (\Exception $e) {
@@ -772,6 +782,10 @@ class AuthController{
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
+          "debug" => [
+            "code" => $code,
+            "secret" => $secret
+          ],
            "desc" => $e->getMessage()
         ]
       ]);
@@ -842,45 +856,11 @@ class AuthController{
     }
 
     try{
-      $result = $this->auth->mfaCheck($userID);
-      if(empty($result)){
-        return $response->withStatus(404)->withJson([
-          "error" => [
-            "code" => "USER_NOT_FOUND",
-            "desc" => "No user was found with the specified ID"
-          ]
-        ]);
+      $result = $this->auth->mfaCheck($userID, $code);
+      if($result -> http_code != 200){
+        return $response->withStatus($result -> http_code)->withJson(["error" => $result->error]);
       }
-      if($result[0]['mfaSecret'] === null){
-        return $response->withStatus(401)->withJson([
-          "error" => [
-            "code" => "MFA_NOT_SET",
-            "desc" => "The user does not have mfa configured"
-          ]
-        ]);
-      }
-    } catch (\Exception $e) {
-      return $response->withStatus(500)->withJson([
-        "error" => [
-          "code" => "INTERNAL_SERVER_ERROR",
-           "desc" => $e->getMessage()
-        ]
-      ]);
-    }
-
-    # Chequeo el codigo contra el secret
-    try{
-      $g2fa = new \PragmaRX\Google2FA\Google2FA();
-      if(!$g2fa -> verifyKey($result[0]['mfaSecret'], $code)){
-        return $response->withStatus(401)->withJson([
-          "error" => [
-            "code" => "INVALID_MFA_CODE",
-            "desc" => "Cannot verify provided mfa code"
-          ]
-        ]);
-      }
-
-      return $response->withStatus(200)->withJson(["message" => "MFA verified"]);
+      return $response->withStatus(200)->withJson($result->message);
     } catch (\Exception $e) {
       return $response->withStatus(500)->withJson([
         "error" => [

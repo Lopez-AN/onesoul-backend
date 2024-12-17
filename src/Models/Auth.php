@@ -686,6 +686,7 @@ class Auth{
   }
 
   public function mfaSet($userID, $secret){
+    
     try {
       # Creo el usuario con los datos basicos
       $stmt = $this->db->prepare("UPDATE Users
@@ -697,13 +698,40 @@ class Auth{
     }
   }
 
-  public function mfaCheck($userID){
+  public function mfaCheck($userID, $code){
     try {
       # Creo el usuario con los datos basicos
       $stmt = $this->db->prepare("SELECT mfaSecret
         FROM Users WHERE UserID = ? AND mfaSecret IS NOT NULL");
       $stmt->execute([$userID]);
-      return $stmt->fetchAll(PDO::FETCH_ASSOC);
+      $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+      if(empty($result) || $result[0]['mfaSecret'] === null){
+        return (object)[
+          "http_code" => 401,
+          "error" => [
+            "code" => "MFA_NOT_SET",
+            "desc" => "The user does not have mfa configured"
+          ]
+        ];
+      }
+      
+      $secret = $result[0]['mfaSecret'];
+
+      $g2fa = new \PragmaRX\Google2FA\Google2FA();
+      if(!$g2fa -> verifyKey($secret, $code)){
+        return (object)[
+          "http_code" => 401,
+          "error" => [
+            "code" => "INVALID_MFA_CODE",
+            "desc" => "Cannot verify provided mfa code"
+          ]
+        ];
+      }
+      return (object)[
+        "http_code" => 200,
+        "message" => "MFA Verified"
+      ];
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
@@ -723,7 +751,7 @@ class Auth{
 
   public function validateMfaId($userId, $mfaId) {
     try {
-      $stmt = $this->db->prepare("SELECT * FROM UserBrowser WHERE UserID = ? AND mfa_id = ?");
+      $stmt = $this->db->prepare("SELECT * FROM UserBrowser WHERE UserID = ? AND mfaID = ?");
       $stmt->execute([$userId, $mfaId]);
       return $stmt->fetch(PDO::FETCH_ASSOC) !== false;
     } catch (\PDOException $e) {
@@ -731,7 +759,7 @@ class Auth{
     }
   }
 
-  public function storeBrowserData($userId, $request) {
+  public function storeBrowserData($userId, $request, $mfaId) {
     // Obtener información del navegador desde el encabezado User-Agent
     $userAgent = $request->getHeader('User-Agent')[0];
     $parser = new \WhichBrowser\Parser($userAgent);
@@ -747,10 +775,10 @@ class Auth{
     try {
       // Insertar los datos del navegador en la tabla UserBrowser
       $stmt = $this->db->prepare("
-        INSERT INTO UserBrowser (UserID, mfa_id, browser, version, os, device, ip, expiry)
-        VALUES (?, UUID(), ?, ?, ?, ?, ?, ?)
+        INSERT INTO UserBrowser (UserID, mfaID, browser, version, os, device, ip, expiry)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ");
-      $stmt->execute([$userId, $browser, $version, $os, $device, $ip, $expiry]);
+      $stmt->execute([$userId, $mfaId, $browser, $version, $os, $device, $ip, $expiry]);
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
