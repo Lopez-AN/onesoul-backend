@@ -29,8 +29,8 @@ class AuthController{
     $email = $data['email'] ?? '';
     $username = $data['username'] ?? '';
     $password = $data['password'] ?? '';
-    $mfa_id = $data['mfa_id'] ?? '';
-    $mfa_code = $data['mfa_code'] ?? '';
+    // $mfa_id = $data['mfa_id'] ?? '';
+    // $mfa_code = $data['mfa_code'] ?? '';
 
 
     // Validar credenciales básicas
@@ -67,33 +67,33 @@ class AuthController{
         ]);
       }
 
-      // Validar MFA (mfa_id o mfa_code)
-      if (!empty($mfa_id)) {
-        if (!$this->auth->validateMfaId($user['UserID'], $mfa_id)) {
-          return $response->withStatus(403)->withJson([
-            "error" => [
-              "code" => "INVALID_MFA_ID",
-              "desc" => "MFA ID is not valid"
-            ]
-          ]);
-        }
-      } elseif (!empty($mfa_code)) {
-        if (!$this->auth->mfaCheck($user['UserID'], $mfa_code)) {
-          return $response->withStatus(401)->withJson([
-            "error" => [
-              "code" => "INVALID_MFA_CODE",
-              "desc" => "MFA code is invalid"
-            ]
-          ]);
-        }
-      } else {
-        return $response->withStatus(400)->withJson([
-          "error" => [
-            "code" => "MFA_REQUIRED",
-            "desc" => "MFA validation is required"
-          ]
-        ]);
-      }
+      // // Validar MFA (mfa_id o mfa_code)
+      // if (!empty($mfa_id)) {
+      //   if (!$this->auth->validateMfaId($user['UserID'], $mfa_id)) {
+      //     return $response->withStatus(403)->withJson([
+      //       "error" => [
+      //         "code" => "INVALID_MFA_ID",
+      //         "desc" => "MFA ID is not valid"
+      //       ]
+      //     ]);
+      //   }
+      // } elseif (!empty($mfa_code)) {
+      //   if (!$this->auth->mfaCheck($user['UserID'], $mfa_code)) {
+      //     return $response->withStatus(401)->withJson([
+      //       "error" => [
+      //         "code" => "INVALID_MFA_CODE",
+      //         "desc" => "MFA code is invalid"
+      //       ]
+      //     ]);
+      //   }
+      // } else {
+      //   return $response->withStatus(400)->withJson([
+      //     "error" => [
+      //       "code" => "MFA_REQUIRED",
+      //       "desc" => "MFA validation is required"
+      //     ]
+      //   ]);
+      // }
 
       if (!password_verify($password, $user['PasswordHash'])) {
         # Logueo fallido actualizar contador de erroneos y tiempo bloqueo si corresponde
@@ -116,7 +116,7 @@ class AuthController{
       $jwt = $this -> JWTgen($result[0]);
 
       // Guardar datos del navegador
-      $this->auth->storeBrowserData($user['UserID'], $request);
+      // $this->auth->storeBrowserData($user['UserID'], $request);
 
       $userData = $this->user->getUserById($result[0]['UserID']);
 
@@ -137,8 +137,8 @@ class AuthController{
   public function loginGoogle(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
     $token = $data['token'] ?? '';
-    $mfa_id = $data['mfa_id'] ?? '';
-    $mfa_code = $data['mfa_code'] ?? '';
+    // $mfa_id = $data['mfa_id'] ?? '';
+    // $mfa_code = $data['mfa_code'] ?? '';
 
     if (empty($token)) {
       return $response->withStatus(400)->withJson([
@@ -155,37 +155,37 @@ class AuthController{
         case 200: // Logueo correcto
           $user = $result->data[0];
 
-          // Validar MFA
-          if (!empty($mfa_id)) {
-            if (!$this->auth->validateMfaId($user['UserID'], $mfa_id)) {
-              return $response->withStatus(403)->withJson([
-                "error" => [
-                  "code" => "INVALID_MFA_ID",
-                  "desc" => "MFA ID is not valid"
-                ]
-              ]);
-            }
-          } elseif (!empty($mfa_code)) {
-            if (!$this->auth->mfaCheck($user['UserID'], $mfa_code)) {
-              return $response->withStatus(401)->withJson([
-                "error" => [
-                  "code" => "INVALID_MFA_CODE",
-                  "desc" => "MFA code is invalid"
-                ]
-              ]);
-            }
-          } else {
-            return $response->withStatus(400)->withJson([
-              "error" => [
-                "code" => "MFA_REQUIRED",
-                "desc" => "MFA validation is required"
-              ]
-            ]);
-          }
+          // // Validar MFA
+          // if (!empty($mfa_id)) {
+          //   if (!$this->auth->validateMfaId($user['UserID'], $mfa_id)) {
+          //     return $response->withStatus(403)->withJson([
+          //       "error" => [
+          //         "code" => "INVALID_MFA_ID",
+          //         "desc" => "MFA ID is not valid"
+          //       ]
+          //     ]);
+          //   }
+          // } elseif (!empty($mfa_code)) {
+          //   if (!$this->auth->mfaCheck($user['UserID'], $mfa_code)) {
+          //     return $response->withStatus(401)->withJson([
+          //       "error" => [
+          //         "code" => "INVALID_MFA_CODE",
+          //         "desc" => "MFA code is invalid"
+          //       ]
+          //     ]);
+          //   }
+          // } else {
+          //   return $response->withStatus(400)->withJson([
+          //     "error" => [
+          //       "code" => "MFA_REQUIRED",
+          //       "desc" => "MFA validation is required"
+          //     ]
+          //   ]);
+          // }
 
           // Generar JWT y guardar datos del navegador
           $jwt = $this->JWTgen($user);
-          $this->auth->storeBrowserData($user['UserID'], $request);
+          // $this->auth->storeBrowserData($user['UserID'], $request);
 
           // Obtener datos completos del usuario
           $userData = $this->user->getUserById($user['UserID']);
@@ -215,8 +215,8 @@ class AuthController{
     $data = $request->getParsedBody();
     $user_id = $data['user_id'] ?? '';
     $token = $data['token'] ?? '';
-    $mfa_id = $data['mfa_id'] ?? '';
-    $mfa_code = $data['mfa_code'] ?? '';
+    // $mfa_id = $data['mfa_id'] ?? '';
+    // $mfa_code = $data['mfa_code'] ?? '';
   
     if (empty($user_id) || empty($token)) {
       return $response->withStatus(400)->withJson([
@@ -233,37 +233,37 @@ class AuthController{
         case 200: // Logueo correcto
           $user = $result->data[0];
   
-          // Validar MFA
-          if (!empty($mfa_id)) {
-            if (!$this->auth->validateMfaId($user['UserID'], $mfa_id)) {
-              return $response->withStatus(403)->withJson([
-                "error" => [
-                  "code" => "INVALID_MFA_ID",
-                  "desc" => "MFA ID is not valid"
-                ]
-              ]);
-            }
-          } elseif (!empty($mfa_code)) {
-            if (!$this->auth->mfaCheck($user['UserID'], $mfa_code)) {
-              return $response->withStatus(401)->withJson([
-                "error" => [
-                  "code" => "INVALID_MFA_CODE",
-                  "desc" => "MFA code is invalid"
-                ]
-              ]);
-            }
-          } else {
-            return $response->withStatus(400)->withJson([
-              "error" => [
-                "code" => "MFA_REQUIRED",
-                "desc" => "MFA validation is required"
-              ]
-            ]);
-          }
+          // // Validar MFA
+          // if (!empty($mfa_id)) {
+          //   if (!$this->auth->validateMfaId($user['UserID'], $mfa_id)) {
+          //     return $response->withStatus(403)->withJson([
+          //       "error" => [
+          //         "code" => "INVALID_MFA_ID",
+          //         "desc" => "MFA ID is not valid"
+          //       ]
+          //     ]);
+          //   }
+          // } elseif (!empty($mfa_code)) {
+          //   if (!$this->auth->mfaCheck($user['UserID'], $mfa_code)) {
+          //     return $response->withStatus(401)->withJson([
+          //       "error" => [
+          //         "code" => "INVALID_MFA_CODE",
+          //         "desc" => "MFA code is invalid"
+          //       ]
+          //     ]);
+          //   }
+          // } else {
+          //   return $response->withStatus(400)->withJson([
+          //     "error" => [
+          //       "code" => "MFA_REQUIRED",
+          //       "desc" => "MFA validation is required"
+          //     ]
+          //   ]);
+          // }
   
           // Generar JWT y guardar datos del navegador
           $jwt = $this->JWTgen($user);
-          $this->auth->storeBrowserData($user['UserID'], $request);
+          // $this->auth->storeBrowserData($user['UserID'], $request);
   
           // Obtener datos completos del usuario
           $userData = $this->user->getUserById($user['UserID']);
