@@ -759,7 +759,7 @@ class Auth{
     }
   }
 
-  public function storeBrowserData($userId, $request, $mfaId) {
+  public function storeBrowserData($userId, $request, $newMfaId) {
     // Obtener información del navegador desde el encabezado User-Agent
     $userAgent = $request->getHeader('User-Agent')[0];
     $parser = new \WhichBrowser\Parser($userAgent);
@@ -778,11 +778,9 @@ class Auth{
         INSERT INTO UserBrowser (UserID, mfaID, browser, version, os, device, ip, expiry)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ");
-      $stmt->execute([$userId, $mfaId, $browser, $version, $os, $device, $ip, $expiry]);
+      $stmt->execute([$userId, $newMfaId, $browser, $version, $os, $device, $ip, $expiry]);
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
   }
 }
-
-
