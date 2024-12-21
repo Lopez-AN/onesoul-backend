@@ -220,19 +220,15 @@ class Offering {
         }
 
         try {
-            $stmt = $this->db->prepare("INSERT INTO Offerings (Title, Description, CategoryID, UserID, Status, CreationDate, 
-            TotalReviews, IsActive, Tags, SKU, Stock, ServiceType) VALUES (:Title, :Description, :CategoryID, :UserID, :Status,
-             :CreationDate, :TotalReviews, :IsActive, :Tags, :SKU, :Stock, :ServiceType)");
+            $stmt = $this->db->prepare("INSERT INTO Offerings (Title, Description, CategoryID, UserID, 
+            Tags, SKU, Stock, ServiceType) VALUES (:Title, :Description, :CategoryID, :UserID,
+            :Tags, :SKU, :Stock, :ServiceType)");
             $stmt->execute([
                 ":Title" => $data['Title'],
                 ":Description" => $data['Description'],
                 ":CategoryID" => $data['CategoryID'],
                 ":UserID" => $data['UserID'],
-                ":Status" => $data['Status'],
-                ":CreationDate" => $data['CreationDate'],
-                ":TotalReviews" => $data['TotalReviews'],
-                ":IsActive" => $data['IsActive'],
-                ":Tags" => json_encode($data['Tags']),
+                ":Tags" => json_encode($data['Tags']) ?? null,
                 ":SKU" => $data['SKU'] ?? null,
                 ":Stock" => $data['Stock'] ?? null,
                 ":ServiceType" => $data['ServiceType'],
@@ -264,7 +260,7 @@ class Offering {
             'limit' => 1,   // Limita a un solo registro
             'offset' => 0   // No usa ningún desplazamiento
         ];
-
+    
         if (empty($data)) {
             return (object)[
                 "http_code" => 400,
@@ -274,39 +270,139 @@ class Offering {
                 ]
             ];
         }
-
+    
         try {
+            // Verificar si la oferta existe
             $stmt = $this->db->prepare("SELECT * FROM Offerings WHERE OfferingID = :id AND Status != 'Deleted'");
             $stmt->execute(['id' => $id]);
-            if (!$stmt->fetch()) {
+            $offering = $stmt->fetch();
+            if (!$offering) {
                 throw new NotFoundException("The specified offering does not exist");
             }
-
-            $status = ($data['Status'] === 'Active' && (!empty($data['Approved']) && $data['Approved'] == 1)) ? 'Active' : 'Pending';
+    
+            // Lista de campos permitidos para actualizar
+            $allowedFields = [
+                'Title', 'Description', 'CategoryID', 'Status', 'Tags', 'SKU', 'Stock', 
+                'ServiceType'
+            ];
+    
+            // Construcción dinámica de la consulta
+            $fields = [];
+            foreach ($data as $key => $value) {
+                if (in_array($key, $allowedFields)) {
+                    $fields[] = "$key = :$key";
+                } else {
+                    return (object)[
+                        "http_code" => 400,
+                        "error" => [
+                            "code" => "INVALID_UPDATE_KEY",
+                            "desc" => "Key '$key' is not allowed to be updated"
+                        ]
+                    ];
+                }
+            }
+    
+            if (empty($fields)) {
+                return (object)[
+                    "http_code" => 400,
+                    "error" => [
+                        "code" => "NO_FIELDS_TO_UPDATE",
+                        "desc" => "No valid fields to update"
+                    ]
+                ];
+            }
+    
+            // Modificación de la fecha de modificación
             $modificationDate = date("YmdHis");
+    
+            // Construir la consulta SQL de actualización
+            $sql = "UPDATE Offerings SET " . implode(", ", $fields) . ", ModificationDate = :ModificationDate WHERE OfferingID = :id";
+            $stmt = $this->db->prepare($sql);
+    
+            // Vincular los parámetros
+            foreach ($data as $key => $value) {
+                $stmt->bindValue(":$key", $value === null ? null : $value, $value === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
+            }
+    
+            $stmt->bindValue(':id', $id, PDO::PARAM_INT);
+            $stmt->bindValue(':ModificationDate', $modificationDate, PDO::PARAM_STR);
 
-            // Actualización del offering
-            $stmt = $this->db->prepare("UPDATE Offerings SET Title = :Title, Description = :Description, CategoryID = :CategoryID, 
-            Status = :Status, ModificationDate = :ModificationDate, Tags = :Tags, SKU = :SKU, Stock = :Stock, 
-            ServiceType = :ServiceType WHERE OfferingID = :id");
-            $stmt->execute([
-                ":id" => $id,
-                ":Title" => $data['Title'],
-                ":Description" => $data['Description'],
-                ":CategoryID" => $data['CategoryID'],
-                ":Status" => $status,
-                ":ModificationDate" => $modificationDate,
-                ":Tags" => json_encode($data['Tags']),
-                ":SKU" => $data['SKU'] ?? null,
-                ":Stock" => $data['Stock'] ?? null,
-                ":ServiceType" => $data['ServiceType']
-            ]);
+            // Modificar los FAQs si se han proporcionado
+            if (isset($data['FAQS']) && is_array($data['FAQS'])) {
+            
+                // Eliminar los FAQs existentes
+                $stmt = $this->db->prepare("DELETE FROM OfferingsFaqs WHERE OfferingID = :id");
+                $stmt->execute(['id' => $id]);
 
+                // Insertar los nuevos FAQs
+                $stmt = $this->db->prepare("INSERT INTO OfferingsFaqs (OfferingID, position, question, answer) VALUES (:OfferingID, :position, :question, :answer)");
+                foreach ($data['FAQS'] as $faq) {
+                    $stmt->execute([
+                        ':OfferingID' => $id,
+                        ':position' => $faq['position'],
+                        ':question' => $faq['question'],
+                        ':answer' => $faq['answer']
+                    ]);
+                }
+            }
+    
+            $stmt->execute();
+    
             return $this->getOfferingById($paginator, $id);
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());
         }
     }
+
+    // public function updateOffering($id, $data) {
+    //     $paginator = (object) [
+    //         'limit' => 1,   // Limita a un solo registro
+    //         'offset' => 0   // No usa ningún desplazamiento
+    //     ];
+
+    //     if (empty($data)) {
+    //         return (object)[
+    //             "http_code" => 400,
+    //             "error" => [
+    //                 "code" => "INVALID_PARAMETERS",
+    //                 "desc" => "Parameters are missing or invalid"
+    //             ]
+    //         ];
+    //     }
+
+    //     try {
+    //         $stmt = $this->db->prepare("SELECT * FROM Offerings WHERE OfferingID = :id AND Status != 'Deleted'");
+    //         $stmt->execute(['id' => $id]);
+    //         if (!$stmt->fetch()) {
+    //             throw new NotFoundException("The specified offering does not exist");
+    //         }
+
+    //         $status = ($data['Status'] === 'Active' && (!empty($data['Approved']) && $data['Approved'] == 1)) ? 'Active' : 'Pending';
+    //         $modificationDate = date("YmdHis");
+
+    //         // Actualización del offering
+    //         $stmt = $this->db->prepare("UPDATE Offerings SET Title = :Title, Description = :Description, CategoryID = :CategoryID, 
+    //         Status = :Status, ModificationDate = :ModificationDate, Tags = :Tags, SKU = :SKU, Stock = :Stock, 
+    //         ServiceType = :ServiceType WHERE OfferingID = :id");
+    //         $stmt->execute([
+    //             ":id" => $id,
+    //             ":Title" => $data['Title'],
+    //             ":Description" => $data['Description'],
+    //             ":CategoryID" => $data['CategoryID'],
+    //             ":Status" => $status,
+    //             ":ModificationDate" => $modificationDate,
+    //             ":Tags" => json_encode($data['Tags']),
+    //             ":SKU" => $data['SKU'] ?? null,
+    //             ":Stock" => $data['Stock'] ?? null,
+    //             ":ServiceType" => $data['ServiceType']
+    //         ]);
+
+    //         return $this->getOfferingById($paginator, $id);
+    //     } catch (\PDOException $e) {
+    //         throw new DatabaseException($e->getMessage());
+    //     }
+    // }
+
 
     public function deleteOffering($id) {
         $paginator = (object) [

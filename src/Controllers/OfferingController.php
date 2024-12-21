@@ -96,10 +96,6 @@ class OfferingController {
         $data = $request->getParsedBody();
 
         $data['UserID'] = $userID;
-        $data['CreationDate'] = date("YmdHis");
-        $data['IsActive'] = 0;
-        $data['TotalReviews'] = 0;
-        $data['Status'] = "Pending";
 
         try {
             # Verificar si el usuario autenticado es un Guia o un administrador
@@ -203,26 +199,100 @@ class OfferingController {
         }
     }    
 
+    // public function updateOffering(Request $request, Response $response, $args) {
+    //     $jwt = $request->getAttribute('jwt');
+    //     $id = $args['id'];
+    //     $paginator = paginator($request);
+
+    //     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+    //         return $response->withStatus(401)->withJson([
+    //             "error" => [
+    //                 "code" => "INVALID_TOKEN",
+    //                 "desc" => "Invalid JWT token"
+    //             ]
+    //         ]);
+    //     }
+    
+    //     $userID = $jwt['data']->UserID;
+    //     $data = $request->getParsedBody();
+
+    //     try {
+    //         $offering = $this->offering->getOfferingById($paginator, $id);
+
+    //         // Verificar que la oferta se obtuvo correctamente
+    //         if (empty($offering['data'])) {
+    //             return $response->withStatus(404)->withJson([
+    //                 "error" => [
+    //                     "code" => "OFFERING_NOT_FOUND", 
+    //                     "desc" => "The specified offering does not exist"
+    //                 ]
+    //             ]);    
+    //         }
+
+    //         // Verificar si el usuario autenticado es el mismo que el que se intenta crear, o si es un administrador
+    //         if ($offering['data'][0]['UserID'] != $userID && $jwt['data']->UserType != 'Admin') {
+    //             return $response->withStatus(401)->withJson([
+    //                 "error" => [
+    //                     "code" => "UNAUTHORIZED",
+    //                     "desc" => "You don't have permission to modify this offering."
+    //                 ]
+    //             ]);
+    //         }
+
+    //         // Valida categoryID contra suscripción del usuario
+    //         if (!$this->userBelongsToCategory($userID, $data['CategoryID'])) {
+    //             return $response->withStatus(400)->withJson([
+    //                 "code" => "WRONG_CATEGORY",
+    //                 "desc" => "The user does not belong to selected category"
+    //             ]);
+    //         }
+
+    //         // Valida contenido con Perspective API
+    //         if ($this->containsInappropriateContent($data['Title']) ||
+    //         $this->containsInappropriateContent($data['Description'])) {
+    //             return $response->withStatus(400)->withJson([
+    //                 "code" => "INAPPROPRIATE_CONTENT",
+    //                 "desc" => "Please remove inappropriate content and try again."
+    //             ]);
+    //         }
+        
+    //         $offering = $this->offering->updateOffering($id, $data);
+            
+    //         return $response->withStatus(201)->withJson([
+    //             "message" => "Offering updated successfully",
+    //             "offering" => $offering
+    //         ]);
+            
+    //     } catch (ValidationException $e) {
+    //         $response = $response->withStatus(422);
+    //         $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
+    //     } catch (DatabaseException $e) {
+    //         $response = $response->withStatus(500);
+    //         $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
+    //     }
+    //     return $response->withHeader('Content-Type', 'application/json');
+    // }
+
     public function updateOffering(Request $request, Response $response, $args) {
         $jwt = $request->getAttribute('jwt');
         $id = $args['id'];
         $paginator = paginator($request);
-
+    
         if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
             return $response->withStatus(401)->withJson([
-              "error" => [
-                "code" => "INVALID_TOKEN",
-                "desc" => "Invalid JWT token"
-              ]
+                "error" => [
+                    "code" => "INVALID_TOKEN",
+                    "desc" => "Invalid JWT token"
+                ]
             ]);
         }
-    
+        
         $userID = $jwt['data']->UserID;
         $data = $request->getParsedBody();
-
+    
         try {
             $offering = $this->offering->getOfferingById($paginator, $id);
-
+    
             // Verificar que la oferta se obtuvo correctamente
             if (empty($offering['data'])) {
                 return $response->withStatus(404)->withJson([
@@ -232,7 +302,7 @@ class OfferingController {
                     ]
                 ]);    
             }
-
+    
             // Verificar si el usuario autenticado es el mismo que el que se intenta crear, o si es un administrador
             if ($offering['data'][0]['UserID'] != $userID && $jwt['data']->UserType != 'Admin') {
                 return $response->withStatus(401)->withJson([
@@ -242,31 +312,31 @@ class OfferingController {
                     ]
                 ]);
             }
-
-            // Valida categoryID contra suscripción del usuario
+    
+            // Validación contra la suscripción del usuario para la categoría
             if (!$this->userBelongsToCategory($userID, $data['CategoryID'])) {
                 return $response->withStatus(400)->withJson([
                     "code" => "WRONG_CATEGORY",
-                    "desc" => "The user does not belong to selected category"
+                    "desc" => "The user does not belong to the selected category"
                 ]);
             }
-
-            // Valida contenido con Perspective API
-            if ($this->containsInappropriateContent($data['Title']) ||
-            $this->containsInappropriateContent($data['Description'])) {
+    
+            // Validación de contenido inapropiado
+            if ($this->containsInappropriateContent($data['Title']) || $this->containsInappropriateContent($data['Description'])) {
                 return $response->withStatus(400)->withJson([
                     "code" => "INAPPROPRIATE_CONTENT",
                     "desc" => "Please remove inappropriate content and try again."
                 ]);
             }
-        
+    
+            // Actualizar la oferta
             $offering = $this->offering->updateOffering($id, $data);
-            
-            return $response->withStatus(201)->withJson([
+    
+            return $response->withStatus(200)->withJson([
                 "message" => "Offering updated successfully",
                 "offering" => $offering
             ]);
-            
+    
         } catch (ValidationException $e) {
             $response = $response->withStatus(422);
             $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
