@@ -57,6 +57,16 @@ class AuthController{
 
       $user = $result[0];
 
+      # Verificar si el usuario esta bloqueado
+      if (!is_null($user['locked_until']) && strtotime($user['locked_until']) > time()) {
+        return $response->withStatus(403)->withJson([
+          "error" => [
+            "code" => "USER_LOCKED",
+            "desc" => "Account is temporaly locked until " . $user['locked_until']
+          ]
+        ]);
+      }
+
       if (!password_verify($password, $user['PasswordHash'])) {
         # Logueo fallido actualizar contador de erroneos y tiempo bloqueo si corresponde
         $failedAttempts = $user['failed_login_attempts'] + 1;
@@ -68,16 +78,6 @@ class AuthController{
           "error" => [
             "code" => "USER_INVALID_CREDENTIALS",
             "desc" => "Invalid credentials"
-          ]
-        ]);
-      }
-
-      # Verificar si el usuario esta bloqueado
-      if (!is_null($user['locked_until']) && strtotime($user['locked_until']) > time()) {
-        return $response->withStatus(403)->withJson([
-          "error" => [
-            "code" => "USER_LOCKED",
-            "desc" => "Account is temporaly locked until " . $user['locked_until']
           ]
         ]);
       }
@@ -149,7 +149,7 @@ class AuthController{
     $token = $data['token'] ?? '';
     $mfa_id = $data['mfa_id'] ?? '';
     $mfa_code = $data['mfa_code'] ?? '';
-  
+
     if (empty($token)) {
       return $response->withStatus(400)->withJson([
         "error" => [
@@ -158,16 +158,16 @@ class AuthController{
         ]
       ]);
     }
-  
+
     try {
       // Validar el token de Google
       $result = $this->auth->loginGoogle($token);
       if ($result->http_code !== 200) {
         return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
-  
+
       $user = $result->data[0];
-  
+
       // Verificar si el usuario está bloqueado
       if (!is_null($user['locked_until']) && strtotime($user['locked_until']) > time()) {
         return $response->withStatus(403)->withJson([
@@ -177,7 +177,7 @@ class AuthController{
           ]
         ]);
       }
-  
+
       // Manejar MFA si está habilitado
       $newMfaId = null;
       if ($user['TwoFactorAuth'] == 1) {
@@ -207,26 +207,26 @@ class AuthController{
             ]
           ]);
         }
-  
+
         if (empty($mfa_id)) {
           $newMfaId = uniqid();
         }
       }
-  
+
       // Login exitoso: resetear intentos fallidos y desbloquear cuenta
       $this->auth->updateFailedLogin($user['UserID'], 0, null);
-  
+
       // Generar JWT
       $jwt = $this->JWTgen($user);
- 
+
       // Guardar datos del navegador si es necesario
       if ($newMfaId !== null) {
         $this->auth->storeBrowserData($user['UserID'], $request, $newMfaId);
       }
-  
+
       // Obtener datos completos del usuario
       $userData = $this->user->getUserById($user['UserID']);
- 
+
       return $response->withStatus(200)->withJson([
         'token' => $jwt,
         'mfaID' => $newMfaId,
@@ -241,7 +241,7 @@ class AuthController{
         ]
       ]);
     }
-  }      
+  }
 
   public function loginFacebook(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
@@ -249,7 +249,7 @@ class AuthController{
     $token = $data['token'] ?? '';
     $mfa_id = $data['mfa_id'] ?? '';
     $mfa_code = $data['mfa_code'] ?? '';
-  
+
     if (empty($user_id) || empty($token)) {
       return $response->withStatus(400)->withJson([
         "error" => [
@@ -258,15 +258,15 @@ class AuthController{
         ]
       ]);
     }
-  
+
     try {
       $result = $this->auth->loginFacebook($user_id, $token);
       if ($result->http_code !== 200) {
         return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
-  
+
       $user = $result->data[0];
-  
+
       // Verificar si el usuario está bloqueado
       if (!is_null($user['locked_until']) && strtotime($user['locked_until']) > time()) {
         return $response->withStatus(403)->withJson([
@@ -276,7 +276,7 @@ class AuthController{
           ]
         ]);
       }
-  
+
       // Manejar MFA si está habilitado
       $newMfaId = null;
       if ($user['TwoFactorAuth'] == 1) {
@@ -306,7 +306,7 @@ class AuthController{
             ]
           ]);
         }
-  
+
         if (empty($mfa_id)) {
           $newMfaId = uniqid();
         }
@@ -314,15 +314,15 @@ class AuthController{
 
       // Login exitoso: resetear intentos fallidos y desbloquear cuenta
       $this->auth->updateFailedLogin($user['UserID'], 0, null);
-  
+
       // Generar JWT
       $jwt = $this->JWTgen($user);
- 
+
       // Guardar datos del navegador si es necesario
       if ($newMfaId !== null) {
         $this->auth->storeBrowserData($user['UserID'], $request, $newMfaId);
       }
-  
+
       // Obtener datos completos del usuario
       $userData = $this->user->getUserById($user['UserID']);
 
@@ -331,7 +331,7 @@ class AuthController{
         'mfaID' => $newMfaId,
         'userData' => $userData->data
       ]);
-  
+
     } catch (\Exception $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
