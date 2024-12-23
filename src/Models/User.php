@@ -424,7 +424,7 @@ class User {
     public function getUserCategories($userId) {
         $query = "SELECT CategoryID FROM UsersCategories WHERE UserID = :userId";
         $stmt = $this->db->prepare($query);
-        $stmt->bindParam(':userId', $userId);
+        $stmt->bindParam(':userId', $userId, PDO::PARAM_INT);
         $stmt->execute();
         return $stmt->fetchAll(\PDO::FETCH_ASSOC);
     }
@@ -432,16 +432,16 @@ class User {
     public function addUserCategory($userId, $categoryId) {
         $query = "INSERT INTO UsersCategories (UserID, CategoryID) VALUES (:userId, :categoryId)";
         $stmt = $this->db->prepare($query);
-        $stmt->bindParam(':userId', $userId);
-        $stmt->bindParam(':categoryId', $categoryId);
+        $stmt->bindParam(':userId', $userId, PDO::PARAM_INT);
+        $stmt->bindParam(':categoryId', $categoryId, PDO::PARAM_INT);
         $stmt->execute();
     }
 
     public function deleteUserCategory($userId, $categoryId) {
         $query = "DELETE FROM UsersCategories WHERE UserID = :userId AND CategoryID = :categoryId";
         $stmt = $this->db->prepare($query);
-        $stmt->bindParam(':userId', $userId);
-        $stmt->bindParam(':categoryId', $categoryId);
+        $stmt->bindParam(':userId', $userId, PDO::PARAM_INT);
+        $stmt->bindParam(':categoryId', $categoryId, PDO::PARAM_INT);
         $stmt->execute();
     }
 }
