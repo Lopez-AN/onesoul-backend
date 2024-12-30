@@ -14,8 +14,12 @@ require_once(ROOT . '/src/Utils/Paginator.php');
 require_once(ROOT . '/src/Utils/OptimizeImg.php');
 require_once(ROOT . '/src/Utils/PerspectiveText.php');
 
-class OfferingController
-{
+define("MAX_IMAGES", 8);
+define("MAX_VIDEOS", 3);
+define("MAX_IMAGE_SIZE", 5 * 1024 * 1024);
+define("MAX_VIDEO_SIZE", 50 * 1024 * 1024);
+
+class OfferingController {
   protected $offering;
 
   public function __construct(Offering $offering)  {
@@ -35,23 +39,22 @@ class OfferingController
   }
 
   public function getOfferingById(Request $request, Response $response, $args)  {
-    $paginator = paginator($request);
     $id = $args['id'];
+
     try {
-      $offering = $this->offering->getOfferingById($paginator, $id);
-      if ($offering) {
-        $response->getBody()->write(json_encode($offering));
-      } else {
-        throw new NotFoundException('Offering not found');
+      $result = $this->offering->getOfferingById($id);
+      if($result->http_code != 200){
+        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
-    } catch (NotFoundException $e) {
-      $response = $response->withStatus(404);
-      $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
-    } catch (DatabaseException $e) {
-      $response = $response->withStatus(500);
-      $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
+      return $response->withStatus(200)->withJson($result->data);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
     }
-    return $response->withHeader('Content-Type', 'application/json');
   }
 
   public function getOfferingsByCategoryId(Request $request, Response $response, $args)  {
@@ -133,7 +136,7 @@ class OfferingController
 
       $offering = $this->offering->createOffering($data);
 
-      return $response->withStatus(201)->withJson($offering['data']);
+      return $response->withStatus(200)->withJson($offering);
 
     } catch (DatabaseException $e) {
       return $response->withStatus(500)->withJson(["error" => $e->getMessage()]);
@@ -143,7 +146,6 @@ class OfferingController
   public function approveOffering(Request $request, Response $response, $args)  {
     $id = $args['id'];
     $jwt = $request->getAttribute('jwt');
-    $paginator = paginator($request);
 
     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
       return $response->withStatus(401)->withJson([
@@ -155,7 +157,11 @@ class OfferingController
     }
 
     try {
-      $offering = $this->offering->getOfferingById($paginator, $id);
+      $result = $this->offering->getOfferingById($id);
+      if($result->http_code != 200){
+        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+      }
+      $offeringData = $result->data;
 
       // Verificar que el token contenga UserType y sea un administrador
       if ($jwt['data']->UserType !== 'Admin') {
@@ -166,18 +172,6 @@ class OfferingController
           ]
         ]);
       }
-
-      // Verificar que la oferta se obtuvo correctamente
-      if (empty($offering['data'])) {
-        return $response->withStatus(404)->withJson([
-          "error" => [
-            "code" => "OFFERING_NOT_FOUND",
-            "desc" => "The specified offering does not exist"
-          ]
-        ]);
-      }
-
-      $offeringData = $offering['data'][0];
 
       // Verificar que el offering no esté eliminado
       if ($offeringData['Status'] === 'Deleted') {
@@ -192,7 +186,7 @@ class OfferingController
       // Aprobar el offering (cambiar el estado a 'Active')
       $this->offering->approveOfferingById($id);
 
-      return $response->withStatus(201)->withJson([
+      return $response->withStatus(200)->withJson([
         "message" => "Offering approved successfully",
         "offering" => $offering
       ]);
@@ -261,7 +255,7 @@ class OfferingController
 
   //         $offering = $this->offering->updateOffering($id, $data);
 
-  //         return $response->withStatus(201)->withJson([
+  //         return $response->withStatus(200)->withJson([
   //             "message" => "Offering updated successfully",
   //             "offering" => $offering
   //         ]);
@@ -279,7 +273,6 @@ class OfferingController
   public function updateOffering(Request $request, Response $response, $args)  {
     $jwt = $request->getAttribute('jwt');
     $id = $args['id'];
-    $paginator = paginator($request);
 
     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
       return $response->withStatus(401)->withJson([
@@ -294,20 +287,14 @@ class OfferingController
     $data = $request->getParsedBody();
 
     try {
-      $offering = $this->offering->getOfferingById($paginator, $id);
-
-      // Verificar que la oferta se obtuvo correctamente
-      if (empty($offering['data'])) {
-        return $response->withStatus(404)->withJson([
-          "error" => [
-            "code" => "OFFERING_NOT_FOUND",
-            "desc" => "The specified offering does not exist"
-          ]
-        ]);
+      $result = $this->offering->getOfferingById($id);
+      if($result->http_code != 200){
+        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
+      $offeringData = $result->data;
 
       // Verificar si el usuario autenticado es el mismo que el que se intenta crear, o si es un administrador
-      if ($offering['data'][0]['UserID'] != $userID && $jwt['data']->UserType != 'Admin') {
+      if ($offeringData['UserID'] != $userID && $jwt['data']->UserType != 'Admin') {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
@@ -353,7 +340,6 @@ class OfferingController
   public function deleteOffering(Request $request, Response $response, $args)  {
     $id = $args['id'];
     $jwt = $request->getAttribute('jwt');
-    $paginator = paginator($request);
 
     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
       return $response->withStatus(401)->withJson([
@@ -368,20 +354,14 @@ class OfferingController
     $data = $request->getParsedBody();
 
     try {
-      $offering = $this->offering->getOfferingById($paginator, $id);
-
-      // Verificar que el servicio se obtuvo correctamente
-      if (empty($offering['data'])) {
-        return $response->withStatus(404)->withJson([
-          "error" => [
-            "code" => "OFFERING_NOT_FOUND",
-            "desc" => "The specified offering does not exist"
-          ]
-        ]);
+      $result = $this->offering->getOfferingById($id);
+      if($result->http_code != 200){
+        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
+      $offeringData = $result->data;
 
       // Verificar si el usuario autenticado es el mismo que el que se intenta crear, o si es un administrador
-      if ($offering['data'][0]['UserID'] != $userID && $jwt['data']->UserType != 'Admin') {
+      if ($offeringData['UserID'] != $userID && $jwt['data']->UserType != 'Admin') {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
@@ -389,8 +369,6 @@ class OfferingController
           ]
         ]);
       }
-
-      $offeringData = $offering['data'][0];
 
       if ($offeringData['Status'] === 'Deleted') {
         return $response->withStatus(400)->withJson([
@@ -414,80 +392,17 @@ class OfferingController
     return $response->withHeader('Content-Type', 'application/json');
   }
 
-  // public function updateOfferingMedia(Request $request, Response $response, $args)  {
-  //     $jwt = $request->getAttribute('jwt');
-  //     $userId = $jwt['data']->UserID;
-  //     $id = $args['id'];
-  //     $paginator = paginator($request);
 
-  //     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
-  //         return $response->withStatus(401)->withJson([
-  //             "error" => [
-  //                 "code" => "INVALID_TOKEN",
-  //                 "desc" => "Invalid JWT token"
-  //             ]
-  //         ]);
-  //     }
+    // /* ID archivo multimedia si este ID es null el multimedia se inserta,
+    //   en caso contrario se modifica el existente */
+    //   $mediaID = isset($args['media_id']) ? $args['media_id'] : null;
 
-  //     try {
-  //         $offering = $this->offering->getOfferingById($paginator, $id);
+  public function createOfferingMedia(Request $request, Response $response, $args){
+    $id = $args['id']; // ID de offering
+    $position = $args['position']; // Posicion del archivo multimedia
 
-  //         // Verificar que la oferta se obtuvo correctamente
-  //         if (empty($offering['data'])) {
-  //             return $response->withStatus(404)->withJson([
-  //                 "error" => [
-  //                     "code" => "OFFERING_NOT_FOUND",
-  //                     "desc" => "The specified offering does not exist"
-  //                 ]
-  //             ]);
-  //         }
-
-  //         // Verificar si el usuario autenticado es el mismo que el que se intenta crear, o si es un administrador
-  //         if ($offering['data'][0]['UserID'] != $userId && $jwt['data']->UserType != 'Admin') {
-  //             return $response->withStatus(401)->withJson([
-  //                 "error" => [
-  //                     "code" => "UNAUTHORIZED",
-  //                     "desc" => "You do not have permission to modify this user"
-  //                 ]
-  //             ]);
-  //         }
-
-  //         # Obtengo el archivo del body del request
-  //         $uploadedFiles = $request->getUploadedFiles();
-  //         $uploadedFile = $uploadedFiles['media'] ?? null;
-
-  //         if (!$uploadedFile || $uploadedFile->getError() !== UPLOAD_ERR_OK) {
-  //             return $response->withStatus(400)->withJson([
-  //                 "error" => [
-  //                     "code" => "UPLOAD_ERROR",
-  //                     "desc" => "Cannot read the attached file"
-  //                 ]
-  //             ]);
-  //         }
-
-  //         $result = $this->offering->updateOfferingMedia($id, $uploadedFile);
-  //         if($result->http_code != 200){
-  //             return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
-  //         }
-
-  //         # Retornar el usuario actualizado
-  //         return $response->withStatus(200)->withJson($result->data);
-
-  //     } catch (\Throwable $e) {
-  //         return $response->withStatus(500)->withJson([
-  //             "error" => [
-  //                 "code" => "INTERNAL_SERVER_ERROR",
-  //                 "desc" => $e->getMessage()
-  //             ]
-  //         ]);
-  //     }
-  // }
-
-  public function updateOfferingMedia(Request $request, Response $response, $args)  {
-    $id = $args['id'];
     $jwt = $request->getAttribute('jwt');
     $userID = $jwt['data']->UserID;
-    $paginator = paginator($request);
 
     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
       return $response->withStatus(401)->withJson([
@@ -500,19 +415,14 @@ class OfferingController
 
     try {
       // Verificar que el offering existe
-      $offering = $this->offering->getOfferingById($paginator, $id);
-      if (empty($offering['data'])) {
-        return $response->withStatus(404)->withJson([
-          "error" => [
-            "code" => "OFFERING_NOT_FOUND",
-            "desc" => "The specified offering does not exist"
-          ]
-        ]);
+      $result = $this->offering->getOfferingById($id);
+      if($result->http_code != 200){
+        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
+      $offeringData = $result->data;
 
       // Verificar permisos
-      $offeringData = $offering['data'][0];
-      if ($offeringData != $userID && $jwt['data']->UserType != 'Admin') {
+      if ($offeringData['UserID'] != $userID && $jwt['data']->UserType != 'Admin') {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
@@ -521,53 +431,15 @@ class OfferingController
         ]);
       }
 
-      // Obtener el archivo del request
-      $uploadedFiles = $request->getUploadedFiles();
-      $uploadedFile = $uploadedFiles['media'] ?? null;
-
-      if (!$uploadedFile || $uploadedFile->getError() !== UPLOAD_ERR_OK) {
-        return $response->withStatus(400)->withJson([
-          "error" => [
-            "code" => "UPLOAD_ERROR",
-            "desc" => "Cannot read the attached file"
-          ]
-        ]);
-      }
-
-      // Validar el tamaño del archivo
-      $fileSize = $uploadedFile->getSize();
-      $mimeType = $uploadedFile->getClientMediaType();
-      if (
-        ($this->isImage($mimeType) && $fileSize > 5 * 1024 * 1024) ||
-        (!$this->isImage($mimeType) && $fileSize > 50 * 1024 * 1024)
-      ) {
-        return $response->withStatus(400)->withJson([
-          "error" => [
-            "code" => "MEDIA_TOO_BIG",
-            "desc" => "Maximum size is 5MB for photos and 50MB for videos"
-          ]
-        ]);
-      }
-
-      // Validar el formato de archivo usando finfo_file
-      $finfo = finfo_open(FILEINFO_MIME_TYPE);
-      $filePathTemp = $uploadedFile->getStream()->getMetadata('uri');
-      $actualMimeType = finfo_file($finfo, $filePathTemp);
-      finfo_close($finfo);
-
-      $allowedMimeTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'video/mp4', 'video/x-matroska'];
-      if (!in_array($actualMimeType, $allowedMimeTypes)) {
-        return $response->withStatus(400)->withJson([
-          "error" => [
-            "code" => "MEDIA_FORMAT_INVALID",
-            "desc" => "Allowed formats are JPEG, PNG, GIF, WEBP, MP4, MKV"
-          ]
-        ]);
+      // Verifico si el archivo multimedia es valido
+      $uploadedMedia = $this -> _getUploadedMedia($request);
+      if($uploadedMedia-> error){
+        return $response->withStatus(400)->withJson($checkMedia -> error);
       }
 
       // Validar cantidad de archivos existentes
       $mediaCounts = $this->offering->getMediaCountByType($id);
-      if ($this->isImage($mimeType) && $mediaCounts['image'] >= 2) {
+      if ($this->_isImage($uploadedMedia-> mimeType) && $mediaCounts['image'] >= MAX_IMAGES) {
         return $response->withStatus(400)->withJson([
           "error" => [
             "code" => "MEDIA_TOO_MANY",
@@ -575,7 +447,7 @@ class OfferingController
           ]
         ]);
       }
-      if (!$this->isImage($mimeType) && $mediaCounts['video'] >= 2) {
+      if (!$this->_isImage($uploadedMedia-> mimeType) && $mediaCounts['video'] >= MAX_VIDEOS) {
         return $response->withStatus(400)->withJson([
           "error" => [
             "code" => "MEDIA_TOO_MANY",
@@ -585,24 +457,25 @@ class OfferingController
       }
 
       // Ruta de archivo y URL
-      $fileExtension = pathinfo($uploadedFile->getClientFilename(), PATHINFO_EXTENSION);
-      $imgID = uniqid();
+      $fileExtension = $uploadedMedia-> extension;
+      $uid = uniqid();
       $uploadDirectory = $GLOBALS['config']['media_folder']['path'];
-      $filePath = "$uploadDirectory/offering/$imgID.$fileExtension";
-      $fileURL = $GLOBALS['config']['media_folder']['url'] . "/offering/$imgID.$fileExtension";
+      $filePath = "$uploadDirectory/offering/$uid.$fileExtension";
+      $fileURL = $GLOBALS['config']['media_folder']['url'] . "/offering/$uid.$fileExtension";
 
       // Mover el archivo al destino
-      $uploadedFile->moveTo($filePath);
+      $uploadedMedia->file->moveTo($filePath);
 
       // Insertar media en la base de datos
-      $this->offering->updateOfferingMedia($id, $fileURL, $filePath, $this->isImage($mimeType) ? 'image' : 'video');
+      $this->offering->createOfferingMedia($id, $fileURL, $filePath,
+        $this->_isImage($uploadedMedia-> mimeType) ? 'image' : 'video', $position);
 
-      return $response->withStatus(201)->withJson([
+      return $response->withStatus(200)->withJson([
         "message" => "Media file added successfully",
         "URL" => $fileURL
       ]);
     } catch (\Exception $e) {
-      if (isset($filePath) && is_file($filePath)) {
+      if (!empty($filePath) && is_file($filePath)) {
         unlink($filePath); // Eliminar archivo subido en caso de error
       }
       return $response->withStatus(500)->withJson([
@@ -614,8 +487,155 @@ class OfferingController
     }
   }
 
+  public function updateOfferingMedia(Request $request, Response $response, $args){
+    $id = $args['id']; // ID de offering
+    $mediaID = $args['media_id']; // ID del archivo de medios
+    $position = $args['position']; // Posicion del archivo multimedia
+
+    $jwt = $request->getAttribute('jwt');
+    $userID = $jwt['data']->UserID;
+
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+      return $response->withStatus(401)->withJson([
+        "error" => [
+          "code" => "INVALID_TOKEN",
+          "desc" => "Invalid JWT token"
+        ]
+      ]);
+    }
+
+    try {
+      // Verificar que el offering existe
+      $result = $this->offering->getOfferingById($id);
+      if($result->http_code != 200){
+        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+      }
+      $offeringData = $result->data;
+
+      // Verificar permisos
+      if ($offeringData['UserID'] != $userID && $jwt['data']->UserType != 'Admin') {
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "UNAUTHORIZED",
+            "desc" => "You do not have permission to modify this offering"
+          ]
+        ]);
+      }
+
+      // Busco el media del offering
+      $media = $this->offering->getMediaById($id,$mediaID);
+      if(empty($media)){
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "MEDIA_NOT_FOUND",
+            "desc" => "Media file not found"
+          ]
+        ]);
+      }
+
+      // Verifico si el archivo multimedia es valido
+      $uploadedMedia = $this -> _getUploadedMedia($request);
+      if($uploadedMedia !== false){
+        if($uploadedMedia-> error){
+          return $response->withStatus(400)->withJson($checkMedia -> error);
+        }
+
+        // Ruta de archivo y URL
+        $fileExtension = $uploadedMedia-> extension;
+        $uid = uniqid();
+        $uploadDirectory = $GLOBALS['config']['media_folder']['path'];
+        $filePath = "$uploadDirectory/offering/$uid.$fileExtension";
+        $fileURL = $GLOBALS['config']['media_folder']['url'] . "/offering/$uid.$fileExtension";
+
+        // Mover el archivo al destino
+        $uploadedMedia->file->moveTo($filePath);
+      }
+
+      //$uploadedMedia
+      // // Insertar media en la base de datos
+      // $this->offering->updateOfferingMedia($id, $fileURL, $filePath, $this->_isImage($uploadedMedia-> mimeType) ? 'image' : 'video', $position);
+
+      return $response->withStatus(200)->withJson([
+        "message" => "Media file added successfully",
+        "URL" => $fileURL
+      ]);
+    } catch (\Exception $e) {
+      if (!empty($filePath) && is_file($filePath)) {
+        unlink($filePath); // Eliminar archivo subido en caso de error
+      }
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  // Extrae el archivo multimedia del request y analiza si es valido
+  private function _getUploadedMedia($request){
+    // Obtener el archivo del request
+    $uploadedFiles = $request->getUploadedFiles();
+    $uploadedFile = $uploadedFiles['media'] ?? null;
+
+    // Si no hay un archivo MEDIA que leer devuelvo false
+    if(!$uploadedFile){
+      return false;
+    }
+
+    if (!$uploadedFile || $uploadedFile->getError() !== UPLOAD_ERR_OK) {
+      return (object) [
+        "error" => [
+          "code" => "UPLOAD_ERROR",
+          "desc" => "Cannot read the attached file"
+        ]
+      ];
+    }
+
+    // Datos del archivo
+    $fileSize = $uploadedFile->getSize();
+    $mimeType = $uploadedFile->getClientMediaType();
+    $extension = pathinfo($uploadedFile->getClientFilename(), PATHINFO_EXTENSION);
+
+    // Validar el tamaño del archivo
+    if(($this->_isImage($mimeType) && $fileSize > MAX_IMAGE_SIZE) ||
+      (!$this->_isImage($mimeType) && $fileSize > MAX_VIDEO_SIZE)
+    ){
+      return (object) [
+        "error" => [
+          "code" => "MEDIA_TOO_BIG",
+          "desc" => "Maximum size is 5MB for photos and 50MB for videos"
+        ]
+      ];
+    }
+
+    // Validar el formato de archivo usando finfo_file
+    $finfo = finfo_open(FILEINFO_MIME_TYPE);
+    $filePathTemp = $uploadedFile->getStream()->getMetadata('uri');
+    $actualMimeType = finfo_file($finfo, $filePathTemp);
+    finfo_close($finfo);
+
+    $allowedMimeTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'video/mp4', 'video/x-matroska'];
+    if(!in_array($actualMimeType, $allowedMimeTypes)){
+      return (object) [
+        "error" => [
+          "code" => "MEDIA_FORMAT_INVALID",
+          "desc" => "Allowed formats are JPEG, PNG, GIF, WEBP, MP4, MKV"
+        ]
+      ];
+    }
+
+    return (object) [
+      "file" => $uploadedFile,
+      "mimeType" => $mimeType,
+      "fileSize" => $fileSize,
+      "extension" => $extension,
+      "error" => false
+    ];
+  }
+
   // Función para validar si el archivo es imagen
-  private function isImage($mimeType)  {
+  private function _isImage($mimeType)  {
     return in_array($mimeType, ['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
   }
 
@@ -623,7 +643,6 @@ class OfferingController
     $id = $args['id'];
     $mediaID = $args['mediaID'];
     $jwt = $request->getAttribute('jwt');
-    $paginator = paginator($request);
     $userId = $jwt['data']->UserID;
 
     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
@@ -636,20 +655,14 @@ class OfferingController
     }
 
     try {
-      $offering = $this->offering->getOfferingById($paginator, $id);
-
-      // Verificar que la oferta se obtuvo correctamente
-      if (empty($offering['data'])) {
-        return $response->withStatus(404)->withJson([
-          "error" => [
-            "code" => "OFFERING_NOT_FOUND",
-            "desc" => "The specified offering does not exist"
-          ]
-        ]);
+      $result = $this->offering->getOfferingById($id);
+      if($result->http_code != 200){
+        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
+      $offeringData = $result->data;
 
       // Verificar si el usuario autenticado es el mismo que el que se intenta crear, o si es un administrador
-      if ($offering['data'][0]['UserID'] != $userId && $jwt['data']->UserType != 'Admin') {
+      if ($offeringData['UserID'] != $userId && $jwt['data']->UserType != 'Admin') {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",

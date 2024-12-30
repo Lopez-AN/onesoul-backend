@@ -37,8 +37,9 @@ return function (App $app) {
   $app->get('/offerings/{id}', [$offeringController, 'getOfferingById']);
   $app->patch('/offerings/{id}', [$offeringController, 'updateOffering']);
   $app->delete('/offerings/{id}', [$offeringController, 'deleteOffering']);
-  $app->post('/offerings/{id}/media', [$offeringController, 'updateOfferingMedia']);
-  $app->delete('/offerings/{id}/media/{mediaID}', [$offeringController, 'deleteOfferingMedia']);
+  $app->post('/offerings/{id}/media/{position}', [$offeringController, 'createOfferingMedia']);
+  $app->put('/offerings/{id}/media/{media_id}/{position}', [$offeringController, 'updateOfferingMedia']);
+  $app->delete('/offerings/{id}/media/{media_id}', [$offeringController, 'deleteOfferingMedia']);
   $app->get('/categories/{categoryID}/offerings', [$offeringController, 'getOfferingsByCategoryId']);
   $app->get('/users/{userID}/offerings', [$offeringController, 'getOfferingsByUserId']);
   $app->patch('/offerings/approve/{id}', [$offeringController, 'approveOffering']);

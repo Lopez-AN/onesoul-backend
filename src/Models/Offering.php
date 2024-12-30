@@ -60,7 +60,7 @@ class Offering
     }
   }
 
-  public function getOfferingById($paginator, $id)  {
+  public function getOfferingById($id)  {
     try {
       $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*, m1.URL as imgURL,
         u.UserID as author_UserID, u.FirstName as author_FirstName,
@@ -70,17 +70,12 @@ class Offering
         LEFT JOIN Media AS m1 ON o.OfferingID = m1.OfferingID
         LEFT JOIN Media AS m2 ON u.UserID = m2.UserID
         WHERE o.OfferingID = :id
-        ORDER BY o.OfferingID
-        LIMIT :_limit OFFSET :_offset");
+        ORDER BY o.OfferingID");
 
       $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-      $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
-      $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
       $stmt->execute();
 
       $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
-      $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
-      $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
       $rs = array_map(function ($e) {
         $e['author'] = [
@@ -96,12 +91,21 @@ class Offering
         return $e;
       }, $rs);
 
-      return [
-        "data" => $rs,
-        "rows" => [
-          "total" => $total['total'],
-          "fetched" => count($rs)
-        ]
+      if (empty($rs)) {
+        return (object)[
+          "http_code" => 404,
+          "error" => [
+            "code" => "OFFERING_NOT_FOUND",
+            "desc" => "No offering was found with the specified ID"
+          ]
+        ];
+      }
+
+      $offering = $rs[0];
+
+      return (object)[
+        "http_code" => 200,
+        "data" => $offering
       ];
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
@@ -205,11 +209,6 @@ class Offering
   }
 
   public function createOffering($data)  {
-    $paginator = (object) [
-      'limit' => 1,   // Limita a un solo registro
-      'offset' => 0   // No usa ningún desplazamiento
-    ];
-
     if (empty($data)) {
       return (object) [
         "http_code" => 400,
@@ -252,7 +251,7 @@ class Offering
         }
       }
 
-      return $this->getOfferingById($paginator, $offeringID);
+      return $this->getOfferingById($offeringID);
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
@@ -270,11 +269,6 @@ class Offering
   }
 
   public function updateOffering($id, $data)  {
-    $paginator = (object) [
-      'limit' => 1,   // Limita a un solo registro
-      'offset' => 0   // No usa ningún desplazamiento
-    ];
-
     if (empty($data)) {
       return (object) [
         "http_code" => 400,
@@ -370,7 +364,7 @@ class Offering
 
       $stmt->execute();
 
-      return $this->getOfferingById($paginator, $id);
+      return $this->getOfferingById($id);
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
@@ -427,10 +421,6 @@ class Offering
 
 
   public function deleteOffering($id)  {
-    $paginator = (object) [
-      'limit' => 1,   // Limita a un solo registro
-      'offset' => 0   // No usa ningún desplazamiento
-    ];
     try {
       $stmt = $this->db->prepare("UPDATE Offerings SET Status = 'Deleted', IsActive = 0
         WHERE OfferingID = :id");
@@ -600,28 +590,46 @@ class Offering
     }
   }
 
-  public function updateOfferingMedia($id, $fileURL, $filePath, $mediaType, $mediaID = null)  {
+  public function createOfferingMedia($id, $fileURL, $filePath, $mediaType, $position) {
     try {
-      if ($mediaID) {
-        // Actualizar el registro existente
-        $stmt = $this->db->prepare("UPDATE Media SET URL = :fileURL, Path = :filePath, MediaType = :mediaType
-          WHERE MediaID = :mediaID AND OfferingID = :id");
-        $stmt->bindParam(':mediaID', $mediaID, PDO::PARAM_INT);
-      } else {
-        // Insertar un nuevo registro si no existe mediaId
-        $stmt = $this->db->prepare("INSERT INTO Media (URL, OfferingID, Path, MediaType)
-          VALUES (:fileURL, :id, :filePath, :mediaType)");
-      }
+      // Insertar un nuevo registro si no existe mediaId
+      $stmt = $this->db->prepare("INSERT INTO Media (`OfferingID`, `URL`, `Path`, `MediaType`, `Position`)
+        VALUES (:id, :fileURL, :filePath, :mediaType, :position)");
 
       $stmt->bindParam(':id', $id, PDO::PARAM_INT);
       $stmt->bindParam(':fileURL', $fileURL, PDO::PARAM_STR);
       $stmt->bindParam(':filePath', $filePath, PDO::PARAM_STR);
       $stmt->bindParam(':mediaType', $mediaType, PDO::PARAM_STR);
+      $stmt->bindParam(':position', $position, PDO::PARAM_INT);
       $stmt->execute();
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
   }
+
+  // public function updateOfferingMedia($id, $fileURL, $filePath, $mediaType, $position, $mediaID = false)  {
+  //   try {
+  //     if ($mediaID) {
+  //       // Actualizar el registro existente
+  //       $stmt = $this->db->prepare("UPDATE Media SET URL = :fileURL, Path = :filePath, MediaType = :mediaType
+  //         WHERE MediaID = :mediaID AND OfferingID = :id AND Position = :position");
+  //       $stmt->bindParam(':mediaID', $mediaID, PDO::PARAM_INT);
+  //     } else {
+  //       // Insertar un nuevo registro si no existe mediaId
+  //       $stmt = $this->db->prepare("INSERT INTO Media (URL, OfferingID, Path, MediaType, Position)
+  //         VALUES (:fileURL, :id, :filePath, :mediaType, :position)");
+  //     }
+
+  //     $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+  //     $stmt->bindParam(':fileURL', $fileURL, PDO::PARAM_STR);
+  //     $stmt->bindParam(':filePath', $filePath, PDO::PARAM_STR);
+  //     $stmt->bindParam(':mediaType', $mediaType, PDO::PARAM_STR);
+  //     $stmt->bindParam(':position', $position, PDO::PARAM_INT);
+  //     $stmt->execute();
+  //   } catch (\PDOException $e) {
+  //     throw new DatabaseException($e->getMessage());
+  //   }
+  // }
 
   public function getMediaById($id, $mediaID)  {
     try {
