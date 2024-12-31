@@ -38,7 +38,7 @@ return function (App $app) {
   $app->patch('/offerings/{id}', [$offeringController, 'updateOffering']);
   $app->delete('/offerings/{id}', [$offeringController, 'deleteOffering']);
   $app->post('/offerings/{id}/media/{position}', [$offeringController, 'createOfferingMedia']);
-  $app->put('/offerings/{id}/media/{media_id}/{position}', [$offeringController, 'updateOfferingMedia']);
+  $app->post('/offerings/{id}/media/{media_id}/{position}', [$offeringController, 'updateOfferingMedia']);
   $app->delete('/offerings/{id}/media/{media_id}', [$offeringController, 'deleteOfferingMedia']);
   $app->get('/categories/{categoryID}/offerings', [$offeringController, 'getOfferingsByCategoryId']);
   $app->get('/users/{userID}/offerings', [$offeringController, 'getOfferingsByUserId']);

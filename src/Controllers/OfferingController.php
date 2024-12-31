@@ -467,8 +467,8 @@ class OfferingController {
       $uploadedMedia->file->moveTo($filePath);
 
       // Insertar media en la base de datos
-      $this->offering->createOfferingMedia($id, $fileURL, $filePath,
-        $this->_isImage($uploadedMedia-> mimeType) ? 'image' : 'video', $position);
+      $this->offering->createOfferingMedia($id, $position, $fileURL, $filePath,
+        $this->_isImage($uploadedMedia-> mimeType) ? 'image' : 'video');
 
       return $response->withStatus(200)->withJson([
         "message" => "Media file added successfully",
@@ -533,11 +533,11 @@ class OfferingController {
         ]);
       }
 
-      // Verifico si el archivo multimedia es valido
+      // Verifico si el archivo multimedia es valido (si se subio)
       $uploadedMedia = $this -> _getUploadedMedia($request);
       if($uploadedMedia !== false){
         if($uploadedMedia-> error){
-          return $response->withStatus(400)->withJson($checkMedia -> error);
+          return $response->withStatus(400)->withJson($uploadedMedia -> error);
         }
 
         // Ruta de archivo y URL
@@ -549,15 +549,16 @@ class OfferingController {
 
         // Mover el archivo al destino
         $uploadedMedia->file->moveTo($filePath);
+
+        $this->offering->updateOfferingMedia($id, $position, $mediaID, $fileURL, $filePath, $this->_isImage($uploadedMedia-> mimeType) ? 'image' : 'video');
+        // Elimino el archivo antiguo si se actualizo con uno nuevo
+        unlink($media['Path']);
+      }else{
+        $this->offering->updateOfferingMedia($id, $position, $mediaID);
       }
 
-      //$uploadedMedia
-      // // Insertar media en la base de datos
-      // $this->offering->updateOfferingMedia($id, $fileURL, $filePath, $this->_isImage($uploadedMedia-> mimeType) ? 'image' : 'video', $position);
-
       return $response->withStatus(200)->withJson([
-        "message" => "Media file added successfully",
-        "URL" => $fileURL
+        "message" => "Media file updated successfully"
       ]);
     } catch (\Exception $e) {
       if (!empty($filePath) && is_file($filePath)) {
@@ -641,7 +642,7 @@ class OfferingController {
 
   public function deleteOfferingMedia(Request $request, Response $response, $args)  {
     $id = $args['id'];
-    $mediaID = $args['mediaID'];
+    $mediaID = $args['media_id'];
     $jwt = $request->getAttribute('jwt');
     $userId = $jwt['data']->UserID;
 
