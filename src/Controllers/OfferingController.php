@@ -434,7 +434,7 @@ class OfferingController {
       // Verifico si el archivo multimedia es valido
       $uploadedMedia = $this -> _getUploadedMedia($request);
       if($uploadedMedia-> error){
-        return $response->withStatus(400)->withJson($checkMedia -> error);
+        return $response->withStatus(400)->withJson($uploadedMedia -> error);
       }
 
       // Validar cantidad de archivos existentes
