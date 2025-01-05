@@ -17,12 +17,12 @@ class Offering
 
     public function getOfferings($paginator){
         try {
-            $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*, u.UserID as author_UserID, 
-            u.FirstName as author_FirstName, u.LastName as author_LastName, m.URL as author_imgURL 
-            FROM Offerings AS o 
-            INNER JOIN Users AS u ON u.UserID = o.UserID 
+            $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*, u.UserID as author_UserID,
+            u.FirstName as author_FirstName, u.LastName as author_LastName, m.URL as author_imgURL
+            FROM Offerings AS o
+            INNER JOIN Users AS u ON u.UserID = o.UserID
             LEFT JOIN Media AS m ON u.UserID = m.UserID
-            ORDER BY o.OfferingID 
+            ORDER BY o.OfferingID
             LIMIT :_limit OFFSET :_offset");
 
             $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
@@ -82,12 +82,12 @@ class Offering
              INNER JOIN Users AS u ON u.UserID = o.UserID
              LEFT JOIN Media AS m ON u.UserID = m.UserID
              WHERE o.OfferingID = :id");
-    
+
             $stmt->bindParam(':id', $id, PDO::PARAM_INT);
             $stmt->execute();
-    
+
             $offerings = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
+
             if (empty($offerings)) {
                 return (object) [
                     "http_code" => 404,
@@ -97,15 +97,15 @@ class Offering
                     ]
                 ];
             }
-  
+
             $offering = $offerings[0];
             $mediaStmt = $this->db->prepare("SELECT MediaType, URL FROM Media WHERE OfferingID = :offeringID");
             $mediaStmt->bindValue(':offeringID', $offering['OfferingID'], PDO::PARAM_INT);
             $mediaStmt->execute();
-    
+
             $mediaResults = $mediaStmt->fetchAll(PDO::FETCH_ASSOC);
             $media = ["images" => [], "videos" => []];
-    
+
             foreach ($mediaResults as $mediaItem) {
                 if ($mediaItem['MediaType'] === 'image') {
                     $media['images'][] = $mediaItem['URL'];
@@ -113,7 +113,7 @@ class Offering
                     $media['videos'][] = $mediaItem['URL'];
                 }
             }
-    
+
             $offering['media'] = $media;
             $offering['author'] = [
                 "UserID" => $offering['author_UserID'],
@@ -121,14 +121,14 @@ class Offering
                 "LastName" => $offering['author_LastName'],
                 "imgURL" => $offering['author_imgURL']
             ];
-    
+
             unset($offering['author_UserID'], $offering['author_FirstName'], $offering['author_LastName'], $offering['author_imgURL']);
-    
+
             return (object) [
                 "http_code" => 200,
                 "data" => $offering
             ];
-            
+
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());
         }
@@ -137,12 +137,12 @@ class Offering
     public function getOfferingsByCategoryId($paginator, $categoryId){
         try {
             $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*, u.UserID as author_UserID,
-            u.FirstName as author_FirstName, u.LastName as author_LastName, m.URL as author_imgURL 
-            FROM Offerings AS o 
-            INNER JOIN Users AS u ON u.UserID = o.UserID 
-            LEFT JOIN Media AS m ON u.UserID = m.UserID 
-            WHERE o.CategoryID = :categoryId 
-            ORDER BY o.OfferingID 
+            u.FirstName as author_FirstName, u.LastName as author_LastName, m.URL as author_imgURL
+            FROM Offerings AS o
+            INNER JOIN Users AS u ON u.UserID = o.UserID
+            LEFT JOIN Media AS m ON u.UserID = m.UserID
+            WHERE o.CategoryID = :categoryId
+            ORDER BY o.OfferingID
             LIMIT :_limit OFFSET :_offset");
 
             $stmt->bindParam(':categoryId', $categoryId, PDO::PARAM_INT);
@@ -198,11 +198,11 @@ class Offering
     public function getOfferingsByUserId($paginator, $userId){
         try {
             $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*, u.UserID as author_UserID,
-            u.FirstName as author_FirstName, u.LastName as author_LastName, m.URL as author_imgURL 
-            FROM Offerings AS o 
-            INNER JOIN Users AS u ON u.UserID = o.UserID 
-            LEFT JOIN Media AS m ON u.UserID = m.UserID 
-            WHERE o.UserID = :userId 
+            u.FirstName as author_FirstName, u.LastName as author_LastName, m.URL as author_imgURL
+            FROM Offerings AS o
+            INNER JOIN Users AS u ON u.UserID = o.UserID
+            LEFT JOIN Media AS m ON u.UserID = m.UserID
+            WHERE o.UserID = :userId
             LIMIT :_limit OFFSET :_offset");
 
             $stmt->bindParam(':userId', $userId, PDO::PARAM_INT);
@@ -213,8 +213,8 @@ class Offering
             $offerings = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
             foreach ($offerings as &$offering) {
-                $mediaStmt = $this->db->prepare("SELECT MediaType, URL FROM Media WHERE UserID = :userId");
-                $mediaStmt->bindValue(':userId', $offering['UserID'], PDO::PARAM_INT);
+                $mediaStmt = $this->db->prepare("SELECT MediaType, URL FROM Media WHERE OfferingID = :offeringID");
+                $mediaStmt->bindValue(':offeringID', $offering['OfferingID'], PDO::PARAM_INT);
                 $mediaStmt->execute();
 
                 $mediaResults = $mediaStmt->fetchAll(PDO::FETCH_ASSOC);
