@@ -40,7 +40,6 @@ class OfferingController {
 
   public function getOfferingById(Request $request, Response $response, $args)  {
     $id = $args['id'];
-
     try {
       $result = $this->offering->getOfferingById($id);
       if($result->http_code != 200){
@@ -304,12 +303,12 @@ class OfferingController {
       }
 
       // Validación contra la suscripción del usuario para la categoría
-      if (!$this->userBelongsToCategory($userID, $data['CategoryID'])) {
-        return $response->withStatus(400)->withJson([
-          "code" => "WRONG_CATEGORY",
-          "desc" => "The user does not belong to the selected category"
-        ]);
-      }
+      // if (!$this->userBelongsToCategory($userID, $data['CategoryID'])) {
+      //   return $response->withStatus(400)->withJson([
+      //     "code" => "WRONG_CATEGORY",
+      //     "desc" => "The user does not belong to the selected category"
+      //   ]);
+      // }
 
       // Validación de contenido inapropiado
       if ($this->containsInappropriateContent($data['Title']) || $this->containsInappropriateContent($data['Description'])) {
