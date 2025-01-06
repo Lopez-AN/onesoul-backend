@@ -252,7 +252,8 @@ class OfferingController {
       // }
 
       // Validación de contenido inapropiado
-      if ($this->containsInappropriateContent($data['Title']) || $this->containsInappropriateContent($data['Description'])) {
+      if((!empty($data['Title']) && $this->containsInappropriateContent($data['Title'])) ||
+        (!empty($data['Description']) && $this->containsInappropriateContent($data['Description']))){
         return $response->withStatus(400)->withJson([
           "code" => "INAPPROPRIATE_CONTENT",
           "desc" => "Please remove inappropriate content and try again."
