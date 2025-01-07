@@ -266,11 +266,12 @@ class Offering
         }
 
         try {
-            $stmt = $this->db->prepare("INSERT INTO Offerings (Title, Description, CategoryID, UserID,
+            $stmt = $this->db->prepare("INSERT INTO Offerings (Title, ShortDescription, Description, CategoryID, UserID,
             Status, CreationDate, IsActive, Tags, SKU, Stock, ServiceType)
-            VALUES (:Title, :Description, :CategoryID, :UserID, :Status, :CreationDate, 0, :Tags, :SKU, :Stock, :ServiceType)");
+            VALUES (:Title, :ShortDescription, :Description, :CategoryID, :UserID, :Status, :CreationDate, 0, :Tags, :SKU, :Stock, :ServiceType)");
 
             $stmt->bindParam(':Title', $data['Title'], PDO::PARAM_STR);
+            $stmt->bindParam(':ShortDescription', $data['ShortDescription'], PDO::PARAM_STR);
             $stmt->bindParam(':Description', $data['Description'], PDO::PARAM_STR);
             $stmt->bindParam(':CategoryID', $data['CategoryID'], PDO::PARAM_INT);
             $stmt->bindParam(':UserID', $data['UserID'], PDO::PARAM_INT);
@@ -339,6 +340,7 @@ class Offering
             // Lista de campos permitidos para actualizar
             $allowedFields = [
                 'Title',
+                'ShortDescription',
                 'Description',
                 'CategoryID',
                 'Status',
@@ -351,6 +353,10 @@ class Offering
             // Construcción dinámica de la consulta
             $fields = [];
             foreach ($data as $key => $value) {
+                // Los valores array los convierto en string separados por coma, ej 'tags'
+                if(is_array($value)){
+                    $data[$key] = implode(",",$value);
+                }
                 if (in_array($key, $allowedFields)) {
                     $fields[] = "$key = :$key";
                 } else {

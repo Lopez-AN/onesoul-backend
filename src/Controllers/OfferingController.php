@@ -262,6 +262,9 @@ class OfferingController {
 
       // Actualizar la oferta
       $result = $this->offering->updateOffering($id, $data);
+      if($result->http_code != 200){
+        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+      }
       return $response->withStatus(200)->withJson($result->data);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
