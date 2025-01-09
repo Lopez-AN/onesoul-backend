@@ -17,12 +17,12 @@ class Offering
 
     public function getOfferings($paginator){
         try {
-            $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*, u.UserID as author_UserID,
-            u.FirstName as author_FirstName, u.LastName as author_LastName, m.URL as author_imgURL
-            FROM Offerings AS o
-            INNER JOIN Users AS u ON u.UserID = o.UserID
+            $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*, u.UserID as author_UserID, 
+            u.FirstName as author_FirstName, u.LastName as author_LastName, m.URL as author_imgURL 
+            FROM Offerings AS o 
+            INNER JOIN Users AS u ON u.UserID = o.UserID 
             LEFT JOIN Media AS m ON u.UserID = m.UserID
-            ORDER BY o.OfferingID
+            ORDER BY o.OfferingID 
             LIMIT :_limit OFFSET :_offset");
 
             $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
@@ -32,7 +32,7 @@ class Offering
             $offerings = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
             foreach ($offerings as &$offering) {
-                $mediaStmt = $this->db->prepare("SELECT MediaType, URL FROM Media WHERE OfferingID = :offeringID");
+                $mediaStmt = $this->db->prepare("SELECT MediaID, MediaType, URL, Title, Description, position FROM Media WHERE OfferingID = :offeringID");
                 $mediaStmt->bindValue(':offeringID', $offering['OfferingID'], PDO::PARAM_INT);
                 $mediaStmt->execute();
 
@@ -40,14 +40,49 @@ class Offering
                 $media = ["images" => [], "videos" => []];
 
                 foreach ($mediaResults as $mediaItem) {
+                    $mediaData = [
+                        "id" => $mediaItem['MediaID'],
+                        "url" => $mediaItem['URL'],
+                        "Title" => $mediaItem['Title'],
+                        "Description" => $mediaItem['Description'],
+                        "position" => $mediaItem['position']
+                    ];
+
                     if ($mediaItem['MediaType'] === 'image') {
-                        $media['images'][] = $mediaItem['URL'];
+                        $media['images'][] = $mediaData;
                     } elseif ($mediaItem['MediaType'] === 'video') {
-                        $media['videos'][] = $mediaItem['URL'];
+                        $media['videos'][] = $mediaData;
                     }
                 }
 
                 $offering['media'] = $media;
+
+                // Obtener FAQs
+                $faqStmt = $this->db->prepare("SELECT position, question, answer 
+                FROM OfferingsFaqs 
+                WHERE OfferingID = :offeringID
+                ORDER BY position ASC");
+
+
+                $faqStmt->bindValue(':offeringID', $offering['OfferingID'], PDO::PARAM_INT);
+                $faqStmt->execute();
+
+                $faqs = $faqStmt->fetchAll(PDO::FETCH_ASSOC);
+                $offering['faqs'] = $faqs;
+
+                // Obtener Packages
+                $packagesStmt = $this->db->prepare("SELECT package, price, description, conditions, sessionType 
+                FROM OfferingsPackages 
+                WHERE OfferingID = :offeringID");
+                
+                $packagesStmt->bindValue(':offeringID', $offering['OfferingID'], PDO::PARAM_INT);
+                $packagesStmt->execute();
+
+                $packages = $packagesStmt->fetchAll(PDO::FETCH_ASSOC);
+
+                $offering['packages'] = $packages;
+
+                // Obtener el UserID del Offering
                 $offering['author'] = [
                     "UserID" => $offering['author_UserID'],
                     "FirstName" => $offering['author_FirstName'],
@@ -76,18 +111,19 @@ class Offering
 
     public function getOfferingById($id){
         try {
-            $stmt = $this->db->prepare("SELECT o.*, u.UserID as author_UserID,
-             u.FirstName as author_FirstName, u.LastName as author_LastName, m.URL as author_imgURL
-             FROM Offerings AS o
-             INNER JOIN Users AS u ON u.UserID = o.UserID
-             LEFT JOIN Media AS m ON u.UserID = m.UserID
-             WHERE o.OfferingID = :id");
-
+            $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*, 
+                   u.UserID as author_UserID, u.FirstName as author_FirstName, u.LastName as author_LastName, 
+                   m2.URL as author_imgURL
+            FROM Offerings AS o
+            INNER JOIN Users AS u ON u.UserID = o.UserID
+            LEFT JOIN Media AS m2 ON u.UserID = m2.UserID
+            WHERE o.OfferingID = :id");
+    
             $stmt->bindParam(':id', $id, PDO::PARAM_INT);
             $stmt->execute();
-
+    
             $offerings = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
+    
             if (empty($offerings)) {
                 return (object) [
                     "http_code" => 404,
@@ -97,38 +133,75 @@ class Offering
                     ]
                 ];
             }
+  
+        // Consulta para FAQs
+        $stmtFaqs = $this->db->prepare("
+            SELECT Position, Question, Answer 
+            FROM OfferingsFaqs 
+            WHERE OfferingID = :id
+            ORDER BY Position ASC
+        ");
+        $stmtFaqs->bindParam(':id', $id, PDO::PARAM_INT);
+        $stmtFaqs->execute();
+        $faqs = $stmtFaqs->fetchAll(PDO::FETCH_ASSOC);
 
-            $offering = $offerings[0];
-            $mediaStmt = $this->db->prepare("SELECT MediaType, URL FROM Media WHERE OfferingID = :offeringID");
-            $mediaStmt->bindValue(':offeringID', $offering['OfferingID'], PDO::PARAM_INT);
-            $mediaStmt->execute();
+        // Consulta para Packages
+        $stmtPackages = $this->db->prepare("
+            SELECT Package, Price, Description, Conditions, SessionType 
+            FROM OfferingsPackages 
+            WHERE OfferingID = :id
+        ");
+        $stmtPackages->bindParam(':id', $id, PDO::PARAM_INT);
+        $stmtPackages->execute();
+        $packages = $stmtPackages->fetchAll(PDO::FETCH_ASSOC);
 
-            $mediaResults = $mediaStmt->fetchAll(PDO::FETCH_ASSOC);
-            $media = ["images" => [], "videos" => []];
-
-            foreach ($mediaResults as $mediaItem) {
-                if ($mediaItem['MediaType'] === 'image') {
-                    $media['images'][] = $mediaItem['URL'];
-                } elseif ($mediaItem['MediaType'] === 'video') {
-                    $media['videos'][] = $mediaItem['URL'];
-                }
+        // Proceso de organización de medios
+        $stmtMedia = $this->db->prepare("
+            SELECT MediaID, URL, Title, Description, MediaType, Position
+            FROM Media
+            WHERE OfferingID = :id
+            ORDER BY Position ASC
+        ");
+        $stmtMedia->bindParam(':id', $id, PDO::PARAM_INT);
+        $stmtMedia->execute();
+        $mediaData = $stmtMedia->fetchAll(PDO::FETCH_ASSOC);
+        
+        $media = ["images" => [], "videos" => []];
+        foreach ($mediaData as $item) {
+            $mediaItem = [
+                "position" => $item["Position"],
+                "id" => $item['MediaID'],
+                "url" => $item['URL'],
+                "Title" => $item['Title'],
+                "Description" => $item['Description']
+                
+            ];
+            if ($item['MediaType'] === 'image') {
+                $media["images"][] = $mediaItem;
+            } elseif ($item['MediaType'] === 'video') {
+                $media["videos"][] = $mediaItem;
             }
+        }
 
+            // Construcción del objeto principal
+            $offering = $offerings[0];    
             $offering['media'] = $media;
+            $offering['faqs'] = $faqs;
+            $offering['packages'] = $packages;
             $offering['author'] = [
                 "UserID" => $offering['author_UserID'],
                 "FirstName" => $offering['author_FirstName'],
                 "LastName" => $offering['author_LastName'],
                 "imgURL" => $offering['author_imgURL']
             ];
-
+    
             unset($offering['author_UserID'], $offering['author_FirstName'], $offering['author_LastName'], $offering['author_imgURL']);
-
+    
             return (object) [
                 "http_code" => 200,
                 "data" => $offering
             ];
-
+            
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());
         }
@@ -137,12 +210,12 @@ class Offering
     public function getOfferingsByCategoryId($paginator, $categoryId){
         try {
             $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*, u.UserID as author_UserID,
-            u.FirstName as author_FirstName, u.LastName as author_LastName, m.URL as author_imgURL
-            FROM Offerings AS o
-            INNER JOIN Users AS u ON u.UserID = o.UserID
-            LEFT JOIN Media AS m ON u.UserID = m.UserID
-            WHERE o.CategoryID = :categoryId
-            ORDER BY o.OfferingID
+            u.FirstName as author_FirstName, u.LastName as author_LastName, m.URL as author_imgURL 
+            FROM Offerings AS o 
+            INNER JOIN Users AS u ON u.UserID = o.UserID 
+            LEFT JOIN Media AS m ON u.UserID = m.UserID 
+            WHERE o.CategoryID = :categoryId 
+            ORDER BY o.OfferingID 
             LIMIT :_limit OFFSET :_offset");
 
             $stmt->bindParam(':categoryId', $categoryId, PDO::PARAM_INT);
@@ -153,7 +226,7 @@ class Offering
             $offerings = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
             foreach ($offerings as &$offering) {
-                $mediaStmt = $this->db->prepare("SELECT MediaType, URL FROM Media WHERE OfferingID = :offeringID");
+                $mediaStmt = $this->db->prepare("SELECT MediaID, MediaType, URL, Title, Description, position FROM Media WHERE OfferingID = :offeringID");
                 $mediaStmt->bindValue(':offeringID', $offering['OfferingID'], PDO::PARAM_INT);
                 $mediaStmt->execute();
 
@@ -161,14 +234,49 @@ class Offering
                 $media = ["images" => [], "videos" => []];
 
                 foreach ($mediaResults as $mediaItem) {
+                    $mediaData = [
+                        "id" => $mediaItem['MediaID'],
+                        "url" => $mediaItem['URL'],
+                        "Title" => $mediaItem['Title'],
+                        "Description" => $mediaItem['Description'],
+                        "position" => $mediaItem['position']
+                    ];
+
                     if ($mediaItem['MediaType'] === 'image') {
-                        $media['images'][] = $mediaItem['URL'];
+                        $media['images'][] = $mediaData;
                     } elseif ($mediaItem['MediaType'] === 'video') {
-                        $media['videos'][] = $mediaItem['URL'];
+                        $media['videos'][] = $mediaData;
                     }
                 }
 
                 $offering['media'] = $media;
+
+                // Obtener FAQs
+                $faqStmt = $this->db->prepare("SELECT position, question, answer 
+                FROM OfferingsFaqs 
+                WHERE OfferingID = :offeringID
+                ORDER BY position ASC");
+
+
+                $faqStmt->bindValue(':offeringID', $offering['OfferingID'], PDO::PARAM_INT);
+                $faqStmt->execute();
+
+                $faqs = $faqStmt->fetchAll(PDO::FETCH_ASSOC);
+                $offering['faqs'] = $faqs;
+
+                // Obtener Packages
+                $packagesStmt = $this->db->prepare("SELECT package, price, description, conditions, sessionType 
+                FROM OfferingsPackages 
+                WHERE OfferingID = :offeringID");
+                
+                $packagesStmt->bindValue(':offeringID', $offering['OfferingID'], PDO::PARAM_INT);
+                $packagesStmt->execute();
+
+                $packages = $packagesStmt->fetchAll(PDO::FETCH_ASSOC);
+
+                $offering['packages'] = $packages;
+
+                // Obtener el UserID del Offering
                 $offering['author'] = [
                     "UserID" => $offering['author_UserID'],
                     "FirstName" => $offering['author_FirstName'],
@@ -198,11 +306,11 @@ class Offering
     public function getOfferingsByUserId($paginator, $userId){
         try {
             $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*, u.UserID as author_UserID,
-            u.FirstName as author_FirstName, u.LastName as author_LastName, m.URL as author_imgURL
-            FROM Offerings AS o
-            INNER JOIN Users AS u ON u.UserID = o.UserID
-            LEFT JOIN Media AS m ON u.UserID = m.UserID
-            WHERE o.UserID = :userId
+            u.FirstName as author_FirstName, u.LastName as author_LastName, m.URL as author_imgURL 
+            FROM Offerings AS o 
+            INNER JOIN Users AS u ON u.UserID = o.UserID 
+            LEFT JOIN Media AS m ON u.UserID = m.UserID 
+            WHERE o.UserID = :userId 
             LIMIT :_limit OFFSET :_offset");
 
             $stmt->bindParam(':userId', $userId, PDO::PARAM_INT);
@@ -213,7 +321,7 @@ class Offering
             $offerings = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
             foreach ($offerings as &$offering) {
-                $mediaStmt = $this->db->prepare("SELECT MediaType, URL FROM Media WHERE OfferingID = :offeringID");
+                $mediaStmt = $this->db->prepare("SELECT MediaID, MediaType, URL, Title, Description, position FROM Media WHERE OfferingID = :offeringID");
                 $mediaStmt->bindValue(':offeringID', $offering['OfferingID'], PDO::PARAM_INT);
                 $mediaStmt->execute();
 
@@ -221,14 +329,49 @@ class Offering
                 $media = ["images" => [], "videos" => []];
 
                 foreach ($mediaResults as $mediaItem) {
+                    $mediaData = [
+                        "id" => $mediaItem['MediaID'],
+                        "url" => $mediaItem['URL'],
+                        "Title" => $mediaItem['Title'],
+                        "Description" => $mediaItem['Description'],
+                        "position" => $mediaItem['position']
+                    ];
+
                     if ($mediaItem['MediaType'] === 'image') {
-                        $media['images'][] = $mediaItem['URL'];
+                        $media['images'][] = $mediaData;
                     } elseif ($mediaItem['MediaType'] === 'video') {
-                        $media['videos'][] = $mediaItem['URL'];
+                        $media['videos'][] = $mediaData;
                     }
                 }
 
                 $offering['media'] = $media;
+
+                // Obtener FAQs
+                $faqStmt = $this->db->prepare("SELECT position, question, answer 
+                FROM OfferingsFaqs 
+                WHERE OfferingID = :offeringID
+                ORDER BY position ASC");
+
+
+                $faqStmt->bindValue(':offeringID', $offering['OfferingID'], PDO::PARAM_INT);
+                $faqStmt->execute();
+
+                $faqs = $faqStmt->fetchAll(PDO::FETCH_ASSOC);
+                $offering['faqs'] = $faqs;
+
+                // Obtener Packages
+                $packagesStmt = $this->db->prepare("SELECT package, price, description, conditions, sessionType 
+                FROM OfferingsPackages 
+                WHERE OfferingID = :offeringID");
+                
+                $packagesStmt->bindValue(':offeringID', $offering['OfferingID'], PDO::PARAM_INT);
+                $packagesStmt->execute();
+
+                $packages = $packagesStmt->fetchAll(PDO::FETCH_ASSOC);
+
+                $offering['packages'] = $packages;
+
+                // Obtener el UserID del Offering
                 $offering['author'] = [
                     "UserID" => $offering['author_UserID'],
                     "FirstName" => $offering['author_FirstName'],
@@ -315,7 +458,7 @@ class Offering
         }
     }
 
-    public function updateOffering($id, $data){
+    public function updateOffering($id, $data) {
         if (empty($data)) {
             return (object) [
                 "http_code" => 400,
@@ -325,18 +468,17 @@ class Offering
                 ]
             ];
         }
-
+    
         try {
             // Verificar si la oferta existe
-            $stmt = $this->db->prepare("SELECT * FROM Offerings
-            WHERE OfferingID = :id AND Status != 'Deleted'");
+            $stmt = $this->db->prepare("SELECT * FROM Offerings WHERE OfferingID = :id AND Status != 'Deleted'");
             $stmt->bindParam(':id', $id, PDO::PARAM_INT);
             $stmt->execute();
             $offering = $stmt->fetch();
             if (!$offering) {
                 throw new NotFoundException("The specified offering does not exist");
             }
-
+    
             // Lista de campos permitidos para actualizar
             $allowedFields = [
                 'Title',
@@ -349,27 +491,23 @@ class Offering
                 'Stock',
                 'ServiceType'
             ];
-
+    
             // Construcción dinámica de la consulta
             $fields = [];
-            foreach ($data as $key => $value) {
-                // Los valores array los convierto en string separados por coma, ej 'tags'
-                if(is_array($value)){
-                    $data[$key] = implode(",",$value);
-                }
-                if (in_array($key, $allowedFields)) {
-                    $fields[] = "$key = :$key";
+            foreach ($allowedFields as $field) {
+                if (array_key_exists($field, $data)) {
+                    $fields[] = "$field = :$field";
                 } else {
                     return (object) [
                         "http_code" => 400,
                         "error" => [
                             "code" => "INVALID_UPDATE_KEY",
-                            "desc" => "Key '$key' is not allowed to be updated"
+                            "desc" => "Key '$field' is not allowed to be updated"
                         ]
                     ];
-                }
-            }
-
+		        }
+            }    
+    
             if (empty($fields)) {
                 return (object) [
                     "http_code" => 400,
@@ -379,43 +517,72 @@ class Offering
                     ]
                 ];
             }
-
+    
             // Modificación de la fecha de modificación
             $modificationDate = date("YmdHis");
-
+    
             // Construir la consulta SQL de actualización
             $sql = "UPDATE Offerings SET " . implode(", ", $fields) . ", ModificationDate = :ModificationDate WHERE OfferingID = :id";
             $stmt = $this->db->prepare($sql);
-
+    
             // Vincular los parámetros
             foreach ($data as $key => $value) {
-                $stmt->bindValue(":$key", $value === null ? null : $value, $value === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
+                if (in_array($key, $allowedFields)) {
+                    $stmt->bindValue(":$key", $value, $value === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
+                }
             }
-
+    
             $stmt->bindValue(':id', $id, PDO::PARAM_INT);
             $stmt->bindValue(':ModificationDate', $modificationDate, PDO::PARAM_STR);
-
-            // Modificar los FAQs si se han proporcionado
+            $stmt->execute();
+    
+            // Gestionar los FAQs, si están presentes en los datos
             if (isset($data['FAQS']) && is_array($data['FAQS'])) {
-
-                // Eliminar los FAQs existentes
+                // Eliminar los FAQs existentes para esta oferta
                 $stmt = $this->db->prepare("DELETE FROM OfferingsFaqs WHERE OfferingID = :id");
                 $stmt->bindParam(':id', $id, PDO::PARAM_INT);
                 $stmt->execute();
-
+    
                 // Insertar los nuevos FAQs
-                $stmt = $this->db->prepare("INSERT INTO OfferingsFaqs (OfferingID, position, question, answer) VALUES (:OfferingID, :position, :question, :answer)");
+                $stmt = $this->db->prepare(
+                    "INSERT INTO OfferingsFaqs (OfferingID, position, question, answer) 
+                    VALUES (:OfferingID, :position, :question, :answer)"
+                );
+    
                 foreach ($data['FAQS'] as $faq) {
                     $stmt->bindParam(':OfferingID', $id, PDO::PARAM_INT);
-                    $stmt->bindParam(':position', $id, PDO::PARAM_INT);
-                    $stmt->bindParam(':question', $id, PDO::PARAM_STR);
-                    $stmt->bindParam(':answer', $id, PDO::PARAM_STR);
+                    $stmt->bindParam(':position', $faq['position'], PDO::PARAM_INT);
+                    $stmt->bindParam(':question', $faq['question'], PDO::PARAM_STR);
+                    $stmt->bindParam(':answer', $faq['answer'], PDO::PARAM_STR);
                     $stmt->execute();
                 }
             }
 
+            // Gestionar los paquetes, si están presentes en los datos
+            if (isset($data['packages']) && is_array($data['packages'])) {
+            
+            // Eliminar los paquetes existentes para esta oferta
+            $stmt = $this->db->prepare("DELETE FROM OfferingsPackages WHERE OfferingID = :id");
+            $stmt->bindParam(':id', $id, PDO::PARAM_INT);
             $stmt->execute();
 
+            // Insertar los nuevos paquetes
+            $stmt = $this->db->prepare(
+                "INSERT INTO OfferingsPackages (OfferingID, package, price, description, conditions, sessionType) 
+                VALUES (:OfferingID, :package, :price, :description, :conditions, :sessionType)"
+            );
+
+            foreach ($data['packages'] as $package) {
+                $stmt->bindParam(':OfferingID', $id, PDO::PARAM_INT);
+                $stmt->bindParam(':package', $package['package'], PDO::PARAM_STR);
+                $stmt->bindParam(':price', $package['price'], PDO::PARAM_STR);
+                $stmt->bindParam(':description', $package['description'], PDO::PARAM_STR);
+                $stmt->bindParam(':conditions', $package['conditions'], PDO::PARAM_STR);
+                $stmt->bindParam(':sessionType', $package['sessionType'], PDO::PARAM_STR);
+                $stmt->execute();
+            }
+        }
+    
             return $this->getOfferingById($id);
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());
@@ -433,11 +600,11 @@ class Offering
         }
     }
 
-    public function getMediaById($id, $mediaID){
+    public function getMediaById($id, $media_id){
         try {
             $stmt = $this->db->prepare("SELECT * FROM Media
-            WHERE MediaID = :mediaID AND OfferingID = :id");
-            $stmt->bindParam(':mediaID', $mediaID, PDO::PARAM_INT);
+            WHERE MediaID = :media_id AND OfferingID = :id");
+            $stmt->bindParam(':media_id', $media_id, PDO::PARAM_INT);
             $stmt->bindParam(':id', $id, PDO::PARAM_INT);
             $stmt->execute();
             return $stmt->fetch(PDO::FETCH_ASSOC);
@@ -448,6 +615,25 @@ class Offering
 
     public function createOfferingMedia($id, $position, $fileURL, $filePath, $mediaType){
         try {
+            // Verificar si ya existe una posición 0 asociada al OfferingID
+            $stmt = $this->db->prepare("SELECT COUNT(*) AS count FROM Media WHERE OfferingID = :id AND Position = 0 AND MediaType = 'image'");
+            $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+            $stmt->execute();
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+            // Asignar posición 0 si no existe ninguna imagen en esa posición
+            $position = ($result['count'] == 0 && $mediaType === 'image') ? 0 : null;
+        
+            // Calcular la próxima posición si no es posición 0
+            if ($position === null) {
+                $stmt = $this->db->prepare("SELECT MAX(Position) AS max_position FROM Media WHERE OfferingID = :id");
+                $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+                $stmt->execute();
+                $maxPosition = $stmt->fetch(PDO::FETCH_ASSOC)['max_position'];
+                $position = $maxPosition !== null ? $maxPosition + 1 : 1;
+            }
+
+            // Insertar en la tabla Media
             $stmt = $this->db->prepare("INSERT INTO Media (`OfferingID`, `URL`, `Path`, `MediaType`, `Position`)
             VALUES (:id, :fileURL, :filePath, :mediaType, :position)");
 
@@ -462,22 +648,22 @@ class Offering
         }
     }
 
-    public function updateOfferingMedia($id, $position, $mediaID, $fileURL = false, $filePath = false, $mediaType = false){
+    public function updateOfferingMedia($id, $position, $media_id, $fileURL = false, $filePath = false, $mediaType = false){
         try {
             // Diferente update segun se adjunto un archivo o no
             if ($fileURL) {
                 $stmt = $this->db->prepare("UPDATE Media
                 SET URL = :fileURL, Path = :filePath, MediaType = :mediaType, Position = :position
-                WHERE MediaID = :mediaID AND OfferingID = :id");
+                WHERE MediaID = :media_id AND OfferingID = :id");
             } else {
                 $stmt = $this->db->prepare("UPDATE Media SET Position = :position
-                WHERE MediaID = :mediaID AND OfferingID = :id");
+                WHERE MediaID = :media_id AND OfferingID = :id");
             }
 
 
             $stmt->bindParam(':id', $id, PDO::PARAM_INT);
             $stmt->bindParam(':position', $position, PDO::PARAM_INT);
-            $stmt->bindParam(':mediaID', $mediaID, PDO::PARAM_INT);
+            $stmt->bindParam(':media_id', $media_id, PDO::PARAM_INT);
 
             if ($fileURL) {
                 $stmt->bindParam(':fileURL', $fileURL, PDO::PARAM_STR);
@@ -491,10 +677,10 @@ class Offering
         }
     }
 
-    public function deleteOfferingMedia($mediaID){
+    public function deleteOfferingMedia($media_id){
         try {
-            $stmt = $this->db->prepare("DELETE FROM Media WHERE MediaID = :mediaID");
-            $stmt->bindParam(':mediaID', $mediaID, PDO::PARAM_INT);
+            $stmt = $this->db->prepare("DELETE FROM Media WHERE MediaID = :media_id");
+            $stmt->bindParam(':media_id', $media_id, PDO::PARAM_INT);
             $stmt->execute();
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());

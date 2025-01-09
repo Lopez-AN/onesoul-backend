@@ -334,11 +334,6 @@ class OfferingController {
     }
   }
 
-
-    // /* ID archivo multimedia si este ID es null el multimedia se inserta,
-    //   en caso contrario se modifica el existente */
-    //   $mediaID = isset($args['media_id']) ? $args['media_id'] : null;
-
   public function createOfferingMedia(Request $request, Response $response, $args){
     $id = $args['id']; // ID de offering
     $position = $args['position']; // Posicion del archivo multimedia
@@ -431,7 +426,7 @@ class OfferingController {
 
   public function updateOfferingMedia(Request $request, Response $response, $args){
     $id = $args['id']; // ID de offering
-    $mediaID = $args['media_id']; // ID del archivo de medios
+    $media_id = $args['media_id']; // ID del archivo de medios
     $position = $args['position']; // Posicion del archivo multimedia
 
     $jwt = $request->getAttribute('jwt');
@@ -465,7 +460,7 @@ class OfferingController {
       }
 
       // Busco el media del offering
-      $media = $this->offering->getMediaById($id,$mediaID);
+      $media = $this->offering->getMediaById($id,$media_id);
       if(empty($media)){
         return $response->withStatus(404)->withJson([
           "error" => [
@@ -492,11 +487,11 @@ class OfferingController {
         // Mover el archivo al destino
         $uploadedMedia->file->moveTo($filePath);
 
-        $this->offering->updateOfferingMedia($id, $position, $mediaID, $fileURL, $filePath, $this->_isImage($uploadedMedia-> mimeType) ? 'image' : 'video');
+        $this->offering->updateOfferingMedia($id, $position, $media_id, $fileURL, $filePath, $this->_isImage($uploadedMedia-> mimeType) ? 'image' : 'video');
         // Elimino el archivo antiguo si se actualizo con uno nuevo
         unlink($media['Path']);
       }else{
-        $this->offering->updateOfferingMedia($id, $position, $mediaID);
+        $this->offering->updateOfferingMedia($id, $position, $media_id);
       }
 
       return $response->withStatus(200)->withJson([
@@ -584,7 +579,7 @@ class OfferingController {
 
   public function deleteOfferingMedia(Request $request, Response $response, $args)  {
     $id = $args['id'];
-    $mediaID = $args['media_id'];
+    $media_id = $args['media_id'];
     $jwt = $request->getAttribute('jwt');
     $userId = $jwt['data']->UserID;
 
@@ -615,7 +610,7 @@ class OfferingController {
       }
 
       // Obtener el archivo multimedia por mediaId y offeringId
-      $media = $this->offering->getMediaById($id, $mediaID);
+      $media = $this->offering->getMediaById($id, $media_id);
 
       if (empty($media)) {
         return $response->withStatus(404)->withJson([
@@ -637,7 +632,7 @@ class OfferingController {
       }
 
       // Eliminar el registro de la tabla MEDIA
-      $this->offering->deleteOfferingMedia($mediaID);
+      $this->offering->deleteOfferingMedia($media_id);
 
       return $response->withStatus(200)->withJson(["message" => "Media file deleted successfully"]);
 

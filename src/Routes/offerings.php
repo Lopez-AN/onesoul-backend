@@ -15,7 +15,7 @@ return function (App $app) {
           "/offerings",
           "/offerings/{id}",
           "/offerings/{id}/media",
-          "/offerings/{id}/media/{mediaID}",
+          "/offerings/{id}/media/{media_id}",
           "/categories/{categoryID}/offerings",
           "/users/{userID}/offerings",
           "/offerings/approve/{id}"
