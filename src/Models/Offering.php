@@ -58,10 +58,10 @@ class Offering
                 $offering['media'] = $media;
 
                 // Obtener FAQs
-                $faqStmt = $this->db->prepare("SELECT position, question, answer 
+                $faqStmt = $this->db->prepare("SELECT Position, Question, Answer 
                 FROM OfferingsFaqs 
                 WHERE OfferingID = :offeringID
-                ORDER BY position ASC");
+                ORDER BY Position ASC");
 
 
                 $faqStmt->bindValue(':offeringID', $offering['OfferingID'], PDO::PARAM_INT);
@@ -71,7 +71,7 @@ class Offering
                 $offering['faqs'] = $faqs;
 
                 // Obtener Packages
-                $packagesStmt = $this->db->prepare("SELECT package, price, description, conditions, sessionType 
+                $packagesStmt = $this->db->prepare("SELECT Package, Price, Description, Conditions, SessionType 
                 FROM OfferingsPackages 
                 WHERE OfferingID = :offeringID");
                 
@@ -409,6 +409,17 @@ class Offering
         }
 
         try {
+            // Validar datos obligatorios
+            if (!isset($data['Title'], $data['ShortDescription'], $data['Description'], $data['CategoryID'], $data['UserID'])) {
+                return (object) [
+                   "http_code" => 400,
+                    "error" => [
+                        "code" => "MISSING_REQUIRED_FIELDS",
+                        "desc" => "Missing required fields: Title, ShortDescription, Description, CategoryID, or UserID."
+                    ]
+                ];
+            }
+
             $stmt = $this->db->prepare("INSERT INTO Offerings (Title, ShortDescription, Description, CategoryID, UserID,
             Status, CreationDate, IsActive, Tags, SKU, Stock, ServiceType)
             VALUES (:Title, :ShortDescription, :Description, :CategoryID, :UserID, :Status, :CreationDate, 0, :Tags, :SKU, :Stock, :ServiceType)");
@@ -420,28 +431,68 @@ class Offering
             $stmt->bindParam(':UserID', $data['UserID'], PDO::PARAM_INT);
             $stmt->bindValue(':Status', 'Pending', PDO::PARAM_STR);
             $stmt->bindValue(':CreationDate', date('YmdHis'), PDO::PARAM_STR);
-            $stmt->bindValue(':Tags', implode(",", $data['Tags']), PDO::PARAM_STR);
+            $stmt->bindValue(':Tags', is_array($data['Tags']) ? implode(",", $data['Tags']) : $data['Tags'], PDO::PARAM_STR);
             $stmt->bindValue(':SKU', $data['SKU'] ?? null, ($data['SKU'] ?? null) === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
             $stmt->bindValue(':Stock', $data['Stock'] ?? null, ($data['Stock'] ?? null) === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
             $stmt->bindParam(':ServiceType', $data['ServiceType'], PDO::PARAM_STR);
 
             $stmt->execute();
-            $offeringID = $this->db->lastInsertId();
+            $id = $this->db->lastInsertId();
 
-            if (isset($data['FAQS'])) {
-                foreach ($data['FAQS'] as $s) {
-                    $stmt = $this->db->prepare("INSERT INTO OfferingsFaqs (OfferingID, position, question, answer)
-            VALUES (:OfferingID, :position, :question, :answer)");
+            if (isset($data['faqs'])) {
+                foreach ($data['faqs'] as $faq) {
+                    $stmt = $this->db->prepare("INSERT INTO OfferingsFaqs (OfferingID, Position, Question, Answer)
+                    VALUES (:id, :position, :question, :answer)");
 
-                    $stmt->bindParam(':OfferingID', $offeringID, PDO::PARAM_INT);
-                    $stmt->bindParam(':position', $s['position'], PDO::PARAM_INT);
-                    $stmt->bindParam(':question', $s['question'], PDO::PARAM_STR);
-                    $stmt->bindParam(':answer', $s['answer'], PDO::PARAM_STR);
+                    $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+                    $stmt->bindParam(':position', $faq['position'], PDO::PARAM_INT);
+                    $stmt->bindParam(':question', $faq['question'], PDO::PARAM_STR);
+                    $stmt->bindParam(':answer', $faq['answer'], PDO::PARAM_STR);
                     $stmt->execute();
                 }
             }
 
-            return $this->getOfferingById($offeringID);
+            // Gestionar los paquetes, si están presentes en los datos
+            if (isset($data['packages']) && is_array($data['packages'])) {
+            
+                // Eliminar los paquetes existentes para esta oferta
+                $stmt = $this->db->prepare("DELETE FROM OfferingsPackages WHERE OfferingID = :id");
+                $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+                $stmt->execute();
+    
+                // Insertar los nuevos paquetes
+                $stmt = $this->db->prepare("INSERT INTO OfferingsPackages (OfferingID, Package, Price, Description, Conditions, SessionType) 
+                    VALUES (:id, :package, :price, :description, :conditions, :sessionType)"
+                );
+    
+                foreach ($data['packages'] as $package) {
+                    $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+                    $stmt->bindParam(':package', $package['package'], PDO::PARAM_STR);
+                    $stmt->bindParam(':price', $package['price'], PDO::PARAM_STR);
+                    $stmt->bindParam(':description', $package['description'], PDO::PARAM_STR);
+                    $stmt->bindParam(':conditions', $package['conditions'], PDO::PARAM_STR);
+                    $stmt->bindParam(':sessionType', $package['sessionType'], PDO::PARAM_STR);
+                    $stmt->execute();
+                }
+            } 
+            
+            // Verificar si hay medios (imágenes o videos) y llamamos a createOfferingMedia
+            if (isset($data['media'])) {
+                var_dump($data['media']);
+                foreach ($data['media'] as $media) {
+                    $this->createOfferingMedia(
+                        $id, 
+                        $media['title'], 
+                        $media['description'], 
+                        $media['position'], 
+                        $media['fileURL'], 
+                        $media['filePath'], 
+                        $media['mediaType']
+                    );
+                }
+            }
+
+            return $this->getOfferingById($id);
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());
         }
@@ -492,23 +543,28 @@ class Offering
                 'ServiceType'
             ];
     
+            // Filtrar faqs y packages antes del ciclo de validación
+            $faqs = $data['faqs'] ?? null;
+            $packages = $data['packages'] ?? null;
+            unset($data['faqs'], $data['packages']);
+
             // Construcción dinámica de la consulta
             $fields = [];
-            foreach ($allowedFields as $field) {
-                if (array_key_exists($field, $data)) {
-                    $fields[] = "$field = :$field";
+            foreach ($data as $key => $value) {
+                if (in_array($key, $allowedFields)) {
+                    $fields[] = "$key = :$key";
                 } else {
                     return (object) [
                         "http_code" => 400,
                         "error" => [
                             "code" => "INVALID_UPDATE_KEY",
-                            "desc" => "Key '$field' is not allowed to be updated"
+                            "desc" => "Key '$key' is not allowed to be updated"
                         ]
                     ];
 		        }
             }    
     
-            if (empty($fields)) {
+            if (empty($fields) && !$faqs && !$packages && !$data['media']) {
                 return (object) [
                     "http_code" => 400,
                     "error" => [
@@ -517,14 +573,23 @@ class Offering
                     ]
                 ];
             }
+
+            // Verificar si se han modificado campos que requieren cambiar el estado
+            $updateStatusRequired = false;
+            if (isset($data['Title']) || isset($data['ShortDescription']) || isset($data['Description']) || 
+                isset($faqs['title']) || isset($faqs['description']) || isset($packages['question']) || isset($faqs['answer'])) {
+                $updateStatusRequired = true;
+            }
     
             // Modificación de la fecha de modificación
             $modificationDate = date("YmdHis");
-    
+            $fields[] = "ModificationDate = :ModificationDate";  // Siempre agregar ModificationDate
+
             // Construir la consulta SQL de actualización
-            $sql = "UPDATE Offerings SET " . implode(", ", $fields) . ", ModificationDate = :ModificationDate WHERE OfferingID = :id";
+            $statusQuery = $updateStatusRequired ? ", Status = 'Pending', IsActive = 0, Approved = 0" : "";
+            $sql = "UPDATE Offerings SET " . implode(", ", $fields) . $statusQuery . " WHERE OfferingID = :id";
             $stmt = $this->db->prepare($sql);
-    
+
             // Vincular los parámetros
             foreach ($data as $key => $value) {
                 if (in_array($key, $allowedFields)) {
@@ -536,44 +601,61 @@ class Offering
             $stmt->bindValue(':ModificationDate', $modificationDate, PDO::PARAM_STR);
             $stmt->execute();
     
-            // Gestionar los FAQs, si están presentes en los datos
-            if (isset($data['FAQS']) && is_array($data['FAQS'])) {
-                // Eliminar los FAQs existentes para esta oferta
-                $stmt = $this->db->prepare("DELETE FROM OfferingsFaqs WHERE OfferingID = :id");
-                $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-                $stmt->execute();
+            if ($faqs !== null) {
+                $this->updateOfferingFaqs($id, $faqs);
+            }
+            if ($packages !== null) {
+                $this->updateOfferingPackages($id, $packages);
+            }
     
-                // Insertar los nuevos FAQs
-                $stmt = $this->db->prepare(
-                    "INSERT INTO OfferingsFaqs (OfferingID, position, question, answer) 
-                    VALUES (:OfferingID, :position, :question, :answer)"
-                );
-    
-                foreach ($data['FAQS'] as $faq) {
-                    $stmt->bindParam(':OfferingID', $id, PDO::PARAM_INT);
-                    $stmt->bindParam(':position', $faq['position'], PDO::PARAM_INT);
-                    $stmt->bindParam(':question', $faq['question'], PDO::PARAM_STR);
-                    $stmt->bindParam(':answer', $faq['answer'], PDO::PARAM_STR);
-                    $stmt->execute();
+            // Verificar si hay medios (imágenes o videos) y llamamos a updateOfferingMedia
+            if (isset($data['media'])) {
+                var_dump($data['media']);
+                foreach ($data['media'] as $media) {
+                    $this->updateOfferingMedia(
+                        $id, 
+                        $media['title'], 
+                        $media['description'], 
+                        $media['position'], 
+                        $media['fileURL'], 
+                        $media['filePath'], 
+                        $media['mediaType']
+                    );
                 }
             }
 
-            // Gestionar los paquetes, si están presentes en los datos
-            if (isset($data['packages']) && is_array($data['packages'])) {
-            
-            // Eliminar los paquetes existentes para esta oferta
+            return $this->getOfferingById($id);
+        } catch (\PDOException $e) {
+            throw new DatabaseException($e->getMessage());
+        }
+    }
+
+    public function updateOfferingFaqs($id, $faqs) {
+        if ($faqs !== null && is_array($faqs)) {
+            $stmt = $this->db->prepare("DELETE FROM OfferingsFaqs WHERE OfferingID = :id");
+            $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+            $stmt->execute();
+    
+            $stmt = $this->db->prepare("INSERT INTO OfferingsFaqs (OfferingID, Position, Question, Answer) VALUES (:id, :position, :question, :answer)");
+            foreach ($faqs as $faq) {
+                $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+                $stmt->bindParam(':position', $faq['position'], PDO::PARAM_INT);
+                $stmt->bindParam(':question', $faq['question'], PDO::PARAM_STR);
+                $stmt->bindParam(':answer', $faq['answer'], PDO::PARAM_STR);
+                $stmt->execute();
+            }
+        }
+    }
+
+    public function updateOfferingPackages($id, $packages) {
+        if ($packages !== null && is_array($packages)) {
             $stmt = $this->db->prepare("DELETE FROM OfferingsPackages WHERE OfferingID = :id");
             $stmt->bindParam(':id', $id, PDO::PARAM_INT);
             $stmt->execute();
-
-            // Insertar los nuevos paquetes
-            $stmt = $this->db->prepare(
-                "INSERT INTO OfferingsPackages (OfferingID, package, price, description, conditions, sessionType) 
-                VALUES (:OfferingID, :package, :price, :description, :conditions, :sessionType)"
-            );
-
-            foreach ($data['packages'] as $package) {
-                $stmt->bindParam(':OfferingID', $id, PDO::PARAM_INT);
+    
+            $stmt = $this->db->prepare("INSERT INTO OfferingsPackages (OfferingID, Package, Price, Description, Conditions, SessionType) VALUES (:id, :package, :price, :description, :conditions, :sessionType)");
+            foreach ($packages as $package) {
+                $stmt->bindParam(':id', $id, PDO::PARAM_INT);
                 $stmt->bindParam(':package', $package['package'], PDO::PARAM_STR);
                 $stmt->bindParam(':price', $package['price'], PDO::PARAM_STR);
                 $stmt->bindParam(':description', $package['description'], PDO::PARAM_STR);
@@ -581,11 +663,6 @@ class Offering
                 $stmt->bindParam(':sessionType', $package['sessionType'], PDO::PARAM_STR);
                 $stmt->execute();
             }
-        }
-    
-            return $this->getOfferingById($id);
-        } catch (\PDOException $e) {
-            throw new DatabaseException($e->getMessage());
         }
     }
 
@@ -613,7 +690,7 @@ class Offering
         }
     }
 
-    public function createOfferingMedia($id, $position, $fileURL, $filePath, $mediaType){
+    public function createOfferingMedia($id, $title, $description, $position, $fileURL, $filePath, $mediaType){
         try {
             // Verificar si ya existe una posición 0 asociada al OfferingID
             $stmt = $this->db->prepare("SELECT COUNT(*) AS count FROM Media WHERE OfferingID = :id AND Position = 0 AND MediaType = 'image'");
@@ -634,10 +711,12 @@ class Offering
             }
 
             // Insertar en la tabla Media
-            $stmt = $this->db->prepare("INSERT INTO Media (`OfferingID`, `URL`, `Path`, `MediaType`, `Position`)
-            VALUES (:id, :fileURL, :filePath, :mediaType, :position)");
+            $stmt = $this->db->prepare("INSERT INTO Media (`OfferingID`, `Title`, `Description`, `URL`, `Path`, `MediaType`, `Position`)
+            VALUES (:id, :title, :description, :fileURL, :filePath, :mediaType, :position)");
 
             $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+            $stmt->bindParam(':title', $title, PDO::PARAM_STR);
+            $stmt->bindParam(':description', $description, PDO::PARAM_STR);
             $stmt->bindParam(':position', $position, PDO::PARAM_INT);
             $stmt->bindParam(':fileURL', $fileURL, PDO::PARAM_STR);
             $stmt->bindParam(':filePath', $filePath, PDO::PARAM_STR);
@@ -648,30 +727,56 @@ class Offering
         }
     }
 
-    public function updateOfferingMedia($id, $position, $media_id, $fileURL = false, $filePath = false, $mediaType = false){
+    public function updateOfferingMedia($id, $title, $description, $position, $media_id, $fileURL = false, $filePath = false, $mediaType = false){
         try {
-            // Diferente update segun se adjunto un archivo o no
+            // Diferente update según se adjuntó un archivo o no
             if ($fileURL) {
+            // Actualización para Media con archivo
                 $stmt = $this->db->prepare("UPDATE Media
-                SET URL = :fileURL, Path = :filePath, MediaType = :mediaType, Position = :position
+                SET Title = :title, Description = :description, URL = :fileURL, Path = :filePath, MediaType = :mediaType, Position = :position
                 WHERE MediaID = :media_id AND OfferingID = :id");
-            } else {
-                $stmt = $this->db->prepare("UPDATE Media SET Position = :position
-                WHERE MediaID = :media_id AND OfferingID = :id");
-            }
 
-
-            $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-            $stmt->bindParam(':position', $position, PDO::PARAM_INT);
-            $stmt->bindParam(':media_id', $media_id, PDO::PARAM_INT);
-
-            if ($fileURL) {
                 $stmt->bindParam(':fileURL', $fileURL, PDO::PARAM_STR);
                 $stmt->bindParam(':filePath', $filePath, PDO::PARAM_STR);
                 $stmt->bindParam(':mediaType', $mediaType, PDO::PARAM_STR);
+            } else {
+                // Actualización para Media sin archivo
+                $stmt = $this->db->prepare("UPDATE Media SET Title = :title, Description = :description, Position = :position
+                WHERE MediaID = :media_id AND OfferingID = :id");
             }
-
+        
+            // Vínculo de los parámetros para Media
+            $stmt->bindParam(':title', $title, PDO::PARAM_STR);
+            $stmt->bindParam(':description', $description, PDO::PARAM_STR);
+            $stmt->bindParam(':position', $position, PDO::PARAM_INT);
+            $stmt->bindParam(':media_id', $media_id, PDO::PARAM_INT);
+            $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+        
+            // Ejecutar la consulta
             $stmt->execute();
+       
+            // Verificar si es necesario actualizar el Offering
+            $updateStatusRequired = false;
+            if (isset($title) || isset($description) || isset($fileURL) || isset($filePath)) {
+                $updateStatusRequired = true;
+            }
+        
+            // Modificación de la fecha de modificación
+            $modificationDate = date("YmdHis");
+            $fields = ["ModificationDate = :ModificationDate"]; // Siempre agregar ModificationDate
+        
+            // Construir la consulta SQL de actualización para Offering
+            $statusQuery = $updateStatusRequired ? ", Status = 'Pending', IsActive = 0, Approved = 0" : "";
+            $sql = "UPDATE Offerings SET " . implode(", ", $fields) . $statusQuery . " WHERE OfferingID = :id";
+        
+            // Preparar la consulta de Offering
+            $stmt = $this->db->prepare($sql);
+            $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+            $stmt->bindValue(':ModificationDate', $modificationDate, PDO::PARAM_STR);
+        
+            // Ejecutar la consulta de Offering
+            $stmt->execute();
+                
         } catch (\PDOException $e) {
             throw new DatabaseException($e->getMessage());
         }
