@@ -454,15 +454,17 @@ class OfferingController {
       $description = $data['description'] ?? null;
 
       // Valida contenido con Perspective API
-      if (
-        $this->containsInappropriateContent($data['title']) ||
-        $this->containsInappropriateContent($data['description'])
-      ) {
-        return $response->withStatus(400)->withJson([
-        "code" => "INAPPROPRIATE_CONTENT",
-          "desc" => "Please remove inappropriate content and try again."
-        ]);
-      }
+      if ($title && $description) {
+        if (
+          $this->containsInappropriateContent($data['title']) ||
+          $this->containsInappropriateContent($data['description'])
+        ) {
+          return $response->withStatus(400)->withJson([
+            "code" => "INAPPROPRIATE_CONTENT",
+            "desc" => "Please remove inappropriate content and try again."
+          ]);
+        }
+      } 
 
       // Ruta de archivo y URL
       $fileExtension = $uploadedMedia-> extension;
@@ -551,15 +553,17 @@ class OfferingController {
       $description = $data['description'] ?? null;
 
       // Valida contenido con Perspective API
-      if (
-        $this->containsInappropriateContent($data['title']) ||
-        $this->containsInappropriateContent($data['description'])
-      ) {
-        return $response->withStatus(400)->withJson([
-        "code" => "INAPPROPRIATE_CONTENT",
-          "desc" => "Please remove inappropriate content and try again."
-        ]);
-      }
+      if ($title && $description) {
+        if (
+          $this->containsInappropriateContent($data['title']) ||
+          $this->containsInappropriateContent($data['description'])
+        ) {
+          return $response->withStatus(400)->withJson([
+            "code" => "INAPPROPRIATE_CONTENT",
+            "desc" => "Please remove inappropriate content and try again."
+          ]);
+        }
+      } 
 
       if($uploadedMedia !== false){
         if($uploadedMedia-> error){

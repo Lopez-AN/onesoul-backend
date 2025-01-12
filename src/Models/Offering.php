@@ -33,7 +33,7 @@ class Offering
       $offerings = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
       foreach ($offerings as &$offering) {
-        $mediaStmt = $this->db->prepare("SELECT MediaID, MediaType, URL, Title, Description, position FROM Media WHERE OfferingID = :offeringID");
+        $mediaStmt = $this->db->prepare("SELECT MediaID, MediaType, URL, Title, Description, Position FROM Media WHERE OfferingID = :offeringID");
         $mediaStmt->bindValue(':offeringID', $offering['OfferingID'], PDO::PARAM_INT);
         $mediaStmt->execute();
 
@@ -46,7 +46,7 @@ class Offering
             "url" => $mediaItem['URL'],
             "Title" => $mediaItem['Title'],
             "Description" => $mediaItem['Description'],
-            "position" => $mediaItem['position']
+            "position" => $mediaItem['Position']
           ];
 
           if ($mediaItem['MediaType'] === 'image') {
@@ -229,7 +229,7 @@ class Offering
       $offerings = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
       foreach ($offerings as &$offering) {
-        $mediaStmt = $this->db->prepare("SELECT MediaID, MediaType, URL, Title, Description, position FROM Media WHERE OfferingID = :offeringID");
+        $mediaStmt = $this->db->prepare("SELECT MediaID, MediaType, URL, Title, Description, Position FROM Media WHERE OfferingID = :offeringID");
         $mediaStmt->bindValue(':offeringID', $offering['OfferingID'], PDO::PARAM_INT);
         $mediaStmt->execute();
 
@@ -242,7 +242,7 @@ class Offering
             "url" => $mediaItem['URL'],
             "Title" => $mediaItem['Title'],
             "Description" => $mediaItem['Description'],
-            "position" => $mediaItem['position']
+            "position" => $mediaItem['Position']
           ];
 
           if ($mediaItem['MediaType'] === 'image') {
@@ -255,10 +255,10 @@ class Offering
         $offering['media'] = $media;
 
         // Obtener FAQs
-        $faqStmt = $this->db->prepare("SELECT position, question, answer 
+        $faqStmt = $this->db->prepare("SELECT Position, Question, Answer 
                 FROM OfferingsFaqs 
                 WHERE OfferingID = :offeringID
-                ORDER BY position ASC");
+                ORDER BY Position ASC");
 
 
         $faqStmt->bindValue(':offeringID', $offering['OfferingID'], PDO::PARAM_INT);
@@ -268,7 +268,7 @@ class Offering
         $offering['faqs'] = $faqs;
 
         // Obtener Packages
-        $packagesStmt = $this->db->prepare("SELECT package, price, description, conditions, sessionType 
+        $packagesStmt = $this->db->prepare("SELECT Package, Price, Description, Conditions, SessionType 
                 FROM OfferingsPackages 
                 WHERE OfferingID = :offeringID");
 
@@ -325,7 +325,7 @@ class Offering
       $offerings = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
       foreach ($offerings as &$offering) {
-        $mediaStmt = $this->db->prepare("SELECT MediaID, MediaType, URL, Title, Description, position FROM Media WHERE OfferingID = :offeringID");
+        $mediaStmt = $this->db->prepare("SELECT MediaID, MediaType, URL, Title, Description, Position FROM Media WHERE OfferingID = :offeringID");
         $mediaStmt->bindValue(':offeringID', $offering['OfferingID'], PDO::PARAM_INT);
         $mediaStmt->execute();
 
@@ -338,7 +338,7 @@ class Offering
             "url" => $mediaItem['URL'],
             "Title" => $mediaItem['Title'],
             "Description" => $mediaItem['Description'],
-            "position" => $mediaItem['position']
+            "position" => $mediaItem['Position']
           ];
 
           if ($mediaItem['MediaType'] === 'image') {
@@ -351,10 +351,10 @@ class Offering
         $offering['media'] = $media;
 
         // Obtener FAQs
-        $faqStmt = $this->db->prepare("SELECT position, question, answer 
+        $faqStmt = $this->db->prepare("SELECT Position, Question, Answer 
                 FROM OfferingsFaqs 
                 WHERE OfferingID = :offeringID
-                ORDER BY position ASC");
+                ORDER BY Position ASC");
 
 
         $faqStmt->bindValue(':offeringID', $offering['OfferingID'], PDO::PARAM_INT);
@@ -364,7 +364,7 @@ class Offering
         $offering['faqs'] = $faqs;
 
         // Obtener Packages
-        $packagesStmt = $this->db->prepare("SELECT package, price, description, conditions, sessionType 
+        $packagesStmt = $this->db->prepare("SELECT Package, Price, Description, Conditions, SessionType 
                 FROM OfferingsPackages 
                 WHERE OfferingID = :offeringID");
 
