@@ -21,7 +21,7 @@ class Search
       $stmt = $this->pdo->prepare("SELECT SQL_CALC_FOUND_ROWS c.*,m.URL as imgURL
             FROM Categories AS c
             LEFT JOIN Media as m ON c.CategoryID = m.CategoryID
-            WHERE `Name` LIKE :search1 OR `Description` LIKE :search2
+            WHERE (c.Name LIKE :search1 OR c.Description LIKE :search2) AND c.IsActive = 1
             ORDER BY c.CategoryID
             LIMIT :_limit OFFSET :_offset");
 
@@ -58,7 +58,8 @@ class Search
             INNER JOIN Users AS u ON u.UserID = o.UserID
             LEFT JOIN Media AS m1 ON o.OfferingID = m1.OfferingID
             LEFT JOIN Media AS m2 ON u.UserID = m2.UserID
-            WHERE Title LIKE :search1 OR Description LIKE :search2 OR Tags LIKE :search3
+            WHERE (o.Title LIKE :search1 OR o.Description LIKE :search2 OR o.Tags LIKE :search3) 
+            AND o.Status = "Active"
             ORDER BY o.OfferingID
             LIMIT :_limit OFFSET :_offset');
 
@@ -112,7 +113,7 @@ class Search
             u.Email, u.Phone, u.AddressName, u.AddressNumber, u.Floor,
             u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
             u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
-            u.LastLogin, u.DeactivationDate, u.UserLevel, u.TermsAndConditions, u.SignedContract,
+            u.LastLogin, u.UserLevel, u.TermsAndConditions, u.SignedContract,
             GROUP_CONCAT(DISTINCT c.Name ORDER BY c.Name ASC SEPARATOR ', ') AS Categories,
             u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating, m.URL as imgURL
             FROM Users as u
@@ -120,8 +121,8 @@ class Search
             LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
             LEFT JOIN Media as m ON u.UserID = m.UserID
             LEFT JOIN Reviews as r ON u.UserID = r.SUserID OR u.UserID = r.GUserID
-            WHERE FirstName LIKE :search1 OR LastName LIKE :search2 OR Biography LIKE :search3
-            OR CONCAT(FirstName,' ',LastName) LIKE :search4
+            WHERE (u.FirstName LIKE :search1 OR u.LastName LIKE :search2 OR u.Biography LIKE :search3 
+            OR CONCAT(u.FirstName,' ',u.LastName) LIKE :search4) AND u.DeactivationDate IS NULL
             GROUP BY u.UserID
             ORDER BY u.UserID
             LIMIT :_limit OFFSET :_offset");
