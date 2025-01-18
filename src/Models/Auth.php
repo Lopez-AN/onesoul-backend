@@ -444,7 +444,7 @@ class Auth{
       $mail->Subject = 'Complete su registro en OneSoul';
       $mail->Body    = $template;
       $mail->AltBody = "Hola $username, bienvenido a OneSoul\nSu código de verificaci&oacute;n es $otpCode";
-      $mail->addEmbeddedImage(ROOT."/src/templates/logo.png", 'logo');
+      $mail->addEmbeddedImage(ROOT."/src/templates/logo2.png", 'logo');
 
       # Enviar el correo
       $mail->send();
