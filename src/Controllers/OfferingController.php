@@ -109,15 +109,16 @@ class OfferingController {
     $data['Stock'] = null;
     $data['ServiceType'] = 'Service';
 
-    // Validar `CategoryID`
-    if (!isset($data['CategoryID']) || !$this->userBelongsToCategory($userID, $data['CategoryID'])) {
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "WRONG_CATEGORY",
-          "desc" => "The user does not belong to the selected category"
-        ]
-      ]);
-    }
+    // Evaluar si es necesario que solo se permitan crear offering con las categorias del usuario
+    // // Validar `CategoryID`
+    // if (!isset($data['CategoryID']) || !$this->userBelongsToCategory($userID, $data['CategoryID'])) {
+    //   return $response->withStatus(400)->withJson([
+    //     "error" => [
+    //       "code" => "WRONG_CATEGORY",
+    //       "desc" => "The user does not belong to the selected category"
+    //     ]
+    //   ]);
+    // }
 
     try {
       # Verificar si el usuario autenticado es un Guia o un administrador
@@ -269,15 +270,16 @@ class OfferingController {
         ]);
       }
       
-      if (!empty($data['CategoryID'])) {
-        //Validación contra la suscripción del usuario para la categoría
-        if (!$this->userBelongsToCategory($userID, $data['CategoryID'])) {
-          return $response->withStatus(400)->withJson([
-            "code" => "WRONG_CATEGORY",
-            "desc" => "The user does not belong to the selected category"
-          ]);
-        }
-      }
+      // Evaluar si es necesario que solo se permitan crear offering con las categorias del usuario
+      // if (!empty($data['CategoryID'])) {
+      //   //Validación contra la suscripción del usuario para la categoría
+      //   if (!$this->userBelongsToCategory($userID, $data['CategoryID'])) {
+      //     return $response->withStatus(400)->withJson([
+      //       "code" => "WRONG_CATEGORY",
+      //       "desc" => "The user does not belong to the selected category"
+      //     ]);
+      //   }
+      // }
 
       // Validación de contenido inapropiado
       if((!empty($data['Title']) && $this->containsInappropriateContent($data['Title'])) ||
