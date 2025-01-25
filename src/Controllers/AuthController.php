@@ -31,16 +31,22 @@ class AuthController{
     $password = $data['password'] ?? '';
     $mfa_id = $data['mfa_id'] ?? '';
     $mfa_code = $data['mfa_code'] ?? '';
-
+    $recaptchaToken = $data['recaptcha_token'] ?? '';
+    $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
     // Validar credenciales básicas
-    if((empty($email) && empty($username)) || empty($password)){
+    if((empty($email) && empty($username)) || empty($password) || empty($recaptchaToken)){
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "USER_INVALID_CREDENTIALS",
           "desc" => "Invalid credentials"
         ]
       ]);
+    }
+    
+    $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
+    if ($result->http_code !== 200) {
+      return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
     }
 
     try {
@@ -70,14 +76,14 @@ class AuthController{
       if (!password_verify($password, $user['PasswordHash'])) {
         # Logueo fallido actualizar contador de erroneos y tiempo bloqueo si corresponde
         $failedAttempts = $user['failed_login_attempts'] + 1;
-        $lockTime = $this->calculateLockTime($failedAttempts);
+        $lockTime = $this->auth->calculateLockTime($failedAttempts);
 
         $this->auth->updateFailedLogin($user['UserID'], $failedAttempts, $lockTime);
 
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "USER_INVALID_CREDENTIALS",
-            "desc" => "Invalid credentials"
+            "desc" => "The password is invalid"
           ]
         ]);
       }
@@ -95,13 +101,9 @@ class AuthController{
             ]);
           }
         } elseif (!empty($mfa_code)) {
-          if ($this->auth->mfaCheck($user['UserID'], $mfa_code) -> http_code != 200){
-            return $response->withStatus(401)->withJson([
-              "error" => [
-                "code" => "INVALID_MFA_CODE",
-                "desc" => "MFA code is invalid"
-              ]
-            ]);
+          $result = $this->auth->mfaCheck($user['UserID'], $mfa_code);
+          if ($result->http_code != 200) {
+            return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
           }
         } else {
           return $response->withStatus(400)->withJson([
@@ -119,7 +121,7 @@ class AuthController{
       # Login exitoso, resetear intentos fallidos y bloqueo
       $this->auth->updateFailedLogin($user['UserID'], 0, null);
 
-      $jwt = $this -> JWTgen($result[0]);
+      $jwt = $this -> JWTgen($user);
 
       // Si se esta vinculando un nuevo navegador guardarlo
       if($newMfaId !== null){
@@ -127,7 +129,7 @@ class AuthController{
         $this->auth->storeBrowserData($user['UserID'], $request, $newMfaId);
       }
 
-      $userData = $this->user->getUserById($result[0]['UserID']);
+      $userData = $this->user->getUserById($user['UserID']);
 
       return $response->withStatus(200)->withJson([
         "token" => $jwt,
@@ -149,14 +151,21 @@ class AuthController{
     $token = $data['token'] ?? '';
     $mfa_id = $data['mfa_id'] ?? '';
     $mfa_code = $data['mfa_code'] ?? '';
+    $recaptchaToken = $data['recaptcha_token'] ?? '';
+    $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
-    if (empty($token)) {
+    if (empty($token) || empty($recaptchaToken)) {
       return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "INVALID_PARAMETERS",
           "desc" => "Parameters are missing or invalid"
         ]
       ]);
+    }
+
+    $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
+    if ($result->http_code !== 200) {
+      return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
     }
 
     try {
@@ -191,13 +200,9 @@ class AuthController{
             ]);
           }
         } elseif (!empty($mfa_code)) {
-          if ($this->auth->mfaCheck($user['UserID'], $mfa_code)->http_code != 200) {
-            return $response->withStatus(401)->withJson([
-              "error" => [
-                "code" => "INVALID_MFA_CODE",
-                "desc" => "MFA code is invalid"
-              ]
-            ]);
+          $result = $this->auth->mfaCheck($user['UserID'], $mfa_code);
+          if ($result->http_code != 200) {
+            return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
           }
         } else {
           return $response->withStatus(400)->withJson([
@@ -249,14 +254,23 @@ class AuthController{
     $token = $data['token'] ?? '';
     $mfa_id = $data['mfa_id'] ?? '';
     $mfa_code = $data['mfa_code'] ?? '';
+    $recaptchaToken = $data['recaptcha_token'] ?? '';
+    $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
-    if (empty($user_id) || empty($token)) {
+
+
+    if (empty($user_id) || empty($token) || empty($recaptchaToken)) {
       return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "INVALID_PARAMETERS",
           "desc" => "Parameters are missing or invalid"
         ]
       ]);
+    }
+    
+    $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
+    if ($result->http_code !== 200) {
+      return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
     }
 
     try {
@@ -290,13 +304,9 @@ class AuthController{
             ]);
           }
         } elseif (!empty($mfa_code)) {
-          if ($this->auth->mfaCheck($user['UserID'], $mfa_code)->http_code != 200) {
-            return $response->withStatus(401)->withJson([
-              "error" => [
-                "code" => "INVALID_MFA_CODE",
-                "desc" => "MFA code is invalid"
-              ]
-            ]);
+          $result = $this->auth->mfaCheck($user['UserID'], $mfa_code);
+          if ($result->http_code != 200) {
+            return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
           }
         } else {
           return $response->withStatus(400)->withJson([
@@ -341,6 +351,7 @@ class AuthController{
       ]);
     }
   }
+
 
   /*
   * Registro usuario
@@ -930,19 +941,5 @@ class AuthController{
     ];
     $secret = $GLOBALS['config']['jwt']['secret'];
     return JWT::encode($payload, $secret, 'HS256');
-  }
-
-  # Función para calcular los tiempos de bloqueo
-  private function calculateLockTime($failedAttempts) {
-    $lockTime = null;
-    switch ($failedAttempts) {
-      case 5: $lockTime = "+1 minute"; break;
-      case 6: $lockTime = "+2 minutes"; break;
-      case 7: $lockTime = "+4 minutes"; break;
-      case 8: $lockTime = "+8 minutes"; break;
-      case 9: $lockTime = "+15 minutes"; break;
-      case 10: $lockTime = "+30 minutes"; break;
-    }
-    return $lockTime ? date("Y-m-d H:i:s", strtotime($lockTime)) : null;
   }
 }

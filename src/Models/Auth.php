@@ -37,16 +37,6 @@ class Auth{
     }
   }
 
-  public function updateFailedLogin($userId, $failedAttempts, $lockedUntil = null) {
-    try {
-      $stmt = $this->db->prepare("UPDATE Users SET failed_login_attempts = ?,
-      locked_until = ? WHERE UserID = ?");
-      $stmt->execute([$failedAttempts, $lockedUntil, $userId]);
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
-  }
-
   public function loginGoogle($token){
     $response = $this -> validateToken("https://oauth2.googleapis.com/tokeninfo?id_token=$token");
     if($response === false){
@@ -698,37 +688,69 @@ class Auth{
     }
   }
 
-  public function mfaCheck($userID, $code){
-    try {
-      # Creo el usuario con los datos basicos
-      $stmt = $this->db->prepare("SELECT mfaSecret
-        FROM Users WHERE UserID = ? AND mfaSecret IS NOT NULL");
-      $stmt->execute([$userID]);
-      $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-      if(empty($result) || $result[0]['mfaSecret'] === null){
-        return (object)[
+  public function mfaCheck($userID, $code)
+  {
+    try {
+      // Verificar si el usuario está bloqueado
+      $stmt = $this->db->prepare("SELECT mfaSecret, failed_login_attempts, locked_until 
+            FROM Users WHERE UserID = ? AND mfaSecret IS NOT NULL");
+      $stmt->execute([$userID]);
+      $result = $stmt->fetch(PDO::FETCH_ASSOC);
+
+      if (empty($result) || $result['mfaSecret'] === null) {
+        return (object) [
           "http_code" => 401,
           "error" => [
             "code" => "MFA_NOT_SET",
-            "desc" => "The user does not have mfa configured"
+            "desc" => "The user does not have MFA configured"
           ]
         ];
       }
-      
-      $secret = $result[0]['mfaSecret'];
 
+      if (!is_null($result['locked_until']) && strtotime($result['locked_until']) > time()) {
+        return (object) [
+          "http_code" => 403,
+          "error" => [
+            "code" => "USER_LOCKED",
+            "desc" => "Account is temporarily locked until " . $result['locked_until']
+          ]
+        ];
+      }
+
+      $secret = $result['mfaSecret'];
       $g2fa = new \PragmaRX\Google2FA\Google2FA();
-      if(!$g2fa -> verifyKey($secret, $code)){
-        return (object)[
+
+      if (!$g2fa->verifyKey($secret, $code)) {
+        // Incrementar intentos fallidos y actualizar bloqueo si es necesario
+        $failedAttempts = $result['failed_login_attempts'] + 1;
+        $lockTime = $this->calculateLockTime($failedAttempts);
+
+        $this->updateFailedLogin($userID, $failedAttempts, $lockTime);
+
+        if ($lockTime !== null) {
+          return (object) [
+            "http_code" => 403,
+            "error" => [
+              "code" => "MFA_MAX_ATTEMPTS",
+              "desc" => "Maximum MFA attempts reached. Account is now locked."
+            ]
+          ];
+        }
+
+        return (object) [
           "http_code" => 401,
           "error" => [
             "code" => "INVALID_MFA_CODE",
-            "desc" => "Cannot verify provided mfa code"
+            "desc" => "Cannot verify provided MFA code"
           ]
         ];
       }
-      return (object)[
+
+      // MFA verificado, resetear intentos fallidos y bloqueo
+      $this->updateFailedLogin($userID, 0, null);
+
+      return (object) [
         "http_code" => 200,
         "message" => "MFA Verified"
       ];
@@ -782,5 +804,29 @@ class Auth{
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
+  }
+
+  public function updateFailedLogin($userId, $failedAttempts, $lockedUntil = null) {
+    try {
+      $stmt = $this->db->prepare("UPDATE Users SET failed_login_attempts = ?,
+      locked_until = ? WHERE UserID = ?");
+      $stmt->execute([$failedAttempts, $lockedUntil, $userId]);
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  # Función para calcular los tiempos de bloqueo
+  public function calculateLockTime($failedAttempts) {
+    $lockTime = null;
+    switch ($failedAttempts) {
+      case 5: $lockTime = "+1 minute"; break;
+      case 6: $lockTime = "+2 minutes"; break;
+      case 7: $lockTime = "+4 minutes"; break;
+      case 8: $lockTime = "+8 minutes"; break;
+      case 9: $lockTime = "+15 minutes"; break;
+      case 10: $lockTime = "+30 minutes"; break;
+    }
+    return $lockTime ? date("Y-m-d H:i:s", strtotime($lockTime)) : null;
   }
 }
