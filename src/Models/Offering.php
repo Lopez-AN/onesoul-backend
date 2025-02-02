@@ -18,12 +18,12 @@ class Offering
   public function getOfferings($paginator)
   {
     try {
-      $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*, u.UserID as author_UserID, 
-            u.FirstName as author_FirstName, u.LastName as author_LastName, m.URL as author_imgURL 
-            FROM Offerings AS o 
-            INNER JOIN Users AS u ON u.UserID = o.UserID 
+      $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*, u.UserID as author_UserID,
+            u.FirstName as author_FirstName, u.LastName as author_LastName, m.URL as author_imgURL
+            FROM Offerings AS o
+            INNER JOIN Users AS u ON u.UserID = o.UserID
             LEFT JOIN Media AS m ON u.UserID = m.UserID
-            ORDER BY o.OfferingID 
+            ORDER BY o.OfferingID
             LIMIT :_limit OFFSET :_offset");
 
       $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
@@ -42,11 +42,11 @@ class Offering
 
         foreach ($mediaResults as $mediaItem) {
           $mediaData = [
-            "id" => $mediaItem['MediaID'],
-            "url" => $mediaItem['URL'],
+            "Id" => $mediaItem['MediaID'],
+            "Url" => $mediaItem['URL'],
             "Title" => $mediaItem['Title'],
             "Description" => $mediaItem['Description'],
-            "position" => $mediaItem['Position']
+            "Position" => $mediaItem['Position']
           ];
 
           if ($mediaItem['MediaType'] === 'image') {
@@ -59,8 +59,8 @@ class Offering
         $offering['media'] = $media;
 
         // Obtener FAQs
-        $faqStmt = $this->db->prepare("SELECT Position, Question, Answer 
-                FROM OfferingsFaqs 
+        $faqStmt = $this->db->prepare("SELECT Position, Question, Answer
+                FROM OfferingsFaqs
                 WHERE OfferingID = :offeringID
                 ORDER BY Position ASC");
 
@@ -72,8 +72,8 @@ class Offering
         $offering['faqs'] = $faqs;
 
         // Obtener Packages
-        $packagesStmt = $this->db->prepare("SELECT Package, Price, Description, Conditions, SessionType 
-                FROM OfferingsPackages 
+        $packagesStmt = $this->db->prepare("SELECT Package, Price, Description, Conditions, SessionType
+                FROM OfferingsPackages
                 WHERE OfferingID = :offeringID");
 
         $packagesStmt->bindValue(':offeringID', $offering['OfferingID'], PDO::PARAM_INT);
@@ -88,7 +88,7 @@ class Offering
           "UserID" => $offering['author_UserID'],
           "FirstName" => $offering['author_FirstName'],
           "LastName" => $offering['author_LastName'],
-          "imgURL" => $offering['author_imgURL']
+          "ImgURL" => $offering['author_imgURL']
         ];
 
         unset($offering['author_UserID'], $offering['author_FirstName'], $offering['author_LastName'], $offering['author_imgURL']);
@@ -113,8 +113,8 @@ class Offering
   public function getOfferingById($id)
   {
     try {
-      $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*, 
-                   u.UserID as author_UserID, u.FirstName as author_FirstName, u.LastName as author_LastName, 
+      $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*,
+                   u.UserID as author_UserID, u.FirstName as author_FirstName, u.LastName as author_LastName,
                    m2.URL as author_imgURL
             FROM Offerings AS o
             INNER JOIN Users AS u ON u.UserID = o.UserID
@@ -138,8 +138,8 @@ class Offering
 
       // Consulta para FAQs
       $stmtFaqs = $this->db->prepare("
-            SELECT Position, Question, Answer 
-            FROM OfferingsFaqs 
+            SELECT Position, Question, Answer
+            FROM OfferingsFaqs
             WHERE OfferingID = :id
             ORDER BY Position ASC
         ");
@@ -149,8 +149,8 @@ class Offering
 
       // Consulta para Packages
       $stmtPackages = $this->db->prepare("
-            SELECT Package, Price, Description, Conditions, SessionType 
-            FROM OfferingsPackages 
+            SELECT Package, Price, Description, Conditions, SessionType
+            FROM OfferingsPackages
             WHERE OfferingID = :id
         ");
       $stmtPackages->bindParam(':id', $id, PDO::PARAM_INT);
@@ -171,12 +171,11 @@ class Offering
       $media = ["images" => [], "videos" => []];
       foreach ($mediaData as $item) {
         $mediaItem = [
-          "position" => $item["Position"],
-          "id" => $item['MediaID'],
-          "url" => $item['URL'],
+          "Id" => $item['MediaID'],
+          "Url" => $item['URL'],
           "Title" => $item['Title'],
-          "Description" => $item['Description']
-
+          "Description" => $item['Description'],
+          "Position" => $item["Position"]
         ];
         if ($item['MediaType'] === 'image') {
           $media["images"][] = $mediaItem;
@@ -194,7 +193,7 @@ class Offering
         "UserID" => $offering['author_UserID'],
         "FirstName" => $offering['author_FirstName'],
         "LastName" => $offering['author_LastName'],
-        "imgURL" => $offering['author_imgURL']
+        "ImgURL" => $offering['author_imgURL']
       ];
 
       unset($offering['author_UserID'], $offering['author_FirstName'], $offering['author_LastName'], $offering['author_imgURL']);
@@ -213,12 +212,12 @@ class Offering
   {
     try {
       $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*, u.UserID as author_UserID,
-            u.FirstName as author_FirstName, u.LastName as author_LastName, m.URL as author_imgURL 
-            FROM Offerings AS o 
-            INNER JOIN Users AS u ON u.UserID = o.UserID 
-            LEFT JOIN Media AS m ON u.UserID = m.UserID 
-            WHERE o.CategoryID = :categoryId 
-            ORDER BY o.OfferingID 
+            u.FirstName as author_FirstName, u.LastName as author_LastName, m.URL as author_imgURL
+            FROM Offerings AS o
+            INNER JOIN Users AS u ON u.UserID = o.UserID
+            LEFT JOIN Media AS m ON u.UserID = m.UserID
+            WHERE o.CategoryID = :categoryId
+            ORDER BY o.OfferingID
             LIMIT :_limit OFFSET :_offset");
 
       $stmt->bindParam(':categoryId', $categoryId, PDO::PARAM_INT);
@@ -238,11 +237,11 @@ class Offering
 
         foreach ($mediaResults as $mediaItem) {
           $mediaData = [
-            "id" => $mediaItem['MediaID'],
-            "url" => $mediaItem['URL'],
+            "Id" => $mediaItem['MediaID'],
+            "Url" => $mediaItem['URL'],
             "Title" => $mediaItem['Title'],
             "Description" => $mediaItem['Description'],
-            "position" => $mediaItem['Position']
+            "Position" => $mediaItem['Position']
           ];
 
           if ($mediaItem['MediaType'] === 'image') {
@@ -255,8 +254,8 @@ class Offering
         $offering['media'] = $media;
 
         // Obtener FAQs
-        $faqStmt = $this->db->prepare("SELECT Position, Question, Answer 
-                FROM OfferingsFaqs 
+        $faqStmt = $this->db->prepare("SELECT Position, Question, Answer
+                FROM OfferingsFaqs
                 WHERE OfferingID = :offeringID
                 ORDER BY Position ASC");
 
@@ -268,8 +267,8 @@ class Offering
         $offering['faqs'] = $faqs;
 
         // Obtener Packages
-        $packagesStmt = $this->db->prepare("SELECT Package, Price, Description, Conditions, SessionType 
-                FROM OfferingsPackages 
+        $packagesStmt = $this->db->prepare("SELECT Package, Price, Description, Conditions, SessionType
+                FROM OfferingsPackages
                 WHERE OfferingID = :offeringID");
 
         $packagesStmt->bindValue(':offeringID', $offering['OfferingID'], PDO::PARAM_INT);
@@ -284,7 +283,7 @@ class Offering
           "UserID" => $offering['author_UserID'],
           "FirstName" => $offering['author_FirstName'],
           "LastName" => $offering['author_LastName'],
-          "imgURL" => $offering['author_imgURL']
+          "ImgURL" => $offering['author_imgURL']
         ];
 
         unset($offering['author_UserID'], $offering['author_FirstName'], $offering['author_LastName'], $offering['author_imgURL']);
@@ -310,11 +309,11 @@ class Offering
   {
     try {
       $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*, u.UserID as author_UserID,
-            u.FirstName as author_FirstName, u.LastName as author_LastName, m.URL as author_imgURL 
-            FROM Offerings AS o 
-            INNER JOIN Users AS u ON u.UserID = o.UserID 
-            LEFT JOIN Media AS m ON u.UserID = m.UserID 
-            WHERE o.UserID = :userId 
+            u.FirstName as author_FirstName, u.LastName as author_LastName, m.URL as author_imgURL
+            FROM Offerings AS o
+            INNER JOIN Users AS u ON u.UserID = o.UserID
+            LEFT JOIN Media AS m ON u.UserID = m.UserID
+            WHERE o.UserID = :userId
             LIMIT :_limit OFFSET :_offset");
 
       $stmt->bindParam(':userId', $userId, PDO::PARAM_INT);
@@ -334,11 +333,11 @@ class Offering
 
         foreach ($mediaResults as $mediaItem) {
           $mediaData = [
-            "id" => $mediaItem['MediaID'],
-            "url" => $mediaItem['URL'],
+            "Id" => $mediaItem['MediaID'],
+            "Url" => $mediaItem['URL'],
             "Title" => $mediaItem['Title'],
             "Description" => $mediaItem['Description'],
-            "position" => $mediaItem['Position']
+            "Position" => $mediaItem['Position']
           ];
 
           if ($mediaItem['MediaType'] === 'image') {
@@ -351,8 +350,8 @@ class Offering
         $offering['media'] = $media;
 
         // Obtener FAQs
-        $faqStmt = $this->db->prepare("SELECT Position, Question, Answer 
-                FROM OfferingsFaqs 
+        $faqStmt = $this->db->prepare("SELECT Position, Question, Answer
+                FROM OfferingsFaqs
                 WHERE OfferingID = :offeringID
                 ORDER BY Position ASC");
 
@@ -364,8 +363,8 @@ class Offering
         $offering['faqs'] = $faqs;
 
         // Obtener Packages
-        $packagesStmt = $this->db->prepare("SELECT Package, Price, Description, Conditions, SessionType 
-                FROM OfferingsPackages 
+        $packagesStmt = $this->db->prepare("SELECT Package, Price, Description, Conditions, SessionType
+                FROM OfferingsPackages
                 WHERE OfferingID = :offeringID");
 
         $packagesStmt->bindValue(':offeringID', $offering['OfferingID'], PDO::PARAM_INT);
@@ -380,7 +379,7 @@ class Offering
           "UserID" => $offering['author_UserID'],
           "FirstName" => $offering['author_FirstName'],
           "LastName" => $offering['author_LastName'],
-          "imgURL" => $offering['author_imgURL']
+          "ImgURL" => $offering['author_imgURL']
         ];
 
         unset($offering['author_UserID'], $offering['author_FirstName'], $offering['author_LastName'], $offering['author_imgURL']);
@@ -450,9 +449,9 @@ class Offering
                     VALUES (:id, :position, :question, :answer)");
 
           $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-          $stmt->bindParam(':position', $faq['position'], PDO::PARAM_INT);
-          $stmt->bindParam(':question', $faq['question'], PDO::PARAM_STR);
-          $stmt->bindParam(':answer', $faq['answer'], PDO::PARAM_STR);
+          $stmt->bindParam(':position', $faq['Position'], PDO::PARAM_INT);
+          $stmt->bindParam(':question', $faq['Question'], PDO::PARAM_STR);
+          $stmt->bindParam(':answer', $faq['Answer'], PDO::PARAM_STR);
           $stmt->execute();
         }
       }
@@ -466,34 +465,18 @@ class Offering
         $stmt->execute();
 
         // Insertar los nuevos paquetes
-        $stmt = $this->db->prepare("INSERT INTO OfferingsPackages (OfferingID, Package, Price, Description, Conditions, SessionType) 
+        $stmt = $this->db->prepare("INSERT INTO OfferingsPackages (OfferingID, Package, Price, Description, Conditions, SessionType)
                     VALUES (:id, :package, :price, :description, :conditions, :sessionType)"
         );
 
         foreach ($data['packages'] as $package) {
           $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-          $stmt->bindParam(':package', $package['package'], PDO::PARAM_STR);
-          $stmt->bindParam(':price', $package['price'], PDO::PARAM_STR);
-          $stmt->bindParam(':description', $package['description'], PDO::PARAM_STR);
-          $stmt->bindParam(':conditions', $package['conditions'], PDO::PARAM_STR);
-          $stmt->bindParam(':sessionType', $package['sessionType'], PDO::PARAM_STR);
+          $stmt->bindParam(':package', $package['Package'], PDO::PARAM_STR);
+          $stmt->bindParam(':price', $package['Price'], PDO::PARAM_STR);
+          $stmt->bindParam(':description', $package['Description'], PDO::PARAM_STR);
+          $stmt->bindParam(':conditions', $package['Conditions'], PDO::PARAM_STR);
+          $stmt->bindParam(':sessionType', $package['SessionType'], PDO::PARAM_STR);
           $stmt->execute();
-        }
-      }
-
-      // Verificar si hay medios (imágenes o videos) y llamamos a createOfferingMedia
-      if (isset($data['media'])) {
-        var_dump($data['media']);
-        foreach ($data['media'] as $media) {
-          $this->createOfferingMedia(
-            $id,
-            $media['title'],
-            $media['description'],
-            $media['position'],
-            $media['fileURL'],
-            $media['filePath'],
-            $media['mediaType']
-          );
         }
       }
 
@@ -585,7 +568,7 @@ class Offering
       $updateStatusRequired = false;
       if (
         isset($data['Title']) || isset($data['ShortDescription']) || isset($data['Description']) ||
-        isset($faqs['title']) || isset($faqs['description']) || isset($packages['question']) || isset($faqs['answer'])
+        isset($faqs['Title']) || isset($faqs['Description']) || isset($packages['Question']) || isset($faqs['Answer'])
       ) {
         $updateStatusRequired = true;
       }
@@ -617,22 +600,6 @@ class Offering
         $this->updateOfferingPackages($id, $packages);
       }
 
-      // Verificar si hay medios (imágenes o videos) y llamamos a updateOfferingMedia
-      if (isset($data['media'])) {
-        var_dump($data['media']);
-        foreach ($data['media'] as $media) {
-          $this->updateOfferingMedia(
-            $id,
-            $media['title'],
-            $media['description'],
-            $media['position'],
-            $media['fileURL'],
-            $media['filePath'],
-            $media['mediaType']
-          );
-        }
-      }
-
       return $this->getOfferingById($id);
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
@@ -649,9 +616,9 @@ class Offering
       $stmt = $this->db->prepare("INSERT INTO OfferingsFaqs (OfferingID, Position, Question, Answer) VALUES (:id, :position, :question, :answer)");
       foreach ($faqs as $faq) {
         $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-        $stmt->bindParam(':position', $faq['position'], PDO::PARAM_INT);
-        $stmt->bindParam(':question', $faq['question'], PDO::PARAM_STR);
-        $stmt->bindParam(':answer', $faq['answer'], PDO::PARAM_STR);
+        $stmt->bindParam(':position', $faq['Position'], PDO::PARAM_INT);
+        $stmt->bindParam(':question', $faq['Question'], PDO::PARAM_STR);
+        $stmt->bindParam(':answer', $faq['Answer'], PDO::PARAM_STR);
         $stmt->execute();
       }
     }
@@ -667,11 +634,11 @@ class Offering
       $stmt = $this->db->prepare("INSERT INTO OfferingsPackages (OfferingID, Package, Price, Description, Conditions, SessionType) VALUES (:id, :package, :price, :description, :conditions, :sessionType)");
       foreach ($packages as $package) {
         $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-        $stmt->bindParam(':package', $package['package'], PDO::PARAM_STR);
-        $stmt->bindParam(':price', $package['price'], PDO::PARAM_STR);
-        $stmt->bindParam(':description', $package['description'], PDO::PARAM_STR);
-        $stmt->bindParam(':conditions', $package['conditions'], PDO::PARAM_STR);
-        $stmt->bindParam(':sessionType', $package['sessionType'], PDO::PARAM_STR);
+        $stmt->bindParam(':package', $package['Package'], PDO::PARAM_STR);
+        $stmt->bindParam(':price', $package['Price'], PDO::PARAM_STR);
+        $stmt->bindParam(':description', $package['Description'], PDO::PARAM_STR);
+        $stmt->bindParam(':conditions', $package['Conditions'], PDO::PARAM_STR);
+        $stmt->bindParam(':sessionType', $package['SessionType'], PDO::PARAM_STR);
         $stmt->execute();
       }
     }

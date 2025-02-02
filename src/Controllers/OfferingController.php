@@ -144,8 +144,8 @@ class OfferingController {
       // Validar FAQs
       if (!empty($data['faqs']) && is_array($data['faqs'])) {
         foreach ($data['faqs'] as $faq) {
-          if ((!empty($faq['question']) && $this->containsInappropriateContent($faq['question'])) ||
-            (!empty($faq['answer']) && $this->containsInappropriateContent($faq['answer']))) {
+          if ((!empty($faq['Question']) && $this->containsInappropriateContent($faq['Question'])) ||
+            (!empty($faq['Answer']) && $this->containsInappropriateContent($faq['Answer']))) {
             return $response->withStatus(400)->withJson([
               "code" => "INAPPROPRIATE_CONTENT",
               "desc" => "FAQs contain inappropriate content. Please review and try again."
@@ -157,14 +157,14 @@ class OfferingController {
       // Validar Packages
       if (!empty($data['packages']) && is_array($data['packages'])) {
         foreach ($data['packages'] as $package) {
-          if ((!empty($package['conditions']) && $this->containsInappropriateContent($package['conditions'])) ||
-            (!empty($package['description']) && $this->containsInappropriateContent($package['description']))) {
+          if ((!empty($package['Conditions']) && $this->containsInappropriateContent($package['Conditions'])) ||
+            (!empty($package['Description']) && $this->containsInappropriateContent($package['Description']))) {
             return $response->withStatus(400)->withJson([
               "code" => "INAPPROPRIATE_CONTENT",
               "desc" => "Packages contain inappropriate content. Please review and try again."
             ]);
           }
-        } 
+        }
       }
 
       $result = $this->offering->createOffering($data);
@@ -269,7 +269,7 @@ class OfferingController {
           ]
         ]);
       }
-      
+
       // Evaluar si es necesario que solo se permitan crear offering con las categorias del usuario
       // if (!empty($data['CategoryID'])) {
       //   //Validación contra la suscripción del usuario para la categoría
@@ -294,8 +294,8 @@ class OfferingController {
       // Validar FAQs
       if (!empty($data['faqs']) && is_array($data['faqs'])) {
         foreach ($data['faqs'] as $faq) {
-          if ((!empty($faq['question']) && $this->containsInappropriateContent($faq['question'])) ||
-            (!empty($faq['answer']) && $this->containsInappropriateContent($faq['answer']))) {
+          if ((!empty($faq['Question']) && $this->containsInappropriateContent($faq['Question'])) ||
+            (!empty($faq['Answer']) && $this->containsInappropriateContent($faq['Answer']))) {
             return $response->withStatus(400)->withJson([
               "code" => "INAPPROPRIATE_CONTENT",
               "desc" => "FAQs contain inappropriate content. Please review and try again."
@@ -307,14 +307,14 @@ class OfferingController {
       // Validar Packages
       if (!empty($data['packages']) && is_array($data['packages'])) {
         foreach ($data['packages'] as $package) {
-          if ((!empty($package['conditions']) && $this->containsInappropriateContent($package['conditions'])) ||
-            (!empty($package['description']) && $this->containsInappropriateContent($package['description']))) {
+          if ((!empty($package['Conditions']) && $this->containsInappropriateContent($package['Conditions'])) ||
+            (!empty($package['Description']) && $this->containsInappropriateContent($package['Description']))) {
             return $response->withStatus(400)->withJson([
               "code" => "INAPPROPRIATE_CONTENT",
               "desc" => "Packages contain inappropriate content. Please review and try again."
             ]);
           }
-        } 
+        }
       }
 
       // Actualizar la oferta
@@ -452,21 +452,21 @@ class OfferingController {
 
       // Obtener datos del cuerpo de la petición
       $data = $request->getParsedBody();
-      $title = $data['title'] ?? null;
-      $description = $data['description'] ?? null;
+      $title = $data['Title'] ?? null;
+      $description = $data['Description'] ?? null;
 
       // Valida contenido con Perspective API
       if ($title && $description) {
         if (
-          $this->containsInappropriateContent($data['title']) ||
-          $this->containsInappropriateContent($data['description'])
+          $this->containsInappropriateContent($data['Title']) ||
+          $this->containsInappropriateContent($data['Description'])
         ) {
           return $response->withStatus(400)->withJson([
             "code" => "INAPPROPRIATE_CONTENT",
             "desc" => "Please remove inappropriate content and try again."
           ]);
         }
-      } 
+      }
 
       // Ruta de archivo y URL
       $fileExtension = $uploadedMedia-> extension;
@@ -522,7 +522,7 @@ class OfferingController {
       if($result->http_code != 200){
         return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
-      
+
       $offeringData = $result->data;
 
       // Verificar permisos
@@ -548,24 +548,24 @@ class OfferingController {
       // Verifico si el archivo multimedia es valido (si se subio)
       $uploadedMedia = $this -> _getUploadedMedia($request);
 
-      
+
       // Obtener datos del cuerpo de la petición
       $data = $request->getParsedBody();
-      $title = $data['title'] ?? null;
-      $description = $data['description'] ?? null;
+      $title = $data['Title'] ?? null;
+      $description = $data['Description'] ?? null;
 
       // Valida contenido con Perspective API
       if ($title && $description) {
         if (
-          $this->containsInappropriateContent($data['title']) ||
-          $this->containsInappropriateContent($data['description'])
+          $this->containsInappropriateContent($data['Title']) ||
+          $this->containsInappropriateContent($data['Description'])
         ) {
           return $response->withStatus(400)->withJson([
             "code" => "INAPPROPRIATE_CONTENT",
             "desc" => "Please remove inappropriate content and try again."
           ]);
         }
-      } 
+      }
 
       if($uploadedMedia !== false){
         if($uploadedMedia-> error){

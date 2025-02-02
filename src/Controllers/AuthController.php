@@ -43,7 +43,7 @@ class AuthController{
         ]
       ]);
     }
-    
+
     $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
     if ($result->http_code !== 200) {
       return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
@@ -267,7 +267,7 @@ class AuthController{
         ]
       ]);
     }
-    
+
     $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
     if ($result->http_code !== 200) {
       return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
