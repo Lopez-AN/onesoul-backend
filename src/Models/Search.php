@@ -51,21 +51,60 @@ class Search
   {
     try {
       $searchQuery = "%$query%";
-      $stmt = $this->pdo->prepare('SELECT SQL_CALC_FOUND_ROWS o.*, m1.URL as imgURL,
-            u.UserID as author_UserID, u.FirstName as author_FirstName,
-            u.LastName as author_LastName, m2.URL as author_imgURL
-            FROM Offerings AS o
-            INNER JOIN Users AS u ON u.UserID = o.UserID
-            LEFT JOIN Media AS m1 ON o.OfferingID = m1.OfferingID
-            LEFT JOIN Media AS m2 ON u.UserID = m2.UserID
-            WHERE (o.Title LIKE :search1 OR o.Description LIKE :search2 OR o.Tags LIKE :search3) 
-            AND o.Status = "Active"
-            ORDER BY o.OfferingID
-            LIMIT :_limit OFFSET :_offset');
+      $stmt = $this->pdo->prepare("SELECT o.*, u.UserID AS author_UserID,
+        u.FirstName AS author_FirstName, u.LastName AS author_LastName,
+        (SELECT URL FROM Media WHERE UserID = u.UserID LIMIT 1) AS author_imgURL,
+        -- Subconsulta para media_images
+        (SELECT JSON_ARRAYAGG(
+          JSON_OBJECT(
+            'Id', m.MediaID,
+            'Url', m.URL,
+            'Title', m.Title,
+            'Description', m.Description,
+            'Position', m.Position
+          )
+        ) FROM Media m WHERE m.OfferingID = o.OfferingID AND m.MediaType = 'image') AS media_images,
+        -- Subconsulta para media_videos
+        (SELECT JSON_ARRAYAGG(
+          JSON_OBJECT(
+            'Id', m.MediaID,
+            'Url', m.URL,
+            'Title', m.Title,
+            'Description', m.Description,
+            'Position', m.Position
+          )
+        ) FROM Media m WHERE m.OfferingID = o.OfferingID AND m.MediaType = 'video') AS media_videos,
+        -- Subconsulta para faqs
+        (SELECT JSON_ARRAYAGG(
+          JSON_OBJECT(
+            'Position', f.position,
+            'Question', f.question,
+            'Answer', f.answer
+          )
+        ) FROM OfferingsFaqs f WHERE f.OfferingID = o.OfferingID) AS faqs,
+        -- Subconsulta para packages
+        (SELECT JSON_ARRAYAGG(
+          JSON_OBJECT(
+            'Package', p.package,
+            'Price', p.price,
+            'Description', p.description,
+            'Conditions', p.conditions,
+            'SessionType', p.sessionType
+          )
+        ) FROM OfferingsPackages p WHERE p.OfferingID = o.OfferingID) AS packages
+        FROM Offerings AS o
+        INNER JOIN Users AS u ON u.UserID = o.UserID
+        WHERE (o.Title LIKE :search1 OR o.Description LIKE :search2
+        OR o.ShortDescription LIKE :search3 OR o.Tags LIKE :search4)
+        AND o.Status = 'Active'
+        ORDER BY o.OfferingID
+        LIMIT :_limit OFFSET :_offset"
+      );
 
       $stmt->bindParam(':search1', $searchQuery, PDO::PARAM_STR);
       $stmt->bindParam(':search2', $searchQuery, PDO::PARAM_STR);
       $stmt->bindParam(':search3', $searchQuery, PDO::PARAM_STR);
+      $stmt->bindParam(':search4', $searchQuery, PDO::PARAM_STR);
       $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
       $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
       $stmt->execute();
@@ -74,17 +113,46 @@ class Search
       $stmt = $this->pdo->query("SELECT FOUND_ROWS() as total");
       $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
+      // Desagrupo los json traidos por MYSQL para armar el JSON anidado de respuesta
       $rs = array_map(function ($e) {
+        $e['media'] = [
+          'images' => [],
+          'videos' => []
+        ];
+
+        $images = @json_decode($e['media_images'], true);
+        if($images){
+          $e['media']['images'] = $images;
+        }
+        unset($e['media_images']);
+
+        $videos = @json_decode($e['media_videos'], true);
+        if($videos){
+          $e['media']['videos'] = $videos;
+        }
+        unset($e['media_videos']);
+
+        $faqs = @json_decode($e['faqs'], true);
+        if($faqs){
+          $e['faqs'] = $faqs;
+        }
+
+        $packages = @json_decode($e['packages'], true);
+        if($packages){
+          $e['packages'] = $packages;
+        }
+
         $e['author'] = [
           "UserID" => $e['author_UserID'],
           "FirstName" => $e['author_FirstName'],
           "LastName" => $e['author_LastName'],
-          "imgURL" => $e['author_imgURL']
+          "ImgURL" => $e['author_imgURL']
         ];
         unset($e['author_UserID']);
         unset($e['author_FirstName']);
         unset($e['author_LastName']);
         unset($e['author_imgURL']);
+
         return $e;
       }, $rs);
 
@@ -121,7 +189,7 @@ class Search
             LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
             LEFT JOIN Media as m ON u.UserID = m.UserID
             LEFT JOIN Reviews as r ON u.UserID = r.SUserID OR u.UserID = r.GUserID
-            WHERE (u.FirstName LIKE :search1 OR u.LastName LIKE :search2 OR u.Biography LIKE :search3 
+            WHERE (u.FirstName LIKE :search1 OR u.LastName LIKE :search2 OR u.Biography LIKE :search3
             OR CONCAT(u.FirstName,' ',u.LastName) LIKE :search4) AND u.DeactivationDate IS NULL
             GROUP BY u.UserID
             ORDER BY u.UserID
