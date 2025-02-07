@@ -139,9 +139,6 @@ class Auth{
       "otpCode" => $otpCode
     ]);
 
-    # Envio el mail al usuario
-    $this -> _sendOtpMail($email, $username, $otpCode);
-
     $user_data = $this -> getUserByUserName($username);
     return (object)["http_code" => 200, "data" => $user_data];
   }
