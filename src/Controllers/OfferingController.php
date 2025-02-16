@@ -431,6 +431,20 @@ class OfferingController {
         return $response->withStatus(400)->withJson($uploadedMedia -> error);
       }
 
+      // Ruta temporal del archivo
+      $tempFilePath = $uploadedMedia->file->getStream()->getMetadata('uri');
+
+      // Analizar la imagen con Amazon Rekognition
+      $rekognitionResult = analyzeImageWithRekognition($tempFilePath);
+      if ($rekognitionResult['error']) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "INAPPROPRIATE_IMAGE",
+            "desc" => $rekognitionResult['reason']
+          ]
+        ]);
+      }      
+
       // Validar cantidad de archivos existentes
       $mediaCounts = $this->offering->getMediaCountByType($id);
       if ($this->_isImage($uploadedMedia-> mimeType) && $mediaCounts['image'] >= MAX_IMAGES) {
@@ -479,12 +493,20 @@ class OfferingController {
       $uploadedMedia->file->moveTo($filePath);
 
       // Insertar media en la base de datos
-      $this->offering->createOfferingMedia($id, $title, $description, $position, $fileURL, $filePath,
-        $this->_isImage($uploadedMedia-> mimeType) ? 'image' : 'video');
+      $this->offering->createOfferingMedia(
+        $id,
+        $title,
+        $description,
+        $position,
+        $fileURL,
+        $filePath,
+        $this->_isImage($uploadedMedia->mimeType) ? 'image' : 'video'
+      );
 
       return $response->withStatus(200)->withJson([
         "message" => "Media file added successfully",
-        "URL" => $fileURL
+        "URL" => $fileURL,
+        "detected_text" => $rekognitionResult['text']
       ]);
     } catch (\Throwable $e) {
       if (!empty($filePath) && is_file($filePath)) {
@@ -519,7 +541,7 @@ class OfferingController {
     try {
       // Verificar que el offering existe
       $result = $this->offering->getOfferingById($id);
-      if($result->http_code != 200){
+      if ($result->http_code != 200){
         return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
 
@@ -537,7 +559,7 @@ class OfferingController {
 
       // Busco el media del offering
       $media = $this->offering->getMediaById($id,$media_id);
-      if(empty($media)){
+      if (empty($media)){
         return $response->withStatus(404)->withJson([
           "error" => [
             "code" => "MEDIA_NOT_FOUND",
@@ -545,9 +567,23 @@ class OfferingController {
           ]
         ]);
       }
+
       // Verifico si el archivo multimedia es valido (si se subio)
       $uploadedMedia = $this -> _getUploadedMedia($request);
 
+      // Ruta temporal del archivo
+      $tempFilePath = $uploadedMedia->file->getStream()->getMetadata('uri');
+
+      // Analizar la imagen con Amazon Rekognition
+      $rekognitionResult = analyzeImageWithRekognition($tempFilePath);
+      if ($rekognitionResult['error']) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "INAPPROPRIATE_IMAGE",
+            "desc" => $rekognitionResult['reason']
+          ]
+        ]);
+      }
 
       // Obtener datos del cuerpo de la petición
       $data = $request->getParsedBody();
@@ -567,7 +603,7 @@ class OfferingController {
         }
       }
 
-      if($uploadedMedia !== false){
+      if ($uploadedMedia !== false){
         if($uploadedMedia-> error){
           return $response->withStatus(400)->withJson($uploadedMedia -> error);
         }
@@ -590,7 +626,8 @@ class OfferingController {
       }
 
       return $response->withStatus(200)->withJson([
-        "message" => "Media file updated successfully"
+        "message" => "Media file updated successfully",
+        "detected_text" => $rekognitionResult['text']
       ]);
     } catch (\Throwable $e) {
       if (!empty($filePath) && is_file($filePath)) {
