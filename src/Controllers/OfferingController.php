@@ -10,6 +10,7 @@ use Firebase\JWT\JWT;
 require_once(ROOT . '/src/Utils/Paginator.php');
 require_once(ROOT . '/src/Utils/OptimizeImg.php');
 require_once(ROOT . '/src/Utils/PerspectiveText.php');
+require_once(ROOT . '/src/Utils/AWSRekognition.php');
 
 define("MAX_IMAGES", 8);
 define("MAX_VIDEOS", 3);
@@ -391,7 +392,8 @@ class OfferingController {
     }
   }
 
-  public function createOfferingMedia(Request $request, Response $response, $args){
+  public function createOfferingMedia(Request $request, Response $response, $args)
+  {
     $id = $args['id']; // ID de offering
     $position = $args['position']; // Posicion del archivo multimedia
 
@@ -410,7 +412,7 @@ class OfferingController {
     try {
       // Verificar que el offering existe
       $result = $this->offering->getOfferingById($id);
-      if($result->http_code != 200){
+      if ($result->http_code != 200) {
         return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
       $offeringData = $result->data;
@@ -426,28 +428,34 @@ class OfferingController {
       }
 
       // Verifico si el archivo multimedia es valido
-      $uploadedMedia = $this -> _getUploadedMedia($request);
-      if($uploadedMedia-> error){
-        return $response->withStatus(400)->withJson($uploadedMedia -> error);
+      $uploadedMedia = $this->_getUploadedMedia($request);
+      if ($uploadedMedia->error) {
+        return $response->withStatus(400)->withJson($uploadedMedia->error);
       }
+
+      // Obtengo la extención del archivo media
+      $fileExtension = $uploadedMedia->extension;
 
       // Ruta temporal del archivo
       $tempFilePath = $uploadedMedia->file->getStream()->getMetadata('uri');
 
       // Analizar la imagen con Amazon Rekognition
-      $rekognitionResult = analyzeImageWithRekognition($tempFilePath);
-      if ($rekognitionResult['error']) {
-        return $response->withStatus(400)->withJson([
-          "error" => [
-            "code" => "INAPPROPRIATE_IMAGE",
-            "desc" => $rekognitionResult['reason']
-          ]
-        ]);
-      }      
+      if (in_array($fileExtension, ['jpg', 'jpeg', 'png'])) {
+        $rekognitionResult = analyzeImageWithRekognition($tempFilePath);
+        
+        if (!empty($rekognitionResult['error'])) {
+          return $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "INAPPROPRIATE_IMAGE",
+              "desc" => $rekognitionResult['reason']
+            ]
+          ]);
+        }
+      }
 
       // Validar cantidad de archivos existentes
       $mediaCounts = $this->offering->getMediaCountByType($id);
-      if ($this->_isImage($uploadedMedia-> mimeType) && $mediaCounts['image'] >= MAX_IMAGES) {
+      if ($this->_isImage($uploadedMedia->mimeType) && $mediaCounts['image'] >= MAX_IMAGES) {
         return $response->withStatus(400)->withJson([
           "error" => [
             "code" => "MEDIA_TOO_MANY",
@@ -455,7 +463,7 @@ class OfferingController {
           ]
         ]);
       }
-      if (!$this->_isImage($uploadedMedia-> mimeType) && $mediaCounts['video'] >= MAX_VIDEOS) {
+      if (!$this->_isImage($uploadedMedia->mimeType) && $mediaCounts['video'] >= MAX_VIDEOS) {
         return $response->withStatus(400)->withJson([
           "error" => [
             "code" => "MEDIA_TOO_MANY",
@@ -483,7 +491,7 @@ class OfferingController {
       }
 
       // Ruta de archivo y URL
-      $fileExtension = $uploadedMedia-> extension;
+      $fileExtension = $uploadedMedia->extension;
       $uid = uniqid();
       $uploadDirectory = $GLOBALS['config']['media_folder']['path'];
       $filePath = "$uploadDirectory/offering/$uid.$fileExtension";
@@ -506,7 +514,7 @@ class OfferingController {
       return $response->withStatus(200)->withJson([
         "message" => "Media file added successfully",
         "URL" => $fileURL,
-        "detected_text" => $rekognitionResult['text']
+        "detected_text" => isset($rekognitionResult['text']) ? $rekognitionResult['text'] : ''
       ]);
     } catch (\Throwable $e) {
       if (!empty($filePath) && is_file($filePath)) {
@@ -521,7 +529,8 @@ class OfferingController {
     }
   }
 
-  public function updateOfferingMedia(Request $request, Response $response, $args){
+  public function updateOfferingMedia(Request $request, Response $response, $args)
+  {
     $id = $args['id']; // ID de offering
     $media_id = $args['media_id']; // ID del archivo de medios
     $position = $args['position']; // Posicion del archivo multimedia
@@ -541,7 +550,7 @@ class OfferingController {
     try {
       // Verificar que el offering existe
       $result = $this->offering->getOfferingById($id);
-      if ($result->http_code != 200){
+      if ($result->http_code != 200) {
         return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
 
@@ -558,8 +567,8 @@ class OfferingController {
       }
 
       // Busco el media del offering
-      $media = $this->offering->getMediaById($id,$media_id);
-      if (empty($media)){
+      $media = $this->offering->getMediaById($id, $media_id);
+      if (empty($media)) {
         return $response->withStatus(404)->withJson([
           "error" => [
             "code" => "MEDIA_NOT_FOUND",
@@ -569,20 +578,26 @@ class OfferingController {
       }
 
       // Verifico si el archivo multimedia es valido (si se subio)
-      $uploadedMedia = $this -> _getUploadedMedia($request);
+      $uploadedMedia = $this->_getUploadedMedia($request);
+
+      // Obtengo la extención del archivo media
+      $fileExtension = $uploadedMedia->extension;
 
       // Ruta temporal del archivo
       $tempFilePath = $uploadedMedia->file->getStream()->getMetadata('uri');
 
       // Analizar la imagen con Amazon Rekognition
-      $rekognitionResult = analyzeImageWithRekognition($tempFilePath);
-      if ($rekognitionResult['error']) {
-        return $response->withStatus(400)->withJson([
-          "error" => [
-            "code" => "INAPPROPRIATE_IMAGE",
-            "desc" => $rekognitionResult['reason']
-          ]
-        ]);
+      if (in_array($fileExtension, ['jpg', 'jpeg', 'png'])) {
+        $rekognitionResult = analyzeImageWithRekognition($tempFilePath);
+        
+        if (!empty($rekognitionResult['error'])) {
+          return $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "INAPPROPRIATE_IMAGE",
+              "desc" => $rekognitionResult['reason']
+            ]
+          ]);
+        }
       }
 
       // Obtener datos del cuerpo de la petición
@@ -603,13 +618,12 @@ class OfferingController {
         }
       }
 
-      if ($uploadedMedia !== false){
-        if($uploadedMedia-> error){
-          return $response->withStatus(400)->withJson($uploadedMedia -> error);
+      if ($uploadedMedia !== false) {
+        if ($uploadedMedia->error) {
+          return $response->withStatus(400)->withJson($uploadedMedia->error);
         }
 
         // Ruta de archivo y URL
-        $fileExtension = $uploadedMedia-> extension;
         $uid = uniqid();
         $uploadDirectory = $GLOBALS['config']['media_folder']['path'];
         $filePath = "$uploadDirectory/offering/$uid.$fileExtension";
@@ -618,7 +632,7 @@ class OfferingController {
         // Mover el archivo al destino
         $uploadedMedia->file->moveTo($filePath);
 
-        $this->offering->updateOfferingMedia($id, $title, $description, $position, $media_id, $fileURL, $filePath, $this->_isImage($uploadedMedia-> mimeType) ? 'image' : 'video');
+        $this->offering->updateOfferingMedia($id, $title, $description, $position, $media_id, $fileURL, $filePath, $this->_isImage($uploadedMedia->mimeType) ? 'image' : 'video');
         // Elimino el archivo antiguo si se actualizo con uno nuevo
         unlink($media['Path']);
       } else {
@@ -627,7 +641,7 @@ class OfferingController {
 
       return $response->withStatus(200)->withJson([
         "message" => "Media file updated successfully",
-        "detected_text" => $rekognitionResult['text']
+        "detected_text" => isset($rekognitionResult['text']) ? $rekognitionResult['text'] : ''
       ]);
     } catch (\Throwable $e) {
       if (!empty($filePath) && is_file($filePath)) {
