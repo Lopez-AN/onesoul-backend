@@ -5,7 +5,7 @@ namespace App\Models;
 use PDO;
 use App\Exceptions\DatabaseException;
 
-
+require_once(ROOT . '/src/Utils/AWSRekognition.php');
 
 class User
 {
@@ -358,6 +358,19 @@ class User
       #Grabo el archivo en el FS
       $uploadedFile->moveTo($filePath);
       $fileWritten = true;
+
+      // Validar con Amazon Rekognition
+      $rekognitionResult = analyzeImageWithRekognition($filePath);
+      if ($rekognitionResult['error']) {
+        unlink($filePath); // Borrar la imagen si es inapropiada
+        return (object) [
+          "http_code" => 400,
+          "error" => [
+            "code" => "INAPPROPRIATE_CONTENT",
+            "desc" => $rekognitionResult['reason']
+          ]
+        ];
+      }
 
       // Aquí optimizamos la imagen usando la función optimizeImage
       $optimizedPath = optimizeImage($filePath);
