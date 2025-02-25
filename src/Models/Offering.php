@@ -91,7 +91,13 @@ class Offering
           "ImgURL" => $offering['author_imgURL']
         ];
 
-        unset($offering['author_UserID'], $offering['author_FirstName'], $offering['author_LastName'], $offering['author_imgURL']);
+        $offering['location'] = [
+          "CountryCode" => $offering['CountryCode'] ?? null,
+          "City" => $offering['City'] ?? null
+        ];
+
+        unset($offering['author_UserID'], $offering['author_FirstName'], $offering['author_LastName'], 
+              $offering['author_imgURL'], $offering['CountryCode'], $offering['City']);
       }
 
       $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
@@ -195,8 +201,13 @@ class Offering
         "LastName" => $offering['author_LastName'],
         "ImgURL" => $offering['author_imgURL']
       ];
-
-      unset($offering['author_UserID'], $offering['author_FirstName'], $offering['author_LastName'], $offering['author_imgURL']);
+      $offering['location'] = [
+        "CountryCode" => $offering['CountryCode'] ?? null,
+        "City" => $offering['City'] ?? null
+      ];
+      
+      unset($offering['author_UserID'], $offering['author_FirstName'], $offering['author_LastName'], 
+            $offering['author_imgURL'], $offering['CountryCode'], $offering['City']);
 
       return (object) [
         "http_code" => 200,
@@ -286,7 +297,13 @@ class Offering
           "ImgURL" => $offering['author_imgURL']
         ];
 
-        unset($offering['author_UserID'], $offering['author_FirstName'], $offering['author_LastName'], $offering['author_imgURL']);
+        $offering['location'] = [
+          "CountryCode" => $offering['CountryCode'] ?? null,
+          "City" => $offering['City'] ?? null
+        ];
+
+        unset($offering['author_UserID'], $offering['author_FirstName'], $offering['author_LastName'], 
+              $offering['author_imgURL'], $offering['CountryCode'], $offering['City']);
       }
 
       $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
@@ -382,7 +399,13 @@ class Offering
           "ImgURL" => $offering['author_imgURL']
         ];
 
-        unset($offering['author_UserID'], $offering['author_FirstName'], $offering['author_LastName'], $offering['author_imgURL']);
+        $offering['location'] = [
+          "CountryCode" => $offering['CountryCode'] ?? null,
+          "City" => $offering['City'] ?? null
+        ];
+
+        unset($offering['author_UserID'], $offering['author_FirstName'], $offering['author_LastName'], 
+              $offering['author_imgURL'], $offering['CountryCode'], $offering['City']);
       }
 
       $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
@@ -425,8 +448,8 @@ class Offering
       }
 
       $stmt = $this->db->prepare("INSERT INTO Offerings (Title, ShortDescription, Description, CategoryID, UserID,
-            Status, CreationDate, IsActive, Tags, SKU, Stock, ServiceType)
-            VALUES (:Title, :ShortDescription, :Description, :CategoryID, :UserID, :Status, :CreationDate, 0, :Tags, :SKU, :Stock, :ServiceType)");
+            Status, CreationDate, IsActive, CountryCode, City, Currency, Tags, SKU, Stock, ServiceType)
+            VALUES (:Title, :ShortDescription, :Description, :CategoryID, :UserID, :Status, :CreationDate, 0, :CountryCode, :City, :Currency, :Tags, :SKU, :Stock, :ServiceType)");
 
       $stmt->bindParam(':Title', $data['Title'], PDO::PARAM_STR);
       $stmt->bindParam(':ShortDescription', $data['ShortDescription'], PDO::PARAM_STR);
@@ -435,6 +458,9 @@ class Offering
       $stmt->bindParam(':UserID', $data['UserID'], PDO::PARAM_INT);
       $stmt->bindValue(':Status', 'Pending', PDO::PARAM_STR);
       $stmt->bindValue(':CreationDate', date('YmdHis'), PDO::PARAM_STR);
+      $stmt->bindValue(':CountryCode', $data['location']['CountryCode'] ?? null, ($data['location']['CountryCode'] ?? null) === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
+      $stmt->bindValue(':City', $data['location']['City'] ?? null, ($data['location']['City'] ?? null) === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
+      $stmt->bindValue(':Currency', $data['Currency'], PDO::PARAM_STR);
       $stmt->bindValue(':Tags', is_array($data['Tags']) ? implode(",", $data['Tags']) : $data['Tags'], PDO::PARAM_STR);
       $stmt->bindValue(':SKU', $data['SKU'] ?? null, ($data['SKU'] ?? null) === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
       $stmt->bindValue(':Stock', $data['Stock'] ?? null, ($data['Stock'] ?? null) === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
@@ -520,6 +546,13 @@ class Offering
         throw new NotFoundException("The specified offering does not exist");
       }
 
+      // Extraer ubicación si está presente
+      if (isset($data['location']) && is_array($data['location'])) {
+        $data['CountryCode'] = $data['location']['CountryCode'] ?? null;
+        $data['City'] = $data['location']['City'] ?? null;
+        unset($data['location']); // Remover 'location' del array principal
+      }
+
       // Lista de campos permitidos para actualizar
       $allowedFields = [
         'Title',
@@ -527,6 +560,9 @@ class Offering
         'Description',
         'CategoryID',
         'Status',
+        'CountryCode',
+        'City',
+        'Currency',
         'Tags',
         'SKU',
         'Stock',

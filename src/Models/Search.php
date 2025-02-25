@@ -148,10 +148,12 @@ class Search
           "LastName" => $e['author_LastName'],
           "ImgURL" => $e['author_imgURL']
         ];
-        unset($e['author_UserID']);
-        unset($e['author_FirstName']);
-        unset($e['author_LastName']);
-        unset($e['author_imgURL']);
+
+        $e['location'] = [
+          "CountryCode" => $e['CountryCode'],
+          "City" => $e['City']
+        ];
+        unset($e['author_UserID'], $e['author_FirstName'], $e['author_LastName'], $e['author_imgURL'], $e['CountryCode'], $e['City']);
 
         return $e;
       }, $rs);
