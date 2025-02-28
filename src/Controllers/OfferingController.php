@@ -474,7 +474,7 @@ class OfferingController {
 
       // Obtener datos del cuerpo de la petición
       $data = $request->getParsedBody();
-      $title = $data['Title'] ?? null;
+      $title = $data['Title'];
       $description = $data['Description'] ?? null;
 
       // Valida contenido con Perspective API
@@ -602,7 +602,7 @@ class OfferingController {
 
       // Obtener datos del cuerpo de la petición
       $data = $request->getParsedBody();
-      $title = $data['Title'] ?? null;
+      $title = $data['Title'];
       $description = $data['Description'] ?? null;
 
       // Valida contenido con Perspective API
