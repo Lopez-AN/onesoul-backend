@@ -49,11 +49,12 @@ class SearchController
 
   public function searchUsers(Request $request, Response $response, $args)
   {
+    $type = empty($args) || empty(['type']) ? "" : strtolower($args['type']);
     $paginator = paginator($request);
     $queryParams = $request->getQueryParams();
     $query = $queryParams['query'];
     try {
-      $results = $this->search->searchUsers($paginator, $query);
+      $results = $this->search->searchUsers($paginator, $query, $type);
       $response->getBody()->write(json_encode($results));
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());

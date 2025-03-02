@@ -24,6 +24,7 @@ return function (App $app) {
   $searchController = new SearchController($search);
 
   $app->get('/search/users', [$searchController, 'searchUsers']);
+  $app->get('/search/users/{type}', [$searchController, 'searchUsers']);
   $app->get('/search/offerings', [$searchController, 'searchOfferings']);
   $app->get('/search/categories', [$searchController, 'searchCategories']);
 

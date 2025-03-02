@@ -25,7 +25,9 @@ class User
             u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
             u.LastLogin, u.DeactivationDate, u.UserLevel, u.TermsAndConditions, u.SignedContract,
             GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
-            u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating, m.URL as imgURL
+            u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating,
+            COUNT(DISTINCT r.ReviewID) AS TotalReviews,
+            m.URL as imgURL
             FROM Users as u
             LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
             LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
@@ -70,20 +72,29 @@ class User
   {
     try {
       $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName, u.UserName,
-            u.Email, u.Phone, u.AddressName, u.AddressNumber, u.Floor,
-            u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
-            u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
-            u.LastLogin, u.DeactivationDate, u.UserLevel, u.TermsAndConditions, u.SignedContract,
-            GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
-            u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating, m.URL as imgURL
-            FROM Users as u
-            LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
-            LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
-            LEFT JOIN Media as m ON u.UserID = m.UserID
-            LEFT JOIN Reviews as r ON u.UserID = r.GUserID OR u.UserID = r.SUserID
-            WHERE u.UserID = :id
-            GROUP BY u.UserID
-            ORDER BY u.UserID");
+        u.Email, u.Phone, u.AddressName, u.AddressNumber, u.Floor,
+        u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
+        u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
+        u.LastLogin, u.DeactivationDate, u.UserLevel, u.TermsAndConditions, u.SignedContract,
+        GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
+        u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating,
+        COUNT(DISTINCT r.ReviewID) AS TotalReviews,
+        sub.avgRate, m.URL as imgURL
+        FROM Users as u
+        LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
+        LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
+        LEFT JOIN Media as m ON u.UserID = m.UserID
+        LEFT JOIN Reviews as r ON u.UserID = r.GUserID OR u.UserID = r.SUserID
+        LEFT JOIN (
+          SELECT ROUND(AVG(p.price),0) as AvgRate, o.UserID
+          FROM Offerings as o
+          INNER JOIN OfferingsPackages as p ON o.OfferingID = p.OfferingID
+          WHERE o.Status = 'Active'
+          GROUP BY o.UserID
+        ) as sub ON sub.UserID = u.UserID
+        WHERE u.UserID = :id
+        GROUP BY u.UserID
+        ORDER BY u.UserID");
 
       $stmt->bindParam(':id', $id, PDO::PARAM_INT);
       $stmt->execute();
@@ -144,7 +155,9 @@ class User
                 u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
                 u.LastLogin, u.DeactivationDate, u.UserLevel, u.TermsAndConditions, u.SignedContract,
                 GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
-                u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating, m.URL as imgURL
+                u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating,
+                COUNT(DISTINCT r.ReviewID) AS TotalReviews,
+                m.URL as imgURL
                 FROM Users as u
                 LEFT JOIN UsersCategories as uc ON uc.UserID = u.UserID
                 LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
@@ -159,7 +172,9 @@ class User
                 u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
                 u.LastLogin, u.DeactivationDate, u.UserLevel, u.TermsAndConditions, u.SignedContract,
                 GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
-                u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating, m.URL as imgURL
+                u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating,
+                COUNT(DISTINCT r.ReviewID) AS TotalReviews,
+                m.URL as imgURL
                 FROM Users as u
                 LEFT JOIN UsersCategories as uc ON uc.UserID = u.UserID
                 LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID

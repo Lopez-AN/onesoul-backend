@@ -170,8 +170,10 @@ class Search
     }
   }
 
-  public function searchUsers($paginator, $query)
+  public function searchUsers($paginator, $query, $type)
   {
+    $filterSeeker = in_array($type,['seeker','seekers']) ? " u.UserType = 'Seeker' AND " : "";
+
     try {
       $query = explode(" ", $query);
       $query = array_map(function ($e) {
@@ -179,23 +181,76 @@ class Search
       }, $query);
       $query = implode(" ", $query);
       $searchQuery = "%$query%";
-      $stmt = $this->pdo->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName, u.UserName,
-            u.Email, u.Phone, u.AddressName, u.AddressNumber, u.Floor,
-            u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
-            u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
-            u.LastLogin, u.UserLevel, u.TermsAndConditions, u.SignedContract,
-            GROUP_CONCAT(DISTINCT c.Name ORDER BY c.Name ASC SEPARATOR ', ') AS Categories,
-            u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating, m.URL as imgURL
-            FROM Users as u
-            LEFT JOIN UsersCategories as uc ON uc.UserID = u.UserID
-            LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
-            LEFT JOIN Media as m ON u.UserID = m.UserID
-            LEFT JOIN Reviews as r ON u.UserID = r.SUserID OR u.UserID = r.GUserID
-            WHERE (u.FirstName LIKE :search1 OR u.LastName LIKE :search2 OR u.Biography LIKE :search3
-            OR CONCAT(u.FirstName,' ',u.LastName) LIKE :search4) AND u.DeactivationDate IS NULL
-            GROUP BY u.UserID
-            ORDER BY u.UserID
-            LIMIT :_limit OFFSET :_offset");
+
+      if(in_array($type,['guide','guides'])){
+        $stmt = $this->pdo->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName, u.UserName,
+        u.Email, u.Phone, u.AddressName, u.AddressNumber, u.Floor,
+        u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
+        u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
+        u.LastLogin, u.UserLevel, u.TermsAndConditions, u.SignedContract,
+        GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
+        u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating,
+        COUNT(DISTINCT r.ReviewID) AS TotalReviews,
+        sub.avgRate, m.URL as imgURL
+        FROM Users as u
+        LEFT JOIN UsersCategories as uc ON uc.UserID = u.UserID
+        LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
+        LEFT JOIN Media as m ON u.UserID = m.UserID
+        LEFT JOIN Reviews as r ON u.UserID = r.GUserID
+        LEFT JOIN Offerings as o ON u.UserID = o.UserID
+        LEFT JOIN (
+          SELECT ROUND(AVG(p.price),0) as AvgRate, o.UserID
+          FROM Offerings as o
+          INNER JOIN OfferingsPackages as p ON o.OfferingID = p.OfferingID
+          WHERE o.Status = 'Active'
+          GROUP BY o.UserID
+        ) as sub ON sub.UserID = u.UserID
+        WHERE (
+          u.FirstName LIKE :search1 OR
+          u.LastName LIKE :search2 OR
+          u.Biography LIKE :search3 OR
+          CONCAT(u.FirstName,' ',u.LastName) LIKE :search4
+          OR (o.Status = 'Active' AND (o.Title LIKE :search5 OR o.ShortDescription LIKE :search6))
+        )
+        AND u.DeactivationDate IS NULL
+        GROUP BY u.UserID
+        ORDER BY u.UserID
+        LIMIT :_limit OFFSET :_offset");
+
+        $stmt->bindParam(':search5', $searchQuery, PDO::PARAM_STR);
+        $stmt->bindParam(':search6', $searchQuery, PDO::PARAM_STR);
+      }else{
+        $stmt = $this->pdo->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName, u.UserName,
+        u.Email, u.Phone, u.AddressName, u.AddressNumber, u.Floor,
+        u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
+        u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
+        u.LastLogin, u.UserLevel, u.TermsAndConditions, u.SignedContract,
+        GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
+        u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating,
+        COUNT(DISTINCT r.ReviewID) AS TotalReviews,
+        sub.avgRate, m.URL as imgURL
+        FROM Users as u
+        LEFT JOIN UsersCategories as uc ON uc.UserID = u.UserID
+        LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
+        LEFT JOIN Media as m ON u.UserID = m.UserID
+        LEFT JOIN Reviews as r ON u.UserID = r.GUserID
+        LEFT JOIN (
+          SELECT ROUND(AVG(p.price),0) as AvgRate, o.UserID
+          FROM Offerings as o
+          INNER JOIN OfferingsPackages as p WHERE o.OfferingID = p.OfferingID
+          GROUP BY o.UserID
+        ) as sub ON sub.UserID = u.UserID
+        WHERE $filterSeeker u.UserType NOT IN ('Moderator','Admin')
+        AND (
+          u.FirstName LIKE :search1 OR
+          u.LastName LIKE :search2 OR
+          u.Biography LIKE :search3 OR
+          CONCAT(u.FirstName,' ',u.LastName) LIKE :search4
+        ) AND u.DeactivationDate IS NULL
+        GROUP BY u.UserID
+        ORDER BY u.UserID
+        LIMIT :_limit OFFSET :_offset");
+      }
 
       $stmt->bindParam(':search1', $searchQuery, PDO::PARAM_STR);
       $stmt->bindParam(':search2', $searchQuery, PDO::PARAM_STR);
@@ -208,6 +263,17 @@ class Search
       $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
       $stmt = $this->pdo->query("SELECT FOUND_ROWS() as total");
       $total = $stmt->fetch(PDO::FETCH_ASSOC);
+
+      $rs = array_map(function ($e) {
+        $e['Categories'] = is_null($e['Categories']) ? [] : array_map(
+          function ($a) {
+            $a = explode(":", $a);
+            return ["id" => intval($a[0]), "name" => $a[1]];
+          },
+          explode(",", $e['Categories'])
+        );
+        return $e;
+      }, $rs);
 
       return [
         "data" => $rs,
