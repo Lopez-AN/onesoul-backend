@@ -51,7 +51,7 @@ class Search
   {
     try {
       $searchQuery = "%$query%";
-      $stmt = $this->pdo->prepare("SELECT o.*, u.UserID AS author_UserID,
+      $stmt = $this->pdo->prepare("SELECT o.*, u.UserID AS author_UserID, u.DisplayName AS author_DisplayName,
         u.FirstName AS author_FirstName, u.LastName AS author_LastName,
         (SELECT URL FROM Media WHERE UserID = u.UserID LIMIT 1) AS author_imgURL,
         -- Subconsulta para media_images
@@ -144,6 +144,7 @@ class Search
 
         $e['author'] = [
           "UserID" => $e['author_UserID'],
+          "DisplayName" => $e['author_DisplayName'],
           "FirstName" => $e['author_FirstName'],
           "LastName" => $e['author_LastName'],
           "ImgURL" => $e['author_imgURL']
@@ -153,7 +154,7 @@ class Search
           "CountryCode" => $e['CountryCode'],
           "City" => $e['City']
         ];
-        unset($e['author_UserID'], $e['author_FirstName'], $e['author_LastName'], $e['author_imgURL'], $e['CountryCode'], $e['City']);
+        unset($e['author_UserID'], $e['author_DisplayName'], $e['author_FirstName'], $e['author_LastName'], $e['author_imgURL'], $e['CountryCode'], $e['City']);
 
         return $e;
       }, $rs);
@@ -183,7 +184,7 @@ class Search
       $searchQuery = "%$query%";
 
       if(in_array($type,['guide','guides'])){
-        $stmt = $this->pdo->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName, u.UserName,
+        $stmt = $this->pdo->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName, u.UserName, u.DisplayName,
         u.Email, u.Phone, u.AddressName, u.AddressNumber, u.Floor,
         u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
         u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
@@ -191,7 +192,7 @@ class Search
         GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
         u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating,
         COUNT(DISTINCT r.ReviewID) AS TotalReviews,
-        sub.avgRate, m.URL as imgURL
+        sub.avgRate, sub.hasVirtual, sub.hasInPerson, m.URL as imgURL
         FROM Users as u
         LEFT JOIN UsersCategories as uc ON uc.UserID = u.UserID
         LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
@@ -199,7 +200,9 @@ class Search
         LEFT JOIN Reviews as r ON u.UserID = r.GUserID
         LEFT JOIN Offerings as o ON u.UserID = o.UserID
         LEFT JOIN (
-          SELECT ROUND(AVG(p.price),0) as AvgRate, o.UserID
+          SELECT ROUND(AVG(p.price),0) as AvgRate, o.UserID,
+          MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
+          MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
           FROM Offerings as o
           INNER JOIN OfferingsPackages as p ON o.OfferingID = p.OfferingID
           WHERE o.Status = 'Active'
@@ -220,7 +223,7 @@ class Search
         $stmt->bindParam(':search5', $searchQuery, PDO::PARAM_STR);
         $stmt->bindParam(':search6', $searchQuery, PDO::PARAM_STR);
       }else{
-        $stmt = $this->pdo->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName, u.UserName,
+        $stmt = $this->pdo->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName, u.UserName, u.DisplayName,
         u.Email, u.Phone, u.AddressName, u.AddressNumber, u.Floor,
         u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
         u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
@@ -228,14 +231,16 @@ class Search
         GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
         u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating,
         COUNT(DISTINCT r.ReviewID) AS TotalReviews,
-        sub.avgRate, m.URL as imgURL
+        sub.avgRate, sub.hasVirtual, sub.hasInPerson, m.URL as imgURL
         FROM Users as u
         LEFT JOIN UsersCategories as uc ON uc.UserID = u.UserID
         LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
         LEFT JOIN Media as m ON u.UserID = m.UserID
         LEFT JOIN Reviews as r ON u.UserID = r.GUserID
         LEFT JOIN (
-          SELECT ROUND(AVG(p.price),0) as AvgRate, o.UserID
+          SELECT ROUND(AVG(p.price),0) as AvgRate, o.UserID,
+          MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
+          MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
           FROM Offerings as o
           INNER JOIN OfferingsPackages as p WHERE o.OfferingID = p.OfferingID
           GROUP BY o.UserID
@@ -272,6 +277,14 @@ class Search
           },
           explode(",", $e['Categories'])
         );
+
+        // Agregar sessionType con valores booleanos
+        $e['sessionType'] = [
+        "virtual" => $e['hasVirtual'] == 1,
+        "in-person" => $e['hasInPerson'] == 1
+        ];
+      
+        unset($e['hasVirtual'], $e['hasInPerson']);
         return $e;
       }, $rs);
 

@@ -146,30 +146,11 @@ class Auth{
   private function passwordComplexity($newPassword): bool {
     $password = trim($newPassword);
 
-    # Requerimiento 1: mínimo 8 caracteres
-    if (strlen($newPassword) < 8) {
-        return false;
+    return strlen($password) >= 8 &&
+        preg_match('/[A-Z]/', $password) &&   // Debe tener al menos una mayúscula
+        preg_match('/[a-z]/', $password) &&   // Debe tener al menos una minúscula
+        (preg_match('/[0-9]/', $password) || preg_match('/\W/', $password));  // Debe tener un número O un símbolo
     }
-
-    $points = 0;
-
-    # Requerimiento 2: Validar las reglas con expresiones regulares
-    if (preg_match('/[A-Z]/', $newPassword)) {
-        $points++;
-    }
-    if (preg_match('/[a-z]/', $newPassword)) {
-        $points++;
-    }
-    if (preg_match('/[0-9]/', $newPassword)) {
-        $points++;
-    }
-    if (preg_match('/\W/', $newPassword)) {
-        $points++;
-    }
-
-    # Debe tener al menos 3 puntos para ser considerada segura
-    return $points >= 3;
-  }
 
   public function registerGoogle($token, $username){
     $response = $this -> validateToken("https://oauth2.googleapis.com/tokeninfo?id_token=$token");
@@ -554,38 +535,63 @@ class Auth{
   }
 
   # Busca un usuario por username
-  public function getUserByUserName($username){
-    try{
-      $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName, u.UserName,
-      u.Email, u.Phone, u.AddressName, u.AddressNumber, u.Floor,
-      u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
-      u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
-      u.LastLogin, u.DeactivationDate, u.UserLevel, u.TermsAndConditions, u.SignedContract,
-      GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
-      u.LegalDocuments, u.ShortDescription, round(avg(r.Rating),2) as rating, m.URL as imgURL
-      FROM Users as u
-      LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
-      LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
-      LEFT JOIN Media as m ON u.UserID = m.UserID
-      LEFT JOIN Reviews as r ON u.UserID = r.SUserID
-      WHERE u.UserName = ?");
+  public function getUserByUserName($username) {
+    try {
+      $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName, u.UserName, u.DisplayName, u.Email, 
+      u.Phone, u.AddressName, u.AddressNumber, u.Floor, 
+      u.Department, u.Cp, u.City, u.State, u.CountryCode, 
+      u.DateOfBirth, u.Gender, u.Biography, u.ValidatedEmail, 
+      u.TwoFactorAuth, u.UserType, u.RegistrationDate, 
+      u.LastLogin, u.DeactivationDate, u.UserLevel, 
+      u.TermsAndConditions, u.SignedContract,
+      GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID, ':', TRIM(c.Name)) 
+      ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
+      u.LegalDocuments, u.ShortDescription, 
+      ROUND(AVG(r.Rating),2) AS rating,
+      COUNT(DISTINCT r.ReviewID) AS TotalReviews, 
+      sub.AvgRate, sub.hasVirtual, sub.hasInPerson, 
+      m.URL AS imgURL
+      FROM Users AS u
+      LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
+      LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
+      LEFT JOIN Media AS m ON u.UserID = m.UserID
+      LEFT JOIN Reviews AS r ON u.UserID = r.SUserID
+      LEFT JOIN (
+        SELECT o.UserID, ROUND(AVG(p.price),0) AS AvgRate,
+        MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
+        MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
+        FROM Offerings AS o
+        INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
+        WHERE o.Status = 'Active'
+        GROUP BY o.UserID
+      ) AS sub ON sub.UserID = u.UserID
+      WHERE u.UserName = ?
+      GROUP BY u.UserID");
+        
       $stmt->execute([$username]);
       $rs = $stmt->fetch(PDO::FETCH_ASSOC);
 
-      if($rs && is_null($rs['UserID'])){
-        $rs = [];
-      }
+      if (!$rs) return null; // Si no encuentra el usuario, retorna null
 
-      if(!empty($rs)){
-        $rs['Categories'] = is_null($rs['Categories']) ? [] : array_map(
-          function($a){
-              $a = explode(":", $a);
-              return ["id" => intval($a[0]), "name" => $a[1]];
-          },explode(",",$rs['Categories'])
-        );
-      }
+      // Transformación de datos
+      $rs['Categories'] = is_null($rs['Categories']) ? [] : array_map(
+        function ($a) {
+        $a = explode(":", $a);
+        return ["id" => intval($a[0]), "name" => $a[1]];
+        },
+      explode(",", $rs['Categories'])
+      );
+
+      // Agregar sessionType con valores booleanos
+      $rs['sessionType'] = [
+        "virtual" => $rs['hasVirtual'] == 1,
+        "in-person" => $rs['hasInPerson'] == 1
+      ];
+                
+      unset($rs['hasVirtual'], $rs['hasInPerson']);
 
       return $rs;
+
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
@@ -593,37 +599,62 @@ class Auth{
 
   # Busca un usuario por email
   public function getUserByEmail($email){
-    try{
-      $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName, u.UserName,
-      u.Email, u.Phone, u.AddressName, u.AddressNumber, u.Floor,
-      u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
-      u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
-      u.LastLogin, u.DeactivationDate, u.UserLevel, u.TermsAndConditions, u.SignedContract,
-      GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
-      u.LegalDocuments, u.ShortDescription, round(avg(r.Rating),2) as rating, m.URL as imgURL
-      FROM Users as u
-      LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
-      LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
-      LEFT JOIN Media as m ON u.UserID = m.UserID
-      LEFT JOIN Reviews as r ON u.UserID = r.SUserID
-      WHERE u.Email = ? GROUP BY u.UserID ORDER BY u.UserID");
+    try {
+      $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName, u.UserName, u.DisplayName, u.Email, 
+      u.Phone, u.AddressName, u.AddressNumber, u.Floor, 
+      u.Department, u.Cp, u.City, u.State, u.CountryCode, 
+      u.DateOfBirth, u.Gender, u.Biography, u.ValidatedEmail, 
+      u.TwoFactorAuth, u.UserType, u.RegistrationDate, 
+      u.LastLogin, u.DeactivationDate, u.UserLevel, 
+      u.TermsAndConditions, u.SignedContract,
+      GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID, ':', TRIM(c.Name)) 
+      ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
+      u.LegalDocuments, u.ShortDescription, 
+      ROUND(AVG(r.Rating),2) AS rating,
+      COUNT(DISTINCT r.ReviewID) AS TotalReviews, 
+      sub.AvgRate, sub.hasVirtual, sub.hasInPerson, 
+      m.URL AS imgURL
+      FROM Users AS u
+      LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
+      LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
+      LEFT JOIN Media AS m ON u.UserID = m.UserID
+      LEFT JOIN Reviews AS r ON u.UserID = r.SUserID
+      LEFT JOIN (
+        SELECT o.UserID, ROUND(AVG(p.price),0) AS AvgRate,
+        MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
+        MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
+        FROM Offerings AS o
+        INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
+        WHERE o.Status = 'Active'
+        GROUP BY o.UserID
+      ) AS sub ON sub.UserID = u.UserID
+      WHERE u.Email = ?
+      GROUP BY u.UserID");
+          
       $stmt->execute([$email]);
       $rs = $stmt->fetch(PDO::FETCH_ASSOC);
-
-      if($rs && is_null($rs['UserID'])){
-        $rs = [];
-      }
-
-      if(!empty($rs)){
-        $rs['Categories'] = is_null($rs['Categories']) ? [] : array_map(
-          function($a){
-              $a = explode(":", $a);
-              return ["id" => intval($a[0]), "name" => $a[1]];
-          },explode(",",$rs['Categories'])
-        );
-      }
-
+  
+      if (!$rs) return null; // Si no encuentra el usuario, retorna null
+  
+      // Transformación de datos
+      $rs['Categories'] = is_null($rs['Categories']) ? [] : array_map(
+        function ($a) {
+        $a = explode(":", $a);
+        return ["id" => intval($a[0]), "name" => $a[1]];
+        },
+      explode(",", $rs['Categories'])
+      );
+  
+      // Agregar sessionType con valores booleanos
+      $rs['sessionType'] = [
+        "virtual" => $rs['hasVirtual'] == 1,
+        "in-person" => $rs['hasInPerson'] == 1
+      ];
+                
+      unset($rs['hasVirtual'], $rs['hasInPerson']);
+  
       return $rs;
+  
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }

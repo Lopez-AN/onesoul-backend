@@ -11,7 +11,10 @@ return function (App $app) {
     "secret" => $GLOBALS['config']['jwt']['secret'],
     "rules" => [
       new Tuupola\Middleware\JwtAuthentication\RequestPathRule([
-        "path" => "/users",
+        "path" => [
+          "/users",
+          "/users/{id}"
+        ],
         "ignore" => []
       ]),
       new Tuupola\Middleware\JwtAuthentication\RequestMethodRule([
@@ -33,7 +36,7 @@ return function (App $app) {
   $app->get('/users/username/{username}', [$userController, 'getUserByUserName']);
   $app->post('/users/profile_photo/{id}', [$userController, 'updateProfilePhoto']);
   $app->delete('/users/profile_photo/{id}', [$userController, 'deleteProfilePhoto']);
-  $app->put('/users/{id}', [$userController, 'updateUser']);
+  $app->patch('/users/{id}', [$userController, 'updateUser']);
   $app->delete('/users/{id}', [$userController, 'deleteUser']);
   $app->post('/users/categories/{id}', [$userController, 'updateUserCategories']);
 };

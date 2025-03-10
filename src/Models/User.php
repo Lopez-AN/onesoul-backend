@@ -19,20 +19,28 @@ class User
   public function getUsers($paginator)
   {
     try {
-      $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName, u.UserName,
+      $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName, u.UserName, u.DisplayName,
             u.Email, u.Phone, u.AddressName, u.AddressNumber, u.Floor,
             u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
             u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
             u.LastLogin, u.DeactivationDate, u.UserLevel, u.TermsAndConditions, u.SignedContract,
             GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
             u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating,
-            COUNT(DISTINCT r.ReviewID) AS TotalReviews,
-            m.URL as imgURL
+            COUNT(DISTINCT r.ReviewID) AS TotalReviews, sub.avgRate, sub.hasVirtual, sub.hasInPerson, m.URL as imgURL
             FROM Users as u
             LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
             LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
             LEFT JOIN Media as m ON u.UserID = m.UserID
             LEFT JOIN Reviews as r ON u.UserID = r.SUserID
+            LEFT JOIN (
+              SELECT ROUND(AVG(p.price),0) as AvgRate, o.UserID,
+              MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
+              MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
+              FROM Offerings as o
+              INNER JOIN OfferingsPackages as p ON o.OfferingID = p.OfferingID
+              WHERE o.Status = 'Active'
+              GROUP BY o.UserID
+            ) as sub ON sub.UserID = u.UserID         
             GROUP BY u.UserID
             ORDER BY u.UserID
             LIMIT :_limit OFFSET :_offset");
@@ -53,6 +61,14 @@ class User
           },
           explode(",", $e['Categories'])
         );
+
+        // Agregar sessionType con valores booleanos
+        $e['sessionType'] = [
+          "virtual" => $e['hasVirtual'] == 1,
+          "in-person" => $e['hasInPerson'] == 1
+        ];
+                
+        unset($e['hasVirtual'], $e['hasInPerson']);
         return $e;
       }, $rs);
 
@@ -71,22 +87,23 @@ class User
   public function getUserById($id)
   {
     try {
-      $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName, u.UserName,
+      $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName, u.UserName, u.DisplayName,
         u.Email, u.Phone, u.AddressName, u.AddressNumber, u.Floor,
         u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
         u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
         u.LastLogin, u.DeactivationDate, u.UserLevel, u.TermsAndConditions, u.SignedContract,
         GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
         u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating,
-        COUNT(DISTINCT r.ReviewID) AS TotalReviews,
-        sub.avgRate, m.URL as imgURL
+        COUNT(DISTINCT r.ReviewID) AS TotalReviews, sub.avgRate, sub.hasVirtual, sub.hasInPerson, m.URL as imgURL
         FROM Users as u
         LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
         LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
         LEFT JOIN Media as m ON u.UserID = m.UserID
         LEFT JOIN Reviews as r ON u.UserID = r.GUserID OR u.UserID = r.SUserID
         LEFT JOIN (
-          SELECT ROUND(AVG(p.price),0) as AvgRate, o.UserID
+          SELECT ROUND(AVG(p.price),0) as AvgRate, o.UserID,
+          MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
+          MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
           FROM Offerings as o
           INNER JOIN OfferingsPackages as p ON o.OfferingID = p.OfferingID
           WHERE o.Status = 'Active'
@@ -109,6 +126,14 @@ class User
           },
           explode(",", $e['Categories'])
         );
+
+        // Agregar sessionType con valores booleanos
+        $e['sessionType'] = [
+          "virtual" => $e['hasVirtual'] == 1,
+          "in-person" => $e['hasInPerson'] == 1
+        ];
+                
+        unset($e['hasVirtual'], $e['hasInPerson']);        
         return $e;
       }, $rs);
 
@@ -149,37 +174,53 @@ class User
   {
     try {
       if ($type == 'Guide') {
-        $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName, u.UserName,
+        $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName, u.UserName, u.DisplayName,
                 u.Email, u.Phone, u.AddressName, u.AddressNumber, u.Floor,
                 u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
                 u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
                 u.LastLogin, u.DeactivationDate, u.UserLevel, u.TermsAndConditions, u.SignedContract,
                 GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
                 u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating,
-                COUNT(DISTINCT r.ReviewID) AS TotalReviews,
-                m.URL as imgURL
+                COUNT(DISTINCT r.ReviewID) AS TotalReviews, sub.avgRate, sub.hasVirtual, sub.hasInPerson, m.URL as imgURL
                 FROM Users as u
                 LEFT JOIN UsersCategories as uc ON uc.UserID = u.UserID
                 LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
                 LEFT JOIN Media as m ON u.UserID = m.UserID
                 LEFT JOIN Reviews as r ON u.UserID = r.GUserID
+                LEFT JOIN (
+                  SELECT ROUND(AVG(p.price),0) as AvgRate, o.UserID,
+                  MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
+                  MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
+                  FROM Offerings as o
+                  INNER JOIN OfferingsPackages as p ON o.OfferingID = p.OfferingID
+                  WHERE o.Status = 'Active'
+                  GROUP BY o.UserID
+                ) as sub ON sub.UserID = u.UserID
                 ORDER BY u.UserID
                 LIMIT :_limit OFFSET :_offset");
       } else {
-        $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName, u.UserName,
+        $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName, u.UserName, u.DisplayName,
                 u.Email, u.Phone, u.AddressName, u.AddressNumber, u.Floor,
                 u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
                 u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
                 u.LastLogin, u.DeactivationDate, u.UserLevel, u.TermsAndConditions, u.SignedContract,
                 GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
                 u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating,
-                COUNT(DISTINCT r.ReviewID) AS TotalReviews,
-                m.URL as imgURL
+                COUNT(DISTINCT r.ReviewID) AS TotalReviews, sub.avgrate, sub.hasVirtual, sub.hasInPerson, m.URL as imgURL
                 FROM Users as u
                 LEFT JOIN UsersCategories as uc ON uc.UserID = u.UserID
                 LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
                 LEFT JOIN Media as m ON u.UserID = m.UserID
                 LEFT JOIN Reviews as r ON u.UserID = r.SUserID
+                LEFT JOIN (
+                  SELECT ROUND(AVG(p.price),0) as AvgRate, o.UserID,
+                  MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
+                  MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
+                  FROM Offerings as o
+                  INNER JOIN OfferingsPackages as p ON o.OfferingID = p.OfferingID
+                  WHERE o.Status = 'Active'
+                  GROUP BY o.UserID
+                ) as sub ON sub.UserID = u.UserID
                 WHERE u.UserType = :type
                 GROUP BY u.UserID
                 ORDER BY u.UserID
@@ -203,6 +244,14 @@ class User
           },
           explode(",", $e['Categories'])
         );
+
+        // Agregar sessionType con valores booleanos
+        $e['sessionType'] = [
+          "virtual" => $e['hasVirtual'] == 1,
+          "in-person" => $e['hasInPerson'] == 1
+        ];
+                
+        unset($e['hasVirtual'], $e['hasInPerson']);        
         return $e;
       }, $rs);
 
@@ -242,6 +291,7 @@ class User
       $allowedFields = [
         'FirstName',
         'LastName',
+        'DisplayName',
         'Email',
         'Phone',
         'AddressName',
