@@ -19,10 +19,13 @@ class Offering
   {
     try {
       $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*, u.UserID as author_UserID,
-            u.FirstName as author_FirstName, u.LastName as author_LastName, u.DisplayName as author_DisplayName, m.URL as author_imgURL
+            u.FirstName as author_FirstName, u.LastName as author_LastName, u.DisplayName as author_DisplayName, m.URL as author_imgURL,
+            ol.CountryCode, c.CountryName, ol.State, ol.City
             FROM Offerings AS o
             INNER JOIN Users AS u ON u.UserID = o.UserID
             LEFT JOIN Media AS m ON u.UserID = m.UserID
+            LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
+            LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode    
             ORDER BY o.OfferingID
             LIMIT :_limit OFFSET :_offset");
 
@@ -92,13 +95,18 @@ class Offering
           "ImgURL" => $offering['author_imgURL']
         ];
 
-        $offering['location'] = [
+        // Formatear las locaciones
+        $offering['locations'] = [
           "CountryCode" => $offering['CountryCode'] ?? null,
+          "CountryName" => $offering['CountryName'] ?? null,
+          "State" => $offering['State'] ?? null,
           "City" => $offering['City'] ?? null
         ];
 
         unset($offering['author_UserID'], $offering['author_FirstName'], $offering['author_LastName'], 
-              $offering['author_DisplayName'], $offering['author_imgURL'], $offering['CountryCode'], $offering['City']);
+              $offering['author_DisplayName'], $offering['author_imgURL'], 
+              $offering['CountryCode'], $offering['CountryName'], $offering['State'], $offering['City']
+        );
       }
 
       $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
@@ -121,11 +129,14 @@ class Offering
   {
     try {
       $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*,
-                   u.UserID as author_UserID, u.FirstName as author_FirstName, u.LastName as author_LastName,
-                   u.DisplayName as author_DisplayName, m2.URL as author_imgURL
+              u.UserID as author_UserID, u.FirstName as author_FirstName, u.LastName as author_LastName,
+              u.DisplayName as author_DisplayName, m2.URL as author_imgURL,
+              ol.CountryCode, c.CountryName, ol.State, ol.City
             FROM Offerings AS o
             INNER JOIN Users AS u ON u.UserID = o.UserID
             LEFT JOIN Media AS m2 ON u.UserID = m2.UserID
+            LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
+            LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode   
             WHERE o.OfferingID = :id");
 
       $stmt->bindParam(':id', $id, PDO::PARAM_INT);
@@ -203,13 +214,19 @@ class Offering
         "DisplayName" => $offering['author_DisplayName'],
         "ImgURL" => $offering['author_imgURL']
       ];
-      $offering['location'] = [
+
+      // Formatear las locaciones
+      $offering['locations'] = [
         "CountryCode" => $offering['CountryCode'] ?? null,
+        "CountryName" => $offering['CountryName'] ?? null,
+        "State" => $offering['State'] ?? null,
         "City" => $offering['City'] ?? null
       ];
       
       unset($offering['author_UserID'], $offering['author_FirstName'], $offering['author_LastName'], 
-            $offering['author_DisplayName'], $offering['author_imgURL'], $offering['CountryCode'], $offering['City']);
+            $offering['author_DisplayName'], $offering['author_imgURL'], 
+            $offering['CountryCode'], $offering['CountryName'], $offering['State'], $offering['City']
+      );
 
       return (object) [
         "http_code" => 200,
@@ -225,10 +242,13 @@ class Offering
   {
     try {
       $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*, u.UserID as author_UserID,
-            u.FirstName as author_FirstName, u.LastName as author_LastName, u.DisplayName as author_DisplayName, m.URL as author_imgURL
+            u.FirstName as author_FirstName, u.LastName as author_LastName, u.DisplayName as author_DisplayName, m.URL as author_imgURL,
+            ol.CountryCode, c.CountryName, ol.State, ol.City
             FROM Offerings AS o
             INNER JOIN Users AS u ON u.UserID = o.UserID
             LEFT JOIN Media AS m ON u.UserID = m.UserID
+            LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
+            LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode   
             WHERE o.CategoryID = :categoryId
             ORDER BY o.OfferingID
             LIMIT :_limit OFFSET :_offset");
@@ -300,13 +320,18 @@ class Offering
           "ImgURL" => $offering['author_imgURL']
         ];
 
-        $offering['location'] = [
+        // Formatear las locaciones
+        $offering['locations'] = [
           "CountryCode" => $offering['CountryCode'] ?? null,
+          "CountryName" => $offering['CountryName'] ?? null,
+          "State" => $offering['State'] ?? null,
           "City" => $offering['City'] ?? null
         ];
-
+      
         unset($offering['author_UserID'], $offering['author_FirstName'], $offering['author_LastName'], 
-        $offering['author_DisplayName'], $offering['author_imgURL'], $offering['CountryCode'], $offering['City']);
+            $offering['author_DisplayName'], $offering['author_imgURL'], 
+            $offering['CountryCode'], $offering['CountryName'], $offering['State'], $offering['City']
+        );
       }
 
       $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
@@ -329,10 +354,13 @@ class Offering
   {
     try {
       $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*, u.UserID as author_UserID,
-            u.FirstName as author_FirstName, u.LastName as author_LastName, u.DisplayName as author_DisplayName, m.URL as author_imgURL
+            u.FirstName as author_FirstName, u.LastName as author_LastName, u.DisplayName as author_DisplayName, m.URL as author_imgURL,
+            ol.CountryCode, c.CountryName, ol.State, ol.City
             FROM Offerings AS o
             INNER JOIN Users AS u ON u.UserID = o.UserID
             LEFT JOIN Media AS m ON u.UserID = m.UserID
+            LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
+            LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode   
             WHERE o.UserID = :userId
             LIMIT :_limit OFFSET :_offset");
 
@@ -403,13 +431,18 @@ class Offering
           "ImgURL" => $offering['author_imgURL']
         ];
 
-        $offering['location'] = [
+        // Formatear las locaciones
+        $offering['locations'] = [
           "CountryCode" => $offering['CountryCode'] ?? null,
+          "CountryName" => $offering['CountryName'] ?? null,
+          "State" => $offering['State'] ?? null,
           "City" => $offering['City'] ?? null
         ];
-
+      
         unset($offering['author_UserID'], $offering['author_FirstName'], $offering['author_LastName'], 
-              $offering['author_DisplayName'], $offering['author_imgURL'], $offering['CountryCode'], $offering['City']);
+            $offering['author_DisplayName'], $offering['author_imgURL'], 
+            $offering['CountryCode'], $offering['CountryName'], $offering['State'], $offering['City']
+        );
       }
 
       $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
@@ -452,8 +485,8 @@ class Offering
       }
 
       $stmt = $this->db->prepare("INSERT INTO Offerings (Title, ShortDescription, Description, CategoryID, UserID,
-            Status, CreationDate, IsActive, CountryCode, City, Currency, Tags, SKU, Stock, ServiceType)
-            VALUES (:Title, :ShortDescription, :Description, :CategoryID, :UserID, :Status, :CreationDate, 0, :CountryCode, :City, :Currency, :Tags, :SKU, :Stock, :ServiceType)");
+            Status, CreationDate, IsActive, Currency, Tags, SKU, Stock, ServiceType)
+            VALUES (:Title, :ShortDescription, :Description, :CategoryID, :UserID, :Status, :CreationDate, 0, :Currency, :Tags, :SKU, :Stock, :ServiceType)");
 
       $stmt->bindParam(':Title', $data['Title'], PDO::PARAM_STR);
       $stmt->bindParam(':ShortDescription', $data['ShortDescription'], PDO::PARAM_STR);
@@ -462,8 +495,6 @@ class Offering
       $stmt->bindParam(':UserID', $data['UserID'], PDO::PARAM_INT);
       $stmt->bindValue(':Status', 'Pending', PDO::PARAM_STR);
       $stmt->bindValue(':CreationDate', date('YmdHis'), PDO::PARAM_STR);
-      $stmt->bindValue(':CountryCode', $data['location']['CountryCode'] ?? null, ($data['location']['CountryCode'] ?? null) === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
-      $stmt->bindValue(':City', $data['location']['City'] ?? null, ($data['location']['City'] ?? null) === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
       $stmt->bindValue(':Currency', $data['Currency'], PDO::PARAM_STR);
       $stmt->bindValue(':Tags', is_array($data['Tags']) ? implode(",", $data['Tags']) : $data['Tags'], PDO::PARAM_STR);
       $stmt->bindValue(':SKU', $data['SKU'] ?? null, ($data['SKU'] ?? null) === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
@@ -473,10 +504,24 @@ class Offering
       $stmt->execute();
       $id = $this->db->lastInsertId();
 
+      // Insertar ubicaciones si existen
+      if (!empty($data['locations']) && is_array($data['locations'])) {
+        $stmt = $this->db->prepare("INSERT INTO OfferingLocations (OfferingID, CountryCode, State, City) 
+                VALUES (:OfferingID, :CountryCode, :State, :City)");
+    
+        foreach ($data['locations'] as $location) {
+          $stmt->bindParam(':OfferingID', $id, PDO::PARAM_INT);
+          $stmt->bindParam(':CountryCode', $location['countrycode'], PDO::PARAM_STR);
+          $stmt->bindParam(':State', $location['state'], PDO::PARAM_STR);
+          $stmt->bindParam(':City', $location['city'], PDO::PARAM_STR);
+          $stmt->execute();
+        }
+      }
+
       if (isset($data['faqs'])) {
         foreach ($data['faqs'] as $faq) {
           $stmt = $this->db->prepare("INSERT INTO OfferingsFaqs (OfferingID, Position, Question, Answer)
-                    VALUES (:id, :position, :question, :answer)");
+                  VALUES (:id, :position, :question, :answer)");
 
           $stmt->bindParam(':id', $id, PDO::PARAM_INT);
           $stmt->bindParam(':position', $faq['Position'], PDO::PARAM_INT);
@@ -496,7 +541,7 @@ class Offering
 
         // Insertar los nuevos paquetes
         $stmt = $this->db->prepare("INSERT INTO OfferingsPackages (OfferingID, Package, Price, Description, Conditions, SessionType)
-                    VALUES (:id, :package, :price, :description, :conditions, :sessionType)"
+                VALUES (:id, :package, :price, :description, :conditions, :sessionType)"
         );
 
         foreach ($data['packages'] as $package) {
@@ -550,13 +595,6 @@ class Offering
         throw new NotFoundException("The specified offering does not exist");
       }
 
-      // Extraer ubicación si está presente
-      if (isset($data['location']) && is_array($data['location'])) {
-        $data['CountryCode'] = $data['location']['CountryCode'] ?? null;
-        $data['City'] = $data['location']['City'] ?? null;
-        unset($data['location']); // Remover 'location' del array principal
-      }
-
       // Lista de campos permitidos para actualizar
       $allowedFields = [
         'Title',
@@ -564,8 +602,6 @@ class Offering
         'Description',
         'CategoryID',
         'Status',
-        'CountryCode',
-        'City',
         'Currency',
         'Tags',
         'SKU',
@@ -638,6 +674,26 @@ class Offering
       }
       if ($packages !== null) {
         $this->updateOfferingPackages($id, $packages);
+      }
+
+      // Si se recibe `locations`, eliminar las existentes y agregar las nuevas
+      if (isset($data['locations']) && is_array($data['locations'])) {
+        // Eliminar ubicaciones actuales
+        $stmt = $this->db->prepare("DELETE FROM OfferingLocations WHERE OfferingID = :id");
+        $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+        $stmt->execute();
+    
+        // Insertar nuevas ubicaciones
+        $stmt = $this->db->prepare("INSERT INTO OfferingLocations (OfferingID, CountryCode, State, City) 
+                VALUES (:OfferingID, :CountryCode, :State, :City)");
+    
+        foreach ($data['locations'] as $location) {
+          $stmt->bindParam(':OfferingID', $id, PDO::PARAM_INT);
+          $stmt->bindParam(':CountryCode', $location['countrycode'], PDO::PARAM_STR);
+          $stmt->bindParam(':State', $location['state'], PDO::PARAM_STR);
+          $stmt->bindParam(':City', $location['city'], PDO::PARAM_STR);
+          $stmt->execute();
+        }
       }
 
       return $this->getOfferingById($id);
