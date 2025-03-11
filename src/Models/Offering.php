@@ -19,7 +19,7 @@ class Offering
   {
     try {
       $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*, u.UserID as author_UserID,
-            u.FirstName as author_FirstName, u.LastName as author_LastName, m.URL as author_imgURL
+            u.FirstName as author_FirstName, u.LastName as author_LastName, u.DisplayName as author_DisplayName, m.URL as author_imgURL
             FROM Offerings AS o
             INNER JOIN Users AS u ON u.UserID = o.UserID
             LEFT JOIN Media AS m ON u.UserID = m.UserID
@@ -88,6 +88,7 @@ class Offering
           "UserID" => $offering['author_UserID'],
           "FirstName" => $offering['author_FirstName'],
           "LastName" => $offering['author_LastName'],
+          "DisplayName" => $offering['author_DisplayName'],
           "ImgURL" => $offering['author_imgURL']
         ];
 
@@ -97,7 +98,7 @@ class Offering
         ];
 
         unset($offering['author_UserID'], $offering['author_FirstName'], $offering['author_LastName'], 
-              $offering['author_imgURL'], $offering['CountryCode'], $offering['City']);
+              $offering['author_DisplayName'], $offering['author_imgURL'], $offering['CountryCode'], $offering['City']);
       }
 
       $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
@@ -121,7 +122,7 @@ class Offering
     try {
       $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*,
                    u.UserID as author_UserID, u.FirstName as author_FirstName, u.LastName as author_LastName,
-                   m2.URL as author_imgURL
+                   u.DisplayName as author_DisplayName, m2.URL as author_imgURL
             FROM Offerings AS o
             INNER JOIN Users AS u ON u.UserID = o.UserID
             LEFT JOIN Media AS m2 ON u.UserID = m2.UserID
@@ -199,6 +200,7 @@ class Offering
         "UserID" => $offering['author_UserID'],
         "FirstName" => $offering['author_FirstName'],
         "LastName" => $offering['author_LastName'],
+        "DisplayName" => $offering['author_DisplayName'],
         "ImgURL" => $offering['author_imgURL']
       ];
       $offering['location'] = [
@@ -207,7 +209,7 @@ class Offering
       ];
       
       unset($offering['author_UserID'], $offering['author_FirstName'], $offering['author_LastName'], 
-            $offering['author_imgURL'], $offering['CountryCode'], $offering['City']);
+            $offering['author_DisplayName'], $offering['author_imgURL'], $offering['CountryCode'], $offering['City']);
 
       return (object) [
         "http_code" => 200,
@@ -223,7 +225,7 @@ class Offering
   {
     try {
       $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*, u.UserID as author_UserID,
-            u.FirstName as author_FirstName, u.LastName as author_LastName, m.URL as author_imgURL
+            u.FirstName as author_FirstName, u.LastName as author_LastName, u.DisplayName as author_DisplayName, m.URL as author_imgURL
             FROM Offerings AS o
             INNER JOIN Users AS u ON u.UserID = o.UserID
             LEFT JOIN Media AS m ON u.UserID = m.UserID
@@ -294,6 +296,7 @@ class Offering
           "UserID" => $offering['author_UserID'],
           "FirstName" => $offering['author_FirstName'],
           "LastName" => $offering['author_LastName'],
+          "DisplayName" => $offering['author_DisplayName'],
           "ImgURL" => $offering['author_imgURL']
         ];
 
@@ -303,7 +306,7 @@ class Offering
         ];
 
         unset($offering['author_UserID'], $offering['author_FirstName'], $offering['author_LastName'], 
-              $offering['author_imgURL'], $offering['CountryCode'], $offering['City']);
+        $offering['author_DisplayName'], $offering['author_imgURL'], $offering['CountryCode'], $offering['City']);
       }
 
       $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
@@ -326,7 +329,7 @@ class Offering
   {
     try {
       $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*, u.UserID as author_UserID,
-            u.FirstName as author_FirstName, u.LastName as author_LastName, m.URL as author_imgURL
+            u.FirstName as author_FirstName, u.LastName as author_LastName, u.DisplayName as author_DisplayName, m.URL as author_imgURL
             FROM Offerings AS o
             INNER JOIN Users AS u ON u.UserID = o.UserID
             LEFT JOIN Media AS m ON u.UserID = m.UserID
@@ -396,6 +399,7 @@ class Offering
           "UserID" => $offering['author_UserID'],
           "FirstName" => $offering['author_FirstName'],
           "LastName" => $offering['author_LastName'],
+          "DisplayName" => $offering['author_DisplayName'],
           "ImgURL" => $offering['author_imgURL']
         ];
 
@@ -405,7 +409,7 @@ class Offering
         ];
 
         unset($offering['author_UserID'], $offering['author_FirstName'], $offering['author_LastName'], 
-              $offering['author_imgURL'], $offering['CountryCode'], $offering['City']);
+              $offering['author_DisplayName'], $offering['author_imgURL'], $offering['CountryCode'], $offering['City']);
       }
 
       $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
