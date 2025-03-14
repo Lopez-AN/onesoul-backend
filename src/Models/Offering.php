@@ -19,15 +19,18 @@ class Offering
   {
     try {
       $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*, u.UserID as author_UserID,
-            u.FirstName as author_FirstName, u.LastName as author_LastName, u.DisplayName as author_DisplayName, m.URL as author_imgURL,
-            ol.CountryCode, c.CountryName, ol.State, ol.City
-            FROM Offerings AS o
-            INNER JOIN Users AS u ON u.UserID = o.UserID
-            LEFT JOIN Media AS m ON u.UserID = m.UserID
-            LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
-            LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode    
-            ORDER BY o.OfferingID
-            LIMIT :_limit OFFSET :_offset");
+        u.FirstName as author_FirstName, u.LastName as author_LastName,
+        u.DisplayName as author_DisplayName, m.URL as author_imgURL,
+        GROUP_CONCAT(DISTINCT CONCAT(trim(ol.CountryCode), ':', trim(ol.State), ':', trim(ol.City))
+        ORDER BY ol.CountryCode, ol.State, ol.City ASC SEPARATOR ', ') AS locations
+        FROM Offerings AS o
+        INNER JOIN Users AS u ON u.UserID = o.UserID
+        LEFT JOIN Media AS m ON u.UserID = m.UserID
+        LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
+        LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode
+        GROUP BY o.OfferingID
+        ORDER BY o.OfferingID
+        LIMIT :_limit OFFSET :_offset");
 
       $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
       $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
@@ -36,57 +39,54 @@ class Offering
       $offerings = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
       foreach ($offerings as &$offering) {
-        $mediaStmt = $this->db->prepare("SELECT MediaID, MediaType, URL, Title, Description, Position FROM Media WHERE OfferingID = :offeringID");
-        $mediaStmt->bindValue(':offeringID', $offering['OfferingID'], PDO::PARAM_INT);
-        $mediaStmt->execute();
-
-        $mediaResults = $mediaStmt->fetchAll(PDO::FETCH_ASSOC);
-        $media = ["images" => [], "videos" => []];
-
-        foreach ($mediaResults as $mediaItem) {
-          $mediaData = [
-            "Id" => $mediaItem['MediaID'],
-            "Url" => $mediaItem['URL'],
-            "Title" => $mediaItem['Title'],
-            "Description" => $mediaItem['Description'],
-            "Position" => $mediaItem['Position']
-          ];
-
-          if ($mediaItem['MediaType'] === 'image') {
-            $media['images'][] = $mediaData;
-          } elseif ($mediaItem['MediaType'] === 'video') {
-            $media['videos'][] = $mediaData;
-          }
-        }
-
-        $offering['media'] = $media;
-
         // Obtener FAQs
         $faqStmt = $this->db->prepare("SELECT Position, Question, Answer
-                FROM OfferingsFaqs
-                WHERE OfferingID = :offeringID
-                ORDER BY Position ASC");
-
-
+          FROM OfferingsFaqs
+          WHERE OfferingID = :offeringID
+          ORDER BY Position ASC");
         $faqStmt->bindValue(':offeringID', $offering['OfferingID'], PDO::PARAM_INT);
         $faqStmt->execute();
-
         $faqs = $faqStmt->fetchAll(PDO::FETCH_ASSOC);
-        $offering['faqs'] = $faqs;
 
         // Obtener Packages
         $packagesStmt = $this->db->prepare("SELECT Package, Price, Description, Conditions, SessionType
-                FROM OfferingsPackages
-                WHERE OfferingID = :offeringID");
-
+          FROM OfferingsPackages
+          WHERE OfferingID = :offeringID");
         $packagesStmt->bindValue(':offeringID', $offering['OfferingID'], PDO::PARAM_INT);
         $packagesStmt->execute();
-
         $packages = $packagesStmt->fetchAll(PDO::FETCH_ASSOC);
 
-        $offering['packages'] = $packages;
+        // Proceso de organización de medios
+        $stmtMedia = $this->db->prepare("SELECT MediaID, URL, Title,
+          Description, MediaType, Position
+          FROM Media
+          WHERE OfferingID = :id
+          ORDER BY Position ASC
+        ");
+        $stmtMedia->bindParam(':id', $id, PDO::PARAM_INT);
+        $stmtMedia->execute();
+        $mediaData = $stmtMedia->fetchAll(PDO::FETCH_ASSOC);
 
-        // Obtener el UserID del Offering
+        $media = ["images" => [], "videos" => []];
+        foreach ($mediaData as $item) {
+          $mediaItem = [
+            "Id" => $item['MediaID'],
+            "Url" => $item['URL'],
+            "Title" => $item['Title'],
+            "Description" => $item['Description'],
+            "Position" => $item["Position"]
+          ];
+          if ($item['MediaType'] === 'image') {
+            $media["images"][] = $mediaItem;
+          } elseif ($item['MediaType'] === 'video') {
+            $media["videos"][] = $mediaItem;
+          }
+        }
+
+        // Construcción del objeto principal
+        $offering['media'] = $media;
+        $offering['faqs'] = $faqs;
+        $offering['packages'] = $packages;
         $offering['author'] = [
           "UserID" => $offering['author_UserID'],
           "FirstName" => $offering['author_FirstName'],
@@ -96,15 +96,20 @@ class Offering
         ];
 
         // Formatear las locaciones
-        $offering['locations'] = [
-          "CountryCode" => $offering['CountryCode'] ?? null,
-          "CountryName" => $offering['CountryName'] ?? null,
-          "State" => $offering['State'] ?? null,
-          "City" => $offering['City'] ?? null
-        ];
+        $offering['locations'] = is_null($offering['locations']) ? [] : array_map(
+          function ($a) {
+            $a = explode(":", $a);
+            return [
+              "countryCode" => $a[0],
+              "state" => $a[1],
+              "city" => $a[2]
+            ];
+          },
+          explode(",", $offering['locations'])
+        );
 
-        unset($offering['author_UserID'], $offering['author_FirstName'], $offering['author_LastName'], 
-              $offering['author_DisplayName'], $offering['author_imgURL'], 
+        unset($offering['author_UserID'], $offering['author_FirstName'], $offering['author_LastName'],
+              $offering['author_DisplayName'], $offering['author_imgURL'],
               $offering['CountryCode'], $offering['CountryName'], $offering['State'], $offering['City']
         );
       }
@@ -124,20 +129,21 @@ class Offering
     }
   }
 
-
   public function getOfferingById($id)
   {
     try {
-      $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*,
-              u.UserID as author_UserID, u.FirstName as author_FirstName, u.LastName as author_LastName,
-              u.DisplayName as author_DisplayName, m2.URL as author_imgURL,
-              ol.CountryCode, c.CountryName, ol.State, ol.City
-            FROM Offerings AS o
-            INNER JOIN Users AS u ON u.UserID = o.UserID
-            LEFT JOIN Media AS m2 ON u.UserID = m2.UserID
-            LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
-            LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode   
-            WHERE o.OfferingID = :id");
+      $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*, u.UserID as author_UserID,
+        u.FirstName as author_FirstName, u.LastName as author_LastName,
+        u.DisplayName as author_DisplayName, m.URL as author_imgURL,
+        GROUP_CONCAT(DISTINCT CONCAT(trim(ol.CountryCode), ':', trim(ol.State), ':', trim(ol.City))
+        ORDER BY ol.CountryCode, ol.State, ol.City ASC SEPARATOR ', ') AS locations
+        FROM Offerings AS o
+        INNER JOIN Users AS u ON u.UserID = o.UserID
+        LEFT JOIN Media AS m ON u.UserID = m.UserID
+        LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
+        LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode
+        WHERE o.OfferingID = :id
+        GROUP BY o.OfferingID");
 
       $stmt->bindParam(':id', $id, PDO::PARAM_INT);
       $stmt->execute();
@@ -176,12 +182,12 @@ class Offering
       $packages = $stmtPackages->fetchAll(PDO::FETCH_ASSOC);
 
       // Proceso de organización de medios
-      $stmtMedia = $this->db->prepare("
-            SELECT MediaID, URL, Title, Description, MediaType, Position
-            FROM Media
-            WHERE OfferingID = :id
-            ORDER BY Position ASC
-        ");
+      $stmtMedia = $this->db->prepare("SELECT MediaID, URL, Title,
+        Description, MediaType, Position
+        FROM Media
+        WHERE OfferingID = :id
+        ORDER BY Position ASC
+      ");
       $stmtMedia->bindParam(':id', $id, PDO::PARAM_INT);
       $stmtMedia->execute();
       $mediaData = $stmtMedia->fetchAll(PDO::FETCH_ASSOC);
@@ -216,15 +222,20 @@ class Offering
       ];
 
       // Formatear las locaciones
-      $offering['locations'] = [
-        "CountryCode" => $offering['CountryCode'] ?? null,
-        "CountryName" => $offering['CountryName'] ?? null,
-        "State" => $offering['State'] ?? null,
-        "City" => $offering['City'] ?? null
-      ];
-      
-      unset($offering['author_UserID'], $offering['author_FirstName'], $offering['author_LastName'], 
-            $offering['author_DisplayName'], $offering['author_imgURL'], 
+      $offering['locations'] = is_null($offering['locations']) ? [] : array_map(
+        function ($a) {
+          $a = explode(":", $a);
+          return [
+            "countryCode" => $a[0],
+            "state" => $a[1],
+            "city" => $a[2]
+          ];
+        },
+        explode(",", $offering['locations'])
+      );
+
+      unset($offering['author_UserID'], $offering['author_FirstName'], $offering['author_LastName'],
+            $offering['author_DisplayName'], $offering['author_imgURL'],
             $offering['CountryCode'], $offering['CountryName'], $offering['State'], $offering['City']
       );
 
@@ -242,16 +253,19 @@ class Offering
   {
     try {
       $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*, u.UserID as author_UserID,
-            u.FirstName as author_FirstName, u.LastName as author_LastName, u.DisplayName as author_DisplayName, m.URL as author_imgURL,
-            ol.CountryCode, c.CountryName, ol.State, ol.City
-            FROM Offerings AS o
-            INNER JOIN Users AS u ON u.UserID = o.UserID
-            LEFT JOIN Media AS m ON u.UserID = m.UserID
-            LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
-            LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode   
-            WHERE o.CategoryID = :categoryId
-            ORDER BY o.OfferingID
-            LIMIT :_limit OFFSET :_offset");
+        u.FirstName as author_FirstName, u.LastName as author_LastName,
+        u.DisplayName as author_DisplayName, m.URL as author_imgURL,
+        GROUP_CONCAT(DISTINCT CONCAT(trim(ol.CountryCode), ':', trim(ol.State), ':', trim(ol.City))
+        ORDER BY ol.CountryCode, ol.State, ol.City ASC SEPARATOR ', ') AS locations
+        FROM Offerings AS o
+        INNER JOIN Users AS u ON u.UserID = o.UserID
+        LEFT JOIN Media AS m ON u.UserID = m.UserID
+        LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
+        LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode
+        WHERE o.CategoryID = :categoryId
+        GROUP BY o.OfferingID
+        ORDER BY o.OfferingID
+        LIMIT :_limit OFFSET :_offset");
 
       $stmt->bindParam(':categoryId', $categoryId, PDO::PARAM_INT);
       $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
@@ -261,57 +275,54 @@ class Offering
       $offerings = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
       foreach ($offerings as &$offering) {
-        $mediaStmt = $this->db->prepare("SELECT MediaID, MediaType, URL, Title, Description, Position FROM Media WHERE OfferingID = :offeringID");
-        $mediaStmt->bindValue(':offeringID', $offering['OfferingID'], PDO::PARAM_INT);
-        $mediaStmt->execute();
-
-        $mediaResults = $mediaStmt->fetchAll(PDO::FETCH_ASSOC);
-        $media = ["images" => [], "videos" => []];
-
-        foreach ($mediaResults as $mediaItem) {
-          $mediaData = [
-            "Id" => $mediaItem['MediaID'],
-            "Url" => $mediaItem['URL'],
-            "Title" => $mediaItem['Title'],
-            "Description" => $mediaItem['Description'],
-            "Position" => $mediaItem['Position']
-          ];
-
-          if ($mediaItem['MediaType'] === 'image') {
-            $media['images'][] = $mediaData;
-          } elseif ($mediaItem['MediaType'] === 'video') {
-            $media['videos'][] = $mediaData;
-          }
-        }
-
-        $offering['media'] = $media;
-
         // Obtener FAQs
         $faqStmt = $this->db->prepare("SELECT Position, Question, Answer
-                FROM OfferingsFaqs
-                WHERE OfferingID = :offeringID
-                ORDER BY Position ASC");
-
-
+          FROM OfferingsFaqs
+          WHERE OfferingID = :offeringID
+          ORDER BY Position ASC");
         $faqStmt->bindValue(':offeringID', $offering['OfferingID'], PDO::PARAM_INT);
         $faqStmt->execute();
-
         $faqs = $faqStmt->fetchAll(PDO::FETCH_ASSOC);
-        $offering['faqs'] = $faqs;
 
         // Obtener Packages
         $packagesStmt = $this->db->prepare("SELECT Package, Price, Description, Conditions, SessionType
-                FROM OfferingsPackages
-                WHERE OfferingID = :offeringID");
-
+          FROM OfferingsPackages
+          WHERE OfferingID = :offeringID");
         $packagesStmt->bindValue(':offeringID', $offering['OfferingID'], PDO::PARAM_INT);
         $packagesStmt->execute();
-
         $packages = $packagesStmt->fetchAll(PDO::FETCH_ASSOC);
 
-        $offering['packages'] = $packages;
+        // Proceso de organización de medios
+        $stmtMedia = $this->db->prepare("SELECT MediaID, URL, Title,
+          Description, MediaType, Position
+          FROM Media
+          WHERE OfferingID = :id
+          ORDER BY Position ASC
+        ");
+        $stmtMedia->bindParam(':id', $id, PDO::PARAM_INT);
+        $stmtMedia->execute();
+        $mediaData = $stmtMedia->fetchAll(PDO::FETCH_ASSOC);
 
-        // Obtener el UserID del Offering
+        $media = ["images" => [], "videos" => []];
+        foreach ($mediaData as $item) {
+          $mediaItem = [
+            "Id" => $item['MediaID'],
+            "Url" => $item['URL'],
+            "Title" => $item['Title'],
+            "Description" => $item['Description'],
+            "Position" => $item["Position"]
+          ];
+          if ($item['MediaType'] === 'image') {
+            $media["images"][] = $mediaItem;
+          } elseif ($item['MediaType'] === 'video') {
+            $media["videos"][] = $mediaItem;
+          }
+        }
+
+        // Construcción del objeto principal
+        $offering['media'] = $media;
+        $offering['faqs'] = $faqs;
+        $offering['packages'] = $packages;
         $offering['author'] = [
           "UserID" => $offering['author_UserID'],
           "FirstName" => $offering['author_FirstName'],
@@ -321,16 +332,21 @@ class Offering
         ];
 
         // Formatear las locaciones
-        $offering['locations'] = [
-          "CountryCode" => $offering['CountryCode'] ?? null,
-          "CountryName" => $offering['CountryName'] ?? null,
-          "State" => $offering['State'] ?? null,
-          "City" => $offering['City'] ?? null
-        ];
-      
-        unset($offering['author_UserID'], $offering['author_FirstName'], $offering['author_LastName'], 
-            $offering['author_DisplayName'], $offering['author_imgURL'], 
-            $offering['CountryCode'], $offering['CountryName'], $offering['State'], $offering['City']
+        $offering['locations'] = is_null($offering['locations']) ? [] : array_map(
+          function ($a) {
+            $a = explode(":", $a);
+            return [
+              "countryCode" => $a[0],
+              "state" => $a[1],
+              "city" => $a[2]
+            ];
+          },
+          explode(",", $offering['locations'])
+        );
+
+        unset($offering['author_UserID'], $offering['author_FirstName'], $offering['author_LastName'],
+              $offering['author_DisplayName'], $offering['author_imgURL'],
+              $offering['CountryCode'], $offering['CountryName'], $offering['State'], $offering['City']
         );
       }
 
@@ -354,15 +370,18 @@ class Offering
   {
     try {
       $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*, u.UserID as author_UserID,
-            u.FirstName as author_FirstName, u.LastName as author_LastName, u.DisplayName as author_DisplayName, m.URL as author_imgURL,
-            ol.CountryCode, c.CountryName, ol.State, ol.City
-            FROM Offerings AS o
-            INNER JOIN Users AS u ON u.UserID = o.UserID
-            LEFT JOIN Media AS m ON u.UserID = m.UserID
-            LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
-            LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode   
-            WHERE o.UserID = :userId
-            LIMIT :_limit OFFSET :_offset");
+        u.FirstName as author_FirstName, u.LastName as author_LastName,
+        u.DisplayName as author_DisplayName, m.URL as author_imgURL,
+        GROUP_CONCAT(DISTINCT CONCAT(trim(ol.CountryCode), ':', trim(ol.State), ':', trim(ol.City))
+        ORDER BY ol.CountryCode, ol.State, ol.City ASC SEPARATOR ', ') AS locations
+        FROM Offerings AS o
+        INNER JOIN Users AS u ON u.UserID = o.UserID
+        LEFT JOIN Media AS m ON u.UserID = m.UserID
+        LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
+        LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode
+        WHERE o.UserID = :userId
+        GROUP BY o.OfferingID
+        LIMIT :_limit OFFSET :_offset");
 
       $stmt->bindParam(':userId', $userId, PDO::PARAM_INT);
       $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
@@ -372,57 +391,54 @@ class Offering
       $offerings = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
       foreach ($offerings as &$offering) {
-        $mediaStmt = $this->db->prepare("SELECT MediaID, MediaType, URL, Title, Description, Position FROM Media WHERE OfferingID = :offeringID");
-        $mediaStmt->bindValue(':offeringID', $offering['OfferingID'], PDO::PARAM_INT);
-        $mediaStmt->execute();
-
-        $mediaResults = $mediaStmt->fetchAll(PDO::FETCH_ASSOC);
-        $media = ["images" => [], "videos" => []];
-
-        foreach ($mediaResults as $mediaItem) {
-          $mediaData = [
-            "Id" => $mediaItem['MediaID'],
-            "Url" => $mediaItem['URL'],
-            "Title" => $mediaItem['Title'],
-            "Description" => $mediaItem['Description'],
-            "Position" => $mediaItem['Position']
-          ];
-
-          if ($mediaItem['MediaType'] === 'image') {
-            $media['images'][] = $mediaData;
-          } elseif ($mediaItem['MediaType'] === 'video') {
-            $media['videos'][] = $mediaData;
-          }
-        }
-
-        $offering['media'] = $media;
-
         // Obtener FAQs
         $faqStmt = $this->db->prepare("SELECT Position, Question, Answer
-                FROM OfferingsFaqs
-                WHERE OfferingID = :offeringID
-                ORDER BY Position ASC");
-
-
+          FROM OfferingsFaqs
+          WHERE OfferingID = :offeringID
+          ORDER BY Position ASC");
         $faqStmt->bindValue(':offeringID', $offering['OfferingID'], PDO::PARAM_INT);
         $faqStmt->execute();
-
         $faqs = $faqStmt->fetchAll(PDO::FETCH_ASSOC);
-        $offering['faqs'] = $faqs;
 
         // Obtener Packages
         $packagesStmt = $this->db->prepare("SELECT Package, Price, Description, Conditions, SessionType
-                FROM OfferingsPackages
-                WHERE OfferingID = :offeringID");
-
+          FROM OfferingsPackages
+          WHERE OfferingID = :offeringID");
         $packagesStmt->bindValue(':offeringID', $offering['OfferingID'], PDO::PARAM_INT);
         $packagesStmt->execute();
-
         $packages = $packagesStmt->fetchAll(PDO::FETCH_ASSOC);
 
-        $offering['packages'] = $packages;
+        // Proceso de organización de medios
+        $stmtMedia = $this->db->prepare("SELECT MediaID, URL, Title,
+          Description, MediaType, Position
+          FROM Media
+          WHERE OfferingID = :id
+          ORDER BY Position ASC
+        ");
+        $stmtMedia->bindParam(':id', $id, PDO::PARAM_INT);
+        $stmtMedia->execute();
+        $mediaData = $stmtMedia->fetchAll(PDO::FETCH_ASSOC);
 
-        // Obtener el UserID del Offering
+        $media = ["images" => [], "videos" => []];
+        foreach ($mediaData as $item) {
+          $mediaItem = [
+            "Id" => $item['MediaID'],
+            "Url" => $item['URL'],
+            "Title" => $item['Title'],
+            "Description" => $item['Description'],
+            "Position" => $item["Position"]
+          ];
+          if ($item['MediaType'] === 'image') {
+            $media["images"][] = $mediaItem;
+          } elseif ($item['MediaType'] === 'video') {
+            $media["videos"][] = $mediaItem;
+          }
+        }
+
+        // Construcción del objeto principal
+        $offering['media'] = $media;
+        $offering['faqs'] = $faqs;
+        $offering['packages'] = $packages;
         $offering['author'] = [
           "UserID" => $offering['author_UserID'],
           "FirstName" => $offering['author_FirstName'],
@@ -432,16 +448,21 @@ class Offering
         ];
 
         // Formatear las locaciones
-        $offering['locations'] = [
-          "CountryCode" => $offering['CountryCode'] ?? null,
-          "CountryName" => $offering['CountryName'] ?? null,
-          "State" => $offering['State'] ?? null,
-          "City" => $offering['City'] ?? null
-        ];
-      
-        unset($offering['author_UserID'], $offering['author_FirstName'], $offering['author_LastName'], 
-            $offering['author_DisplayName'], $offering['author_imgURL'], 
-            $offering['CountryCode'], $offering['CountryName'], $offering['State'], $offering['City']
+        $offering['locations'] = is_null($offering['locations']) ? [] : array_map(
+          function ($a) {
+            $a = explode(":", $a);
+            return [
+              "countryCode" => $a[0],
+              "state" => $a[1],
+              "city" => $a[2]
+            ];
+          },
+          explode(",", $offering['locations'])
+        );
+
+        unset($offering['author_UserID'], $offering['author_FirstName'], $offering['author_LastName'],
+              $offering['author_DisplayName'], $offering['author_imgURL'],
+              $offering['CountryCode'], $offering['CountryName'], $offering['State'], $offering['City']
         );
       }
 
@@ -506,9 +527,9 @@ class Offering
 
       // Insertar ubicaciones si existen
       if (!empty($data['locations']) && is_array($data['locations'])) {
-        $stmt = $this->db->prepare("INSERT INTO OfferingLocations (OfferingID, CountryCode, State, City) 
+        $stmt = $this->db->prepare("INSERT INTO OfferingLocations (OfferingID, CountryCode, State, City)
                 VALUES (:OfferingID, :CountryCode, :State, :City)");
-    
+
         foreach ($data['locations'] as $location) {
           $stmt->bindParam(':OfferingID', $id, PDO::PARAM_INT);
           $stmt->bindParam(':CountryCode', $location['countrycode'], PDO::PARAM_STR);
@@ -682,11 +703,11 @@ class Offering
         $stmt = $this->db->prepare("DELETE FROM OfferingLocations WHERE OfferingID = :id");
         $stmt->bindParam(':id', $id, PDO::PARAM_INT);
         $stmt->execute();
-    
+
         // Insertar nuevas ubicaciones
-        $stmt = $this->db->prepare("INSERT INTO OfferingLocations (OfferingID, CountryCode, State, City) 
+        $stmt = $this->db->prepare("INSERT INTO OfferingLocations (OfferingID, CountryCode, State, City)
                 VALUES (:OfferingID, :CountryCode, :State, :City)");
-    
+
         foreach ($data['locations'] as $location) {
           $stmt->bindParam(':OfferingID', $id, PDO::PARAM_INT);
           $stmt->bindParam(':CountryCode', $location['countrycode'], PDO::PARAM_STR);

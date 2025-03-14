@@ -91,12 +91,16 @@ class Search
             'Conditions', p.conditions,
             'SessionType', p.sessionType
           )
-        ) FROM OfferingsPackages p WHERE p.OfferingID = o.OfferingID) AS packages
+        ) FROM OfferingsPackages p WHERE p.OfferingID = o.OfferingID) AS packages,
+        GROUP_CONCAT(DISTINCT CONCAT(trim(ol.CountryCode), ':', trim(ol.State), ':', trim(ol.City))
+        ORDER BY ol.CountryCode, ol.State, ol.City ASC SEPARATOR ', ') AS locations
         FROM Offerings AS o
+        LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
         INNER JOIN Users AS u ON u.UserID = o.UserID
         WHERE (o.Title LIKE :search1 OR o.Description LIKE :search2
         OR o.ShortDescription LIKE :search3 OR o.Tags LIKE :search4)
         AND o.Status = 'Active'
+        GROUP BY o.OfferingID
         ORDER BY o.OfferingID
         LIMIT :_limit OFFSET :_offset"
       );
@@ -150,11 +154,22 @@ class Search
           "ImgURL" => $e['author_imgURL']
         ];
 
-        $e['location'] = [
-          "CountryCode" => $e['CountryCode'],
-          "City" => $e['City']
-        ];
-        unset($e['author_UserID'], $e['author_DisplayName'], $e['author_FirstName'], $e['author_LastName'], $e['author_imgURL'], $e['CountryCode'], $e['City']);
+        // Formatear las locaciones
+        $e['locations'] = is_null($e['locations']) ? [] : array_map(
+          function ($a) {
+            $a = explode(":", $a);
+            return [
+              "countryCode" => $a[0],
+              "state" => $a[1],
+              "city" => $a[2]
+            ];
+          },
+          explode(",", $e['locations'])
+        );
+
+        unset($e['author_UserID'], $e['author_DisplayName'],
+          $e['author_FirstName'], $e['author_LastName'],
+          $e['author_imgURL'], $e['CountryCode'], $e['City']);
 
         return $e;
       }, $rs);
@@ -283,7 +298,7 @@ class Search
         "virtual" => $e['hasVirtual'] == 1,
         "in-person" => $e['hasInPerson'] == 1
         ];
-      
+
         unset($e['hasVirtual'], $e['hasInPerson']);
         return $e;
       }, $rs);
