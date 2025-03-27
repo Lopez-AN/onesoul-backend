@@ -18,16 +18,62 @@ class Offering
   public function getOfferings($paginator)
   {
     try {
-      $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*, u.UserID as author_UserID,
-        u.FirstName as author_FirstName, u.LastName as author_LastName,
-        u.DisplayName as author_DisplayName, m.URL as author_imgURL,
+      $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*,
+        u.UserID AS author_UserID,
+        u.DisplayName AS author_DisplayName,
+        u.FirstName AS author_FirstName,
+        u.LastName AS author_LastName,
+        u.UserName as author_UserName,
+        round(avg(ru.Rating),2) as author_Rating,
+        COUNT(DISTINCT ru.ReviewID) AS author_TotalReviews,
+        (SELECT URL FROM Media WHERE UserID = u.UserID LIMIT 1) AS author_ImgURL,
+        -- Subconsulta para media_images
+        (SELECT JSON_ARRAYAGG(
+          JSON_OBJECT(
+            'Id', m.MediaID,
+            'Url', m.URL,
+            'Title', m.Title,
+            'Description', m.Description,
+            'Position', m.Position
+          )
+        ) FROM Media m WHERE m.OfferingID = o.OfferingID AND m.MediaType = 'image') AS media_images,
+        -- Subconsulta para media_videos
+        (SELECT JSON_ARRAYAGG(
+          JSON_OBJECT(
+            'Id', m.MediaID,
+            'Url', m.URL,
+            'Title', m.Title,
+            'Description', m.Description,
+            'Position', m.Position
+          )
+        ) FROM Media m WHERE m.OfferingID = o.OfferingID AND m.MediaType = 'video') AS media_videos,
+        -- Subconsulta para faqs
+        (SELECT JSON_ARRAYAGG(
+          JSON_OBJECT(
+            'Position', f.position,
+            'Question', f.question,
+            'Answer', f.answer
+          )
+        ) FROM OfferingsFaqs f WHERE f.OfferingID = o.OfferingID) AS faqs,
+        -- Subconsulta para packages
+        (SELECT JSON_ARRAYAGG(
+          JSON_OBJECT(
+            'Package', p.package,
+            'Price', p.price,
+            'Description', p.description,
+            'Conditions', p.conditions,
+            'SessionType', p.sessionType
+          )
+        ) FROM OfferingsPackages p WHERE p.OfferingID = o.OfferingID) AS packages,
+        -- Agrupar locations
         GROUP_CONCAT(DISTINCT CONCAT(trim(ol.CountryCode), ':', trim(ol.State), ':', trim(ol.City))
-        ORDER BY ol.CountryCode, ol.State, ol.City ASC SEPARATOR ', ') AS locations
+        ORDER BY ol.CountryCode, ol.State, ol.City ASC SEPARATOR ', ') AS locations,
+        ROUND(AVG(r.rating),2) as rating
         FROM Offerings AS o
         INNER JOIN Users AS u ON u.UserID = o.UserID
-        LEFT JOIN Media AS m ON u.UserID = m.UserID
+        LEFT JOIN Reviews as r ON o.OfferingID = r.OfferingID
+        LEFT JOIN Reviews as ru ON u.UserID = ru.SUserID
         LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
-        LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode
         GROUP BY o.OfferingID
         ORDER BY o.OfferingID
         LIMIT :_limit OFFSET :_offset");
@@ -36,92 +82,85 @@ class Offering
       $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
       $stmt->execute();
 
-      $offerings = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-      foreach ($offerings as &$offering) {
-        // Obtener FAQs
-        $faqStmt = $this->db->prepare("SELECT Position, Question, Answer
-          FROM OfferingsFaqs
-          WHERE OfferingID = :offeringID
-          ORDER BY Position ASC");
-        $faqStmt->bindValue(':offeringID', $offering['OfferingID'], PDO::PARAM_INT);
-        $faqStmt->execute();
-        $faqs = $faqStmt->fetchAll(PDO::FETCH_ASSOC);
-
-        // Obtener Packages
-        $packagesStmt = $this->db->prepare("SELECT Package, Price, Description, Conditions, SessionType
-          FROM OfferingsPackages
-          WHERE OfferingID = :offeringID");
-        $packagesStmt->bindValue(':offeringID', $offering['OfferingID'], PDO::PARAM_INT);
-        $packagesStmt->execute();
-        $packages = $packagesStmt->fetchAll(PDO::FETCH_ASSOC);
-
-        // Proceso de organización de medios
-        $stmtMedia = $this->db->prepare("SELECT MediaID, URL, Title,
-          Description, MediaType, Position
-          FROM Media
-          WHERE OfferingID = :id
-          ORDER BY Position ASC
-        ");
-        $stmtMedia->bindParam(':id', $id, PDO::PARAM_INT);
-        $stmtMedia->execute();
-        $mediaData = $stmtMedia->fetchAll(PDO::FETCH_ASSOC);
-
-        $media = ["images" => [], "videos" => []];
-        foreach ($mediaData as $item) {
-          $mediaItem = [
-            "Id" => $item['MediaID'],
-            "Url" => $item['URL'],
-            "Title" => $item['Title'],
-            "Description" => $item['Description'],
-            "Position" => $item["Position"]
-          ];
-          if ($item['MediaType'] === 'image') {
-            $media["images"][] = $mediaItem;
-          } elseif ($item['MediaType'] === 'video') {
-            $media["videos"][] = $mediaItem;
-          }
-        }
-
-        // Construcción del objeto principal
-        $offering['media'] = $media;
-        $offering['faqs'] = $faqs;
-        $offering['packages'] = $packages;
-        $offering['author'] = [
-          "UserID" => $offering['author_UserID'],
-          "FirstName" => $offering['author_FirstName'],
-          "LastName" => $offering['author_LastName'],
-          "DisplayName" => $offering['author_DisplayName'],
-          "ImgURL" => $offering['author_imgURL']
-        ];
-
-        // Formatear las locaciones
-        $offering['locations'] = is_null($offering['locations']) ? [] : array_map(
-          function ($a) {
-            $a = explode(":", $a);
-            return [
-              "countryCode" => $a[0],
-              "state" => $a[1],
-              "city" => $a[2]
-            ];
-          },
-          explode(",", $offering['locations'])
-        );
-
-        unset($offering['author_UserID'], $offering['author_FirstName'], $offering['author_LastName'],
-              $offering['author_DisplayName'], $offering['author_imgURL'],
-              $offering['CountryCode'], $offering['CountryName'], $offering['State'], $offering['City']
-        );
-      }
-
+      $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
       $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
       $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
+      // Desagrupo los json traidos por MYSQL para armar el JSON anidado de respuesta
+      $rs = array_map(function ($e) {
+        $e['media'] = [
+          'images' => [],
+          'videos' => []
+        ];
+
+        $images = @json_decode($e['media_images'], true);
+        if($images){
+          $e['media']['images'] = $images;
+        }
+        unset($e['media_images']);
+
+        $videos = @json_decode($e['media_videos'], true);
+        if($videos){
+          $e['media']['videos'] = $videos;
+        }
+        unset($e['media_videos']);
+
+        $faqs = @json_decode($e['faqs'], true);
+        if($faqs){
+          $e['faqs'] = $faqs;
+        }
+
+        $packages = @json_decode($e['packages'], true);
+        if($packages){
+          $e['packages'] = $packages;
+        }
+
+        $e['author'] = [
+          "UserID" => $e['author_UserID'],
+          "DisplayName" => $e['author_DisplayName'],
+          "FirstName" => $e['author_FirstName'],
+          "LastName" => $e['author_LastName'],
+          "DisplayName" => $e['author_DisplayName'],
+          "Rating" => floatVal($e['author_Rating']),
+          "TotalReviews" => intval($e['author_TotalReviews']),
+          "ImgURL" => $e['author_ImgURL']
+        ];
+
+        // Formatear las locaciones
+        $e['locations'] = is_null($e['locations']) ? [] : array_map(
+          function ($a) {
+            $a = explode(":", $a);
+            return [
+              "CountryCode" => $a[0],
+              "State" => $a[1],
+              "City" => $a[2]
+            ];
+          },
+          explode(",", $e['locations'])
+        );
+
+        $e['AverageRating'] = floatVal($e['rating']);
+
+        unset($e['rating'],
+          $e['author_UserID'],
+          $e['author_DisplayName'],
+          $e['author_FirstName'],
+          $e['author_LastName'],
+          $e['author_UserName'],
+          $e['author_Rating'],
+          $e['author_TotalReviews'],
+          $e['author_ImgURL'],
+          $e['CountryCode'],
+          $e['City']);
+
+        return $e;
+      }, $rs);
+
       return [
-        "data" => $offerings,
+        "data" => $rs,
         "rows" => [
           "total" => $total['total'],
-          "fetched" => count($offerings)
+          "fetched" => count($rs)
         ]
       ];
     } catch (\PDOException $e) {
@@ -132,13 +171,22 @@ class Offering
   public function getOfferingById($id)
   {
     try {
-      $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*, u.UserID as author_UserID,
-        u.FirstName as author_FirstName, u.LastName as author_LastName,
-        u.DisplayName as author_DisplayName, m.URL as author_imgURL,
+      $stmt = $this->db->prepare("SELECT o.*,
+        u.UserID AS author_UserID,
+        u.DisplayName AS author_DisplayName,
+        u.FirstName AS author_FirstName,
+        u.LastName AS author_LastName,
+        u.UserName as author_UserName,
+        round(avg(ru.Rating),2) as author_Rating,
+        COUNT(DISTINCT ru.ReviewID) AS author_TotalReviews,
+        (SELECT URL FROM Media WHERE UserID = u.UserID LIMIT 1) AS author_ImgURL,
         GROUP_CONCAT(DISTINCT CONCAT(trim(ol.CountryCode), ':', trim(ol.State), ':', trim(ol.City))
-        ORDER BY ol.CountryCode, ol.State, ol.City ASC SEPARATOR ', ') AS locations
+        ORDER BY ol.CountryCode, ol.State, ol.City ASC SEPARATOR ', ') AS locations,
+        ROUND(AVG(r.rating),2) as rating
         FROM Offerings AS o
         INNER JOIN Users AS u ON u.UserID = o.UserID
+        LEFT JOIN Reviews as r ON o.OfferingID = r.OfferingID
+        LEFT JOIN Reviews as ru ON u.UserID = ru.SUserID
         LEFT JOIN Media AS m ON u.UserID = m.UserID
         LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
         LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode
@@ -218,7 +266,9 @@ class Offering
         "FirstName" => $offering['author_FirstName'],
         "LastName" => $offering['author_LastName'],
         "DisplayName" => $offering['author_DisplayName'],
-        "ImgURL" => $offering['author_imgURL']
+        "Rating" => floatVal($offering['author_Rating']),
+        "TotalReviews" => intval($offering['author_TotalReviews']),
+        "ImgURL" => $offering['author_ImgURL']
       ];
 
       // Formatear las locaciones
@@ -226,18 +276,27 @@ class Offering
         function ($a) {
           $a = explode(":", $a);
           return [
-            "countryCode" => $a[0],
-            "state" => $a[1],
-            "city" => $a[2]
+            "CountryCode" => $a[0],
+            "State" => $a[1],
+            "City" => $a[2]
           ];
         },
         explode(",", $offering['locations'])
       );
 
-      unset($offering['author_UserID'], $offering['author_FirstName'], $offering['author_LastName'],
-            $offering['author_DisplayName'], $offering['author_imgURL'],
-            $offering['CountryCode'], $offering['CountryName'], $offering['State'], $offering['City']
-      );
+      $offering['AverageRating'] = floatVal($offering['rating']);
+
+      unset($offering['rating'],
+        $offering['author_UserID'],
+        $offering['author_DisplayName'],
+        $offering['author_FirstName'],
+        $offering['author_LastName'],
+        $offering['author_UserName'],
+        $offering['author_Rating'],
+        $offering['author_TotalReviews'],
+        $offering['author_ImgURL'],
+        $offering['CountryCode'],
+        $offering['City']);
 
       return (object) [
         "http_code" => 200,
@@ -252,16 +311,62 @@ class Offering
   public function getOfferingsByCategoryId($paginator, $categoryId)
   {
     try {
-      $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*, u.UserID as author_UserID,
-        u.FirstName as author_FirstName, u.LastName as author_LastName,
-        u.DisplayName as author_DisplayName, m.URL as author_imgURL,
+      $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*,
+        u.UserID AS author_UserID,
+        u.DisplayName AS author_DisplayName,
+        u.FirstName AS author_FirstName,
+        u.LastName AS author_LastName,
+        u.UserName as author_UserName,
+        round(avg(ru.Rating),2) as author_Rating,
+        COUNT(DISTINCT ru.ReviewID) AS author_TotalReviews,
+        (SELECT URL FROM Media WHERE UserID = u.UserID LIMIT 1) AS author_ImgURL,
+        -- Subconsulta para media_images
+        (SELECT JSON_ARRAYAGG(
+          JSON_OBJECT(
+            'Id', m.MediaID,
+            'Url', m.URL,
+            'Title', m.Title,
+            'Description', m.Description,
+            'Position', m.Position
+          )
+        ) FROM Media m WHERE m.OfferingID = o.OfferingID AND m.MediaType = 'image') AS media_images,
+        -- Subconsulta para media_videos
+        (SELECT JSON_ARRAYAGG(
+          JSON_OBJECT(
+            'Id', m.MediaID,
+            'Url', m.URL,
+            'Title', m.Title,
+            'Description', m.Description,
+            'Position', m.Position
+          )
+        ) FROM Media m WHERE m.OfferingID = o.OfferingID AND m.MediaType = 'video') AS media_videos,
+        -- Subconsulta para faqs
+        (SELECT JSON_ARRAYAGG(
+          JSON_OBJECT(
+            'Position', f.position,
+            'Question', f.question,
+            'Answer', f.answer
+          )
+        ) FROM OfferingsFaqs f WHERE f.OfferingID = o.OfferingID) AS faqs,
+        -- Subconsulta para packages
+        (SELECT JSON_ARRAYAGG(
+          JSON_OBJECT(
+            'Package', p.package,
+            'Price', p.price,
+            'Description', p.description,
+            'Conditions', p.conditions,
+            'SessionType', p.sessionType
+          )
+        ) FROM OfferingsPackages p WHERE p.OfferingID = o.OfferingID) AS packages,
+        -- Agrupar locations
         GROUP_CONCAT(DISTINCT CONCAT(trim(ol.CountryCode), ':', trim(ol.State), ':', trim(ol.City))
-        ORDER BY ol.CountryCode, ol.State, ol.City ASC SEPARATOR ', ') AS locations
+        ORDER BY ol.CountryCode, ol.State, ol.City ASC SEPARATOR ', ') AS locations,
+        ROUND(AVG(r.rating),2) as rating
         FROM Offerings AS o
         INNER JOIN Users AS u ON u.UserID = o.UserID
-        LEFT JOIN Media AS m ON u.UserID = m.UserID
+        LEFT JOIN Reviews as r ON o.OfferingID = r.OfferingID
+        LEFT JOIN Reviews as ru ON u.UserID = ru.SUserID
         LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
-        LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode
         WHERE o.CategoryID = :categoryId
         GROUP BY o.OfferingID
         ORDER BY o.OfferingID
@@ -272,92 +377,85 @@ class Offering
       $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
       $stmt->execute();
 
-      $offerings = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-      foreach ($offerings as &$offering) {
-        // Obtener FAQs
-        $faqStmt = $this->db->prepare("SELECT Position, Question, Answer
-          FROM OfferingsFaqs
-          WHERE OfferingID = :offeringID
-          ORDER BY Position ASC");
-        $faqStmt->bindValue(':offeringID', $offering['OfferingID'], PDO::PARAM_INT);
-        $faqStmt->execute();
-        $faqs = $faqStmt->fetchAll(PDO::FETCH_ASSOC);
-
-        // Obtener Packages
-        $packagesStmt = $this->db->prepare("SELECT Package, Price, Description, Conditions, SessionType
-          FROM OfferingsPackages
-          WHERE OfferingID = :offeringID");
-        $packagesStmt->bindValue(':offeringID', $offering['OfferingID'], PDO::PARAM_INT);
-        $packagesStmt->execute();
-        $packages = $packagesStmt->fetchAll(PDO::FETCH_ASSOC);
-
-        // Proceso de organización de medios
-        $stmtMedia = $this->db->prepare("SELECT MediaID, URL, Title,
-          Description, MediaType, Position
-          FROM Media
-          WHERE OfferingID = :id
-          ORDER BY Position ASC
-        ");
-        $stmtMedia->bindParam(':id', $id, PDO::PARAM_INT);
-        $stmtMedia->execute();
-        $mediaData = $stmtMedia->fetchAll(PDO::FETCH_ASSOC);
-
-        $media = ["images" => [], "videos" => []];
-        foreach ($mediaData as $item) {
-          $mediaItem = [
-            "Id" => $item['MediaID'],
-            "Url" => $item['URL'],
-            "Title" => $item['Title'],
-            "Description" => $item['Description'],
-            "Position" => $item["Position"]
-          ];
-          if ($item['MediaType'] === 'image') {
-            $media["images"][] = $mediaItem;
-          } elseif ($item['MediaType'] === 'video') {
-            $media["videos"][] = $mediaItem;
-          }
-        }
-
-        // Construcción del objeto principal
-        $offering['media'] = $media;
-        $offering['faqs'] = $faqs;
-        $offering['packages'] = $packages;
-        $offering['author'] = [
-          "UserID" => $offering['author_UserID'],
-          "FirstName" => $offering['author_FirstName'],
-          "LastName" => $offering['author_LastName'],
-          "DisplayName" => $offering['author_DisplayName'],
-          "ImgURL" => $offering['author_imgURL']
-        ];
-
-        // Formatear las locaciones
-        $offering['locations'] = is_null($offering['locations']) ? [] : array_map(
-          function ($a) {
-            $a = explode(":", $a);
-            return [
-              "countryCode" => $a[0],
-              "state" => $a[1],
-              "city" => $a[2]
-            ];
-          },
-          explode(",", $offering['locations'])
-        );
-
-        unset($offering['author_UserID'], $offering['author_FirstName'], $offering['author_LastName'],
-              $offering['author_DisplayName'], $offering['author_imgURL'],
-              $offering['CountryCode'], $offering['CountryName'], $offering['State'], $offering['City']
-        );
-      }
-
+      $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
       $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
       $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
+      // Desagrupo los json traidos por MYSQL para armar el JSON anidado de respuesta
+      $rs = array_map(function ($e) {
+        $e['media'] = [
+          'images' => [],
+          'videos' => []
+        ];
+
+        $images = @json_decode($e['media_images'], true);
+        if($images){
+          $e['media']['images'] = $images;
+        }
+        unset($e['media_images']);
+
+        $videos = @json_decode($e['media_videos'], true);
+        if($videos){
+          $e['media']['videos'] = $videos;
+        }
+        unset($e['media_videos']);
+
+        $faqs = @json_decode($e['faqs'], true);
+        if($faqs){
+          $e['faqs'] = $faqs;
+        }
+
+        $packages = @json_decode($e['packages'], true);
+        if($packages){
+          $e['packages'] = $packages;
+        }
+
+        $e['author'] = [
+          "UserID" => $e['author_UserID'],
+          "DisplayName" => $e['author_DisplayName'],
+          "FirstName" => $e['author_FirstName'],
+          "LastName" => $e['author_LastName'],
+          "DisplayName" => $e['author_DisplayName'],
+          "Rating" => floatVal($e['author_Rating']),
+          "TotalReviews" => intval($e['author_TotalReviews']),
+          "ImgURL" => $e['author_ImgURL']
+        ];
+
+        // Formatear las locaciones
+        $e['locations'] = is_null($e['locations']) ? [] : array_map(
+          function ($a) {
+            $a = explode(":", $a);
+            return [
+              "CountryCode" => $a[0],
+              "State" => $a[1],
+              "City" => $a[2]
+            ];
+          },
+          explode(",", $e['locations'])
+        );
+
+        $e['AverageRating'] = floatVal($e['rating']);
+
+        unset($e['rating'],
+          $e['author_UserID'],
+          $e['author_DisplayName'],
+          $e['author_FirstName'],
+          $e['author_LastName'],
+          $e['author_UserName'],
+          $e['author_Rating'],
+          $e['author_TotalReviews'],
+          $e['author_ImgURL'],
+          $e['CountryCode'],
+          $e['City']);
+
+        return $e;
+      }, $rs);
+
       return [
-        "data" => $offerings,
+        "data" => $rs,
         "rows" => [
           "total" => $total['total'],
-          "fetched" => count($offerings)
+          "fetched" => count($rs)
         ]
       ];
     } catch (\PDOException $e) {
@@ -369,18 +467,65 @@ class Offering
   public function getOfferingsByUserId($paginator, $userId)
   {
     try {
-      $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*, u.UserID as author_UserID,
-        u.FirstName as author_FirstName, u.LastName as author_LastName,
-        u.DisplayName as author_DisplayName, m.URL as author_imgURL,
+      $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*,
+        u.UserID AS author_UserID,
+        u.DisplayName AS author_DisplayName,
+        u.FirstName AS author_FirstName,
+        u.LastName AS author_LastName,
+        u.UserName as author_UserName,
+        round(avg(ru.Rating),2) as author_Rating,
+        COUNT(DISTINCT ru.ReviewID) AS author_TotalReviews,
+        (SELECT URL FROM Media WHERE UserID = u.UserID LIMIT 1) AS author_ImgURL,
+        -- Subconsulta para media_images
+        (SELECT JSON_ARRAYAGG(
+          JSON_OBJECT(
+            'Id', m.MediaID,
+            'Url', m.URL,
+            'Title', m.Title,
+            'Description', m.Description,
+            'Position', m.Position
+          )
+        ) FROM Media m WHERE m.OfferingID = o.OfferingID AND m.MediaType = 'image') AS media_images,
+        -- Subconsulta para media_videos
+        (SELECT JSON_ARRAYAGG(
+          JSON_OBJECT(
+            'Id', m.MediaID,
+            'Url', m.URL,
+            'Title', m.Title,
+            'Description', m.Description,
+            'Position', m.Position
+          )
+        ) FROM Media m WHERE m.OfferingID = o.OfferingID AND m.MediaType = 'video') AS media_videos,
+        -- Subconsulta para faqs
+        (SELECT JSON_ARRAYAGG(
+          JSON_OBJECT(
+            'Position', f.position,
+            'Question', f.question,
+            'Answer', f.answer
+          )
+        ) FROM OfferingsFaqs f WHERE f.OfferingID = o.OfferingID) AS faqs,
+        -- Subconsulta para packages
+        (SELECT JSON_ARRAYAGG(
+          JSON_OBJECT(
+            'Package', p.package,
+            'Price', p.price,
+            'Description', p.description,
+            'Conditions', p.conditions,
+            'SessionType', p.sessionType
+          )
+        ) FROM OfferingsPackages p WHERE p.OfferingID = o.OfferingID) AS packages,
+        -- Agrupar locations
         GROUP_CONCAT(DISTINCT CONCAT(trim(ol.CountryCode), ':', trim(ol.State), ':', trim(ol.City))
-        ORDER BY ol.CountryCode, ol.State, ol.City ASC SEPARATOR ', ') AS locations
+        ORDER BY ol.CountryCode, ol.State, ol.City ASC SEPARATOR ', ') AS locations,
+        ROUND(AVG(r.rating),2) as rating
         FROM Offerings AS o
         INNER JOIN Users AS u ON u.UserID = o.UserID
-        LEFT JOIN Media AS m ON u.UserID = m.UserID
+        LEFT JOIN Reviews as r ON o.OfferingID = r.OfferingID
+        LEFT JOIN Reviews as ru ON u.UserID = ru.SUserID
         LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
-        LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode
         WHERE o.UserID = :userId
         GROUP BY o.OfferingID
+        ORDER BY o.OfferingID
         LIMIT :_limit OFFSET :_offset");
 
       $stmt->bindParam(':userId', $userId, PDO::PARAM_INT);
@@ -388,92 +533,89 @@ class Offering
       $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
       $stmt->execute();
 
-      $offerings = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-      foreach ($offerings as &$offering) {
-        // Obtener FAQs
-        $faqStmt = $this->db->prepare("SELECT Position, Question, Answer
-          FROM OfferingsFaqs
-          WHERE OfferingID = :offeringID
-          ORDER BY Position ASC");
-        $faqStmt->bindValue(':offeringID', $offering['OfferingID'], PDO::PARAM_INT);
-        $faqStmt->execute();
-        $faqs = $faqStmt->fetchAll(PDO::FETCH_ASSOC);
-
-        // Obtener Packages
-        $packagesStmt = $this->db->prepare("SELECT Package, Price, Description, Conditions, SessionType
-          FROM OfferingsPackages
-          WHERE OfferingID = :offeringID");
-        $packagesStmt->bindValue(':offeringID', $offering['OfferingID'], PDO::PARAM_INT);
-        $packagesStmt->execute();
-        $packages = $packagesStmt->fetchAll(PDO::FETCH_ASSOC);
-
-        // Proceso de organización de medios
-        $stmtMedia = $this->db->prepare("SELECT MediaID, URL, Title,
-          Description, MediaType, Position
-          FROM Media
-          WHERE OfferingID = :id
-          ORDER BY Position ASC
-        ");
-        $stmtMedia->bindParam(':id', $id, PDO::PARAM_INT);
-        $stmtMedia->execute();
-        $mediaData = $stmtMedia->fetchAll(PDO::FETCH_ASSOC);
-
-        $media = ["images" => [], "videos" => []];
-        foreach ($mediaData as $item) {
-          $mediaItem = [
-            "Id" => $item['MediaID'],
-            "Url" => $item['URL'],
-            "Title" => $item['Title'],
-            "Description" => $item['Description'],
-            "Position" => $item["Position"]
-          ];
-          if ($item['MediaType'] === 'image') {
-            $media["images"][] = $mediaItem;
-          } elseif ($item['MediaType'] === 'video') {
-            $media["videos"][] = $mediaItem;
-          }
-        }
-
-        // Construcción del objeto principal
-        $offering['media'] = $media;
-        $offering['faqs'] = $faqs;
-        $offering['packages'] = $packages;
-        $offering['author'] = [
-          "UserID" => $offering['author_UserID'],
-          "FirstName" => $offering['author_FirstName'],
-          "LastName" => $offering['author_LastName'],
-          "DisplayName" => $offering['author_DisplayName'],
-          "ImgURL" => $offering['author_imgURL']
-        ];
-
-        // Formatear las locaciones
-        $offering['locations'] = is_null($offering['locations']) ? [] : array_map(
-          function ($a) {
-            $a = explode(":", $a);
-            return [
-              "countryCode" => $a[0],
-              "state" => $a[1],
-              "city" => $a[2]
-            ];
-          },
-          explode(",", $offering['locations'])
-        );
-
-        unset($offering['author_UserID'], $offering['author_FirstName'], $offering['author_LastName'],
-              $offering['author_DisplayName'], $offering['author_imgURL'],
-              $offering['CountryCode'], $offering['CountryName'], $offering['State'], $offering['City']
-        );
-      }
-
+      $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
       $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
       $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
+      ob_start();
+      print_r($rs);
+      file_put_contents("rs.txt", ob_get_clean(), FILE_APPEND); 
+
+      // Desagrupo los json traidos por MYSQL para armar el JSON anidado de respuesta
+      $rs = array_map(function ($e) {
+        $e['media'] = [
+          'images' => [],
+          'videos' => []
+        ];
+
+        $images = @json_decode($e['media_images'], true);
+        if($images){
+          $e['media']['images'] = $images;
+        }
+        unset($e['media_images']);
+
+        $videos = @json_decode($e['media_videos'], true);
+        if($videos){
+          $e['media']['videos'] = $videos;
+        }
+        unset($e['media_videos']);
+
+        $faqs = @json_decode($e['faqs'], true);
+        if($faqs){
+          $e['faqs'] = $faqs;
+        }
+
+        $packages = @json_decode($e['packages'], true);
+        if($packages){
+          $e['packages'] = $packages;
+        }
+
+        $e['author'] = [
+          "UserID" => $e['author_UserID'],
+          "DisplayName" => $e['author_DisplayName'],
+          "FirstName" => $e['author_FirstName'],
+          "LastName" => $e['author_LastName'],
+          "DisplayName" => $e['author_DisplayName'],
+          "Rating" => floatVal($e['author_Rating']),
+          "TotalReviews" => intval($e['author_TotalReviews']),
+          "ImgURL" => $e['author_ImgURL']
+        ];
+
+        // Formatear las locaciones
+        $e['locations'] = is_null($e['locations']) ? [] : array_map(
+          function ($a) {
+            $a = explode(":", $a);
+            return [
+              "CountryCode" => $a[0],
+              "State" => $a[1],
+              "City" => $a[2]
+            ];
+          },
+          explode(",", $e['locations'])
+        );
+
+        $e['AverageRating'] = floatVal($e['rating']);
+
+        unset($e['rating'],
+          $e['author_UserID'],
+          $e['author_DisplayName'],
+          $e['author_FirstName'],
+          $e['author_LastName'],
+          $e['author_UserName'],
+          $e['author_Rating'],
+          $e['author_TotalReviews'],
+          $e['author_ImgURL'],
+          $e['CountryCode'],
+          $e['City']);
+
+        return $e;
+      }, $rs);
+
       return [
-        "data" => $offerings,
+        "data" => $rs,
         "rows" => [
           "total" => $total['total'],
-          "fetched" => count($offerings)
+          "fetched" => count($rs)
         ]
       ];
     } catch (\PDOException $e) {

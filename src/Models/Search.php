@@ -51,9 +51,15 @@ class Search
   {
     try {
       $searchQuery = "%$query%";
-      $stmt = $this->pdo->prepare("SELECT o.*, u.UserID AS author_UserID, u.DisplayName AS author_DisplayName,
-        u.FirstName AS author_FirstName, u.LastName AS author_LastName,
-        (SELECT URL FROM Media WHERE UserID = u.UserID LIMIT 1) AS author_imgURL,
+      $stmt = $this->pdo->prepare("SELECT o.*,
+        u.UserID AS author_UserID,
+        u.DisplayName AS author_DisplayName,
+        u.FirstName AS author_FirstName,
+        u.LastName AS author_LastName,
+        u.UserName as author_UserName,
+        round(avg(ru.Rating),2) as author_Rating,
+        COUNT(DISTINCT ru.ReviewID) AS author_TotalReviews,
+        (SELECT URL FROM Media WHERE UserID = u.UserID LIMIT 1) AS author_ImgURL,
         -- Subconsulta para media_images
         (SELECT JSON_ARRAYAGG(
           JSON_OBJECT(
@@ -92,11 +98,15 @@ class Search
             'SessionType', p.sessionType
           )
         ) FROM OfferingsPackages p WHERE p.OfferingID = o.OfferingID) AS packages,
+        -- Agrupar locations
         GROUP_CONCAT(DISTINCT CONCAT(trim(ol.CountryCode), ':', trim(ol.State), ':', trim(ol.City))
-        ORDER BY ol.CountryCode, ol.State, ol.City ASC SEPARATOR ', ') AS locations
+        ORDER BY ol.CountryCode, ol.State, ol.City ASC SEPARATOR ', ') AS locations,
+        ROUND(AVG(r.rating),2) as rating
         FROM Offerings AS o
-        LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
         INNER JOIN Users AS u ON u.UserID = o.UserID
+        LEFT JOIN Reviews as r ON o.OfferingID = r.OfferingID
+        LEFT JOIN Reviews as ru ON u.UserID = ru.SUserID
+        LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
         WHERE (o.Title LIKE :search1 OR o.Description LIKE :search2
         OR o.ShortDescription LIKE :search3 OR o.Tags LIKE :search4)
         AND o.Status = 'Active'
@@ -151,7 +161,10 @@ class Search
           "DisplayName" => $e['author_DisplayName'],
           "FirstName" => $e['author_FirstName'],
           "LastName" => $e['author_LastName'],
-          "ImgURL" => $e['author_imgURL']
+          "DisplayName" => $e['author_DisplayName'],
+          "Rating" => floatVal($e['author_Rating']),
+          "TotalReviews" => intval($e['author_TotalReviews']),
+          "ImgURL" => $e['author_ImgURL']
         ];
 
         // Formatear las locaciones
@@ -159,17 +172,27 @@ class Search
           function ($a) {
             $a = explode(":", $a);
             return [
-              "countryCode" => $a[0],
-              "state" => $a[1],
-              "city" => $a[2]
+              "CountryCode" => $a[0],
+              "State" => $a[1],
+              "City" => $a[2]
             ];
           },
           explode(",", $e['locations'])
         );
 
-        unset($e['author_UserID'], $e['author_DisplayName'],
-          $e['author_FirstName'], $e['author_LastName'],
-          $e['author_imgURL'], $e['CountryCode'], $e['City']);
+        $e['AverageRating'] = floatVal($e['rating']);
+
+        unset($e['rating'],
+          $e['author_UserID'],
+          $e['author_DisplayName'],
+          $e['author_FirstName'],
+          $e['author_LastName'],
+          $e['author_UserName'],
+          $e['author_Rating'],
+          $e['author_TotalReviews'],
+          $e['author_ImgURL'],
+          $e['CountryCode'],
+          $e['City']);
 
         return $e;
       }, $rs);

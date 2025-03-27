@@ -178,11 +178,11 @@ class AuthController{
       $user = $result->data[0];
 
       // Verificar si el usuario está bloqueado
-      if (!is_null($user['Locked_until']) && strtotime($user['Locked_until']) > time()) {
+      if (!is_null($user['locked_until']) && strtotime($user['locked_until']) > time()) {
         return $response->withStatus(403)->withJson([
           "error" => [
             "code" => "USER_LOCKED",
-            "desc" => "Account is temporarily locked until " . $user['Locked_until']
+            "desc" => "Account is temporarily locked until " . $user['locked_until']
           ]
         ]);
       }
@@ -282,11 +282,11 @@ class AuthController{
       $user = $result->data[0];
 
       // Verificar si el usuario está bloqueado
-      if (!is_null($user['Locked_until']) && strtotime($user['Locked_until']) > time()) {
+      if (!is_null($user['locked_until']) && strtotime($user['locked_until']) > time()) {
         return $response->withStatus(403)->withJson([
           "error" => [
             "code" => "USER_LOCKED",
-            "desc" => "Account is temporarily locked until " . $user['Locked_until']
+            "desc" => "Account is temporarily locked until " . $user['locked_until']
           ]
         ]);
       }
