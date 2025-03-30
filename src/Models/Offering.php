@@ -66,7 +66,7 @@ class Offering
           )
         ) FROM OfferingsPackages p WHERE p.OfferingID = o.OfferingID) AS packages,
         -- Agrupar locations
-        GROUP_CONCAT(DISTINCT CONCAT(trim(ol.CountryCode), ':', trim(ol.State), ':', trim(ol.City))
+        GROUP_CONCAT(DISTINCT CONCAT(trim(ol.CountryCode), ':', trim(c.CountryName), ':', trim(ol.State), ':', trim(ol.City))
         ORDER BY ol.CountryCode, ol.State, ol.City ASC SEPARATOR ', ') AS locations,
         ROUND(AVG(r.rating),2) as rating
         FROM Offerings AS o
@@ -74,6 +74,7 @@ class Offering
         LEFT JOIN Reviews as r ON o.OfferingID = r.OfferingID
         LEFT JOIN Reviews as ru ON u.UserID = ru.SUserID
         LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
+        LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode
         GROUP BY o.OfferingID
         ORDER BY o.OfferingID
         LIMIT :_limit OFFSET :_offset");
@@ -132,8 +133,9 @@ class Offering
             $a = explode(":", $a);
             return [
               "CountryCode" => trim($a[0]),
-              "State" => trim($a[1]),
-              "City" => trim($a[2])
+              "CountryName" => trim($a[1]),
+              "State" => trim($a[2]),
+              "City" => trim($a[3])
             ];
           },
           explode(",", $e['locations'])
@@ -180,7 +182,7 @@ class Offering
         round(avg(ru.Rating),2) as author_Rating,
         COUNT(DISTINCT ru.ReviewID) AS author_TotalReviews,
         (SELECT URL FROM Media WHERE UserID = u.UserID LIMIT 1) AS author_ImgURL,
-        GROUP_CONCAT(DISTINCT CONCAT(trim(ol.CountryCode), ':', trim(ol.State), ':', trim(ol.City))
+        GROUP_CONCAT(DISTINCT CONCAT(trim(ol.CountryCode), ':', trim(c.CountryName), ':', trim(ol.State), ':', trim(ol.City))
         ORDER BY ol.CountryCode, ol.State, ol.City ASC SEPARATOR ', ') AS locations,
         ROUND(AVG(r.rating),2) as rating
         FROM Offerings AS o
@@ -277,8 +279,9 @@ class Offering
           $a = explode(":", $a);
           return [
             "CountryCode" => trim($a[0]),
-            "State" => trim($a[1]),
-            "City" => trim($a[2])
+            "CountryName" => trim($a[1]),
+            "State" => trim($a[2]),
+            "City" => trim($a[3])
           ];
         },
         explode(",", $offering['locations'])
@@ -359,7 +362,7 @@ class Offering
           )
         ) FROM OfferingsPackages p WHERE p.OfferingID = o.OfferingID) AS packages,
         -- Agrupar locations
-        GROUP_CONCAT(DISTINCT CONCAT(trim(ol.CountryCode), ':', trim(ol.State), ':', trim(ol.City))
+        GROUP_CONCAT(DISTINCT CONCAT(trim(ol.CountryCode), ':', trim(c.CountryName), ':', trim(ol.State), ':', trim(ol.City))
         ORDER BY ol.CountryCode, ol.State, ol.City ASC SEPARATOR ', ') AS locations,
         ROUND(AVG(r.rating),2) as rating
         FROM Offerings AS o
@@ -367,6 +370,7 @@ class Offering
         LEFT JOIN Reviews as r ON o.OfferingID = r.OfferingID
         LEFT JOIN Reviews as ru ON u.UserID = ru.SUserID
         LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
+        LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode
         WHERE o.CategoryID = :categoryId
         GROUP BY o.OfferingID
         ORDER BY o.OfferingID
@@ -427,8 +431,9 @@ class Offering
             $a = explode(":", $a);
             return [
               "CountryCode" => trim($a[0]),
-              "State" => trim($a[1]),
-              "City" => trim($a[2])
+              "CountryName" => trim($a[1]),
+              "State" => trim($a[2]),
+              "City" => trim($a[3])
             ];
           },
           explode(",", $e['locations'])
@@ -515,7 +520,7 @@ class Offering
           )
         ) FROM OfferingsPackages p WHERE p.OfferingID = o.OfferingID) AS packages,
         -- Agrupar locations
-        GROUP_CONCAT(DISTINCT CONCAT(trim(ol.CountryCode), ':', trim(ol.State), ':', trim(ol.City))
+        GROUP_CONCAT(DISTINCT CONCAT(trim(ol.CountryCode), ':', trim(c.CountryName), ':', trim(ol.State), ':', trim(ol.City))
         ORDER BY ol.CountryCode, ol.State, ol.City ASC SEPARATOR ', ') AS locations,
         ROUND(AVG(r.rating),2) as rating
         FROM Offerings AS o
@@ -523,6 +528,7 @@ class Offering
         LEFT JOIN Reviews as r ON o.OfferingID = r.OfferingID
         LEFT JOIN Reviews as ru ON u.UserID = ru.SUserID
         LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
+        LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode        
         WHERE o.UserID = :userId
         GROUP BY o.OfferingID
         ORDER BY o.OfferingID
@@ -583,8 +589,9 @@ class Offering
             $a = explode(":", $a);
             return [
               "CountryCode" => trim($a[0]),
-              "State" => trim($a[1]),
-              "City" => trim($a[2])
+              "CountryName" => trim($a[1]),
+              "State" => trim($a[2]),
+              "City" => trim($a[3])
             ];
           },
           explode(",", $e['locations'])
@@ -666,13 +673,13 @@ class Offering
       // Insertar ubicaciones si existen
       if (!empty($data['locations']) && is_array($data['locations'])) {
         $stmt = $this->db->prepare("INSERT INTO OfferingLocations (OfferingID, CountryCode, State, City)
-                VALUES (:OfferingID, :CountryCode, :State, :City)");
+                VALUES (:id, :CountryCode, :State, :City)");
 
         foreach ($data['locations'] as $location) {
           $stmt->bindParam(':OfferingID', $id, PDO::PARAM_INT);
-          $stmt->bindParam(':CountryCode', $location['countrycode'], PDO::PARAM_STR);
-          $stmt->bindParam(':State', $location['state'], PDO::PARAM_STR);
-          $stmt->bindParam(':City', $location['city'], PDO::PARAM_STR);
+          $stmt->bindParam(':CountryCode', $location['CountryCode'], PDO::PARAM_STR);
+          $stmt->bindParam(':State', $location['State'], PDO::PARAM_STR);
+          $stmt->bindParam(':City', $location['City'], PDO::PARAM_STR);
           $stmt->execute();
         }
       }
@@ -771,7 +778,8 @@ class Offering
       // Filtrar faqs y packages antes del ciclo de validación
       $faqs = $data['faqs'] ?? null;
       $packages = $data['packages'] ?? null;
-      unset($data['faqs'], $data['packages']);
+      $locations = $data['locations'] ?? null;
+      unset($data['faqs'], $data['packages'], $data['locations']);
 
       // Construcción dinámica de la consulta
       $fields = [];
@@ -789,7 +797,7 @@ class Offering
         }
       }
 
-      if (empty($fields) && !$faqs && !$packages && !$data['media']) {
+      if (empty($fields) && !$faqs && !$packages && !$locations) {
         return (object) [
           "http_code" => 400,
           "error" => [
@@ -834,30 +842,36 @@ class Offering
       if ($packages !== null) {
         $this->updateOfferingPackages($id, $packages);
       }
-
-      // Si se recibe `locations`, eliminar las existentes y agregar las nuevas
-      if (isset($data['locations']) && is_array($data['locations'])) {
-        // Eliminar ubicaciones actuales
-        $stmt = $this->db->prepare("DELETE FROM OfferingLocations WHERE OfferingID = :id");
-        $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-        $stmt->execute();
-
-        // Insertar nuevas ubicaciones
-        $stmt = $this->db->prepare("INSERT INTO OfferingLocations (OfferingID, CountryCode, State, City)
-                VALUES (:OfferingID, :CountryCode, :State, :City)");
-
-        foreach ($data['locations'] as $location) {
-          $stmt->bindParam(':OfferingID', $id, PDO::PARAM_INT);
-          $stmt->bindParam(':CountryCode', $location['countrycode'], PDO::PARAM_STR);
-          $stmt->bindParam(':State', $location['state'], PDO::PARAM_STR);
-          $stmt->bindParam(':City', $location['city'], PDO::PARAM_STR);
-          $stmt->execute();
-        }
-      }
+      if ($locations !== null) {
+        $this->updateOfferingLocations($id, $locations);
+      }      
 
       return $this->getOfferingById($id);
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
+    }
+  }
+  
+  public function updateOfferingLocations($id, $locations) 
+  {
+    // Si se recibe `locations`, eliminar las existentes y agregar las nuevas
+    if ($locations !== null &&  is_array($locations)) {
+      // Eliminar ubicaciones actuales
+      $stmt = $this->db->prepare("DELETE FROM OfferingLocations WHERE OfferingID = :id");
+      $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+      $stmt->execute();
+
+      // Insertar nuevas ubicaciones
+      $stmt = $this->db->prepare("INSERT INTO OfferingLocations (OfferingID, CountryCode, State, City)
+      VALUES (:id, :CountryCode, :State, :City)");
+
+      foreach ($locations as $location) {
+        $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+        $stmt->bindParam(':CountryCode', $location['CountryCode'], PDO::PARAM_STR);
+        $stmt->bindParam(':State', $location['State'], PDO::PARAM_STR);
+        $stmt->bindParam(':City', $location['City'], PDO::PARAM_STR);
+        $stmt->execute();
+      }
     }
   }
 
