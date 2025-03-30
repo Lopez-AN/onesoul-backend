@@ -172,9 +172,9 @@ class Search
           function ($a) {
             $a = explode(":", $a);
             return [
-              "CountryCode" => $a[0],
-              "State" => $a[1],
-              "City" => $a[2]
+              "CountryCode" => trim($a[0]),
+              "State" => trim($a[1]),
+              "City" => trim($a[2])
             ];
           },
           explode(",", $e['locations'])

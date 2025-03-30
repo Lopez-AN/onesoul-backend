@@ -131,9 +131,9 @@ class Offering
           function ($a) {
             $a = explode(":", $a);
             return [
-              "CountryCode" => $a[0],
-              "State" => $a[1],
-              "City" => $a[2]
+              "CountryCode" => trim($a[0]),
+              "State" => trim($a[1]),
+              "City" => trim($a[2])
             ];
           },
           explode(",", $e['locations'])
@@ -276,9 +276,9 @@ class Offering
         function ($a) {
           $a = explode(":", $a);
           return [
-            "CountryCode" => $a[0],
-            "State" => $a[1],
-            "City" => $a[2]
+            "CountryCode" => trim($a[0]),
+            "State" => trim($a[1]),
+            "City" => trim($a[2])
           ];
         },
         explode(",", $offering['locations'])
@@ -426,9 +426,9 @@ class Offering
           function ($a) {
             $a = explode(":", $a);
             return [
-              "CountryCode" => $a[0],
-              "State" => $a[1],
-              "City" => $a[2]
+              "CountryCode" => trim($a[0]),
+              "State" => trim($a[1]),
+              "City" => trim($a[2])
             ];
           },
           explode(",", $e['locations'])
@@ -537,10 +537,6 @@ class Offering
       $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
       $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
-      ob_start();
-      print_r($rs);
-      file_put_contents("rs.txt", ob_get_clean(), FILE_APPEND); 
-
       // Desagrupo los json traidos por MYSQL para armar el JSON anidado de respuesta
       $rs = array_map(function ($e) {
         $e['media'] = [
@@ -586,9 +582,9 @@ class Offering
           function ($a) {
             $a = explode(":", $a);
             return [
-              "CountryCode" => $a[0],
-              "State" => $a[1],
-              "City" => $a[2]
+              "CountryCode" => trim($a[0]),
+              "State" => trim($a[1]),
+              "City" => trim($a[2])
             ];
           },
           explode(",", $e['locations'])
