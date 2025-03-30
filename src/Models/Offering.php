@@ -121,7 +121,6 @@ class Offering
           "DisplayName" => $e['author_DisplayName'],
           "FirstName" => $e['author_FirstName'],
           "LastName" => $e['author_LastName'],
-          "DisplayName" => $e['author_DisplayName'],
           "Rating" => floatVal($e['author_Rating']),
           "TotalReviews" => intval($e['author_TotalReviews']),
           "ImgURL" => $e['author_ImgURL']
@@ -419,7 +418,6 @@ class Offering
           "DisplayName" => $e['author_DisplayName'],
           "FirstName" => $e['author_FirstName'],
           "LastName" => $e['author_LastName'],
-          "DisplayName" => $e['author_DisplayName'],
           "Rating" => floatVal($e['author_Rating']),
           "TotalReviews" => intval($e['author_TotalReviews']),
           "ImgURL" => $e['author_ImgURL']
@@ -577,7 +575,6 @@ class Offering
           "DisplayName" => $e['author_DisplayName'],
           "FirstName" => $e['author_FirstName'],
           "LastName" => $e['author_LastName'],
-          "DisplayName" => $e['author_DisplayName'],
           "Rating" => floatVal($e['author_Rating']),
           "TotalReviews" => intval($e['author_TotalReviews']),
           "ImgURL" => $e['author_ImgURL']

@@ -99,7 +99,7 @@ class Search
           )
         ) FROM OfferingsPackages p WHERE p.OfferingID = o.OfferingID) AS packages,
         -- Agrupar locations
-        GROUP_CONCAT(DISTINCT CONCAT(trim(ol.CountryCode), ':', trim(ol.State), ':', trim(ol.City))
+        GROUP_CONCAT(DISTINCT CONCAT(trim(ol.CountryCode), ':', trim(c.CountryName), ':', trim(ol.State), ':', trim(ol.City))
         ORDER BY ol.CountryCode, ol.State, ol.City ASC SEPARATOR ', ') AS locations,
         ROUND(AVG(r.rating),2) as rating
         FROM Offerings AS o
@@ -107,6 +107,7 @@ class Search
         LEFT JOIN Reviews as r ON o.OfferingID = r.OfferingID
         LEFT JOIN Reviews as ru ON u.UserID = ru.SUserID
         LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
+        LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode        
         WHERE (o.Title LIKE :search1 OR o.Description LIKE :search2
         OR o.ShortDescription LIKE :search3 OR o.Tags LIKE :search4)
         AND o.Status = 'Active'
@@ -161,7 +162,6 @@ class Search
           "DisplayName" => $e['author_DisplayName'],
           "FirstName" => $e['author_FirstName'],
           "LastName" => $e['author_LastName'],
-          "DisplayName" => $e['author_DisplayName'],
           "Rating" => floatVal($e['author_Rating']),
           "TotalReviews" => intval($e['author_TotalReviews']),
           "ImgURL" => $e['author_ImgURL']
@@ -173,8 +173,9 @@ class Search
             $a = explode(":", $a);
             return [
               "CountryCode" => trim($a[0]),
-              "State" => trim($a[1]),
-              "City" => trim($a[2])
+              "CountryName" => trim($a[1]),
+              "State" => trim($a[2]),
+              "City" => trim($a[3])
             ];
           },
           explode(",", $e['locations'])
