@@ -267,6 +267,25 @@ class User
     }
   }
 
+  public function getReviewsByUser($id)
+  {
+    try{
+      $stmt = $this->db->prepare("SELECT r.ReviewID, o.OfferingID, o.Title AS OfferingTitle, r.Rating, r.ReviewText,
+      IF(u.DisplayName IS NULL, CONCAT(u.FirstName,' ',u.Lastname), u.DisplayName) AS Reviewer
+      FROM Reviews AS r
+      INNER JOIN Users AS u ON r.SUserID = u.UserID
+      INNER JOIN Offerings AS o ON r.OfferingID = o.OfferingID
+      WHERE r.GUserID = :id");
+      $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+      $stmt->execute();
+
+      $reviews = $stmt->fetchAll(PDO::FETCH_ASSOC);
+      return $reviews;
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
   public function updateUser($userId, $data)
   {
     try {

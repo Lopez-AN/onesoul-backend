@@ -34,6 +34,7 @@ return function (App $app) {
   $app->get('/users/type/{type}', [$userController, 'getUsersByType']);
   $app->get('/users/email/{email}', [$userController, 'getUserByEmail']);
   $app->get('/users/username/{username}', [$userController, 'getUserByUserName']);
+  $app->get('/users/{id}/reviews', [$userController, 'getReviewsByUser']);
   $app->post('/users/profile_photo/{id}', [$userController, 'updateProfilePhoto']);
   $app->delete('/users/profile_photo/{id}', [$userController, 'deleteProfilePhoto']);
   $app->patch('/users/{id}', [$userController, 'updateUser']);
