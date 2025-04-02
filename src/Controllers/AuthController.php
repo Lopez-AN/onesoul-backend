@@ -68,7 +68,7 @@ class AuthController{
         return $response->withStatus(403)->withJson([
           "error" => [
             "code" => "USER_LOCKED",
-            "desc" => "Account is temporaly locked until " . $user['locked_until']
+            "desc" => "Account is temporaly locked until " . $user['Locked_until']
           ]
         ]);
       }

@@ -23,7 +23,7 @@ class User
             u.Email, u.Phone, u.AddressName, u.AddressNumber, u.Floor,
             u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
             u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
-            u.LastLogin, u.DeactivationDate, u.UserLevel, u.TermsAndConditions, u.SignedContract,
+            u.LastLogin, u.DeactivationDate, u.UserLevel, u.SignedContract,
             GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
             u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating,
             COUNT(DISTINCT r.ReviewID) AS TotalReviews, sub.avgRate, sub.hasVirtual, sub.hasInPerson, m.URL as imgURL
@@ -91,7 +91,7 @@ class User
         u.Email, u.Phone, u.AddressName, u.AddressNumber, u.Floor,
         u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
         u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
-        u.LastLogin, u.DeactivationDate, u.UserLevel, u.TermsAndConditions, u.SignedContract,
+        u.LastLogin, u.DeactivationDate, u.UserLevel, u.SignedContract,
         GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
         u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating,
         COUNT(DISTINCT r.ReviewID) AS TotalReviews, sub.avgRate, sub.hasVirtual, sub.hasInPerson, m.URL as imgURL
@@ -178,7 +178,7 @@ class User
                 u.Email, u.Phone, u.AddressName, u.AddressNumber, u.Floor,
                 u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
                 u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
-                u.LastLogin, u.DeactivationDate, u.UserLevel, u.TermsAndConditions, u.SignedContract,
+                u.LastLogin, u.DeactivationDate, u.UserLevel, u.SignedContract,
                 GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
                 u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating,
                 COUNT(DISTINCT r.ReviewID) AS TotalReviews, sub.avgRate, sub.hasVirtual, sub.hasInPerson, m.URL as imgURL
@@ -203,7 +203,7 @@ class User
                 u.Email, u.Phone, u.AddressName, u.AddressNumber, u.Floor,
                 u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
                 u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
-                u.LastLogin, u.DeactivationDate, u.UserLevel, u.TermsAndConditions, u.SignedContract,
+                u.LastLogin, u.DeactivationDate, u.UserLevel, u.SignedContract,
                 GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
                 u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating,
                 COUNT(DISTINCT r.ReviewID) AS TotalReviews, sub.avgrate, sub.hasVirtual, sub.hasInPerson, m.URL as imgURL
@@ -401,7 +401,6 @@ class User
         'Gender',
         'Biography',
         'UserType',
-        'TermsAndConditions',
         'SignedContract',
         'LegalDocuments',
         'shortDescription'
