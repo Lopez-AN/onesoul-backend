@@ -353,7 +353,10 @@ class User
       $stmt->execute();
 
       $reviews = $stmt->fetchAll(PDO::FETCH_ASSOC);
-      return $reviews;
+
+      // Si no hay reviews, retornar NULL para manejarlo en el controlador
+      return !empty($reviews) ? $reviews : null;
+
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }

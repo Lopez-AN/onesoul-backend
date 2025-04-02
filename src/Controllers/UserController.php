@@ -140,6 +140,16 @@ class UserController
   
     try {
       $reviews = $this->user->getReviewsByUser($id);
+
+      if ($reviews === null) {
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "NO_REVIEWS_FOUND",
+            "desc" => "No reviews found for this specific User."
+          ]
+        ]);
+      }
+
       return $response->withStatus(200)->withJson($reviews);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
