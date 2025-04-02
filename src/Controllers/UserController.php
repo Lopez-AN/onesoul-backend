@@ -205,8 +205,8 @@ class UserController
         }
       }
 
-      if(!empty($data['shortDescription'])){
-        if ($this->containsInappropriateContent($data['shortDescription'])) {
+      if(!empty($data['ShortDescription'])){
+        if ($this->containsInappropriateContent($data['ShortDescription'])) {
           return $response->withStatus(400)->withJson([
             "code" => "INAPPROPRIATE_CONTENT",
               "desc" => "Please remove inappropriate content and try again."

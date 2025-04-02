@@ -107,7 +107,7 @@ class Search
             'City', l.City
           )
         ) FROM OfferingLocations l WHERE l.OfferingID = o.OfferingID) AS locations,
-        ROUND(AVG(r.rating),2) as rating
+        ROUND(AVG(r.Rating),2) as rating
         FROM Offerings AS o
         INNER JOIN Users AS u ON u.UserID = o.UserID
         LEFT JOIN Reviews as r ON o.OfferingID = r.OfferingID
@@ -226,7 +226,7 @@ class Search
         u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
         u.LastLogin, u.UserLevel, u.SignedContract,
         GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
-        u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating,
+        u.LegalDocuments, u.ShortDescription, round(avg(r.Rating),2) as rating,
         COUNT(DISTINCT r.ReviewID) AS TotalReviews,
         sub.avgRate, sub.hasVirtual, sub.hasInPerson, m.URL as imgURL
         FROM Users as u
@@ -236,7 +236,7 @@ class Search
         LEFT JOIN Reviews as r ON u.UserID = r.GUserID
         LEFT JOIN Offerings as o ON u.UserID = o.UserID
         LEFT JOIN (
-          SELECT ROUND(AVG(p.price),0) as AvgRate, o.UserID,
+          SELECT ROUND(AVG(p.Price),0) as AvgRate, o.UserID,
           MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
           MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
           FROM Offerings as o
@@ -265,7 +265,7 @@ class Search
         u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
         u.LastLogin, u.UserLevel, u.SignedContract,
         GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
-        u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating,
+        u.LegalDocuments, u.ShortDescription, round(avg(r.Rating),2) as rating,
         COUNT(DISTINCT r.ReviewID) AS TotalReviews,
         sub.avgRate, sub.hasVirtual, sub.hasInPerson, m.URL as imgURL
         FROM Users as u
@@ -274,7 +274,7 @@ class Search
         LEFT JOIN Media as m ON u.UserID = m.UserID
         LEFT JOIN Reviews as r ON u.UserID = r.GUserID
         LEFT JOIN (
-          SELECT ROUND(AVG(p.price),0) as AvgRate, o.UserID,
+          SELECT ROUND(AVG(p.Price),0) as AvgRate, o.UserID,
           MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
           MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
           FROM Offerings as o

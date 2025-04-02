@@ -268,7 +268,7 @@ class Auth{
   public function validateOTP($userId, $otpCode, $resetOTP = true){
     try{
       $otp_exptime = $GLOBALS['config']['otp_exptime'];
-      $stmt = $this->db->prepare("SELECT u.OTP_Code, u.OTP_Date, u.OTP_Attemps, u.Email
+      $stmt = $this->db->prepare("SELECT u.OTPCode, u.OTPDate, u.OTPAttemps, u.Email
       FROM Users AS u
       LEFT JOIN Media as m ON u.UserID = m.UserID
       WHERE u.UserID = ?");
@@ -472,22 +472,22 @@ class Auth{
 
   private function incrementOtpAttempts($userId) {
     # Incrementar el contador de intentos fallidos
-    $stmt = $this->db->prepare("UPDATE Users SET OTP_Attemps = IFNULL(OTP_Attemps, 0) + 1 WHERE UserID = ?");
+    $stmt = $this->db->prepare("UPDATE Users SET OTPAttemps = IFNULL(OTPAttemps, 0) + 1 WHERE UserID = ?");
     $stmt->execute([$userId]);
   }
 
   private function getOtpAttempts($userId) {
     # Obtener el número de intentos fallidos
-    $stmt = $this->db->prepare("SELECT OTP_Attemps FROM Users WHERE UserID = ?");
+    $stmt = $this->db->prepare("SELECT OTPAttemps FROM Users WHERE UserID = ?");
     $stmt->execute([$userId]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    return $user['OTP_Attemps'] ?? 0;
+    return $user['OTPAttemps'] ?? 0;
   }
 
   private function resetOtp($userId) {
     # Resetear el OTP y el contador de intentos fallidos
-    $stmt = $this->db->prepare("UPDATE Users SET OTP_Code = NULL, OTP_Date = NULL, OTP_Attemps = NULL
+    $stmt = $this->db->prepare("UPDATE Users SET OTPCode = NULL, OTPDate = NULL, OTPAttemps = NULL
     WHERE UserID = ?");
     $stmt->execute([$userId]);
   }
@@ -497,7 +497,7 @@ class Auth{
     try {
       # Creo el usuario con los datos basicos
       $stmt = $this->db->prepare("INSERT INTO Users (Email, UserName, PasswordHash,
-      OTP_Code, OTP_Date, RegistrationDate, ValidatedEmail)
+      OTPCode, OTPDate, RegistrationDate, ValidatedEmail)
       VALUES (?,?,?,?,?,?,0)");
       $stmt->execute([$userData -> email, $userData -> username, $userData -> password_hash,
         $userData -> otpCode, date('YmdHis'), date('YmdHis')]);
@@ -511,7 +511,7 @@ class Auth{
     # Creo el usuario con los datos basicos
     try {
       $stmt = $this->db->prepare("INSERT INTO Users (FirstName, LastName, Email,
-      UserName, Oauth2_id, Oauth2_service, RegistrationDate)
+      UserName, Oauth2ID, Oauth2Service, RegistrationDate)
       VALUES (?,?,?,?,?,?,?)");
       $stmt->execute([$userData -> first_name, $userData -> last_name, $userData -> email,
       $userData -> user_name, $userData -> oauth2_id, $userData -> oauth2_service, date('YmdHis')]);
@@ -551,12 +551,12 @@ class Auth{
       sub.AvgRate, sub.hasVirtual, sub.hasInPerson, 
       m.URL AS imgURL
       FROM Users AS u
-      LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
+      LEFT JOIN UsersCategories AS uc ON uc.UserID = u.UserID
       LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
       LEFT JOIN Media AS m ON u.UserID = m.UserID
       LEFT JOIN Reviews AS r ON u.UserID = r.SUserID
       LEFT JOIN (
-        SELECT o.UserID, ROUND(AVG(p.price),0) AS AvgRate,
+        SELECT o.UserID, ROUND(AVG(p.Price),0) AS AvgRate,
         MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
         MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
         FROM Offerings AS o
@@ -613,12 +613,12 @@ class Auth{
       sub.AvgRate, sub.hasVirtual, sub.hasInPerson, 
       m.URL AS imgURL
       FROM Users AS u
-      LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
+      LEFT JOIN UsersCategories AS uc ON uc.UserID = u.UserID
       LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
       LEFT JOIN Media AS m ON u.UserID = m.UserID
       LEFT JOIN Reviews AS r ON u.UserID = r.SUserID
       LEFT JOIN (
-        SELECT o.UserID, ROUND(AVG(p.price),0) AS AvgRate,
+        SELECT o.UserID, ROUND(AVG(p.Price),0) AS AvgRate,
         MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
         MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
         FROM Offerings AS o
@@ -663,7 +663,7 @@ class Auth{
     try{
       $stmt = $this->db->prepare("SELECT u.*,m.URL FROM Users AS u
       LEFT JOIN Media as m ON u.UserID = m.UserID
-      WHERE u.Oauth2_id = ? AND u.Oauth2_service = ?");
+      WHERE u.Oauth2ID = ? AND u.Oauth2Service = ?");
       $stmt->execute([$userId, $service]);
       return $stmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (\PDOException $e) {
@@ -719,7 +719,7 @@ class Auth{
   {
     try {
       // Verificar si el usuario está bloqueado
-      $stmt = $this->db->prepare("SELECT MfaSecret, Failed_login_attempts, Locked_until 
+      $stmt = $this->db->prepare("SELECT MfaSecret, FailedLoginAttempts, LockedUntil 
             FROM Users WHERE UserID = ? AND MfaSecret IS NOT NULL");
       $stmt->execute([$userID]);
       $result = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -734,12 +734,12 @@ class Auth{
         ];
       }
 
-      if (!is_null($result['Locked_until']) && strtotime($result['Locked_until']) > time()) {
+      if (!is_null($result['LockedUntil']) && strtotime($result['LockedUntil']) > time()) {
         return (object) [
           "http_code" => 403,
           "error" => [
             "code" => "USER_LOCKED",
-            "desc" => "Account is temporarily locked until " . $result['Locked_until']
+            "desc" => "Account is temporarily locked until " . $result['LockedUntil']
           ]
         ];
       }
@@ -749,7 +749,7 @@ class Auth{
 
       if (!$g2fa->verifyKey($secret, $code)) {
         // Incrementar intentos fallidos y actualizar bloqueo si es necesario
-        $failedAttempts = $result['Failed_login_attempts'] + 1;
+        $failedAttempts = $result['FailedLoginAttempts'] + 1;
         $lockTime = $this->calculateLockTime($failedAttempts);
 
         $this->updateFailedLogin($userID, $failedAttempts, $lockTime);
@@ -834,8 +834,8 @@ class Auth{
 
   public function updateFailedLogin($userId, $failedAttempts, $lockedUntil = null) {
     try {
-      $stmt = $this->db->prepare("UPDATE Users SET Failed_login_attempts = ?,
-      Locked_until = ? WHERE UserID = ?");
+      $stmt = $this->db->prepare("UPDATE Users SET FailedLoginAttempts = ?,
+      LockedUntil = ? WHERE UserID = ?");
       $stmt->execute([$failedAttempts, $lockedUntil, $userId]);
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());

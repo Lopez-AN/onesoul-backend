@@ -7,23 +7,22 @@ use App\Exceptions\DatabaseException;
 
 class Subscription
 {
-  protected $pdo;
+  protected $db;
 
-  public function __construct(PDO $pdo)
+  public function __construct(PDO $db)
   {
-    $this->pdo = $pdo;
+    $this->db = $db;
   }
 
   public function getSubscriptionPlans() {
     try {
-      $query = "SELECT sp.PlanID, sp.Name, sp.Description, sp.Beneficts, sp.Price, sp.CurrencyCode, sp.Duration,
+      $stmt = $this->db->prepare("SELECT sp.PlanID, sp.Name, sp.Description, sp.Beneficts, sp.Price, sp.CurrencyCode, sp.Duration,
                     sf.FeatureCode, sf.Description AS FeatureDescription
                 FROM SubscriptionPlans AS sp
                 LEFT JOIN SubscriptionItems AS si ON sp.PlanID = si.PlanID
                 LEFT JOIN SubscriptionFeatures AS sf ON si.FeatureCode = sf.FeatureCode
-                ORDER BY sp.PlanID, sf.FeatureCode";
+                ORDER BY sp.PlanID, sf.FeatureCode");
 
-      $stmt = $this->db->prepare($query);
       $stmt->execute();
       $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
 

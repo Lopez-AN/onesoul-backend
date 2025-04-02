@@ -64,18 +64,18 @@ class AuthController{
       $user = $result[0];
 
       # Verificar si el usuario esta bloqueado
-      if (!is_null($user['Locked_until']) && strtotime($user['Locked_until']) > time()) {
+      if (!is_null($user['LockedUntil']) && strtotime($user['LockedUntil']) > time()) {
         return $response->withStatus(403)->withJson([
           "error" => [
             "code" => "USER_LOCKED",
-            "desc" => "Account is temporaly locked until " . $user['Locked_until']
+            "desc" => "Account is temporaly locked until " . $user['LockedUntil']
           ]
         ]);
       }
 
       if (!password_verify($password, $user['PasswordHash'])) {
         # Logueo fallido actualizar contador de erroneos y tiempo bloqueo si corresponde
-        $failedAttempts = $user['Failed_login_attempts'] + 1;
+        $failedAttempts = $user['FailedLoginAttempts'] + 1;
         $lockTime = $this->auth->calculateLockTime($failedAttempts);
 
         $this->auth->updateFailedLogin($user['UserID'], $failedAttempts, $lockTime);
@@ -178,11 +178,11 @@ class AuthController{
       $user = $result->data[0];
 
       // Verificar si el usuario está bloqueado
-      if (!is_null($user['locked_until']) && strtotime($user['locked_until']) > time()) {
+      if (!is_null($user['LockedUntil']) && strtotime($user['LockedUntil']) > time()) {
         return $response->withStatus(403)->withJson([
           "error" => [
             "code" => "USER_LOCKED",
-            "desc" => "Account is temporarily locked until " . $user['locked_until']
+            "desc" => "Account is temporarily locked until " . $user['LockedUntil']
           ]
         ]);
       }
@@ -282,11 +282,11 @@ class AuthController{
       $user = $result->data[0];
 
       // Verificar si el usuario está bloqueado
-      if (!is_null($user['locked_until']) && strtotime($user['locked_until']) > time()) {
+      if (!is_null($user['LockedUntil']) && strtotime($user['LockedUntil']) > time()) {
         return $response->withStatus(403)->withJson([
           "error" => [
             "code" => "USER_LOCKED",
-            "desc" => "Account is temporarily locked until " . $user['locked_until']
+            "desc" => "Account is temporarily locked until " . $user['LockedUntil']
           ]
         ]);
       }

@@ -74,7 +74,7 @@ class Offering
             'City', l.City
           )
         ) FROM OfferingLocations l WHERE l.OfferingID = o.OfferingID) AS locations,
-        ROUND(AVG(r.rating),2) as rating
+        ROUND(AVG(r.Rating),2) as rating
         FROM Offerings AS o
         INNER JOIN Users AS u ON u.UserID = o.UserID
         LEFT JOIN Reviews as r ON o.OfferingID = r.OfferingID
@@ -225,7 +225,7 @@ class Offering
             'City', l.City
           )
         ) FROM OfferingLocations l WHERE l.OfferingID = o.OfferingID) AS locations,
-        ROUND(AVG(r.rating),2) as rating
+        ROUND(AVG(r.Rating),2) as rating
         FROM Offerings AS o
         INNER JOIN Users AS u ON u.UserID = o.UserID
         LEFT JOIN Reviews as r ON o.OfferingID = r.OfferingID
@@ -376,7 +376,7 @@ class Offering
             'City', l.City
           )
         ) FROM OfferingLocations l WHERE l.OfferingID = o.OfferingID) AS locations,
-        ROUND(AVG(r.rating),2) as rating
+        ROUND(AVG(r.Rating),2) as rating
         FROM Offerings AS o
         INNER JOIN Users AS u ON u.UserID = o.UserID
         LEFT JOIN Reviews as r ON o.OfferingID = r.OfferingID
@@ -529,7 +529,7 @@ class Offering
             'City', l.City
           )
         ) FROM OfferingLocations l WHERE l.OfferingID = o.OfferingID) AS locations,
-        ROUND(AVG(r.rating),2) as rating
+        ROUND(AVG(r.Rating),2) as rating
         FROM Offerings AS o
         INNER JOIN Users AS u ON u.UserID = o.UserID
         LEFT JOIN Reviews as r ON o.OfferingID = r.OfferingID

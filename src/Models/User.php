@@ -25,7 +25,7 @@ class User
             u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
             u.LastLogin, u.DeactivationDate, u.UserLevel, u.SignedContract,
             GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
-            u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating,
+            u.LegalDocuments, u.ShortDescription, round(avg(r.Rating),2) as rating,
             COUNT(DISTINCT r.ReviewID) AS TotalReviews, sub.avgRate, sub.hasVirtual, sub.hasInPerson, m.URL as imgURL
             FROM Users as u
             LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
@@ -33,7 +33,7 @@ class User
             LEFT JOIN Media as m ON u.UserID = m.UserID
             LEFT JOIN Reviews as r ON u.UserID = r.SUserID
             LEFT JOIN (
-              SELECT ROUND(AVG(p.price),0) as AvgRate, o.UserID,
+              SELECT ROUND(AVG(p.Price),0) as AvgRate, o.UserID,
               MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
               MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
               FROM Offerings as o
@@ -93,7 +93,7 @@ class User
         u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
         u.LastLogin, u.DeactivationDate, u.UserLevel, u.SignedContract,
         GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
-        u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating,
+        u.LegalDocuments, u.ShortDescription, round(avg(r.Rating),2) as rating,
         COUNT(DISTINCT r.ReviewID) AS TotalReviews, sub.avgRate, sub.hasVirtual, sub.hasInPerson, m.URL as imgURL
         FROM Users as u
         LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
@@ -101,7 +101,7 @@ class User
         LEFT JOIN Media as m ON u.UserID = m.UserID
         LEFT JOIN Reviews as r ON u.UserID = r.GUserID OR u.UserID = r.SUserID
         LEFT JOIN (
-          SELECT ROUND(AVG(p.price),0) as AvgRate, o.UserID,
+          SELECT ROUND(AVG(p.Price),0) as AvgRate, o.UserID,
           MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
           MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
           FROM Offerings as o
@@ -180,7 +180,7 @@ class User
                 u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
                 u.LastLogin, u.DeactivationDate, u.UserLevel, u.SignedContract,
                 GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
-                u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating,
+                u.LegalDocuments, u.ShortDescription, round(avg(r.Rating),2) as rating,
                 COUNT(DISTINCT r.ReviewID) AS TotalReviews, sub.avgRate, sub.hasVirtual, sub.hasInPerson, m.URL as imgURL
                 FROM Users as u
                 LEFT JOIN UsersCategories as uc ON uc.UserID = u.UserID
@@ -188,7 +188,7 @@ class User
                 LEFT JOIN Media as m ON u.UserID = m.UserID
                 LEFT JOIN Reviews as r ON u.UserID = r.GUserID
                 LEFT JOIN (
-                  SELECT ROUND(AVG(p.price),0) as AvgRate, o.UserID,
+                  SELECT ROUND(AVG(p.Price),0) as AvgRate, o.UserID,
                   MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
                   MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
                   FROM Offerings as o
@@ -205,7 +205,7 @@ class User
                 u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
                 u.LastLogin, u.DeactivationDate, u.UserLevel, u.SignedContract,
                 GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
-                u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating,
+                u.LegalDocuments, u.ShortDescription, round(avg(r.Rating),2) as rating,
                 COUNT(DISTINCT r.ReviewID) AS TotalReviews, sub.avgrate, sub.hasVirtual, sub.hasInPerson, m.URL as imgURL
                 FROM Users as u
                 LEFT JOIN UsersCategories as uc ON uc.UserID = u.UserID
@@ -213,7 +213,7 @@ class User
                 LEFT JOIN Media as m ON u.UserID = m.UserID
                 LEFT JOIN Reviews as r ON u.UserID = r.SUserID
                 LEFT JOIN (
-                  SELECT ROUND(AVG(p.price),0) as AvgRate, o.UserID,
+                  SELECT ROUND(AVG(p.Price),0) as AvgRate, o.UserID,
                   MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
                   MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
                   FROM Offerings as o
@@ -276,7 +276,7 @@ class User
         u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
         u.LastLogin, u.DeactivationDate, u.UserLevel, u.SignedContract,
         GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
-        u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating,
+        u.LegalDocuments, u.ShortDescription, round(avg(r.Rating),2) as rating,
         COUNT(DISTINCT r.ReviewID) AS TotalReviews, sub.avgRate, sub.hasVirtual, sub.hasInPerson, m.URL as imgURL
         FROM Users as u
         LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
@@ -284,7 +284,7 @@ class User
         LEFT JOIN Media as m ON u.UserID = m.UserID
         LEFT JOIN Reviews as r ON u.UserID = r.GUserID OR u.UserID = r.SUserID
         LEFT JOIN (
-          SELECT ROUND(AVG(p.price),0) as AvgRate, o.UserID,
+          SELECT ROUND(AVG(p.Price),0) as AvgRate, o.UserID,
           MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
           MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
           FROM Offerings as o
