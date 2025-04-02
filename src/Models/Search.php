@@ -83,24 +83,30 @@ class Search
         -- Subconsulta para faqs
         (SELECT JSON_ARRAYAGG(
           JSON_OBJECT(
-            'Position', f.position,
-            'Question', f.question,
-            'Answer', f.answer
+            'Position', f.Position,
+            'Question', f.Question,
+            'Answer', f.Answer
           )
         ) FROM OfferingsFaqs f WHERE f.OfferingID = o.OfferingID) AS faqs,
         -- Subconsulta para packages
         (SELECT JSON_ARRAYAGG(
           JSON_OBJECT(
-            'Package', p.package,
-            'Price', p.price,
-            'Description', p.description,
-            'Conditions', p.conditions,
-            'SessionType', p.sessionType
+            'Package', p.Package,
+            'Price', p.Price,
+            'Description', p.Description,
+            'Conditions', p.Conditions,
+            'SessionType', p.SessionType
           )
         ) FROM OfferingsPackages p WHERE p.OfferingID = o.OfferingID) AS packages,
-        -- Agrupar locations
-        GROUP_CONCAT(DISTINCT CONCAT(trim(ol.CountryCode), ':', trim(c.CountryName), ':', trim(ol.State), ':', trim(ol.City))
-        ORDER BY ol.CountryCode, ol.State, ol.City ASC SEPARATOR ', ') AS locations,
+        -- Subconsulta para locations
+        (SELECT JSON_ARRAYAGG(
+          JSON_OBJECT(
+            'CountryCode', l.CountryCode,
+            'CountryName', c.CountryName,
+            'State', l.State,
+            'City', l.City
+          )
+        ) FROM OfferingLocations l WHERE l.OfferingID = o.OfferingID) AS locations,
         ROUND(AVG(r.rating),2) as rating
         FROM Offerings AS o
         INNER JOIN Users AS u ON u.UserID = o.UserID
@@ -157,6 +163,11 @@ class Search
           $e['packages'] = $packages;
         }
 
+        $locations = @json_decode($e['locations'], true);
+        if($locations){
+          $e['locations'] = $locations;
+        }        
+
         $e['author'] = [
           "UserID" => $e['author_UserID'],
           "DisplayName" => $e['author_DisplayName'],
@@ -166,20 +177,6 @@ class Search
           "TotalReviews" => intval($e['author_TotalReviews']),
           "ImgURL" => $e['author_ImgURL']
         ];
-
-        // Formatear las locaciones
-        $e['locations'] = is_null($e['locations']) ? [] : array_map(
-          function ($a) {
-            $a = explode(":", $a);
-            return [
-              "CountryCode" => trim($a[0]),
-              "CountryName" => trim($a[1]),
-              "State" => trim($a[2]),
-              "City" => trim($a[3])
-            ];
-          },
-          explode(",", $e['locations'])
-        );
 
         $e['AverageRating'] = floatVal($e['rating']);
 
@@ -227,7 +224,7 @@ class Search
         u.Email, u.Phone, u.AddressName, u.AddressNumber, u.Floor,
         u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
         u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
-        u.LastLogin, u.UserLevel, u.TermsAndConditions, u.SignedContract,
+        u.LastLogin, u.UserLevel, u.SignedContract,
         GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
         u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating,
         COUNT(DISTINCT r.ReviewID) AS TotalReviews,
@@ -266,7 +263,7 @@ class Search
         u.Email, u.Phone, u.AddressName, u.AddressNumber, u.Floor,
         u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
         u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
-        u.LastLogin, u.UserLevel, u.TermsAndConditions, u.SignedContract,
+        u.LastLogin, u.UserLevel, u.SignedContract,
         GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
         u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating,
         COUNT(DISTINCT r.ReviewID) AS TotalReviews,
