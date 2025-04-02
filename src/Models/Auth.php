@@ -57,10 +57,10 @@ class Auth{
           "desc" => "No user associated with the specified Google account was found"
         ],
         "data" => [
-          "first_name" => !empty($response -> given_name) ? $response -> given_name : null,
-          "last_name" => !empty($response -> family_name) ? $response -> family_name : null,
-          "email" => !empty($response -> email) ? $response -> email : null,
-          "picture" => !empty($response -> picture) ? $response -> picture : null
+          "FirstName" => !empty($response -> given_name) ? $response -> given_name : null,
+          "LastName" => !empty($response -> family_name) ? $response -> family_name : null,
+          "Email" => !empty($response -> email) ? $response -> email : null,
+          "Picture" => !empty($response -> picture) ? $response -> picture : null
         ]
       ];
     }
@@ -86,10 +86,10 @@ class Auth{
           "desc" => "No user associated with the specified Facebook account was found"
         ],
         "data" => [
-          "first_name" => !empty($response -> first_name) ? $response -> first_name : null,
-          "last_name" => !empty($response -> last_name) ? $response -> last_name : null,
-          "email" => !empty($response -> email) ? $response -> email : null,
-          "picture" => !empty($response -> picture -> data -> url) ? $response -> picture -> data -> url : null
+          "FirstName" => !empty($response -> first_name) ? $response -> first_name : null,
+          "LastName" => !empty($response -> last_name) ? $response -> last_name : null,
+          "Email" => !empty($response -> email) ? $response -> email : null,
+          "Picture" => !empty($response -> picture -> data -> url) ? $response -> picture -> data -> url : null
         ]
       ];
     }
@@ -133,10 +133,10 @@ class Auth{
     $otpCode = rand(100000, 999999); # Codigo que se enviara por mail
 
     $this -> registerUser((object)[
-      "email" => $email,
-      "username" => $username,
-      "password_hash" => $password_hash,
-      "otpCode" => $otpCode
+      "Email" => $email,
+      "UserName" => $username,
+      "PasswordHash" => $password_hash,
+      "OTPCode" => $otpCode
     ]);
 
     $user_data = $this -> getUserByUserName($username);
@@ -195,13 +195,13 @@ class Auth{
     }
 
     $this -> registerUserSSO((object)[
-      "first_name" => $first_name,
-      "last_name" => $last_name,
-      "email" => $email,
-      "user_name" => $username,
-      "picture" => $picture,
-      "oauth2_id" => $userId,
-      "oauth2_service" => "google"
+      "FirstName" => $first_name,
+      "LastName" => $last_name,
+      "Email" => $email,
+      "UserName" => $username,
+      "Picture" => $picture,
+      "Oauth2ID" => $userId,
+      "Oauth2Service" => "google"
     ]);
 
     $user_data = $this -> getUserByOAuthID($userId, "google");
@@ -250,13 +250,13 @@ class Auth{
     }
 
     $this -> registerUserSSO((object)[
-      "first_name" => $first_name,
-      "last_name" => $last_name,
-      "email" => $email,
-      "user_name" => $username,
-      "picture" => $picture,
-      "oauth2_id" => $userId,
-      "oauth2_service" => "facebook"
+      "FirstName" => $first_name,
+      "LastName" => $last_name,
+      "Email" => $email,
+      "UserName" => $username,
+      "Picture" => $picture,
+      "Oauth2ID" => $userId,
+      "Oauth2Service" => "facebook"
     ]);
 
     $user_data = $this -> getUserByOAuthID($userId, "facebook");
@@ -285,7 +285,7 @@ class Auth{
         ];
       }
 
-      if(is_null($user['OTP_Code'])){
+      if(is_null($user['OTPCode'])){
         return (object)[
           "http_code" => 401,
           "error" => [
@@ -296,7 +296,7 @@ class Auth{
       }
 
       # Comparar el codigo OTP recibido con el codigo generado
-      if($otpCode != $user['OTP_Code']){
+      if($otpCode != $user['OTPCode']){
         # Incrementar los intentos fallidos si el código no era correcto
         $this->incrementOtpAttempts($userId);
 
@@ -323,7 +323,7 @@ class Auth{
       }
 
       # Verificar si el OTP ha expirado
-      $otpDate = new DateTime($user['OTP_Date']);
+      $otpDate = new DateTime($user['OTPDate']);
       $now = new DateTime();
       $interval_in_seconds = $now->getTimestamp() - $otpDate->getTimestamp();
 
@@ -373,7 +373,7 @@ class Auth{
 
       # Genero un nuevo codigo OTP y lo grabo en el usuario
       $otpCode = rand(100000, 999999); # Codigo que se enviara por mail
-      $stmt = $this->db->prepare("UPDATE Users SET OTP_Code = ?, OTP_Date = ? WHERE UserID = ?");
+      $stmt = $this->db->prepare("UPDATE Users SET OTPCode = ?, OTPDate = ? WHERE UserID = ?");
       $stmt->execute([$otpCode, date("YmdHis"), $userId]);
       $this -> _sendOtpMail($resp[0]['Email'],$resp[0]['UserName'],$otpCode);
 
@@ -546,10 +546,10 @@ class Auth{
       GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID, ':', TRIM(c.Name)) 
       ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
       u.LegalDocuments, u.ShortDescription, 
-      ROUND(AVG(r.Rating),2) AS rating,
+      ROUND(AVG(r.Rating),2) AS Rating,
       COUNT(DISTINCT r.ReviewID) AS TotalReviews, 
       sub.AvgRate, sub.hasVirtual, sub.hasInPerson, 
-      m.URL AS imgURL
+      m.URL AS ImgURL
       FROM Users AS u
       LEFT JOIN UsersCategories AS uc ON uc.UserID = u.UserID
       LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
@@ -582,9 +582,9 @@ class Auth{
       );
 
       // Agregar sessionType con valores booleanos
-      $rs['sessionType'] = [
-        "virtual" => $rs['hasVirtual'] == 1,
-        "in-person" => $rs['hasInPerson'] == 1
+      $rs['SessionType'] = [
+        "Virtual" => $rs['hasVirtual'] == 1,
+        "InPerson" => $rs['hasInPerson'] == 1
       ];
                 
       unset($rs['hasVirtual'], $rs['hasInPerson']);
@@ -608,10 +608,10 @@ class Auth{
       GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID, ':', TRIM(c.Name)) 
       ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
       u.LegalDocuments, u.ShortDescription, 
-      ROUND(AVG(r.Rating),2) AS rating,
+      ROUND(AVG(r.Rating),2) AS Rating,
       COUNT(DISTINCT r.ReviewID) AS TotalReviews, 
       sub.AvgRate, sub.hasVirtual, sub.hasInPerson, 
-      m.URL AS imgURL
+      m.URL AS ImgURL
       FROM Users AS u
       LEFT JOIN UsersCategories AS uc ON uc.UserID = u.UserID
       LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
@@ -644,9 +644,9 @@ class Auth{
       );
   
       // Agregar sessionType con valores booleanos
-      $rs['sessionType'] = [
-        "virtual" => $rs['hasVirtual'] == 1,
-        "in-person" => $rs['hasInPerson'] == 1
+      $rs['SessionType'] = [
+        "Virtual" => $rs['hasVirtual'] == 1,
+        "InPerson" => $rs['hasInPerson'] == 1
       ];
                 
       unset($rs['hasVirtual'], $rs['hasInPerson']);

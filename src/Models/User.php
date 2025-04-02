@@ -25,8 +25,8 @@ class User
             u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
             u.LastLogin, u.DeactivationDate, u.UserLevel, u.SignedContract,
             GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
-            u.LegalDocuments, u.ShortDescription, round(avg(r.Rating),2) as rating,
-            COUNT(DISTINCT r.ReviewID) AS TotalReviews, sub.avgRate, sub.hasVirtual, sub.hasInPerson, m.URL as imgURL
+            u.LegalDocuments, u.ShortDescription, round(avg(r.Rating),2) as Rating,
+            COUNT(DISTINCT r.ReviewID) AS TotalReviews, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL
             FROM Users as u
             LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
             LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
@@ -63,9 +63,9 @@ class User
         );
 
         // Agregar sessionType con valores booleanos
-        $e['sessionType'] = [
-          "virtual" => $e['hasVirtual'] == 1,
-          "in-person" => $e['hasInPerson'] == 1
+        $e['SessionType'] = [
+          "Virtual" => $e['hasVirtual'] == 1,
+          "InPerson" => $e['hasInPerson'] == 1
         ];
                 
         unset($e['hasVirtual'], $e['hasInPerson']);
@@ -93,8 +93,8 @@ class User
         u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
         u.LastLogin, u.DeactivationDate, u.UserLevel, u.SignedContract,
         GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
-        u.LegalDocuments, u.ShortDescription, round(avg(r.Rating),2) as rating,
-        COUNT(DISTINCT r.ReviewID) AS TotalReviews, sub.avgRate, sub.hasVirtual, sub.hasInPerson, m.URL as imgURL
+        u.LegalDocuments, u.ShortDescription, round(avg(r.Rating),2) as Rating,
+        COUNT(DISTINCT r.ReviewID) AS TotalReviews, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL
         FROM Users as u
         LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
         LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
@@ -128,9 +128,9 @@ class User
         );
 
         // Agregar sessionType con valores booleanos
-        $e['sessionType'] = [
-          "virtual" => $e['hasVirtual'] == 1,
-          "in-person" => $e['hasInPerson'] == 1
+        $e['SessionType'] = [
+          "Virtual" => $e['hasVirtual'] == 1,
+          "InPerson" => $e['hasInPerson'] == 1
         ];
                 
         unset($e['hasVirtual'], $e['hasInPerson']);        
@@ -180,8 +180,8 @@ class User
                 u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
                 u.LastLogin, u.DeactivationDate, u.UserLevel, u.SignedContract,
                 GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
-                u.LegalDocuments, u.ShortDescription, round(avg(r.Rating),2) as rating,
-                COUNT(DISTINCT r.ReviewID) AS TotalReviews, sub.avgRate, sub.hasVirtual, sub.hasInPerson, m.URL as imgURL
+                u.LegalDocuments, u.ShortDescription, round(avg(r.Rating),2) as Rating,
+                COUNT(DISTINCT r.ReviewID) AS TotalReviews, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL
                 FROM Users as u
                 LEFT JOIN UsersCategories as uc ON uc.UserID = u.UserID
                 LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
@@ -205,8 +205,8 @@ class User
                 u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
                 u.LastLogin, u.DeactivationDate, u.UserLevel, u.SignedContract,
                 GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
-                u.LegalDocuments, u.ShortDescription, round(avg(r.Rating),2) as rating,
-                COUNT(DISTINCT r.ReviewID) AS TotalReviews, sub.avgrate, sub.hasVirtual, sub.hasInPerson, m.URL as imgURL
+                u.LegalDocuments, u.ShortDescription, round(avg(r.Rating),2) as Rating,
+                COUNT(DISTINCT r.ReviewID) AS TotalReviews, sub.Avgrate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL
                 FROM Users as u
                 LEFT JOIN UsersCategories as uc ON uc.UserID = u.UserID
                 LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
@@ -246,9 +246,9 @@ class User
         );
 
         // Agregar sessionType con valores booleanos
-        $e['sessionType'] = [
-          "virtual" => $e['hasVirtual'] == 1,
-          "in-person" => $e['hasInPerson'] == 1
+        $e['SessionType'] = [
+          "Virtual" => $e['hasVirtual'] == 1,
+          "InPerson" => $e['hasInPerson'] == 1
         ];
                 
         unset($e['hasVirtual'], $e['hasInPerson']);        
@@ -276,8 +276,8 @@ class User
         u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
         u.LastLogin, u.DeactivationDate, u.UserLevel, u.SignedContract,
         GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
-        u.LegalDocuments, u.ShortDescription, round(avg(r.Rating),2) as rating,
-        COUNT(DISTINCT r.ReviewID) AS TotalReviews, sub.avgRate, sub.hasVirtual, sub.hasInPerson, m.URL as imgURL
+        u.LegalDocuments, u.ShortDescription, round(avg(r.Rating),2) as Rating,
+        COUNT(DISTINCT r.ReviewID) AS TotalReviews, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL
         FROM Users as u
         LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
         LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
@@ -311,9 +311,9 @@ class User
         );
 
         // Agregar sessionType con valores booleanos
-        $e['sessionType'] = [
-          "virtual" => $e['hasVirtual'] == 1,
-          "in-person" => $e['hasInPerson'] == 1
+        $e['SessionType'] = [
+          "Virtual" => $e['hasVirtual'] == 1,
+          "InPerson" => $e['hasInPerson'] == 1
         ];
                 
         unset($e['hasVirtual'], $e['hasInPerson']);        
@@ -403,7 +403,7 @@ class User
         'UserType',
         'SignedContract',
         'LegalDocuments',
-        'shortDescription'
+        'ShortDescription'
       ];
 
       // Filtrar y preparar los campos a actualizar

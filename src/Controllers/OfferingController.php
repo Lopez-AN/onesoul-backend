@@ -734,11 +734,11 @@ class OfferingController {
     }
 
     return (object) [
-      "file" => $uploadedFile,
-      "mimeType" => $mimeType,
-      "fileSize" => $fileSize,
-      "extension" => $extension,
-      "error" => false
+      "File" => $uploadedFile,
+      "MimeType" => $mimeType,
+      "FileSize" => $fileSize,
+      "Extension" => $extension,
+      "Error" => false
     ];
   }
 

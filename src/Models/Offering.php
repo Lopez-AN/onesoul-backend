@@ -54,7 +54,7 @@ class Offering
             'Question', f.Question,
             'Answer', f.Answer
           )
-        ) FROM OfferingsFaqs f WHERE f.OfferingID = o.OfferingID) AS faqs,
+        ) FROM OfferingsFaqs f WHERE f.OfferingID = o.OfferingID) AS Faqs,
         -- Subconsulta para packages
         (SELECT JSON_ARRAYAGG(
           JSON_OBJECT(
@@ -64,7 +64,7 @@ class Offering
             'Conditions', p.Conditions,
             'SessionType', p.SessionType
           )
-        ) FROM OfferingsPackages p WHERE p.OfferingID = o.OfferingID) AS packages,
+        ) FROM OfferingsPackages p WHERE p.OfferingID = o.OfferingID) AS Packages,
         -- Subconsulta para locations
         (SELECT JSON_ARRAYAGG(
           JSON_OBJECT(
@@ -73,8 +73,8 @@ class Offering
             'State', l.State,
             'City', l.City
           )
-        ) FROM OfferingLocations l WHERE l.OfferingID = o.OfferingID) AS locations,
-        ROUND(AVG(r.Rating),2) as rating
+        ) FROM OfferingLocations l WHERE l.OfferingID = o.OfferingID) AS Locations,
+        ROUND(AVG(r.Rating),2) as Rating
         FROM Offerings AS o
         INNER JOIN Users AS u ON u.UserID = o.UserID
         LEFT JOIN Reviews as r ON o.OfferingID = r.OfferingID
@@ -95,36 +95,36 @@ class Offering
 
       // Desagrupo los json traidos por MYSQL para armar el JSON anidado de respuesta
       $rs = array_map(function ($e) {
-        $e['media'] = [
-          'images' => [],
-          'videos' => []
+        $e['Media'] = [
+          'Images' => [],
+          'Videos' => []
         ];
 
         $images = @json_decode($e['media_images'], true);
         if($images){
-          $e['media']['images'] = $images;
+          $e['Media']['Images'] = $images;
         }
         unset($e['media_images']);
 
         $videos = @json_decode($e['media_videos'], true);
         if($videos){
-          $e['media']['videos'] = $videos;
+          $e['Media']['Videos'] = $videos;
         }
         unset($e['media_videos']);
 
-        $faqs = @json_decode($e['faqs'], true);
+        $faqs = @json_decode($e['Faqs'], true);
         if($faqs){
-          $e['faqs'] = $faqs;
+          $e['Faqs'] = $faqs;
         }
 
-        $packages = @json_decode($e['packages'], true);
+        $packages = @json_decode($e['Packages'], true);
         if($packages){
-          $e['packages'] = $packages;
+          $e['Packages'] = $packages;
         }
 
-        $locations = @json_decode($e['locations'], true);
+        $locations = @json_decode($e['Locations'], true);
         if($locations){
-          $e['locations'] = $locations;
+          $e['Locations'] = $locations;
         }
 
         $e['author'] = [
@@ -137,9 +137,9 @@ class Offering
           "ImgURL" => $e['author_ImgURL']
         ];
 
-        $e['AverageRating'] = floatVal($e['rating']);
+        $e['AverageRating'] = floatVal($e['Rating']);
 
-        unset($e['rating'],
+        unset($e['Rating'],
           $e['author_UserID'],
           $e['author_DisplayName'],
           $e['author_FirstName'],
@@ -205,7 +205,7 @@ class Offering
             'Question', f.Question,
             'Answer', f.Answer
           )
-        ) FROM OfferingsFaqs f WHERE f.OfferingID = o.OfferingID) AS faqs,
+        ) FROM OfferingsFaqs f WHERE f.OfferingID = o.OfferingID) AS Faqs,
         -- Subconsulta para packages
         (SELECT JSON_ARRAYAGG(
           JSON_OBJECT(
@@ -215,7 +215,7 @@ class Offering
             'Conditions', p.Conditions,
             'SessionType', p.SessionType
           )
-        ) FROM OfferingsPackages p WHERE p.OfferingID = o.OfferingID) AS packages,
+        ) FROM OfferingsPackages p WHERE p.OfferingID = o.OfferingID) AS Packages,
         -- Subconsulta para locations
         (SELECT JSON_ARRAYAGG(
           JSON_OBJECT(
@@ -224,8 +224,8 @@ class Offering
             'State', l.State,
             'City', l.City
           )
-        ) FROM OfferingLocations l WHERE l.OfferingID = o.OfferingID) AS locations,
-        ROUND(AVG(r.Rating),2) as rating
+        ) FROM OfferingLocations l WHERE l.OfferingID = o.OfferingID) AS Locations,
+        ROUND(AVG(r.Rating),2) as Rating
         FROM Offerings AS o
         INNER JOIN Users AS u ON u.UserID = o.UserID
         LEFT JOIN Reviews as r ON o.OfferingID = r.OfferingID
@@ -252,36 +252,36 @@ class Offering
       $offering = $rs[0];
 
       // Desagrupo los json traidos por MYSQL para armar el JSON anidado de respuesta
-      $offering['media'] = [
-        'images' => [],
-        'videos' => []
+      $offering['Media'] = [
+        'Images' => [],
+        'Videos' => []
       ];
 
       $images = @json_decode($offering['media_images'], true);
       if($images){
-        $offering['media']['images'] = $images;
+        $offering['Media']['Images'] = $images;
       }
       unset($offering['media_images']);
 
       $videos = @json_decode($offering['media_videos'], true);
       if($videos){
-        $offering['media']['videos'] = $videos;
+        $offering['Media']['Videos'] = $videos;
       }
       unset($offering['media_videos']);
 
-      $faqs = @json_decode($offering['faqs'], true);
+      $faqs = @json_decode($offering['Faqs'], true);
       if($faqs){
-        $offering['faqs'] = $faqs;
+        $offering['Faqs'] = $faqs;
       }
 
-      $packages = @json_decode($offering['packages'], true);
+      $packages = @json_decode($offering['Packages'], true);
       if($packages){
-        $offering['packages'] = $packages;
+        $offering['Packages'] = $packages;
       }
 
-      $locations = @json_decode($offering['locations'], true);
+      $locations = @json_decode($offering['Locations'], true);
       if($locations){
-        $offering['locations'] = $locations;
+        $offering['Locations'] = $locations;
       }
 
       $offering['author'] = [
@@ -294,9 +294,9 @@ class Offering
         "ImgURL" => $offering['author_ImgURL']
       ];
 
-      $offering['AverageRating'] = floatVal($offering['rating']);
+      $offering['AverageRating'] = floatVal($offering['Rating']);
       unset(
-        $offering['rating'],
+        $offering['Rating'],
         $offering['author_UserID'],
         $offering['author_DisplayName'],
         $offering['author_FirstName'],
@@ -356,7 +356,7 @@ class Offering
             'Question', f.Question,
             'Answer', f.Answer
           )
-        ) FROM OfferingsFaqs f WHERE f.OfferingID = o.OfferingID) AS faqs,
+        ) FROM OfferingsFaqs f WHERE f.OfferingID = o.OfferingID) AS Faqs,
         -- Subconsulta para packages
         (SELECT JSON_ARRAYAGG(
           JSON_OBJECT(
@@ -366,7 +366,7 @@ class Offering
             'Conditions', p.Conditions,
             'SessionType', p.SessionType
           )
-        ) FROM OfferingsPackages p WHERE p.OfferingID = o.OfferingID) AS packages,
+        ) FROM OfferingsPackages p WHERE p.OfferingID = o.OfferingID) AS Packages,
         -- Subconsulta para locations
         (SELECT JSON_ARRAYAGG(
           JSON_OBJECT(
@@ -375,8 +375,8 @@ class Offering
             'State', l.State,
             'City', l.City
           )
-        ) FROM OfferingLocations l WHERE l.OfferingID = o.OfferingID) AS locations,
-        ROUND(AVG(r.Rating),2) as rating
+        ) FROM OfferingLocations l WHERE l.OfferingID = o.OfferingID) AS Locations,
+        ROUND(AVG(r.Rating),2) as Rating
         FROM Offerings AS o
         INNER JOIN Users AS u ON u.UserID = o.UserID
         LEFT JOIN Reviews as r ON o.OfferingID = r.OfferingID
@@ -399,34 +399,34 @@ class Offering
 
       // Desagrupo los json traidos por MYSQL para armar el JSON anidado de respuesta
       $rs = array_map(function ($e) {
-        $e['media'] = [
-          'images' => [],
-          'videos' => []
+        $e['Media'] = [
+          'Images' => [],
+          'Videos' => []
         ];
 
         $images = @json_decode($e['media_images'], true);
         if($images){
-          $e['media']['images'] = $images;
+          $e['Media']['Images'] = $images;
         }
         unset($e['media_images']);
 
         $videos = @json_decode($e['media_videos'], true);
         if($videos){
-          $e['media']['videos'] = $videos;
+          $e['Media']['Videos'] = $videos;
         }
         unset($e['media_videos']);
 
-        $faqs = @json_decode($e['faqs'], true);
+        $faqs = @json_decode($e['Faqs'], true);
         if($faqs){
           $e['faqs'] = $faqs;
         }
 
-        $packages = @json_decode($e['packages'], true);
+        $packages = @json_decode($e['Packages'], true);
         if($packages){
           $e['packages'] = $packages;
         }
 
-        $locations = @json_decode($e['locations'], true);
+        $locations = @json_decode($e['Locations'], true);
         if($locations){
           $e['locations'] = $locations;
         }
@@ -441,9 +441,9 @@ class Offering
           "ImgURL" => $e['author_ImgURL']
         ];
 
-        $e['AverageRating'] = floatVal($e['rating']);
+        $e['AverageRating'] = floatVal($e['Rating']);
 
-        unset($e['rating'],
+        unset($e['Rating'],
           $e['author_UserID'],
           $e['author_DisplayName'],
           $e['author_FirstName'],
@@ -509,7 +509,7 @@ class Offering
             'Question', f.Question,
             'Answer', f.Answer
           )
-        ) FROM OfferingsFaqs f WHERE f.OfferingID = o.OfferingID) AS faqs,
+        ) FROM OfferingsFaqs f WHERE f.OfferingID = o.OfferingID) AS Faqs,
         -- Subconsulta para packages
         (SELECT JSON_ARRAYAGG(
           JSON_OBJECT(
@@ -519,7 +519,7 @@ class Offering
             'Conditions', p.Conditions,
             'SessionType', p.SessionType
           )
-        ) FROM OfferingsPackages p WHERE p.OfferingID = o.OfferingID) AS packages,
+        ) FROM OfferingsPackages p WHERE p.OfferingID = o.OfferingID) AS Packages,
         -- Subconsulta para locations
         (SELECT JSON_ARRAYAGG(
           JSON_OBJECT(
@@ -528,8 +528,8 @@ class Offering
             'State', l.State,
             'City', l.City
           )
-        ) FROM OfferingLocations l WHERE l.OfferingID = o.OfferingID) AS locations,
-        ROUND(AVG(r.Rating),2) as rating
+        ) FROM OfferingLocations l WHERE l.OfferingID = o.OfferingID) AS Locations,
+        ROUND(AVG(r.Rating),2) as Rating
         FROM Offerings AS o
         INNER JOIN Users AS u ON u.UserID = o.UserID
         LEFT JOIN Reviews as r ON o.OfferingID = r.OfferingID
@@ -552,36 +552,36 @@ class Offering
 
       // Desagrupo los json traidos por MYSQL para armar el JSON anidado de respuesta
       $rs = array_map(function ($e) {
-        $e['media'] = [
-          'images' => [],
-          'videos' => []
+        $e['Media'] = [
+          'Images' => [],
+          'Videos' => []
         ];
 
         $images = @json_decode($e['media_images'], true);
         if($images){
-          $e['media']['images'] = $images;
+          $e['Media']['Images'] = $images;
         }
         unset($e['media_images']);
 
         $videos = @json_decode($e['media_videos'], true);
         if($videos){
-          $e['media']['videos'] = $videos;
+          $e['Media']['Videos'] = $videos;
         }
         unset($e['media_videos']);
 
-        $faqs = @json_decode($e['faqs'], true);
+        $faqs = @json_decode($e['Faqs'], true);
         if($faqs){
-          $e['faqs'] = $faqs;
+          $e['Faqs'] = $faqs;
         }
 
-        $packages = @json_decode($e['packages'], true);
+        $packages = @json_decode($e['Packages'], true);
         if($packages){
-          $e['packages'] = $packages;
+          $e['Packages'] = $packages;
         }
 
-        $locations = @json_decode($e['locations'], true);
+        $locations = @json_decode($e['Locations'], true);
         if($locations){
-          $e['locations'] = $locations;
+          $e['Locations'] = $locations;
         }        
 
         $e['author'] = [
@@ -594,9 +594,9 @@ class Offering
           "ImgURL" => $e['author_ImgURL']
         ];
 
-        $e['AverageRating'] = floatVal($e['rating']);
+        $e['AverageRating'] = floatVal($e['Rating']);
 
-        unset($e['rating'],
+        unset($e['Rating'],
           $e['author_UserID'],
           $e['author_DisplayName'],
           $e['author_FirstName'],
@@ -690,11 +690,11 @@ class Offering
       $id = $this->db->lastInsertId();
 
       // Insertar ubicaciones si existen
-      if (!empty($data['locations']) && is_array($data['locations'])) {
+      if (!empty($data['Locations']) && is_array($data['Locations'])) {
         $stmt = $this->db->prepare("INSERT INTO OfferingLocations (OfferingID, CountryCode, State, City)
                 VALUES (:id, :CountryCode, :State, :City)");
 
-        foreach ($data['locations'] as $location) {
+        foreach ($data['Locations'] as $location) {
           $stmt->bindParam(':OfferingID', $id, PDO::PARAM_INT);
           $stmt->bindParam(':CountryCode', $location['CountryCode'], PDO::PARAM_STR);
           $stmt->bindParam(':State', $location['State'], PDO::PARAM_STR);
@@ -703,8 +703,8 @@ class Offering
         }
       }
 
-      if (isset($data['faqs'])) {
-        foreach ($data['faqs'] as $faq) {
+      if (isset($data['Faqs'])) {
+        foreach ($data['Faqs'] as $faq) {
           $stmt = $this->db->prepare("INSERT INTO OfferingsFaqs (OfferingID, Position, Question, Answer)
                   VALUES (:id, :position, :question, :answer)");
 
@@ -717,7 +717,7 @@ class Offering
       }
 
       // Gestionar los paquetes, si están presentes en los datos
-      if (isset($data['packages']) && is_array($data['packages'])) {
+      if (isset($data['Packages']) && is_array($data['Packages'])) {
 
         // Eliminar los paquetes existentes para esta oferta
         $stmt = $this->db->prepare("DELETE FROM OfferingsPackages WHERE OfferingID = :id");
@@ -729,7 +729,7 @@ class Offering
                 VALUES (:id, :package, :price, :description, :conditions, :sessionType)"
         );
 
-        foreach ($data['packages'] as $package) {
+        foreach ($data['Packages'] as $package) {
           $stmt->bindParam(':id', $id, PDO::PARAM_INT);
           $stmt->bindParam(':package', $package['Package'], PDO::PARAM_STR);
           $stmt->bindParam(':price', $package['Price'], PDO::PARAM_STR);
@@ -795,10 +795,10 @@ class Offering
       ];
 
       // Filtrar faqs y packages antes del ciclo de validación
-      $faqs = $data['faqs'] ?? null;
-      $packages = $data['packages'] ?? null;
-      $locations = $data['locations'] ?? null;
-      unset($data['faqs'], $data['packages'], $data['locations']);
+      $faqs = $data['Faqs'] ?? null;
+      $packages = $data['Packages'] ?? null;
+      $locations = $data['Locations'] ?? null;
+      unset($data['Faqs'], $data['Packages'], $data['Locations']);
 
       // Construcción dinámica de la consulta
       $fields = [];

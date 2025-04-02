@@ -18,7 +18,7 @@ class Search
   {
     try {
       $searchQuery = "%$query%";
-      $stmt = $this->pdo->prepare("SELECT SQL_CALC_FOUND_ROWS c.*,m.URL as imgURL
+      $stmt = $this->pdo->prepare("SELECT SQL_CALC_FOUND_ROWS c.*,m.URL as ImgURL
             FROM Categories AS c
             LEFT JOIN Media as m ON c.CategoryID = m.CategoryID
             WHERE (c.Name LIKE :search1 OR c.Description LIKE :search2) AND c.IsActive = 1
@@ -87,7 +87,7 @@ class Search
             'Question', f.Question,
             'Answer', f.Answer
           )
-        ) FROM OfferingsFaqs f WHERE f.OfferingID = o.OfferingID) AS faqs,
+        ) FROM OfferingsFaqs f WHERE f.OfferingID = o.OfferingID) AS Faqs,
         -- Subconsulta para packages
         (SELECT JSON_ARRAYAGG(
           JSON_OBJECT(
@@ -97,7 +97,7 @@ class Search
             'Conditions', p.Conditions,
             'SessionType', p.SessionType
           )
-        ) FROM OfferingsPackages p WHERE p.OfferingID = o.OfferingID) AS packages,
+        ) FROM OfferingsPackages p WHERE p.OfferingID = o.OfferingID) AS Packages,
         -- Subconsulta para locations
         (SELECT JSON_ARRAYAGG(
           JSON_OBJECT(
@@ -106,8 +106,8 @@ class Search
             'State', l.State,
             'City', l.City
           )
-        ) FROM OfferingLocations l WHERE l.OfferingID = o.OfferingID) AS locations,
-        ROUND(AVG(r.Rating),2) as rating
+        ) FROM OfferingLocations l WHERE l.OfferingID = o.OfferingID) AS Locations,
+        ROUND(AVG(r.Rating),2) as Rating
         FROM Offerings AS o
         INNER JOIN Users AS u ON u.UserID = o.UserID
         LEFT JOIN Reviews as r ON o.OfferingID = r.OfferingID
@@ -136,36 +136,36 @@ class Search
 
       // Desagrupo los json traidos por MYSQL para armar el JSON anidado de respuesta
       $rs = array_map(function ($e) {
-        $e['media'] = [
-          'images' => [],
-          'videos' => []
+        $e['Media'] = [
+          'Images' => [],
+          'Videos' => []
         ];
 
         $images = @json_decode($e['media_images'], true);
         if($images){
-          $e['media']['images'] = $images;
+          $e['Media']['Images'] = $images;
         }
         unset($e['media_images']);
 
         $videos = @json_decode($e['media_videos'], true);
         if($videos){
-          $e['media']['videos'] = $videos;
+          $e['Media']['Videos'] = $videos;
         }
         unset($e['media_videos']);
 
-        $faqs = @json_decode($e['faqs'], true);
+        $faqs = @json_decode($e['Faqs'], true);
         if($faqs){
-          $e['faqs'] = $faqs;
+          $e['Faqs'] = $faqs;
         }
 
-        $packages = @json_decode($e['packages'], true);
+        $packages = @json_decode($e['Packages'], true);
         if($packages){
-          $e['packages'] = $packages;
+          $e['Packages'] = $packages;
         }
 
-        $locations = @json_decode($e['locations'], true);
+        $locations = @json_decode($e['Locations'], true);
         if($locations){
-          $e['locations'] = $locations;
+          $e['Locations'] = $locations;
         }        
 
         $e['author'] = [
@@ -178,9 +178,9 @@ class Search
           "ImgURL" => $e['author_ImgURL']
         ];
 
-        $e['AverageRating'] = floatVal($e['rating']);
+        $e['AverageRating'] = floatVal($e['Rating']);
 
-        unset($e['rating'],
+        unset($e['Rating'],
           $e['author_UserID'],
           $e['author_DisplayName'],
           $e['author_FirstName'],
@@ -226,9 +226,9 @@ class Search
         u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
         u.LastLogin, u.UserLevel, u.SignedContract,
         GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
-        u.LegalDocuments, u.ShortDescription, round(avg(r.Rating),2) as rating,
+        u.LegalDocuments, u.ShortDescription, round(avg(r.Rating),2) as Rating,
         COUNT(DISTINCT r.ReviewID) AS TotalReviews,
-        sub.avgRate, sub.hasVirtual, sub.hasInPerson, m.URL as imgURL
+        sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL
         FROM Users as u
         LEFT JOIN UsersCategories as uc ON uc.UserID = u.UserID
         LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
@@ -265,9 +265,9 @@ class Search
         u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
         u.LastLogin, u.UserLevel, u.SignedContract,
         GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
-        u.LegalDocuments, u.ShortDescription, round(avg(r.Rating),2) as rating,
+        u.LegalDocuments, u.ShortDescription, round(avg(r.Rating),2) as Rating,
         COUNT(DISTINCT r.ReviewID) AS TotalReviews,
-        sub.avgRate, sub.hasVirtual, sub.hasInPerson, m.URL as imgURL
+        sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL
         FROM Users as u
         LEFT JOIN UsersCategories as uc ON uc.UserID = u.UserID
         LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
@@ -315,9 +315,9 @@ class Search
         );
 
         // Agregar sessionType con valores booleanos
-        $e['sessionType'] = [
-        "virtual" => $e['hasVirtual'] == 1,
-        "in-person" => $e['hasInPerson'] == 1
+        $e['SessionType'] = [
+        "Virtual" => $e['hasVirtual'] == 1,
+        "InPerson" => $e['hasInPerson'] == 1
         ];
 
         unset($e['hasVirtual'], $e['hasInPerson']);

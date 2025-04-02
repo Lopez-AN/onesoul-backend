@@ -26,12 +26,12 @@ class AuthController{
   */
   public function login(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
-    $email = $data['email'] ?? '';
-    $username = $data['username'] ?? '';
-    $password = $data['password'] ?? '';
-    $mfa_id = $data['mfa_id'] ?? '';
-    $mfa_code = $data['mfa_code'] ?? '';
-    $recaptchaToken = $data['recaptcha_token'] ?? '';
+    $email = $data['Email'] ?? '';
+    $username = $data['UserName'] ?? '';
+    $password = $data['Password'] ?? '';
+    $mfa_id = $data['MfaID'] ?? '';
+    $mfa_code = $data['MfaCode'] ?? '';
+    $recaptchaToken = $data['RecaptchaToken'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
     // Validar credenciales básicas
@@ -132,9 +132,9 @@ class AuthController{
       $userData = $this->user->getUserById($user['UserID']);
 
       return $response->withStatus(200)->withJson([
-        "token" => $jwt,
-        "mfaID" => $newMfaId,
-        "userData" => $userData -> data
+        "Token" => $jwt,
+        "MfaID" => $newMfaId,
+        "UserData" => $userData -> data
       ]);
     } catch (\Exception $e) {
       return $response->withStatus(500)->withJson([
@@ -148,10 +148,10 @@ class AuthController{
 
   public function loginGoogle(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
-    $token = $data['token'] ?? '';
-    $mfa_id = $data['mfa_id'] ?? '';
-    $mfa_code = $data['mfa_code'] ?? '';
-    $recaptchaToken = $data['recaptcha_token'] ?? '';
+    $token = $data['Token'] ?? '';
+    $mfa_id = $data['MfaID'] ?? '';
+    $mfa_code = $data['MfaCode'] ?? '';
+    $recaptchaToken = $data['RecaptchaToken'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
     if (empty($token) || empty($recaptchaToken)) {
@@ -233,9 +233,9 @@ class AuthController{
       $userData = $this->user->getUserById($user['UserID']);
 
       return $response->withStatus(200)->withJson([
-        'token' => $jwt,
-        'mfaID' => $newMfaId,
-        'userData' => $userData->data
+        'Token' => $jwt,
+        'MfaID' => $newMfaId,
+        'UserData' => $userData->data
       ]);
 
     } catch (\Exception $e) {
@@ -250,11 +250,11 @@ class AuthController{
 
   public function loginFacebook(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
-    $user_id = $data['user_id'] ?? '';
-    $token = $data['token'] ?? '';
-    $mfa_id = $data['mfa_id'] ?? '';
-    $mfa_code = $data['mfa_code'] ?? '';
-    $recaptchaToken = $data['recaptcha_token'] ?? '';
+    $user_id = $data['UserID'] ?? '';
+    $token = $data['Token'] ?? '';
+    $mfa_id = $data['MfaID'] ?? '';
+    $mfa_code = $data['MfaCode'] ?? '';
+    $recaptchaToken = $data['RecaptchaToken'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
 
@@ -337,9 +337,9 @@ class AuthController{
       $userData = $this->user->getUserById($user['UserID']);
 
       return $response->withStatus(200)->withJson([
-        'token' => $jwt,
-        'mfaID' => $newMfaId,
-        'userData' => $userData->data
+        'Token' => $jwt,
+        'MfaID' => $newMfaId,
+        'UserData' => $userData->data
       ]);
 
     } catch (\Exception $e) {
@@ -358,10 +358,10 @@ class AuthController{
   */
   public function register(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
-    $email = $data['email'] ?? '';
-    $username = $data['username'] ?? '';
-    $password = $data['password'] ?? '';
-    $recaptchaToken = $data['recaptcha_token'] ?? '';
+    $email = $data['Email'] ?? '';
+    $username = $data['UserName'] ?? '';
+    $password = $data['Password'] ?? '';
+    $recaptchaToken = $data['RecaptchaToken'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
     if(empty($email) || empty($username) || empty($password) || empty($recaptchaToken)){
@@ -385,8 +385,8 @@ class AuthController{
           $jwt = $this -> JWTgen($result -> data);
           $userData = $this->user->getUserById($result -> data['UserID']);
           return $response->withStatus(200)->withJson([
-            'token' => $jwt,
-            'userData' => $userData -> data
+            'Token' => $jwt,
+            'UserData' => $userData -> data
           ]);
         default: #errores
           return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
@@ -403,9 +403,9 @@ class AuthController{
 
   public function registerGoogle(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
-    $token = $data['token'] ?? '';
-    $username = $data['username'] ?? '';
-    $recaptchaToken = $data['recaptcha_token'] ?? '';
+    $token = $data['Token'] ?? '';
+    $username = $data['UserName'] ?? '';
+    $recaptchaToken = $data['RecaptchaToken'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
     if(empty($token) || empty($username) || empty($recaptchaToken)){
@@ -429,8 +429,8 @@ class AuthController{
           $jwt = $this -> JWTgen($result -> data[0]);
           $userData = $this->user->getUserById($result -> data[0]['UserID']);
           return $response->withStatus(200)->withJson([
-            "token" => $jwt,
-            "userData" => $userData -> data
+            "Token" => $jwt,
+            "UserData" => $userData -> data
           ]);
         default: # Otros, ejemplo Token inválido
           return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
@@ -447,10 +447,10 @@ class AuthController{
 
   public function registerFacebook(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
-    $user_id = $data['user_id'] ?? '';
-    $token = $data['token'] ?? '';
-    $username = $data['username'] ?? '';
-    $recaptchaToken = $data['recaptcha_token'] ?? '';
+    $user_id = $data['UserID'] ?? '';
+    $token = $data['Token'] ?? '';
+    $username = $data['UserName'] ?? '';
+    $recaptchaToken = $data['RecaptchaToken'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
     if(empty($user_id) || empty($token) || empty($username) || empty($recaptchaToken)){
@@ -474,8 +474,8 @@ class AuthController{
           $jwt = $this -> JWTgen($result -> data[0]);
           $userData = $this->user->getUserById($result -> data[0]['UserID']);
           return $response->withStatus(200)->withJson([
-            'token' => $jwt,
-            'userData' => $userData -> data
+            'Token' => $jwt,
+            'UserData' => $userData -> data
           ]);
         default: # errores
           return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
@@ -502,7 +502,7 @@ class AuthController{
     }
 
     $data = $request->getParsedBody();
-    $recaptchaToken = $data['recaptcha_token'] ?? '';
+    $recaptchaToken = $data['RecaptchaToken'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
     $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
@@ -599,14 +599,14 @@ class AuthController{
 
     $token = $this->JWTgen($userData -> data);
     return $response->withStatus(200)->withJson([
-      'token' => $token,
-      'userData' => $userData -> data
+      'Token' => $token,
+      'UserData' => $userData -> data
     ]);
   }
 
   public function validateReCaptcha(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
-    $recaptchaToken = $data['recaptcha_token'] ?? '';
+    $recaptchaToken = $data['RecaptchaToken'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
     if (empty($recaptchaToken)) {
@@ -625,9 +625,9 @@ class AuthController{
   # Solicitar reseteo de contraseña
   public function requestPasswordReset(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
-    $email = $data['email'] ?? '';
-    $username = $data['username'] ?? '';
-    $recaptchaToken = $data['recaptcha_token'] ?? '';
+    $email = $data['Email'] ?? '';
+    $username = $data['UserName'] ?? '';
+    $recaptchaToken = $data['RecaptchaToken'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
     if((empty($email) && empty($username)) || empty($recaptchaToken)){
@@ -674,11 +674,11 @@ class AuthController{
   # Resetear contraseña
   public function resetPassword(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
-    $email = $data['email'] ?? '';
-    $username = $data['username'] ?? '';
-    $password = $data['password'] ?? '';
-    $otpCode = $data['otp_code'] ?? '';
-    $recaptchaToken = $data['recaptcha_token'] ?? '';
+    $email = $data['Email'] ?? '';
+    $username = $data['UserName'] ?? '';
+    $password = $data['Password'] ?? '';
+    $otpCode = $data['OTPCode'] ?? '';
+    $recaptchaToken = $data['Recaptchaoken'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
     $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
