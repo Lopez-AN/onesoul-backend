@@ -116,6 +116,25 @@ class UserController
     }
   }
 
+  public function getUserByCategory(Request $request, Response $response, $args){
+    $id = $args['id'];
+
+    try {
+      $result = $this->user->getUserByCategory($id);
+      if($result->http_code != 200){
+        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+      }
+      return $response->withStatus(200)->withJson($result->data);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }  
+
   public function getReviewsByUser(Request $request, Response $response, $args){
     $id = $args['id'];
   

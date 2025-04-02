@@ -542,8 +542,7 @@ class Auth{
       u.Department, u.Cp, u.City, u.State, u.CountryCode, 
       u.DateOfBirth, u.Gender, u.Biography, u.ValidatedEmail, 
       u.TwoFactorAuth, u.UserType, u.RegistrationDate, 
-      u.LastLogin, u.DeactivationDate, u.UserLevel, 
-      u.TermsAndConditions, u.SignedContract,
+      u.LastLogin, u.DeactivationDate, u.UserLevel, u.SignedContract,
       GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID, ':', TRIM(c.Name)) 
       ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
       u.LegalDocuments, u.ShortDescription, 
@@ -605,8 +604,7 @@ class Auth{
       u.Department, u.Cp, u.City, u.State, u.CountryCode, 
       u.DateOfBirth, u.Gender, u.Biography, u.ValidatedEmail, 
       u.TwoFactorAuth, u.UserType, u.RegistrationDate, 
-      u.LastLogin, u.DeactivationDate, u.UserLevel, 
-      u.TermsAndConditions, u.SignedContract,
+      u.LastLogin, u.DeactivationDate, u.UserLevel, u.SignedContract,
       GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID, ':', TRIM(c.Name)) 
       ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
       u.LegalDocuments, u.ShortDescription, 

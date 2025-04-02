@@ -267,6 +267,79 @@ class User
     }
   }
 
+  public function getUserByCategory($id)
+  {
+    try {
+      $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName, u.UserName, u.DisplayName,
+        u.Email, u.Phone, u.AddressName, u.AddressNumber, u.Floor,
+        u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
+        u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
+        u.LastLogin, u.DeactivationDate, u.UserLevel, u.SignedContract,
+        GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
+        u.LegalDocuments, u.shortDescription, round(avg(r.Rating),2) as rating,
+        COUNT(DISTINCT r.ReviewID) AS TotalReviews, sub.avgRate, sub.hasVirtual, sub.hasInPerson, m.URL as imgURL
+        FROM Users as u
+        LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
+        LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
+        LEFT JOIN Media as m ON u.UserID = m.UserID
+        LEFT JOIN Reviews as r ON u.UserID = r.GUserID OR u.UserID = r.SUserID
+        LEFT JOIN (
+          SELECT ROUND(AVG(p.price),0) as AvgRate, o.UserID,
+          MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
+          MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
+          FROM Offerings as o
+          INNER JOIN OfferingsPackages as p ON o.OfferingID = p.OfferingID
+          WHERE o.Status = 'Active'
+          GROUP BY o.UserID
+        ) as sub ON sub.UserID = u.UserID
+        WHERE uc.CategoryID = :id AND u.DeactivationDate is null
+        GROUP BY u.UserID
+        ORDER BY u.UserID");
+
+      $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+      $stmt->execute();
+
+      $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+      $rs = array_map(function ($e) {
+        $e['Categories'] = is_null($e['Categories']) ? [] : array_map(
+          function ($a) {
+            $a = explode(":", $a);
+            return ["id" => intval($a[0]), "name" => $a[1]];
+          },
+          explode(",", $e['Categories'])
+        );
+
+        // Agregar sessionType con valores booleanos
+        $e['sessionType'] = [
+          "virtual" => $e['hasVirtual'] == 1,
+          "in-person" => $e['hasInPerson'] == 1
+        ];
+                
+        unset($e['hasVirtual'], $e['hasInPerson']);        
+        return $e;
+      }, $rs);
+
+      if (empty($rs)) {
+        return (object) [
+          "http_code" => 404,
+          "error" => [
+            "code" => "USER_NOT_FOUND",
+            "desc" => "No user was found with the specified CategoryID"
+          ]
+        ];
+      }
+
+      return (object) [
+        "http_code" => 200,
+        "data" => $rs
+      ];
+
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }  
+    
   public function getReviewsByUser($id)
   {
     try{
