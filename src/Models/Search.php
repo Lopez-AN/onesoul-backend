@@ -113,7 +113,7 @@ class Search
         LEFT JOIN Reviews as r ON o.OfferingID = r.OfferingID
         LEFT JOIN Reviews as ru ON u.UserID = ru.SUserID
         LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
-        LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode        
+        LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode
         WHERE (o.Title LIKE :search1 OR o.Description LIKE :search2
         OR o.ShortDescription LIKE :search3 OR o.Tags LIKE :search4)
         AND o.Status = 'Active'
@@ -166,7 +166,7 @@ class Search
         $locations = @json_decode($e['Locations'], true);
         if($locations){
           $e['Locations'] = $locations;
-        }        
+        }
 
         $e['author'] = [
           "UserID" => $e['author_UserID'],
@@ -220,20 +220,23 @@ class Search
       $searchQuery = "%$query%";
 
       if(in_array($type,['guide','guides'])){
-        $stmt = $this->pdo->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName, u.UserName, u.DisplayName,
-        u.Email, u.Phone, u.AddressName, u.AddressNumber, u.Floor,
-        u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
-        u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
-        u.LastLogin, u.UserLevel, u.SignedContract,
-        GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
-        u.LegalDocuments, u.ShortDescription, round(avg(r.Rating),2) as Rating,
-        COUNT(DISTINCT r.ReviewID) AS TotalReviews,
-        sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL
+        $stmt = $this->pdo->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName,
+        u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
+        u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
+        u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType,
+        u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel,
+        u.SignedContract, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
+          ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
+        u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
+        -- Subconsulta para reviews
+        (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
+          FROM Reviews as r WHERE r.SUserID = u.UserID) AS Rating,
+        (SELECT COUNT(DISTINCT r.ReviewID)
+          FROM Reviews as r WHERE r.SUserID = u.UserID) AS TotalReviews
         FROM Users as u
-        LEFT JOIN UsersCategories as uc ON uc.UserID = u.UserID
+        LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
         LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
         LEFT JOIN Media as m ON u.UserID = m.UserID
-        LEFT JOIN Reviews as r ON u.UserID = r.GUserID
         LEFT JOIN Offerings as o ON u.UserID = o.UserID
         LEFT JOIN (
           SELECT ROUND(AVG(p.Price),0) as AvgRate, o.UserID,
@@ -259,26 +262,31 @@ class Search
         $stmt->bindParam(':search5', $searchQuery, PDO::PARAM_STR);
         $stmt->bindParam(':search6', $searchQuery, PDO::PARAM_STR);
       }else{
-        $stmt = $this->pdo->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName, u.UserName, u.DisplayName,
-        u.Email, u.Phone, u.AddressName, u.AddressNumber, u.Floor,
-        u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
-        u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType, u.RegistrationDate,
-        u.LastLogin, u.UserLevel, u.SignedContract,
-        GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name)) ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
-        u.LegalDocuments, u.ShortDescription, round(avg(r.Rating),2) as Rating,
-        COUNT(DISTINCT r.ReviewID) AS TotalReviews,
-        sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL
+        $stmt = $this->pdo->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName,
+        u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
+        u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
+        u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType,
+        u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel,
+        u.SignedContract, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
+          ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
+        u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
+        -- Subconsulta para reviews
+        (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
+          FROM Reviews as r WHERE r.SUserID = u.UserID) AS Rating,
+        (SELECT COUNT(DISTINCT r.ReviewID)
+          FROM Reviews as r WHERE r.SUserID = u.UserID) AS TotalReviews
         FROM Users as u
-        LEFT JOIN UsersCategories as uc ON uc.UserID = u.UserID
+        LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
         LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
         LEFT JOIN Media as m ON u.UserID = m.UserID
-        LEFT JOIN Reviews as r ON u.UserID = r.GUserID
+        LEFT JOIN Offerings as o ON u.UserID = o.UserID
         LEFT JOIN (
           SELECT ROUND(AVG(p.Price),0) as AvgRate, o.UserID,
           MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
           MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
           FROM Offerings as o
-          INNER JOIN OfferingsPackages as p WHERE o.OfferingID = p.OfferingID
+          INNER JOIN OfferingsPackages as p ON o.OfferingID = p.OfferingID
+          WHERE o.Status = 'Active'
           GROUP BY o.UserID
         ) as sub ON sub.UserID = u.UserID
         WHERE $filterSeeker u.UserType NOT IN ('Moderator','Admin')
@@ -306,6 +314,8 @@ class Search
       $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
       $rs = array_map(function ($e) {
+        $e['ValidatedEmail'] = (bool)$e['ValidatedEmail'];
+        $e['TwoFactorAuth'] = (bool)$e['TwoFactorAuth'];
         $e['Categories'] = is_null($e['Categories']) ? [] : array_map(
           function ($a) {
             $a = explode(":", $a);
