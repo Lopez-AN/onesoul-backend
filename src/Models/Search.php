@@ -314,12 +314,13 @@ class Search
       $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
       $rs = array_map(function ($e) {
+        $e['Floor'] = is_null($e['Floor']) ? null : (int)$e['Floor'];
         $e['ValidatedEmail'] = (bool)$e['ValidatedEmail'];
         $e['TwoFactorAuth'] = (bool)$e['TwoFactorAuth'];
         $e['Categories'] = is_null($e['Categories']) ? [] : array_map(
           function ($a) {
             $a = explode(":", $a);
-            return ["id" => intval($a[0]), "name" => $a[1]];
+            return ["Id" => intval($a[0]), "Name" => $a[1]];
           },
           explode(",", $e['Categories'])
         );

@@ -3,7 +3,6 @@
 use Slim\App;
 use App\Controllers\UserController;
 use App\Models\User;
-use App\Models\Auth;
 
 return function (App $app) {
   # Proteccion de rutas
@@ -26,8 +25,7 @@ return function (App $app) {
 
   $pdo = require __DIR__ . './../core/database.php';
   $user = new User($pdo);
-  $auth = new Auth($pdo);
-  $userController = new UserController($user, $auth);
+  $userController = new UserController($user);
 
   $app->get('/users', [$userController, 'getUsers']);
   $app->get('/users/{id}', [$userController, 'getUserById']);

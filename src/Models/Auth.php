@@ -23,12 +23,12 @@ class Auth{
       if($username){
         $stmt = $this->db->prepare("SELECT u.*,m.URL FROM Users AS u
         LEFT JOIN Media as m ON u.UserID = m.UserID
-        WHERE u.UserName = ?");
+        WHERE u.UserName = ? AND u.PasswordHash IS NOT NULL");
         $stmt->execute([$username]);
       }else{
         $stmt = $this->db->prepare("SELECT u.*,m.URL FROM Users AS u
         LEFT JOIN Media as m ON u.UserID = m.UserID
-        WHERE u.Email = ?");
+        WHERE u.Email = ? AND u.PasswordHash IS NOT NULL");
         $stmt->execute([$email]);
       }
       return $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -356,7 +356,7 @@ class Auth{
   }
 
   # Envio de codigo OTP por email desde el JWT
-  public function sendOtpMail($userId){
+  public function sendOtpMail($userId,$recovery = false){
     try{
       $stmt = $this->db->prepare("SELECT u.Email, u.UserName FROM Users AS u
       WHERE u.UserID = ?");
@@ -375,7 +375,7 @@ class Auth{
       $otpCode = rand(100000, 999999); # Codigo que se enviara por mail
       $stmt = $this->db->prepare("UPDATE Users SET OTPCode = ?, OTPDate = ? WHERE UserID = ?");
       $stmt->execute([$otpCode, date("YmdHis"), $userId]);
-      $this -> _sendOtpMail($resp[0]['Email'],$resp[0]['UserName'],$otpCode);
+      $this -> _sendOtpMail($resp[0]['Email'],$resp[0]['UserName'],$otpCode,$recovery);
 
       return (object)["http_code" => 200, "data" => []];
     } catch (\PDOException $e) {
@@ -383,10 +383,12 @@ class Auth{
     }
   }
 
-  private function _sendOtpMail($rec, $username, $otpCode){
+  private function _sendOtpMail($rec, $username, $otpCode, $recovery){
     $template = file_get_contents(ROOT."/src/templates/email_otp.html");
     $template = str_replace("{CODIGO}", $otpCode, $template);
     $template = str_replace("{USERNAME}", $username, $template);
+    $template = str_replace("{T_MODE1}", $recovery ? '' : ', bienvenido a OneSoul', $template);
+    $template = str_replace("{T_MODE2}", $recovery ? 'recuperaci&oacute;n' : 'registro', $template);
 
     $smtpAccount = $GLOBALS['config']['mailer']['account'];
     $smtpPassword = $GLOBALS['config']['mailer']['password'];
@@ -409,9 +411,11 @@ class Auth{
 
       # Contenido del correo
       $mail->isHTML(true);
-      $mail->Subject = 'Complete su registro en OneSoul';
+      $mail->Subject = $recovery ? "Recupera tu cuenta de OneSoul" : "Complete su registro en OneSoul";
       $mail->Body    = $template;
-      $mail->AltBody = "Hola $username, bienvenido a OneSoul\nSu código de verificaci&oacute;n es $otpCode";
+      $mail->AltBody = $recovery ?
+        "Hola $username, bienvenido a OneSoul\nSu código de verificaci&oacute;n es $otpCode" :
+        "Hola $username\nSu código de recuperaci&oacute;n es $otpCode";
       $mail->addEmbeddedImage(ROOT."/src/templates/logo2.png", 'logo');
 
       # Enviar el correo
@@ -533,131 +537,6 @@ class Auth{
       throw new DatabaseException($e->getMessage());
     }
   }
-
-  # Busca un usuario por username
-  public function getUserByUserName($username) {
-    try {
-      $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
-      u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
-      u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
-      u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType,
-      u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel,
-      u.SignedContract, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
-        ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
-      u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
-      -- Subconsulta para reviews
-      (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-        FROM Reviews as r WHERE r.SUserID = u.UserID) AS Rating,
-      (SELECT COUNT(DISTINCT r.ReviewID)
-        FROM Reviews as r WHERE r.SUserID = u.UserID) AS TotalReviews
-      FROM Users as u
-      LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
-      LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
-      LEFT JOIN Media as m ON u.UserID = m.UserID
-      LEFT JOIN (
-        SELECT ROUND(AVG(p.Price),0) as AvgRate, o.UserID,
-        MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
-        MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
-        FROM Offerings as o
-        INNER JOIN OfferingsPackages as p ON o.OfferingID = p.OfferingID
-        WHERE o.Status = 'Active'
-        GROUP BY o.UserID
-      ) as sub ON sub.UserID = u.UserID
-      WHERE u.UserName = ?
-      GROUP BY u.UserID");
-
-      $stmt->execute([$username]);
-      $rs = $stmt->fetch(PDO::FETCH_ASSOC);
-
-      if (!$rs) return null; // Si no encuentra el usuario, retorna null
-
-      $rs['ValidatedEmail'] = (bool)$rs['ValidatedEmail'];
-      $rs['TwoFactorAuth'] = (bool)$rs['TwoFactorAuth'];
-      $rs['Categories'] = is_null($rs['Categories']) ? [] : array_map(
-        function ($a) {
-          $a = explode(":", $a);
-          return ["id" => intval($a[0]), "name" => $a[1]];
-        },
-        explode(",", $rs['Categories'])
-      );
-
-      // Agregar sessionType con valores booleanos
-      $rs['SessionType'] = [
-        "Virtual" => $rs['hasVirtual'] == 1,
-        "InPerson" => $rs['hasInPerson'] == 1
-      ];
-
-      unset($rs['hasVirtual'], $rs['hasInPerson']);
-
-      return $rs;
-
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
-  }
-
-  # Busca un usuario por email
-  public function getUserByEmail($email){
-    try {
-      $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
-      u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
-      u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
-      u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType,
-      u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel,
-      u.SignedContract, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
-        ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
-      u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
-      -- Subconsulta para reviews
-      (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-        FROM Reviews as r WHERE r.SUserID = u.UserID) AS Rating,
-      (SELECT COUNT(DISTINCT r.ReviewID)
-        FROM Reviews as r WHERE r.SUserID = u.UserID) AS TotalReviews
-      FROM Users as u
-      LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
-      LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
-      LEFT JOIN Media as m ON u.UserID = m.UserID
-      LEFT JOIN (
-        SELECT ROUND(AVG(p.Price),0) as AvgRate, o.UserID,
-        MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
-        MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
-        FROM Offerings as o
-        INNER JOIN OfferingsPackages as p ON o.OfferingID = p.OfferingID
-        WHERE o.Status = 'Active'
-        GROUP BY o.UserID
-      ) as sub ON sub.UserID = u.UserID
-      WHERE u.Email = ?
-      GROUP BY u.UserID");
-
-      $stmt->execute([$email]);
-      $rs = $stmt->fetch(PDO::FETCH_ASSOC);
-
-      if (!$rs) return null; // Si no encuentra el usuario, retorna null
-
-      $rs['ValidatedEmail'] = (bool)$rs['ValidatedEmail'];
-      $rs['TwoFactorAuth'] = (bool)$rs['TwoFactorAuth'];
-      $rs['Categories'] = is_null($rs['Categories']) ? [] : array_map(
-        function ($a) {
-          $a = explode(":", $a);
-          return ["id" => intval($a[0]), "name" => $a[1]];
-        },
-        explode(",", $rs['Categories'])
-      );
-
-      // Agregar sessionType con valores booleanos
-      $rs['SessionType'] = [
-        "Virtual" => $rs['hasVirtual'] == 1,
-        "InPerson" => $rs['hasInPerson'] == 1
-      ];
-
-      unset($rs['hasVirtual'], $rs['hasInPerson']);
-
-      return $rs;
-  
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
-  }
-
 
   # Trae los datos del usuario luego de loguearse por SSO
   private function getUserByOAuthID($userId, $service){

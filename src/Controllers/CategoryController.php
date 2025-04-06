@@ -77,7 +77,18 @@ class CategoryController
   }
 
   public function createCategory(Request $request, Response $response, $args)
-  {
+  {    
+    $jwt = $request->getAttribute('jwt');
+    # Verificar si el usuario autenticado es el mismo que el que se intenta modificar, o si es un administrador
+    if ($jwt['data']->UserType != 'Admin') {
+      return $response->withStatus(401)->withJson([
+        "error" => [
+          "code" => "UNAUTHORIZED",
+          "desc" => "You do not have permission to create categories"
+        ]
+      ]);
+    }
+
     $data = $request->getParsedBody();
     try {
       $category = $this->category->createCategory($data);
@@ -101,6 +112,18 @@ class CategoryController
   {
     $id = $args['id'];
     $data = $request->getParsedBody();
+    $jwt = $request->getAttribute('jwt');
+
+    # Verificar si el usuario autenticado es el mismo que el que se intenta modificar, o si es un administrador
+    if ($jwt['data']->UserType != 'Admin') {
+      return $response->withStatus(401)->withJson([
+        "error" => [
+          "code" => "UNAUTHORIZED",
+          "desc" => "You do not have permission to create categories"
+        ]
+      ]);
+    }
+
     try {
       $category = $this->category->updateCategory($id, $data);
       $response = $response->withStatus(200);
@@ -125,11 +148,23 @@ class CategoryController
   public function deleteCategory(Request $request, Response $response, $args)
   {
     $id = $args['id'];
+    $jwt = $request->getAttribute('jwt');
+    
+    # Verificar si el usuario autenticado es el mismo que el que se intenta modificar, o si es un administrador
+    if ($jwt['data']->UserType != 'Admin') {
+      return $response->withStatus(401)->withJson([
+        "error" => [
+          "code" => "UNAUTHORIZED",
+          "desc" => "You do not have permission to create categories"
+        ]
+      ]);
+    }
+
     try {
       $this->category->deleteCategory($id);
       $response = $response->withStatus(200);
       $message = [
-        'message' => "Category updated successfully"
+        'message' => "Category deleted successfully"
       ];
       $response->getBody()->write(json_encode($message));
     } catch (NotFoundException $e) {
