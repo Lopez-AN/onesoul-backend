@@ -537,48 +537,48 @@ class Auth{
   # Busca un usuario por username
   public function getUserByUserName($username) {
     try {
-      $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName, u.UserName, u.DisplayName, u.Email, 
-      u.Phone, u.AddressName, u.AddressNumber, u.Floor, 
-      u.Department, u.Cp, u.City, u.State, u.CountryCode, 
-      u.DateOfBirth, u.Gender, u.Biography, u.ValidatedEmail, 
-      u.TwoFactorAuth, u.UserType, u.RegistrationDate, 
-      u.LastLogin, u.DeactivationDate, u.UserLevel, u.SignedContract,
-      GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID, ':', TRIM(c.Name)) 
-      ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
-      u.LegalDocuments, u.ShortDescription, 
-      ROUND(AVG(r.Rating),2) AS Rating,
-      COUNT(DISTINCT r.ReviewID) AS TotalReviews, 
-      sub.AvgRate, sub.hasVirtual, sub.hasInPerson, 
-      m.URL AS ImgURL
-      FROM Users AS u
-      LEFT JOIN UsersCategories AS uc ON uc.UserID = u.UserID
-      LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
-      LEFT JOIN Media AS m ON u.UserID = m.UserID
-      LEFT JOIN Reviews AS r ON u.UserID = r.SUserID
+      $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
+      u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
+      u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
+      u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType,
+      u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel,
+      u.SignedContract, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
+        ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
+      u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
+      -- Subconsulta para reviews
+      (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
+        FROM Reviews as r WHERE r.SUserID = u.UserID) AS Rating,
+      (SELECT COUNT(DISTINCT r.ReviewID)
+        FROM Reviews as r WHERE r.SUserID = u.UserID) AS TotalReviews
+      FROM Users as u
+      LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
+      LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
+      LEFT JOIN Media as m ON u.UserID = m.UserID
       LEFT JOIN (
-        SELECT o.UserID, ROUND(AVG(p.Price),0) AS AvgRate,
+        SELECT ROUND(AVG(p.Price),0) as AvgRate, o.UserID,
         MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
         MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
-        FROM Offerings AS o
-        INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
+        FROM Offerings as o
+        INNER JOIN OfferingsPackages as p ON o.OfferingID = p.OfferingID
         WHERE o.Status = 'Active'
         GROUP BY o.UserID
-      ) AS sub ON sub.UserID = u.UserID
+      ) as sub ON sub.UserID = u.UserID
       WHERE u.UserName = ?
       GROUP BY u.UserID");
-        
+
       $stmt->execute([$username]);
       $rs = $stmt->fetch(PDO::FETCH_ASSOC);
 
       if (!$rs) return null; // Si no encuentra el usuario, retorna null
 
-      // Transformación de datos
+      $rs['ValidatedEmail'] = (bool)$rs['ValidatedEmail'];
+      $rs['TwoFactorAuth'] = (bool)$rs['TwoFactorAuth'];
       $rs['Categories'] = is_null($rs['Categories']) ? [] : array_map(
         function ($a) {
-        $a = explode(":", $a);
-        return ["id" => intval($a[0]), "name" => $a[1]];
+          $a = explode(":", $a);
+          return ["id" => intval($a[0]), "name" => $a[1]];
         },
-      explode(",", $rs['Categories'])
+        explode(",", $rs['Categories'])
       );
 
       // Agregar sessionType con valores booleanos
@@ -586,7 +586,7 @@ class Auth{
         "Virtual" => $rs['hasVirtual'] == 1,
         "InPerson" => $rs['hasInPerson'] == 1
       ];
-                
+
       unset($rs['hasVirtual'], $rs['hasInPerson']);
 
       return $rs;
@@ -599,64 +599,65 @@ class Auth{
   # Busca un usuario por email
   public function getUserByEmail($email){
     try {
-      $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName, u.UserName, u.DisplayName, u.Email, 
-      u.Phone, u.AddressName, u.AddressNumber, u.Floor, 
-      u.Department, u.Cp, u.City, u.State, u.CountryCode, 
-      u.DateOfBirth, u.Gender, u.Biography, u.ValidatedEmail, 
-      u.TwoFactorAuth, u.UserType, u.RegistrationDate, 
-      u.LastLogin, u.DeactivationDate, u.UserLevel, u.SignedContract,
-      GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID, ':', TRIM(c.Name)) 
-      ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
-      u.LegalDocuments, u.ShortDescription, 
-      ROUND(AVG(r.Rating),2) AS Rating,
-      COUNT(DISTINCT r.ReviewID) AS TotalReviews, 
-      sub.AvgRate, sub.hasVirtual, sub.hasInPerson, 
-      m.URL AS ImgURL
-      FROM Users AS u
-      LEFT JOIN UsersCategories AS uc ON uc.UserID = u.UserID
-      LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
-      LEFT JOIN Media AS m ON u.UserID = m.UserID
-      LEFT JOIN Reviews AS r ON u.UserID = r.SUserID
+      $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
+      u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
+      u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
+      u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType,
+      u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel,
+      u.SignedContract, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
+        ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
+      u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
+      -- Subconsulta para reviews
+      (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
+        FROM Reviews as r WHERE r.SUserID = u.UserID) AS Rating,
+      (SELECT COUNT(DISTINCT r.ReviewID)
+        FROM Reviews as r WHERE r.SUserID = u.UserID) AS TotalReviews
+      FROM Users as u
+      LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
+      LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
+      LEFT JOIN Media as m ON u.UserID = m.UserID
       LEFT JOIN (
-        SELECT o.UserID, ROUND(AVG(p.Price),0) AS AvgRate,
+        SELECT ROUND(AVG(p.Price),0) as AvgRate, o.UserID,
         MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
         MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
-        FROM Offerings AS o
-        INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
+        FROM Offerings as o
+        INNER JOIN OfferingsPackages as p ON o.OfferingID = p.OfferingID
         WHERE o.Status = 'Active'
         GROUP BY o.UserID
-      ) AS sub ON sub.UserID = u.UserID
+      ) as sub ON sub.UserID = u.UserID
       WHERE u.Email = ?
       GROUP BY u.UserID");
-          
+
       $stmt->execute([$email]);
       $rs = $stmt->fetch(PDO::FETCH_ASSOC);
-  
+
       if (!$rs) return null; // Si no encuentra el usuario, retorna null
-  
-      // Transformación de datos
+
+      $rs['ValidatedEmail'] = (bool)$rs['ValidatedEmail'];
+      $rs['TwoFactorAuth'] = (bool)$rs['TwoFactorAuth'];
       $rs['Categories'] = is_null($rs['Categories']) ? [] : array_map(
         function ($a) {
-        $a = explode(":", $a);
-        return ["id" => intval($a[0]), "name" => $a[1]];
+          $a = explode(":", $a);
+          return ["id" => intval($a[0]), "name" => $a[1]];
         },
-      explode(",", $rs['Categories'])
+        explode(",", $rs['Categories'])
       );
-  
+
       // Agregar sessionType con valores booleanos
       $rs['SessionType'] = [
         "Virtual" => $rs['hasVirtual'] == 1,
         "InPerson" => $rs['hasInPerson'] == 1
       ];
-                
+
       unset($rs['hasVirtual'], $rs['hasInPerson']);
-  
+
       return $rs;
   
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
   }
+
 
   # Trae los datos del usuario luego de loguearse por SSO
   private function getUserByOAuthID($userId, $service){

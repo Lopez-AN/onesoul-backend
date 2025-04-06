@@ -944,12 +944,12 @@ class Offering
     }
   }
 
-  public function getMediaById($id, $media_id)
+  public function getMediaById($id, $mediaID)
   {
     try {
       $stmt = $this->db->prepare("SELECT * FROM Media
-            WHERE MediaID = :media_id AND OfferingID = :id");
-      $stmt->bindParam(':media_id', $media_id, PDO::PARAM_INT);
+            WHERE MediaID = :mediaID AND OfferingID = :id");
+      $stmt->bindParam(':mediaID', $mediaID, PDO::PARAM_INT);
       $stmt->bindParam(':id', $id, PDO::PARAM_INT);
       $stmt->execute();
       return $stmt->fetch(PDO::FETCH_ASSOC);
@@ -996,7 +996,7 @@ class Offering
     }
   }
 
-  public function updateOfferingMedia($id, $title, $description, $position, $media_id, $fileURL = false, $filePath = false, $mediaType = false)
+  public function updateOfferingMedia($id, $title, $description, $position, $mediaID, $fileURL = false, $filePath = false, $mediaType = false)
   {
     try {
       // Diferente update según se adjuntó un archivo o no
@@ -1004,7 +1004,7 @@ class Offering
         // Actualización para Media con archivo
         $stmt = $this->db->prepare("UPDATE Media
                 SET Title = :title, Description = :description, URL = :fileURL, Path = :filePath, MediaType = :mediaType, Position = :position
-                WHERE MediaID = :media_id AND OfferingID = :id");
+                WHERE MediaID = :mediaID AND OfferingID = :id");
 
         $stmt->bindParam(':fileURL', $fileURL, PDO::PARAM_STR);
         $stmt->bindParam(':filePath', $filePath, PDO::PARAM_STR);
@@ -1012,14 +1012,14 @@ class Offering
       } else {
         // Actualización para Media sin archivo
         $stmt = $this->db->prepare("UPDATE Media SET Title = :title, Description = :description, Position = :position
-                WHERE MediaID = :media_id AND OfferingID = :id");
+                WHERE MediaID = :mediaID AND OfferingID = :id");
       }
 
       // Vínculo de los parámetros para Media
       $stmt->bindParam(':title', $title, PDO::PARAM_STR);
       $stmt->bindParam(':description', $description, PDO::PARAM_STR);
       $stmt->bindParam(':position', $position, PDO::PARAM_INT);
-      $stmt->bindParam(':media_id', $media_id, PDO::PARAM_INT);
+      $stmt->bindParam(':mediaID', $mediaID, PDO::PARAM_INT);
       $stmt->bindParam(':id', $id, PDO::PARAM_INT);
 
       // Ejecutar la consulta
@@ -1052,11 +1052,11 @@ class Offering
     }
   }
 
-  public function deleteOfferingMedia($media_id)
+  public function deleteOfferingMedia($mediaID)
   {
     try {
-      $stmt = $this->db->prepare("DELETE FROM Media WHERE MediaID = :media_id");
-      $stmt->bindParam(':media_id', $media_id, PDO::PARAM_INT);
+      $stmt = $this->db->prepare("DELETE FROM Media WHERE MediaID = :mediaID");
+      $stmt->bindParam(':mediaID', $mediaID, PDO::PARAM_INT);
       $stmt->execute();
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
