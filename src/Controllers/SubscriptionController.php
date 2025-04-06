@@ -174,27 +174,27 @@ class SubscriptionController {
   {
     $featureCode = $args['featureCode'];
     $data = $request->getParsedBody();
-    // $jwt = $request->getAttribute('jwt');
+    $jwt = $request->getAttribute('jwt');
 
-    // if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
-    //   return $response->withStatus(401)->withJson([
-    //     "error" => [
-    //       "code" => "INVALID_TOKEN",
-    //       "desc" => "Invalid JWT token"
-    //     ]
-    //   ]);
-    // }
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+      return $response->withStatus(401)->withJson([
+        "error" => [
+          "code" => "INVALID_TOKEN",
+          "desc" => "Invalid JWT token"
+        ]
+      ]);
+    }
 
     try {
       # Verificar si el usuario autenticado es un administrador o el mismo usuario
-      // if ($jwt['data']->UserType != 'Admin') {
-      //   return $response->withStatus(401)->withJson([
-      //     "error" => [
-      //       "code" => "UNAUTHORIZED",
-      //       "desc" => "You do not have permission to modify this user"
-      //     ]
-      //   ]);
-      // }
+      if ($jwt['data']->UserType != 'Admin') {
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "UNAUTHORIZED",
+            "desc" => "You do not have permission to modify this user"
+          ]
+        ]);
+      }
 
       if (!isset($data['IsActive']) || !in_array($data['IsActive'], [0, 1], true)) {
         return $response->withStatus(400)->withJson([
