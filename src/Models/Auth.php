@@ -599,7 +599,7 @@ class Auth{
   {
     try {
       // Verificar si el usuario está bloqueado
-      $stmt = $this->db->prepare("SELECT MfaSecret, FailedLoginAttempts, LockedUntil 
+      $stmt = $this->db->prepare("SELECT MfaSecret, FailedLoginAttempts, LockedUntil
             FROM Users WHERE UserID = ? AND MfaSecret IS NOT NULL");
       $stmt->execute([$userID]);
       $result = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -693,12 +693,12 @@ class Auth{
     $parser = new \WhichBrowser\Parser($userAgent);
 
     // Detalles del navegador y del dispositivo
-    $browser = $parser->browser->getName();        
-    $version = $parser->browser->getVersion();    
-    $os = $parser->os->getName();                
-    $device = $parser->device->type;            
-    $ip = $request->getAttribute('ip_address');  
-    $expiry = date('Y-m-d H:i:s', strtotime('+90 days')); 
+    $browser = $parser->browser->getName();
+    $version = $parser->browser->getVersion();
+    $os = $parser->os->getName();
+    $device = $parser->device->type;
+    $ip = $request->getAttribute('ip_address');
+    $expiry = date('Y-m-d H:i:s', strtotime('+90 days'));
 
     try {
       // Insertar los datos del navegador en la tabla UserBrowser
