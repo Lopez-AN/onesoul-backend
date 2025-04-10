@@ -130,11 +130,11 @@ class UserController
         ]
       ]);
     }
-  }  
+  }
 
   public function getReviewsByUser(Request $request, Response $response, $args){
     $id = $args['id'];
-  
+
     try {
       $reviews = $this->user->getReviewsByUser($id);
 

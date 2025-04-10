@@ -113,7 +113,7 @@ class Search
         LEFT JOIN Reviews as r ON o.OfferingID = r.OfferingID
         LEFT JOIN Reviews as ru ON u.UserID = ru.SUserID
         LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
-        LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode        
+        LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode
         WHERE (o.Title LIKE :search1 OR o.Description LIKE :search2
         OR o.ShortDescription LIKE :search3 OR o.Tags LIKE :search4)
         AND o.Status = 'Active'
@@ -166,9 +166,9 @@ class Search
         $locations = @json_decode($e['Locations'], true);
         if($locations){
           $e['Locations'] = $locations;
-        }        
+        }
 
-        $e['author'] = [
+        $e['Author'] = [
           "UserID" => $e['author_UserID'],
           "DisplayName" => $e['author_DisplayName'],
           "FirstName" => $e['author_FirstName'],

@@ -127,7 +127,7 @@ class Offering
           $e['Locations'] = $locations;
         }
 
-        $e['author'] = [
+        $e['Author'] = [
           "UserID" => $e['author_UserID'],
           "DisplayName" => $e['author_DisplayName'],
           "FirstName" => $e['author_FirstName'],
@@ -284,7 +284,7 @@ class Offering
         $offering['Locations'] = $locations;
       }
 
-      $offering['author'] = [
+      $offering['Author'] = [
         "UserID" => $offering['author_UserID'],
         "DisplayName" => $offering['author_DisplayName'],
         "FirstName" => $offering['author_FirstName'],
@@ -418,20 +418,20 @@ class Offering
 
         $faqs = @json_decode($e['Faqs'], true);
         if($faqs){
-          $e['faqs'] = $faqs;
+          $e['Faqs'] = $faqs;
         }
 
         $packages = @json_decode($e['Packages'], true);
         if($packages){
-          $e['packages'] = $packages;
+          $e['Packages'] = $packages;
         }
 
         $locations = @json_decode($e['Locations'], true);
         if($locations){
-          $e['locations'] = $locations;
+          $e['Locations'] = $locations;
         }
 
-        $e['author'] = [
+        $e['Author'] = [
           "UserID" => $e['author_UserID'],
           "DisplayName" => $e['author_DisplayName'],
           "FirstName" => $e['author_FirstName'],
@@ -535,7 +535,7 @@ class Offering
         LEFT JOIN Reviews as r ON o.OfferingID = r.OfferingID
         LEFT JOIN Reviews as ru ON u.UserID = ru.SUserID
         LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
-        LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode        
+        LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode
         WHERE o.UserID = :userId
         GROUP BY o.OfferingID
         ORDER BY o.OfferingID
@@ -582,9 +582,9 @@ class Offering
         $locations = @json_decode($e['Locations'], true);
         if($locations){
           $e['Locations'] = $locations;
-        }        
+        }
 
-        $e['author'] = [
+        $e['Author'] = [
           "UserID" => $e['author_UserID'],
           "DisplayName" => $e['author_DisplayName'],
           "FirstName" => $e['author_FirstName'],
@@ -631,19 +631,19 @@ class Offering
               FROM Reviews AS r
               INNER JOIN Users AS u ON r.SUserID = u.UserID
               WHERE r.OfferingID = :id");
-          
+
       $stmt->bindParam(':id', $id, PDO::PARAM_INT);
       $stmt->execute();
-  
+
       $reviews = $stmt->fetchAll(PDO::FETCH_ASSOC);
-      
+
       // Si no hay reviews, retornar NULL para manejarlo en el controlador
       return !empty($reviews) ? $reviews : null;
 
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
-  }  
+  }
 
   public function createOffering($data)
   {
@@ -863,15 +863,15 @@ class Offering
       }
       if ($locations !== null) {
         $this->updateOfferingLocations($id, $locations);
-      }      
+      }
 
       return $this->getOfferingById($id);
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
   }
-  
-  public function updateOfferingLocations($id, $locations) 
+
+  public function updateOfferingLocations($id, $locations)
   {
     // Si se recibe `locations`, eliminar las existentes y agregar las nuevas
     if ($locations !== null &&  is_array($locations)) {

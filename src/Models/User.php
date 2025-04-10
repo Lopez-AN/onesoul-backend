@@ -352,7 +352,7 @@ class User
   }
 
 
-  
+
   public function getUsersByType($paginator, $type)
   {
     try {
@@ -541,7 +541,7 @@ class User
       throw new DatabaseException($e->getMessage());
     }
   }
-    
+
   public function getReviewsByUser($id)
   {
     try{
