@@ -38,8 +38,8 @@ class AuthController{
     if((empty($email) && empty($username)) || empty($password) || empty($recaptchaToken)){
       return $response->withStatus(401)->withJson([
         "error" => [
-          "code" => "USER_INVALID_CREDENTIALS",
-          "desc" => "Invalid credentials"
+          "code" => "INVALID_PARAMETERS",
+          "desc" => "Parameters are missing or invalid"
         ]
       ]);
     }
@@ -646,17 +646,14 @@ class AuthController{
     try {
       #Busco por mail o username
       $result = !empty($email) ?
-        $this->auth->getUserByEmail($email) : $this->auth->getUserByUserName($username);
-      if (empty($result)) {
-        return $response->withStatus(404)->withJson([
-          "error" => [
-            "code" => "USER_NOT_FOUND",
-            "desc" => "No user was found with the specified Email/Username"
-          ]
-        ]);
+        $this->user->getUserByEmail($email) : $this->user->getUserByUserName($username);
+      if($result->http_code != 200){
+        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
+      $userID = $result->data['UserID'];
 
-      $result = $this->auth->sendOtpMail($result['UserID']);
+      // Envio el mail OTP
+      $result = $this->auth->sendOtpMail($userID, true);
       if($result->http_code !== 200){
         return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
@@ -678,7 +675,7 @@ class AuthController{
     $username = $data['UserName'] ?? '';
     $password = $data['Password'] ?? '';
     $otpCode = $data['OTPCode'] ?? '';
-    $recaptchaToken = $data['Recaptchaoken'] ?? '';
+    $recaptchaToken = $data['RecaptchaToken'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
     $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
@@ -698,16 +695,11 @@ class AuthController{
     try {
       #Busco por mail o username
       $result = !empty($email) ?
-        $this->auth->getUserByEmail($email) : $this->auth->getUserByUserName($username);
-      if (empty($result)) {
-        return $response->withStatus(404)->withJson([
-          "error" => [
-            "code" => "USER_NOT_FOUND",
-            "desc" => "No user was found with the specified Email/Username"
-          ]
-        ]);
+        $this->user->getUserByEmail($email) : $this->user->getUserByUserName($username);
+      if($result->http_code != 200){
+        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
-      $userID = $result['UserID'];
+      $userID = $result->data['UserID'];
 
       # Llamar a la validación del OTP
       $result = $this->auth->validateOTP($userID, $otpCode, false);
@@ -765,8 +757,8 @@ class AuthController{
       $secret = $g2fa -> generateSecretKey();
       $qr = $g2fa -> getQRCodeUrl("OneSoul.app", $userName,	$secret);
       return $response->withStatus($userData->http_code)->withJson([
-        "secret" => $secret,
-        "qr" => $qr,
+        "Secret" => $secret,
+        "QR" => $qr,
       ]);
     } catch (\Exception $e) {
       return $response->withStatus(500)->withJson([

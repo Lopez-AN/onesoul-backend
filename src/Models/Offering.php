@@ -127,7 +127,7 @@ class Offering
           $e['Locations'] = $locations;
         }
 
-        $e['author'] = [
+        $e['Author'] = [
           "UserID" => $e['author_UserID'],
           "DisplayName" => $e['author_DisplayName'],
           "FirstName" => $e['author_FirstName'],
@@ -284,7 +284,7 @@ class Offering
         $offering['Locations'] = $locations;
       }
 
-      $offering['author'] = [
+      $offering['Author'] = [
         "UserID" => $offering['author_UserID'],
         "DisplayName" => $offering['author_DisplayName'],
         "FirstName" => $offering['author_FirstName'],
@@ -418,20 +418,20 @@ class Offering
 
         $faqs = @json_decode($e['Faqs'], true);
         if($faqs){
-          $e['faqs'] = $faqs;
+          $e['Faqs'] = $faqs;
         }
 
         $packages = @json_decode($e['Packages'], true);
         if($packages){
-          $e['packages'] = $packages;
+          $e['Packages'] = $packages;
         }
 
         $locations = @json_decode($e['Locations'], true);
         if($locations){
-          $e['locations'] = $locations;
+          $e['Locations'] = $locations;
         }
 
-        $e['author'] = [
+        $e['Author'] = [
           "UserID" => $e['author_UserID'],
           "DisplayName" => $e['author_DisplayName'],
           "FirstName" => $e['author_FirstName'],
@@ -535,7 +535,7 @@ class Offering
         LEFT JOIN Reviews as r ON o.OfferingID = r.OfferingID
         LEFT JOIN Reviews as ru ON u.UserID = ru.SUserID
         LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
-        LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode        
+        LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode
         WHERE o.UserID = :userId
         GROUP BY o.OfferingID
         ORDER BY o.OfferingID
@@ -582,9 +582,9 @@ class Offering
         $locations = @json_decode($e['Locations'], true);
         if($locations){
           $e['Locations'] = $locations;
-        }        
+        }
 
-        $e['author'] = [
+        $e['Author'] = [
           "UserID" => $e['author_UserID'],
           "DisplayName" => $e['author_DisplayName'],
           "FirstName" => $e['author_FirstName'],
@@ -631,19 +631,19 @@ class Offering
               FROM Reviews AS r
               INNER JOIN Users AS u ON r.SUserID = u.UserID
               WHERE r.OfferingID = :id");
-          
+
       $stmt->bindParam(':id', $id, PDO::PARAM_INT);
       $stmt->execute();
-  
+
       $reviews = $stmt->fetchAll(PDO::FETCH_ASSOC);
-      
+
       // Si no hay reviews, retornar NULL para manejarlo en el controlador
       return !empty($reviews) ? $reviews : null;
 
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
-  }  
+  }
 
   public function createOffering($data)
   {
@@ -863,15 +863,15 @@ class Offering
       }
       if ($locations !== null) {
         $this->updateOfferingLocations($id, $locations);
-      }      
+      }
 
       return $this->getOfferingById($id);
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
   }
-  
-  public function updateOfferingLocations($id, $locations) 
+
+  public function updateOfferingLocations($id, $locations)
   {
     // Si se recibe `locations`, eliminar las existentes y agregar las nuevas
     if ($locations !== null &&  is_array($locations)) {
@@ -944,12 +944,12 @@ class Offering
     }
   }
 
-  public function getMediaById($id, $media_id)
+  public function getMediaById($id, $mediaID)
   {
     try {
       $stmt = $this->db->prepare("SELECT * FROM Media
-            WHERE MediaID = :media_id AND OfferingID = :id");
-      $stmt->bindParam(':media_id', $media_id, PDO::PARAM_INT);
+            WHERE MediaID = :mediaID AND OfferingID = :id");
+      $stmt->bindParam(':mediaID', $mediaID, PDO::PARAM_INT);
       $stmt->bindParam(':id', $id, PDO::PARAM_INT);
       $stmt->execute();
       return $stmt->fetch(PDO::FETCH_ASSOC);
@@ -996,7 +996,7 @@ class Offering
     }
   }
 
-  public function updateOfferingMedia($id, $title, $description, $position, $media_id, $fileURL = false, $filePath = false, $mediaType = false)
+  public function updateOfferingMedia($id, $title, $description, $position, $mediaID, $fileURL = false, $filePath = false, $mediaType = false)
   {
     try {
       // Diferente update según se adjuntó un archivo o no
@@ -1004,7 +1004,7 @@ class Offering
         // Actualización para Media con archivo
         $stmt = $this->db->prepare("UPDATE Media
                 SET Title = :title, Description = :description, URL = :fileURL, Path = :filePath, MediaType = :mediaType, Position = :position
-                WHERE MediaID = :media_id AND OfferingID = :id");
+                WHERE MediaID = :mediaID AND OfferingID = :id");
 
         $stmt->bindParam(':fileURL', $fileURL, PDO::PARAM_STR);
         $stmt->bindParam(':filePath', $filePath, PDO::PARAM_STR);
@@ -1012,14 +1012,14 @@ class Offering
       } else {
         // Actualización para Media sin archivo
         $stmt = $this->db->prepare("UPDATE Media SET Title = :title, Description = :description, Position = :position
-                WHERE MediaID = :media_id AND OfferingID = :id");
+                WHERE MediaID = :mediaID AND OfferingID = :id");
       }
 
       // Vínculo de los parámetros para Media
       $stmt->bindParam(':title', $title, PDO::PARAM_STR);
       $stmt->bindParam(':description', $description, PDO::PARAM_STR);
       $stmt->bindParam(':position', $position, PDO::PARAM_INT);
-      $stmt->bindParam(':media_id', $media_id, PDO::PARAM_INT);
+      $stmt->bindParam(':mediaID', $mediaID, PDO::PARAM_INT);
       $stmt->bindParam(':id', $id, PDO::PARAM_INT);
 
       // Ejecutar la consulta
@@ -1052,11 +1052,11 @@ class Offering
     }
   }
 
-  public function deleteOfferingMedia($media_id)
+  public function deleteOfferingMedia($mediaID)
   {
     try {
-      $stmt = $this->db->prepare("DELETE FROM Media WHERE MediaID = :media_id");
-      $stmt->bindParam(':media_id', $media_id, PDO::PARAM_INT);
+      $stmt = $this->db->prepare("DELETE FROM Media WHERE MediaID = :mediaID");
+      $stmt->bindParam(':mediaID', $mediaID, PDO::PARAM_INT);
       $stmt->execute();
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());

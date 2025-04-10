@@ -5,7 +5,6 @@ namespace App\Controllers;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use App\Models\User;
-use App\Models\Auth;
 
 require_once(ROOT . '/src/Utils/Paginator.php');
 require_once(ROOT . '/src/Utils/OptimizeImg.php');
@@ -14,12 +13,10 @@ require_once(ROOT . '/src/Utils/PerspectiveText.php');
 class UserController
 {
   protected $user;
-  protected $auth;
 
-  public function __construct(User $user, Auth $auth)
+  public function __construct(User $user)
   {
     $this->user = $user;
-    $this->auth = $auth;
   }
 
   public function getUsers(Request $request, Response $response, $args){
@@ -60,7 +57,7 @@ class UserController
   public function getUserByEmail(Request $request, Response $response, $args){
     $email = $args['email'];
     try {
-      $result = $this->auth->getUserByEmail($email);
+      $result = $this->user->getUserByEmail($email);
       if(!$result) {
         return $response->withStatus(404)->withJson((object)["error" => [
           "code" => "USER_NOT_FOUND",
@@ -81,7 +78,7 @@ class UserController
   public function getUserByUserName(Request $request, Response $response, $args){
     $username = $args['username'];
     try {
-      $result = $this->auth->getUserByUserName($username);
+      $result = $this->user->getUserByUserName($username);
       if(!$result) {
         return $response->withStatus(404)->withJson((object)["error" => [
           "code" => "USER_NOT_FOUND",
@@ -133,11 +130,11 @@ class UserController
         ]
       ]);
     }
-  }  
+  }
 
   public function getReviewsByUser(Request $request, Response $response, $args){
     $id = $args['id'];
-  
+
     try {
       $reviews = $this->user->getReviewsByUser($id);
 
@@ -257,7 +254,7 @@ class UserController
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
-            "desc" => "You do not have permission to modify this user"
+            "desc" => "You do not have permission to delete this user"
           ]
         ]);
       }

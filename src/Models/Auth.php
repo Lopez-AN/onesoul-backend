@@ -23,12 +23,12 @@ class Auth{
       if($username){
         $stmt = $this->db->prepare("SELECT u.*,m.URL FROM Users AS u
         LEFT JOIN Media as m ON u.UserID = m.UserID
-        WHERE u.UserName = ?");
+        WHERE u.UserName = ? AND u.PasswordHash IS NOT NULL");
         $stmt->execute([$username]);
       }else{
         $stmt = $this->db->prepare("SELECT u.*,m.URL FROM Users AS u
         LEFT JOIN Media as m ON u.UserID = m.UserID
-        WHERE u.Email = ?");
+        WHERE u.Email = ? AND u.PasswordHash IS NOT NULL");
         $stmt->execute([$email]);
       }
       return $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -356,7 +356,7 @@ class Auth{
   }
 
   # Envio de codigo OTP por email desde el JWT
-  public function sendOtpMail($userId){
+  public function sendOtpMail($userId,$recovery = false){
     try{
       $stmt = $this->db->prepare("SELECT u.Email, u.UserName FROM Users AS u
       WHERE u.UserID = ?");
@@ -375,7 +375,7 @@ class Auth{
       $otpCode = rand(100000, 999999); # Codigo que se enviara por mail
       $stmt = $this->db->prepare("UPDATE Users SET OTPCode = ?, OTPDate = ? WHERE UserID = ?");
       $stmt->execute([$otpCode, date("YmdHis"), $userId]);
-      $this -> _sendOtpMail($resp[0]['Email'],$resp[0]['UserName'],$otpCode);
+      $this -> _sendOtpMail($resp[0]['Email'],$resp[0]['UserName'],$otpCode,$recovery);
 
       return (object)["http_code" => 200, "data" => []];
     } catch (\PDOException $e) {
@@ -383,10 +383,12 @@ class Auth{
     }
   }
 
-  private function _sendOtpMail($rec, $username, $otpCode){
+  private function _sendOtpMail($rec, $username, $otpCode, $recovery){
     $template = file_get_contents(ROOT."/src/templates/email_otp.html");
     $template = str_replace("{CODIGO}", $otpCode, $template);
     $template = str_replace("{USERNAME}", $username, $template);
+    $template = str_replace("{T_MODE1}", $recovery ? '' : ', bienvenido a OneSoul', $template);
+    $template = str_replace("{T_MODE2}", $recovery ? 'recuperaci&oacute;n' : 'registro', $template);
 
     $smtpAccount = $GLOBALS['config']['mailer']['account'];
     $smtpPassword = $GLOBALS['config']['mailer']['password'];
@@ -409,9 +411,11 @@ class Auth{
 
       # Contenido del correo
       $mail->isHTML(true);
-      $mail->Subject = 'Complete su registro en OneSoul';
+      $mail->Subject = $recovery ? "Recupera tu cuenta de OneSoul" : "Complete su registro en OneSoul";
       $mail->Body    = $template;
-      $mail->AltBody = "Hola $username, bienvenido a OneSoul\nSu código de verificaci&oacute;n es $otpCode";
+      $mail->AltBody = $recovery ?
+        "Hola $username, bienvenido a OneSoul\nSu código de verificaci&oacute;n es $otpCode" :
+        "Hola $username\nSu código de recuperaci&oacute;n es $otpCode";
       $mail->addEmbeddedImage(ROOT."/src/templates/logo2.png", 'logo');
 
       # Enviar el correo
@@ -534,6 +538,7 @@ class Auth{
     }
   }
 
+<<<<<<< HEAD
   # Busca un usuario por username
   public function getUserByUserName($username) {
     try {
@@ -658,6 +663,8 @@ class Auth{
     }
   }
 
+=======
+>>>>>>> ded0f3138f7fa7d9118195cc5f3645865f265b22
   # Trae los datos del usuario luego de loguearse por SSO
   private function getUserByOAuthID($userId, $service){
     try{

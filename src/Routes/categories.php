@@ -16,7 +16,8 @@ return function (App $app) {
       new Tuupola\Middleware\JwtAuthentication\RequestMethodRule([
         "ignore" => ["OPTIONS", "GET"]
       ])
-    ]
+    ],
+    "attribute" => "jwt"
   ]));
 
   $pdo = require __DIR__ . './../core/database.php';

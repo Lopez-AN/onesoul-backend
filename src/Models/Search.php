@@ -168,7 +168,7 @@ class Search
           $e['Locations'] = $locations;
         }
 
-        $e['author'] = [
+        $e['Author'] = [
           "UserID" => $e['author_UserID'],
           "DisplayName" => $e['author_DisplayName'],
           "FirstName" => $e['author_FirstName'],
@@ -314,12 +314,16 @@ class Search
       $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
       $rs = array_map(function ($e) {
+<<<<<<< HEAD
+=======
+        $e['Floor'] = is_null($e['Floor']) ? null : (int)$e['Floor'];
+>>>>>>> ded0f3138f7fa7d9118195cc5f3645865f265b22
         $e['ValidatedEmail'] = (bool)$e['ValidatedEmail'];
         $e['TwoFactorAuth'] = (bool)$e['TwoFactorAuth'];
         $e['Categories'] = is_null($e['Categories']) ? [] : array_map(
           function ($a) {
             $a = explode(":", $a);
-            return ["id" => intval($a[0]), "name" => $a[1]];
+            return ["Id" => intval($a[0]), "Name" => $a[1]];
           },
           explode(",", $e['Categories'])
         );
