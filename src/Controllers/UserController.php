@@ -399,7 +399,7 @@ class UserController
     }
 
     $data = $request->getParsedBody();
-    $categories = $data['categories'] ?? [];
+    $categories = $data['Categories'] ?? [];
 
     if (!is_array($categories)) {
       return $response->withStatus(400)->withJson([

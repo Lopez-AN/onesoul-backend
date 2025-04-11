@@ -134,17 +134,6 @@ class OfferingController {
     $data['Stock'] = null;
     $data['ServiceType'] = 'Service';
 
-    // Evaluar si es necesario que solo se permitan crear offering con las categorias del usuario
-    // // Validar `CategoryID`
-    // if (!isset($data['CategoryID']) || !$this->userBelongsToCategory($userID, $data['CategoryID'])) {
-    //   return $response->withStatus(400)->withJson([
-    //     "error" => [
-    //       "code" => "WRONG_CATEGORY",
-    //       "desc" => "The user does not belong to the selected category"
-    //     ]
-    //   ]);
-    // }
-
     try {
       # Verificar si el usuario autenticado es un Guia o un administrador
       if ($jwt['data']->UserType != 'Guide' && $jwt['data']->UserType != 'Admin') {

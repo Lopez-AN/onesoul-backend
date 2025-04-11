@@ -539,8 +539,8 @@ class AuthController{
     }
 
     $data = $request->getParsedBody();
-    $otpCode = $data['otp_code'] ?? '';
-    $recaptchaToken = $data['recaptcha_token'] ?? '';
+    $otpCode = $data['OTPCode'] ?? '';
+    $recaptchaToken = $data['RecaptchaToken'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
     if(empty($otpCode) || empty($recaptchaToken)) {
@@ -798,8 +798,8 @@ class AuthController{
     }
 
     $data = $request->getParsedBody();
-    $secret = $data['secret'] ?? '';
-    $code = $data['code'] ?? '';
+    $secret = $data['Secret'] ?? '';
+    $code = $data['Code'] ?? '';
 
     if(empty($secret) && empty($code)){
       return $response->withStatus(400)->withJson([
