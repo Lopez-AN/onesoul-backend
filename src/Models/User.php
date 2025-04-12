@@ -23,7 +23,7 @@ class User
       u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
       u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
       u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType,
-      u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel,
+      u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
       u.SignedContract, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
         ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
       u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
@@ -58,10 +58,8 @@ class User
       $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
       $rs = array_map(function ($e) {
-<<<<<<< HEAD
-=======
         $e['Floor'] = is_null($e['Floor']) ? null : (int)$e['Floor'];
->>>>>>> ded0f3138f7fa7d9118195cc5f3645865f265b22
+        $e['UserLevel'] = !$e['UserLevel'] ? 1 : (int)$e['UserLevel'];
         $e['ValidatedEmail'] = (bool)$e['ValidatedEmail'];
         $e['TwoFactorAuth'] = (bool)$e['TwoFactorAuth'];
         $e['Categories'] = is_null($e['Categories']) ? [] : array_map(
@@ -101,7 +99,7 @@ class User
       u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
       u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
       u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType,
-      u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel,
+      u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
       u.SignedContract, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
         ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
       u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
@@ -142,6 +140,7 @@ class User
       }
       $user = $rs[0];
       $user['Floor'] = is_null($user['Floor']) ? null : (int)$user['Floor'];
+      $user['UserLevel'] = !$user['UserLevel'] ? 1 : (int)$user['UserLevel'];
       $user['ValidatedEmail'] = (bool)$user['ValidatedEmail'];
       $user['TwoFactorAuth'] = (bool)$user['TwoFactorAuth'];
       $user['Categories'] = is_null($user['Categories']) ? [] : array_map(
@@ -157,25 +156,6 @@ class User
         "Virtual" => $user['hasVirtual'] == 1,
         "InPerson" => $user['hasInPerson'] == 1
       ];
-
-      unset($user['hasVirtual'], $user['hasInPerson']);
-
-      $user['ValidatedEmail'] = (bool)$user['ValidatedEmail'];
-      $user['TwoFactorAuth'] = (bool)$user['TwoFactorAuth'];
-      $user['Categories'] = is_null($user['Categories']) ? [] : array_map(
-        function ($a) {
-          $a = explode(":", $a);
-          return ["id" => intval($a[0]), "name" => $a[1]];
-        },
-        explode(",", $user['Categories'])
-      );
-
-      // Agregar sessionType con valores booleanos
-      $user['SessionType'] = [
-        "Virtual" => $user['hasVirtual'] == 1,
-        "InPerson" => $user['hasInPerson'] == 1
-      ];
-
       unset($user['hasVirtual'], $user['hasInPerson']);
 
       // Verificar si la cuenta está desactivada
@@ -206,7 +186,7 @@ class User
       u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
       u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
       u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType,
-      u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel,
+      u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
       u.SignedContract, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
         ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
       u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
@@ -229,56 +209,57 @@ class User
         GROUP BY o.UserID
       ) as sub ON sub.UserID = u.UserID
       WHERE u.UserName = :username
-      GROUP BY u.UserID");
+      GROUP BY u.UserID
+      ORDER BY u.UserID");
 
-      $stmt->bindParam(':username', $username, PDO::PARAM_STR);
-      $stmt->execute();
-      $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $stmt->bindParam(':username', $username, PDO::PARAM_STR);
+    $stmt->execute();
+    $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-      if (empty($rs)) {
-        return (object) [
-          "http_code" => 404,
-          "error" => [
-            "code" => "USER_NOT_FOUND",
-            "desc" => "No user was found with the specified ID"
-          ]
-        ];
-      }
-      $user = $rs[0];
-      $user['Floor'] = is_null($user['Floor']) ? null : (int)$user['Floor'];
-      $user['ValidatedEmail'] = (bool)$user['ValidatedEmail'];
-      $user['TwoFactorAuth'] = (bool)$user['TwoFactorAuth'];
-      $user['Categories'] = is_null($user['Categories']) ? [] : array_map(
-        function ($a) {
-          $a = explode(":", $a);
-          return ["Id" => intval($a[0]), "Name" => $a[1]];
-        },
-        explode(",", $user['Categories'])
-      );
-
-      // Agregar sessionType con valores booleanos
-      $user['SessionType'] = [
-        "Virtual" => $user['hasVirtual'] == 1,
-        "InPerson" => $user['hasInPerson'] == 1
-      ];
-
-      unset($user['hasVirtual'], $user['hasInPerson']);
-
-      // Verificar si la cuenta está desactivada
-      if (!is_null($user['DeactivationDate']) && strtotime($user['DeactivationDate']) <= time()) {
-        return (object) [
-          "http_code" => 401,
-          "error" => [
-            "code" => "USER_DISABLED",
-            "desc" => "The specified user is disabled"
-          ]
-        ];
-      }
-
+    if (empty($rs)) {
       return (object) [
-        "http_code" => 200,
-        "data" => $user
+        "http_code" => 404,
+        "error" => [
+          "code" => "USER_NOT_FOUND",
+          "desc" => "No user was found with the specified ID"
+        ]
       ];
+    }
+    $user = $rs[0];
+    $user['Floor'] = is_null($user['Floor']) ? null : (int)$user['Floor'];
+    $user['UserLevel'] = !$user['UserLevel'] ? 1 : (int)$user['UserLevel'];
+    $user['ValidatedEmail'] = (bool)$user['ValidatedEmail'];
+    $user['TwoFactorAuth'] = (bool)$user['TwoFactorAuth'];
+    $user['Categories'] = is_null($user['Categories']) ? [] : array_map(
+      function ($a) {
+        $a = explode(":", $a);
+        return ["Id" => intval($a[0]), "Name" => $a[1]];
+      },
+      explode(",", $user['Categories'])
+    );
+
+    // Agregar sessionType con valores booleanos
+    $user['SessionType'] = [
+      "Virtual" => $user['hasVirtual'] == 1,
+      "InPerson" => $user['hasInPerson'] == 1
+    ];
+    unset($user['hasVirtual'], $user['hasInPerson']);
+
+    // Verificar si la cuenta está desactivada
+    if (!is_null($user['DeactivationDate']) && strtotime($user['DeactivationDate']) <= time()) {
+      return (object) [
+        "http_code" => 401,
+        "error" => [
+          "code" => "USER_DISABLED",
+          "desc" => "The specified user is disabled"
+        ]
+      ];
+    }
+
+    return (object) [
+      "http_code" => 200,
+      "data" => $user
+    ];
 
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
@@ -292,7 +273,7 @@ class User
       u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
       u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
       u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType,
-      u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel,
+      u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
       u.SignedContract, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
         ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
       u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
@@ -315,7 +296,8 @@ class User
         GROUP BY o.UserID
       ) as sub ON sub.UserID = u.UserID
       WHERE u.Email = :email
-      GROUP BY u.UserID");
+      GROUP BY u.UserID
+      ORDER BY u.UserID");
 
       $stmt->bindParam(':email', $email, PDO::PARAM_STR);
       $stmt->execute();
@@ -330,9 +312,9 @@ class User
           ]
         ];
       }
-
       $user = $rs[0];
       $user['Floor'] = is_null($user['Floor']) ? null : (int)$user['Floor'];
+      $user['UserLevel'] = !$user['UserLevel'] ? 1 : (int)$user['UserLevel'];
       $user['ValidatedEmail'] = (bool)$user['ValidatedEmail'];
       $user['TwoFactorAuth'] = (bool)$user['TwoFactorAuth'];
       $user['Categories'] = is_null($user['Categories']) ? [] : array_map(
@@ -348,7 +330,6 @@ class User
         "Virtual" => $user['hasVirtual'] == 1,
         "InPerson" => $user['hasInPerson'] == 1
       ];
-
       unset($user['hasVirtual'], $user['hasInPerson']);
 
       // Verificar si la cuenta está desactivada
@@ -372,17 +353,103 @@ class User
     }
   }
 
+  # Busca un usuario por oAuthID
+  public function getUserByOAuthID($oAuthID, $oAuthService){
+    try {
+      $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
+      u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
+      u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
+      u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType,
+      u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
+      u.SignedContract, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
+        ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
+      u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
+      -- Subconsulta para reviews
+      (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
+        FROM Reviews as r WHERE r.SUserID = u.UserID) AS Rating,
+      (SELECT COUNT(DISTINCT r.ReviewID)
+        FROM Reviews as r WHERE r.SUserID = u.UserID) AS TotalReviews
+      FROM Users as u
+      LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
+      LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
+      LEFT JOIN Media as m ON u.UserID = m.UserID
+      LEFT JOIN (
+        SELECT ROUND(AVG(p.Price),0) as AvgRate, o.UserID,
+        MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
+        MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
+        FROM Offerings as o
+        INNER JOIN OfferingsPackages as p ON o.OfferingID = p.OfferingID
+        WHERE o.Status = 'Active'
+        GROUP BY o.UserID
+      ) as sub ON sub.UserID = u.UserID
+      WHERE u.Oauth2ID = :oAuthID AND u.Oauth2Service = :oAuthService
+      GROUP BY u.UserID
+      ORDER BY u.UserID");
 
+      $stmt->bindParam(':oAuthID', $oAuthID, PDO::PARAM_STR);
+      $stmt->bindParam(':oAuthService', $oAuthService, PDO::PARAM_STR);
+      $stmt->execute();
+      $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-  public function getUsersByType($paginator, $type)
+      if (empty($rs)) {
+        return (object) [
+          "http_code" => 404,
+          "error" => [
+            "code" => "USER_NOT_FOUND",
+            "desc" => "No user was found with the specified ID"
+          ]
+        ];
+      }
+      $user = $rs[0];
+      $user['Floor'] = is_null($user['Floor']) ? null : (int)$user['Floor'];
+      $user['UserLevel'] = !$user['UserLevel'] ? 1 : (int)$user['UserLevel'];
+      $user['ValidatedEmail'] = (bool)$user['ValidatedEmail'];
+      $user['TwoFactorAuth'] = (bool)$user['TwoFactorAuth'];
+      $user['Categories'] = is_null($user['Categories']) ? [] : array_map(
+        function ($a) {
+          $a = explode(":", $a);
+          return ["Id" => intval($a[0]), "Name" => $a[1]];
+        },
+        explode(",", $user['Categories'])
+      );
+
+      // Agregar sessionType con valores booleanos
+      $user['SessionType'] = [
+        "Virtual" => $user['hasVirtual'] == 1,
+        "InPerson" => $user['hasInPerson'] == 1
+      ];
+      unset($user['hasVirtual'], $user['hasInPerson']);
+
+      // Verificar si la cuenta está desactivada
+      if (!is_null($user['DeactivationDate']) && strtotime($user['DeactivationDate']) <= time()) {
+        return (object) [
+          "http_code" => 401,
+          "error" => [
+            "code" => "USER_DISABLED",
+            "desc" => "The specified user is disabled"
+          ]
+        ];
+      }
+
+      return (object) [
+        "http_code" => 200,
+        "data" => $user
+      ];
+
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  public function getUsersByType($paginator, $userType)
   {
     try {
-      if ($type == 'Guide') {
+      if ($userType == 'Guide') {
         $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName,
         u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
         u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
         u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType,
-        u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel,
+        u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
         u.SignedContract, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
           ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
         u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
@@ -411,7 +478,7 @@ class User
         u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
         u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
         u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType,
-        u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel,
+        u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
         u.SignedContract, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
           ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
         u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
@@ -433,11 +500,11 @@ class User
           WHERE o.Status = 'Active'
           GROUP BY o.UserID
         ) as sub ON sub.UserID = u.UserID
-        WHERE u.UserType = :type
+        WHERE u.UserType = :userType
         GROUP BY u.UserID
         ORDER BY u.UserID
         LIMIT :_limit OFFSET :_offset");
-        $stmt->bindParam(':type', $type, PDO::PARAM_STR);
+        $stmt->bindParam(':userType', $userType, PDO::PARAM_STR);
       }
 
       $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
@@ -449,10 +516,8 @@ class User
       $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
       $rs = array_map(function ($e) {
-<<<<<<< HEAD
-=======
         $e['Floor'] = is_null($e['Floor']) ? null : (int)$e['Floor'];
->>>>>>> ded0f3138f7fa7d9118195cc5f3645865f265b22
+        $e['UserLevel'] = !$e['UserLevel'] ? 1 : (int)$e['UserLevel'];
         $e['ValidatedEmail'] = (bool)$e['ValidatedEmail'];
         $e['TwoFactorAuth'] = (bool)$e['TwoFactorAuth'];
         $e['Categories'] = is_null($e['Categories']) ? [] : array_map(
@@ -485,14 +550,14 @@ class User
     }
   }
 
-  public function getUserByCategory($id)
+  public function getUserByCategory($categoryID)
   {
     try {
       $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
       u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
       u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
       u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType,
-      u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel,
+      u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
       u.SignedContract, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
         ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
       u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
@@ -515,20 +580,18 @@ class User
         WHERE o.Status = 'Active'
         GROUP BY o.UserID
       ) as sub ON sub.UserID = u.UserID
-      WHERE uc.CategoryID = :id AND u.DeactivationDate is null
+      WHERE uc.CategoryID = :categoryID AND u.DeactivationDate is null
       GROUP BY u.UserID
       ORDER BY u.UserID");
 
-      $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+      $stmt->bindParam(':categoryID', $categoryID, PDO::PARAM_INT);
       $stmt->execute();
 
       $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
       $rs = array_map(function ($e) {
-<<<<<<< HEAD
-=======
         $e['Floor'] = is_null($e['Floor']) ? null : (int)$e['Floor'];
->>>>>>> ded0f3138f7fa7d9118195cc5f3645865f265b22
+        $e['UserLevel'] = !$e['UserLevel'] ? 1 : (int)$e['UserLevel'];
         $e['ValidatedEmail'] = (bool)$e['ValidatedEmail'];
         $e['TwoFactorAuth'] = (bool)$e['TwoFactorAuth'];
         $e['Categories'] = is_null($e['Categories']) ? [] : array_map(
@@ -569,16 +632,19 @@ class User
     }
   }
 
-  public function getReviewsByUser($id)
+  public function getReviewsByUser($userID)
   {
     try{
-      $stmt = $this->db->prepare("SELECT r.ReviewID, o.OfferingID, o.Title AS OfferingTitle, r.Rating, r.ReviewText,
-      IF(u.DisplayName IS NULL, CONCAT(u.FirstName,' ',u.Lastname), u.DisplayName) AS Reviewer
+      $stmt = $this->db->prepare("SELECT r.ReviewID, o.OfferingID,
+      o.Title AS OfferingTitle, r.Rating, r.ReviewText,
+      IF(u.DisplayName IS NULL, CONCAT(u.FirstName,' ',u.Lastname), u.DisplayName) AS Reviewer,
+      m.URL as ReviewerProfilePhoto
       FROM Reviews AS r
       INNER JOIN Users AS u ON r.SUserID = u.UserID
       INNER JOIN Offerings AS o ON r.OfferingID = o.OfferingID
-      WHERE r.GUserID = :id");
-      $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+      LEFT JOIN Media AS m ON r.SUserID = m.UserID
+      WHERE r.GUserID = :userID");
+      $stmt->bindParam(':userID', $userID, PDO::PARAM_INT);
       $stmt->execute();
 
       $reviews = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -704,7 +770,7 @@ class User
       return (object) [
         "http_code" => 200,
         "data" => [
-          "message" => "User deleted"
+          "Message" => "User deleted"
         ]
       ];
     } catch (\PDOException $e) {
@@ -748,16 +814,18 @@ class User
       $fileWritten = true;
 
       // Validar con Amazon Rekognition
-      $rekognitionResult = analyzeImageWithRekognition($filePath);
-      if ($rekognitionResult['error']) {
-        unlink($filePath); // Borrar la imagen si es inapropiada
-        return (object) [
-          "http_code" => 400,
-          "error" => [
-            "code" => "INAPPROPRIATE_CONTENT",
-            "desc" => $rekognitionResult['reason']
-          ]
-        ];
+      if(empty($GLOBALS['config']['debug_mode']) || !$GLOBALS['config']['debug_mode']){
+        $rekognitionResult = analyzeImageWithRekognition($filePath);
+        if ($rekognitionResult['error']) {
+          unlink($filePath); // Borrar la imagen si es inapropiada
+          return (object) [
+            "http_code" => 400,
+            "error" => [
+              "code" => "INAPPROPRIATE_CONTENT",
+              "desc" => $rekognitionResult['reason']
+            ]
+          ];
+        }
       }
 
       // Aquí optimizamos la imagen usando la función optimizeImage
@@ -840,7 +908,7 @@ class User
       return (object) [
         "http_code" => 200,
         "data" => [
-          "message" => "Profile photo deleted"
+          "Message" => "Profile photo deleted"
         ]
       ];
     } catch (\PDOException $e) {

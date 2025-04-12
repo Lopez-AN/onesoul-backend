@@ -76,7 +76,7 @@ class SubscriptionController {
       }
 
       return $response->withStatus(200)->withJson($subscription);
-    
+
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -101,7 +101,7 @@ class SubscriptionController {
       ]);
     }
 
-    try {      
+    try {
       # Verificar si el usuario autenticado es un administrador
       if ($jwt['data']->UserType != 'Admin') {
         return $response->withStatus(401)->withJson([
@@ -206,7 +206,7 @@ class SubscriptionController {
       }
 
       $result = $this->subscription->updateFeatureStatus($featureCode, $data['IsActive']);
-    
+
       return $response->withJson([
         'success' => true,
         'message' => $result
@@ -220,4 +220,4 @@ class SubscriptionController {
       ]);
     }
   }
-}  
+}

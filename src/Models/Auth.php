@@ -37,7 +37,7 @@ class Auth{
     }
   }
 
-  public function loginGoogle($token){
+  public function loginGoogle($userModel, $token){
     $response = $this -> validateToken("https://oauth2.googleapis.com/tokeninfo?id_token=$token");
     if($response === false){
       return (object)["http_code" => 401,
@@ -49,7 +49,7 @@ class Auth{
     }
 
     $userId = $response -> sub;
-    $user_data = $this -> getUserByOAuthID($userId, "google");
+    $user_data = $userModel -> getUserByOAuthID($userId, "google");
     if(empty($user_data)){
       return (object)["http_code" => 404,
         "error" => [
@@ -64,10 +64,10 @@ class Auth{
         ]
       ];
     }
-    return (object)["http_code" => 200, "data" => $user_data];
+    return $user_data;
   }
 
-  public function loginFacebook($userId, $token){
+  public function loginFacebook($userModel, $userId, $token){
     $response = $this -> validateToken("https://graph.facebook.com/$userId?fields=id,first_name,last_name,email,picture.width(640)&access_token=$token");
     if($response === false){
       return (object)["http_code" => 401,
@@ -78,7 +78,7 @@ class Auth{
       ];
     }
 
-    $user_data = $this -> getUserByOAuthID($userId, "facebook");
+    $user_data = $userModel -> getUserByOAuthID($userId, "facebook");
     if(empty($user_data)){
       return (object)["http_code" => 404,
         "error" => [
@@ -93,13 +93,13 @@ class Auth{
         ]
       ];
     }
-    return (object)["http_code" => 200, "data" => $user_data];
+    return $user_data;
   }
 
   /*
   * Registro usuario
   */
-  public function register($email, $username, $newPassword){
+  public function register($userModel, $email, $username, $newPassword){
     # Validación de fortaleza de contraseña
     if(!$this->passwordComplexity($newPassword)) {
       return (object)[
@@ -111,7 +111,7 @@ class Auth{
       ];
     }
 
-    if(!empty($this -> getUserByEmail($email))){
+    if($userModel->getUserByEmail($email)->http_code == 200){
       return (object)["http_code" => 409,
         "error" => [
           "code" => "DUPLICATED_EMAIL",
@@ -120,7 +120,7 @@ class Auth{
       ];
     }
 
-    if(!empty($this -> getUserByUserName($username))){
+    if($userModel->getUserByUserName($username)->http_code == 200){
       return (object)["http_code" => 409,
         "error" => [
           "code" => "DUPLICATED_USERNAME",
@@ -139,8 +139,7 @@ class Auth{
       "OTPCode" => $otpCode
     ]);
 
-    $user_data = $this -> getUserByUserName($username);
-    return (object)["http_code" => 200, "data" => $user_data];
+    return $userModel -> getUserByUserName($username);
   }
 
   private function passwordComplexity($newPassword): bool {
@@ -152,7 +151,7 @@ class Auth{
         (preg_match('/[0-9]/', $password) || preg_match('/\W/', $password));  // Debe tener un número O un símbolo
     }
 
-  public function registerGoogle($token, $username){
+  public function registerGoogle($userModel, $token, $username){
     $response = $this -> validateToken("https://oauth2.googleapis.com/tokeninfo?id_token=$token");
     if($response === false){
       return (object)["http_code" => 401,
@@ -164,9 +163,9 @@ class Auth{
     }
 
     $userId = $response -> sub;
-    $user_data = $this -> getUserByOAuthID($userId, "google");
-    if(!empty($user_data)){ # Si el usuario existe lo devuelvo para genera el token
-      return (object)["http_code" => 200, "data" => $user_data];
+    $user_data = $userModel -> getUserByOAuthID($userId, "google");
+    if($user_data->http_code == 200){ # Si el usuario existe lo devuelvo para generar el token
+      return $user_data;
     }
 
     # Fix por posibles campos nulos
@@ -176,7 +175,7 @@ class Auth{
     $picture = !empty($response -> picture) ? $response -> picture : null;
 
     # Verifico si hay otro usuario con ese email
-    if(!empty($email) && !empty($this -> getUserByEmail($email))){
+    if(!empty($email) && $userModel->getUserByEmail($email)->http_code == 200){
       return (object)["http_code" => 409,
         "error" => [
           "code" => "DUPLICATED_EMAIL",
@@ -184,8 +183,8 @@ class Auth{
         ]
       ];
     }
-   # Verifico si hay otro usuario con ese username
-    if(!empty($this -> getUserByUserName($username))){
+    # Verifico si hay otro usuario con ese username
+    if(!empty($username) && $userModel->getUserByUserName($username)->http_code == 200){
       return (object)["http_code" => 409,
         "error" => [
           "code" => "DUPLICATED_USERNAME",
@@ -204,11 +203,10 @@ class Auth{
       "Oauth2Service" => "google"
     ]);
 
-    $user_data = $this -> getUserByOAuthID($userId, "google");
-    return (object)["http_code" => 200, "data" => $user_data];
+    return $userModel -> getUserByOAuthID($userId, "google");
   }
 
-  public function registerFacebook($userId, $token, $username){
+  public function registerFacebook($userModel, $userId, $token, $username){
     $response = $this -> validateToken("https://graph.facebook.com/$userId?fields=id,first_name,last_name,email,picture.width(640)&access_token=$token");
     if($response === false){
       return (object)["http_code" => 401,
@@ -219,9 +217,9 @@ class Auth{
       ];
     }
 
-    $user_data = $this -> getUserByOAuthID($userId, "facebook");
-    if(!empty($user_data)){ # Si el usuario existe lo devuelvo para genera el token
-      return (object)["http_code" => 200, "data" => $user_data];
+    $user_data = $userModel -> getUserByOAuthID($userId, "facebook");
+    if($user_data->http_code == 200){ # Si el usuario existe lo devuelvo para generar el token
+      return $user_data;
     }
 
     # Fix por posibles campos nulos
@@ -231,7 +229,7 @@ class Auth{
     $picture = !empty($response -> picture -> data -> url) ? $response -> picture -> data -> url : null;
 
     # Verifico si hay otro usuario con ese email
-    if(!empty($email) && !empty($this -> getUserByEmail($email))){
+    if(!empty($email) && $userModel->getUserByEmail($email)->http_code == 200){
       return (object)["http_code" => 409,
         "error" => [
           "code" => "DUPLICATED_EMAIL",
@@ -240,7 +238,7 @@ class Auth{
       ];
     }
    # Verifico si hay otro usuario con ese username
-    if(!empty($username) && !empty($this -> getUserByUserName($username))){
+   if(!empty($username) && $userModel->getUserByUserName($username)->http_code == 200){
       return (object)["http_code" => 409,
         "error" => [
           "code" => "DUPLICATED_USERNAME",
@@ -259,8 +257,7 @@ class Auth{
       "Oauth2Service" => "facebook"
     ]);
 
-    $user_data = $this -> getUserByOAuthID($userId, "facebook");
-    return (object)["http_code" => 200, "data" => $user_data];
+    return $userModel -> getUserByOAuthID($userId, "facebook");
   }
 
   /* Validacion OTP, el parametro resetOTP se envia en false para el metodo de resetear
@@ -503,8 +500,8 @@ class Auth{
       $stmt = $this->db->prepare("INSERT INTO Users (Email, UserName, PasswordHash,
       OTPCode, OTPDate, RegistrationDate, ValidatedEmail)
       VALUES (?,?,?,?,?,?,0)");
-      $stmt->execute([$userData -> email, $userData -> username, $userData -> password_hash,
-        $userData -> otpCode, date('YmdHis'), date('YmdHis')]);
+      $stmt->execute([$userData -> Email, $userData -> UserName, $userData -> PasswordHash,
+        $userData -> OTPCode, date('YmdHis'), date('YmdHis')]);
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
@@ -517,168 +514,33 @@ class Auth{
       $stmt = $this->db->prepare("INSERT INTO Users (FirstName, LastName, Email,
       UserName, Oauth2ID, Oauth2Service, RegistrationDate)
       VALUES (?,?,?,?,?,?,?)");
-      $stmt->execute([$userData -> first_name, $userData -> last_name, $userData -> email,
-      $userData -> user_name, $userData -> oauth2_id, $userData -> oauth2_service, date('YmdHis')]);
+      $stmt->execute([$userData -> FirstName, $userData -> LastName, $userData -> Email,
+      $userData -> UserName, $userData -> Oauth2ID, $userData -> Oauth2Service, date('YmdHis')]);
 
       # Obtengo el ID del usuario creado
       $userId = $this->db->lastInsertId();
 
-      if(!is_null($userData -> email)){
+      if(!is_null($userData -> Email)){
         $stmt = $this->db->prepare("UPDATE Users SET ValidatedEmail = 1 WHERE UserID = ?");
         $stmt->execute([$userId]);
       }
 
-      if(!is_null($userData -> picture)){
+      if(!is_null($userData -> Picture)){
         # Inserto la foto de perfil en la tabla media
         $stmt = $this->db->prepare("INSERT INTO Media (UserID, `URL`) VALUES (?,?)");
-        $stmt->execute([$userId, $userData -> picture]);
+        $stmt->execute([$userId, $userData -> Picture]);
       }
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
-  }
-
-<<<<<<< HEAD
-  # Busca un usuario por username
-  public function getUserByUserName($username) {
-    try {
-      $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
-      u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
-      u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
-      u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType,
-      u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel,
-      u.SignedContract, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
-        ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
-      u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
-      -- Subconsulta para reviews
-      (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-        FROM Reviews as r WHERE r.SUserID = u.UserID) AS Rating,
-      (SELECT COUNT(DISTINCT r.ReviewID)
-        FROM Reviews as r WHERE r.SUserID = u.UserID) AS TotalReviews
-      FROM Users as u
-      LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
-      LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
-      LEFT JOIN Media as m ON u.UserID = m.UserID
-      LEFT JOIN (
-        SELECT ROUND(AVG(p.Price),0) as AvgRate, o.UserID,
-        MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
-        MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
-        FROM Offerings as o
-        INNER JOIN OfferingsPackages as p ON o.OfferingID = p.OfferingID
-        WHERE o.Status = 'Active'
-        GROUP BY o.UserID
-      ) as sub ON sub.UserID = u.UserID
-      WHERE u.UserName = ?
-      GROUP BY u.UserID");
-
-      $stmt->execute([$username]);
-      $rs = $stmt->fetch(PDO::FETCH_ASSOC);
-
-      if (!$rs) return null; // Si no encuentra el usuario, retorna null
-
-      $rs['ValidatedEmail'] = (bool)$rs['ValidatedEmail'];
-      $rs['TwoFactorAuth'] = (bool)$rs['TwoFactorAuth'];
-      $rs['Categories'] = is_null($rs['Categories']) ? [] : array_map(
-        function ($a) {
-          $a = explode(":", $a);
-          return ["id" => intval($a[0]), "name" => $a[1]];
-        },
-        explode(",", $rs['Categories'])
-      );
-
-      // Agregar sessionType con valores booleanos
-      $rs['SessionType'] = [
-        "Virtual" => $rs['hasVirtual'] == 1,
-        "InPerson" => $rs['hasInPerson'] == 1
-      ];
-
-      unset($rs['hasVirtual'], $rs['hasInPerson']);
-
-      return $rs;
-
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
-  }
-
-  # Busca un usuario por email
-  public function getUserByEmail($email){
-    try {
-      $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
-      u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
-      u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
-      u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType,
-      u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel,
-      u.SignedContract, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
-        ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
-      u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
-      -- Subconsulta para reviews
-      (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-        FROM Reviews as r WHERE r.SUserID = u.UserID) AS Rating,
-      (SELECT COUNT(DISTINCT r.ReviewID)
-        FROM Reviews as r WHERE r.SUserID = u.UserID) AS TotalReviews
-      FROM Users as u
-      LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
-      LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
-      LEFT JOIN Media as m ON u.UserID = m.UserID
-      LEFT JOIN (
-        SELECT ROUND(AVG(p.Price),0) as AvgRate, o.UserID,
-        MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
-        MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
-        FROM Offerings as o
-        INNER JOIN OfferingsPackages as p ON o.OfferingID = p.OfferingID
-        WHERE o.Status = 'Active'
-        GROUP BY o.UserID
-      ) as sub ON sub.UserID = u.UserID
-      WHERE u.Email = ?
-      GROUP BY u.UserID");
-
-      $stmt->execute([$email]);
-      $rs = $stmt->fetch(PDO::FETCH_ASSOC);
-
-      if (!$rs) return null; // Si no encuentra el usuario, retorna null
-
-      $rs['ValidatedEmail'] = (bool)$rs['ValidatedEmail'];
-      $rs['TwoFactorAuth'] = (bool)$rs['TwoFactorAuth'];
-      $rs['Categories'] = is_null($rs['Categories']) ? [] : array_map(
-        function ($a) {
-          $a = explode(":", $a);
-          return ["id" => intval($a[0]), "name" => $a[1]];
-        },
-        explode(",", $rs['Categories'])
-      );
-
-      // Agregar sessionType con valores booleanos
-      $rs['SessionType'] = [
-        "Virtual" => $rs['hasVirtual'] == 1,
-        "InPerson" => $rs['hasInPerson'] == 1
-      ];
-
-      unset($rs['hasVirtual'], $rs['hasInPerson']);
-
-      return $rs;
-
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
-  }
-
-=======
->>>>>>> ded0f3138f7fa7d9118195cc5f3645865f265b22
-  # Trae los datos del usuario luego de loguearse por SSO
-  private function getUserByOAuthID($userId, $service){
-    try{
-      $stmt = $this->db->prepare("SELECT u.*,m.URL FROM Users AS u
-      LEFT JOIN Media as m ON u.UserID = m.UserID
-      WHERE u.Oauth2ID = ? AND u.Oauth2Service = ?");
-      $stmt->execute([$userId, $service]);
-      return $stmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
   }
 
   public function validateReCaptcha($recaptchaToken, $clientIp) {
+    # Si esta el modo debug no se valida esto
+    if(!empty($GLOBALS['config']['debug_mode']) && $GLOBALS['config']['debug_mode']){
+      return (object)["http_code" => 200, "data" => []];
+    }
+
     $secret = $GLOBALS['config']['recaptcha']['secret'];
     $minScore = $GLOBALS['config']['recaptcha']['min_score'];
     $url = "https://www.google.com/recaptcha/api/siteverify?secret=$secret&response=$recaptchaToken&remoteip=$clientIp";
@@ -727,7 +589,7 @@ class Auth{
     try {
       // Verificar si el usuario está bloqueado
       $stmt = $this->db->prepare("SELECT MfaSecret, FailedLoginAttempts, LockedUntil
-            FROM Users WHERE UserID = ? AND MfaSecret IS NOT NULL");
+        FROM Users WHERE UserID = ? AND MfaSecret IS NOT NULL");
       $stmt->execute([$userID]);
       $result = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -784,8 +646,7 @@ class Auth{
       $this->updateFailedLogin($userID, 0, null);
 
       return (object) [
-        "http_code" => 200,
-        "message" => "MFA Verified"
+        "http_code" => 200
       ];
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());

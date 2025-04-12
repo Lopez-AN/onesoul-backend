@@ -170,12 +170,11 @@ class AuthController{
 
     try {
       // Validar el token de Google
-      $result = $this->auth->loginGoogle($token);
+      $result = $this->auth->loginGoogle($this -> user, $token);
       if ($result->http_code !== 200) {
         return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
-
-      $user = $result->data[0];
+      $user = $result->data;
 
       // Verificar si el usuario está bloqueado
       if (!is_null($user['LockedUntil']) && strtotime($user['LockedUntil']) > time()) {
@@ -229,13 +228,10 @@ class AuthController{
         $this->auth->storeBrowserData($user['UserID'], $request, $newMfaId);
       }
 
-      // Obtener datos completos del usuario
-      $userData = $this->user->getUserById($user['UserID']);
-
       return $response->withStatus(200)->withJson([
         'Token' => $jwt,
         'MfaID' => $newMfaId,
-        'UserData' => $userData->data
+        'UserData' => $user
       ]);
 
     } catch (\Exception $e) {
@@ -274,12 +270,11 @@ class AuthController{
     }
 
     try {
-      $result = $this->auth->loginFacebook($user_id, $token);
+      $result = $this->auth->loginFacebook($this -> user, $user_id, $token);
       if ($result->http_code !== 200) {
         return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
-
-      $user = $result->data[0];
+      $user = $result->data;
 
       // Verificar si el usuario está bloqueado
       if (!is_null($user['LockedUntil']) && strtotime($user['LockedUntil']) > time()) {
@@ -379,14 +374,13 @@ class AuthController{
     }
 
     try {
-      $result = $this->auth->register($email, $username, $password);
+      $result = $this->auth->register($this->user, $email, $username, $password);
       switch($result->http_code) {
         case 200: # Logueo correcto o usuario existente
           $jwt = $this -> JWTgen($result -> data);
-          $userData = $this->user->getUserById($result -> data['UserID']);
           return $response->withStatus(200)->withJson([
             'Token' => $jwt,
-            'UserData' => $userData -> data
+            'UserData' => $result -> data
           ]);
         default: #errores
           return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
@@ -423,14 +417,13 @@ class AuthController{
     }
 
     try {
-      $result = $this->auth->registerGoogle($token, $username);
+      $result = $this->auth->registerGoogle($this->user, $token, $username);
       switch($result->http_code) {
         case 200: # Logueo correcto o usuario existente
-          $jwt = $this -> JWTgen($result -> data[0]);
-          $userData = $this->user->getUserById($result -> data[0]['UserID']);
+          $jwt = $this -> JWTgen($result -> data);
           return $response->withStatus(200)->withJson([
             "Token" => $jwt,
-            "UserData" => $userData -> data
+            "UserData" => $result -> data
           ]);
         default: # Otros, ejemplo Token inválido
           return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
@@ -468,14 +461,14 @@ class AuthController{
     }
 
     try{
-      $result = $this->auth->registerFacebook($user_id, $token, $username);
+      $result = $this->auth->registerFacebook($this->user, $user_id, $token, $username);
       switch($result->http_code) {
         case 200: # Logueo correcto o usuario existente
-          $jwt = $this -> JWTgen($result -> data[0]);
-          $userData = $this->user->getUserById($result -> data[0]['UserID']);
+          $jwt = $this -> JWTgen($result -> data);
+          $userData = $this->user->getUserById($result -> data['UserID']);
           return $response->withStatus(200)->withJson([
             'Token' => $jwt,
-            'UserData' => $userData -> data
+            'UserData' => $result -> data
           ]);
         default: # errores
           return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
@@ -515,7 +508,7 @@ class AuthController{
       if($result->http_code !== 200){
         return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
-      return $response->withStatus(200)->withJson(["message" => "OTP code sent successfully"]);
+      return $response->withStatus(200)->withJson(["Message" => "OTP code sent successfully"]);
     } catch (\Exception $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -567,7 +560,7 @@ class AuthController{
 
       # OTP válido
       return $response->withStatus(200)->withJson([
-        "message" => "OTP code validated successfully"
+        "Message" => "OTP code validated successfully"
       ]);
     } catch (\Exception $e) {
       return $response->withStatus(500)->withJson([
@@ -657,7 +650,9 @@ class AuthController{
       if($result->http_code !== 200){
         return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
-      return $response->withStatus(200)->withJson(["message" => "OTP code sent successfully"]);
+      return $response->withStatus(200)->withJson([
+        "Message" => "OTP code sent successfully"
+      ]);
     } catch (\Exception $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -711,7 +706,9 @@ class AuthController{
       if($result->http_code !== 200){
         return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
-      return $response->withStatus(200)->withJson(["message" => "Password was reset successfully"]);
+      return $response->withStatus(200)->withJson([
+        "Message" => "Password was reset successfully"
+      ]);
     } catch (\Exception $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -823,7 +820,9 @@ class AuthController{
       }
 
       $this->auth->mfaSet($userID,$secret);
-      return $response->withStatus(200)->withJson(["message" => "MFA is set"]);
+      return $response->withStatus(200)->withJson([
+        "Message" => "MFA is set"
+      ]);
     } catch (\Exception $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -867,7 +866,9 @@ class AuthController{
 
     try{
       $this->auth->mfaDel($userID);
-      return $response->withStatus(200)->withJson(["message" => "MFA unset"]);
+      return $response->withStatus(200)->withJson([
+        "Message" => "MFA unset"
+      ]);
     } catch (\Exception $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -906,7 +907,9 @@ class AuthController{
       if($result -> http_code != 200){
         return $response->withStatus($result -> http_code)->withJson(["error" => $result->error]);
       }
-      return $response->withStatus(200)->withJson($result->message);
+      return $response->withStatus(200)->withJson([
+        "Message" => "MFA Verified"
+      ]);
     } catch (\Exception $e) {
       return $response->withStatus(500)->withJson([
         "error" => [

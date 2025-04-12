@@ -58,13 +58,10 @@ class UserController
     $email = $args['email'];
     try {
       $result = $this->user->getUserByEmail($email);
-      if(!$result) {
-        return $response->withStatus(404)->withJson((object)["error" => [
-          "code" => "USER_NOT_FOUND",
-          "desc" => "No user associated with the specified email"
-        ]]);
+      if($result->http_code != 200){
+        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
-      return $response->withStatus(200)->withJson($result);
+      return $response->withStatus(200)->withJson($result ->data);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -79,13 +76,13 @@ class UserController
     $username = $args['username'];
     try {
       $result = $this->user->getUserByUserName($username);
-      if(!$result) {
+      if($result->http_code != 200){
         return $response->withStatus(404)->withJson((object)["error" => [
           "code" => "USER_NOT_FOUND",
           "desc" => "No user associated with the specified username"
         ]]);
       }
-      return $response->withStatus(200)->withJson($result);
+      return $response->withStatus(200)->withJson($result->data);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [

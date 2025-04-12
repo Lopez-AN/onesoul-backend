@@ -59,7 +59,7 @@ class Subscription
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
-  }  
+  }
 
   public function getSubscriptionPlanByID($id) {
     try {
@@ -115,7 +115,7 @@ class Subscription
       $stmt = $this->db->prepare("SELECT SubscriptionID, UserID, PlanID, StartDate, EndDate, TrialPeriod
                                   FROM Subscriptions
                                   WHERE UserID = :userID");
-    
+
       $stmt->bindParam(':userID', $userID, PDO::PARAM_INT);
       $stmt->execute();
 
@@ -205,15 +205,14 @@ class Subscription
       }
 
       return [
-        "success" => true,
-        "message" => $exists ? "Subscription plan updated successfully." : "Subscription plan created successfully."
+        "Code" => $exists ? "PLAN_UPDATED" : "PLAN_CREATED",
+        "Message" => $exists ? "Subscription plan updated successfully." : "Subscription plan created successfully."
       ];
-    
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
   }
-  
+
   public function updateSubscriptionByUser($userID, $newPlanID = null)
   {
     try {
@@ -251,7 +250,7 @@ class Subscription
       }
 
       return 'Subscription created successfully.';
-  
+
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
@@ -277,4 +276,4 @@ class Subscription
       throw new DatabaseException($e->getMessage());
     }
   }
-}  
+}
