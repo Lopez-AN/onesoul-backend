@@ -134,17 +134,6 @@ class OfferingController {
     $data['Stock'] = null;
     $data['ServiceType'] = 'Service';
 
-    // Evaluar si es necesario que solo se permitan crear offering con las categorias del usuario
-    // // Validar `CategoryID`
-    // if (!isset($data['CategoryID']) || !$this->userBelongsToCategory($userID, $data['CategoryID'])) {
-    //   return $response->withStatus(400)->withJson([
-    //     "error" => [
-    //       "code" => "WRONG_CATEGORY",
-    //       "desc" => "The user does not belong to the selected category"
-    //     ]
-    //   ]);
-    // }
-
     try {
       # Verificar si el usuario autenticado es un Guia o un administrador
       if ($jwt['data']->UserType != 'Guide' && $jwt['data']->UserType != 'Admin') {
@@ -248,7 +237,7 @@ class OfferingController {
       $this->offering->approveOfferingById($id);
 
       return $response->withStatus(200)->withJson([
-        "message" => "Offering approved successfully"
+        "Message" => "Offering approved successfully"
       ]);
 
     } catch (\Throwable $e) {
@@ -392,7 +381,7 @@ class OfferingController {
       $this->offering->deleteOffering($id);
 
       return $response->withStatus(200)->withJson([
-        "message" => "Offering deleted successfully"
+        "Message" => "Offering deleted successfully"
       ]);
 
     } catch (\Throwable $e) {
@@ -453,16 +442,17 @@ class OfferingController {
       $tempFilePath = $uploadedMedia->File->getStream()->getMetadata('uri');
 
       // Analizar la imagen con Amazon Rekognition
-      if (in_array($fileExtension, ['jpg', 'jpeg', 'png'])) {
-        $rekognitionResult = analyzeImageWithRekognition($tempFilePath);
-        
-        if (!empty($rekognitionResult['error'])) {
-          return $response->withStatus(400)->withJson([
-            "error" => [
-              "code" => "INAPPROPRIATE_IMAGE",
-              "desc" => $rekognitionResult['reason']
-            ]
-          ]);
+      if(empty($GLOBALS['config']['debug_mode']) || !$GLOBALS['config']['debug_mode']){
+        if (in_array($fileExtension, ['jpg', 'jpeg', 'png'])) {
+          $rekognitionResult = analyzeImageWithRekognition($tempFilePath);
+          if (!empty($rekognitionResult['error'])) {
+            return $response->withStatus(400)->withJson([
+              "error" => [
+                "code" => "INAPPROPRIATE_IMAGE",
+                "desc" => $rekognitionResult['reason']
+              ]
+            ]);
+          }
         }
       }
 
@@ -603,16 +593,18 @@ class OfferingController {
       $tempFilePath = $uploadedMedia->File->getStream()->getMetadata('uri');
 
       // Analizar la imagen con Amazon Rekognition
-      if (in_array($fileExtension, ['jpg', 'jpeg', 'png'])) {
-        $rekognitionResult = analyzeImageWithRekognition($tempFilePath);
-        
-        if (!empty($rekognitionResult['error'])) {
-          return $response->withStatus(400)->withJson([
-            "error" => [
-              "code" => "INAPPROPRIATE_IMAGE",
-              "desc" => $rekognitionResult['reason']
-            ]
-          ]);
+      if(empty($GLOBALS['config']['debug_mode']) || !$GLOBALS['config']['debug_mode']){
+        if (in_array($fileExtension, ['jpg', 'jpeg', 'png'])) {
+          $rekognitionResult = analyzeImageWithRekognition($tempFilePath);
+
+          if (!empty($rekognitionResult['error'])) {
+            return $response->withStatus(400)->withJson([
+              "error" => [
+                "code" => "INAPPROPRIATE_IMAGE",
+                "desc" => $rekognitionResult['reason']
+              ]
+            ]);
+          }
         }
       }
 
@@ -646,12 +638,10 @@ class OfferingController {
         $fileURL = $GLOBALS['config']['media_folder']['url'] . "/offering/$uid.$fileExtension";
 
         // Mover el archivo al destino
-        $uploadedMedia->File->moveTo($filePath);
+        $uploadedMedia->file->moveTo($filePath);
 
-        $this->offering->updateOfferingMedia($id, $title, $description, $position, $media_id, $fileURL, $filePath, 
-          $this->_isImage($uploadedMedia->mimeType) ? 'image' : 'video');
-        
-          // Elimino el archivo antiguo si se actualizo con uno nuevo
+        $this->offering->updateOfferingMedia($id, $title, $description, $position, $media_id, $fileURL, $filePath, $this->_isImage($uploadedMedia->mimeType) ? 'image' : 'video');
+        // Elimino el archivo antiguo si se actualizo con uno nuevo
         unlink($media['Path']);
       } else {
         $this->offering->updateOfferingMedia($id, $title, $description, $position, $media_id);
@@ -793,7 +783,9 @@ class OfferingController {
       // Eliminar el registro de la tabla MEDIA
       $this->offering->deleteOfferingMedia($media_id);
 
-      return $response->withStatus(200)->withJson(["message" => "Media file deleted successfully"]);
+      return $response->withStatus(200)->withJson([
+        "Message" => "Media file deleted successfully"
+      ]);
 
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([

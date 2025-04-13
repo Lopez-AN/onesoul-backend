@@ -37,7 +37,7 @@ class Auth{
     }
   }
 
-  public function loginGoogle($token){
+  public function loginGoogle($userModel, $token){
     $response = $this -> validateToken("https://oauth2.googleapis.com/tokeninfo?id_token=$token");
     if($response === false){
       return (object)["http_code" => 401,
@@ -49,7 +49,7 @@ class Auth{
     }
 
     $userId = $response -> sub;
-    $user_data = $this -> getUserByOAuthID($userId, "google");
+    $user_data = $userModel -> getUserByOAuthID($userId, "google");
     if(empty($user_data)){
       return (object)["http_code" => 404,
         "error" => [
@@ -64,10 +64,10 @@ class Auth{
         ]
       ];
     }
-    return (object)["http_code" => 200, "data" => $user_data];
+    return $user_data;
   }
 
-  public function loginFacebook($userId, $token){
+  public function loginFacebook($userModel, $userId, $token){
     $response = $this -> validateToken("https://graph.facebook.com/$userId?fields=id,first_name,last_name,email,picture.width(640)&access_token=$token");
     if($response === false){
       return (object)["http_code" => 401,
@@ -78,7 +78,7 @@ class Auth{
       ];
     }
 
-    $user_data = $this -> getUserByOAuthID($userId, "facebook");
+    $user_data = $userModel -> getUserByOAuthID($userId, "facebook");
     if(empty($user_data)){
       return (object)["http_code" => 404,
         "error" => [
@@ -93,13 +93,13 @@ class Auth{
         ]
       ];
     }
-    return (object)["http_code" => 200, "data" => $user_data];
+    return $user_data;
   }
 
   /*
   * Registro usuario
   */
-  public function register($email, $username, $newPassword){
+  public function register($userModel, $email, $username, $newPassword){
     # Validación de fortaleza de contraseña
     if(!$this->passwordComplexity($newPassword)) {
       return (object)[
@@ -111,7 +111,7 @@ class Auth{
       ];
     }
 
-    if(!empty($this -> getUserByEmail($email))){
+    if($userModel->getUserByEmail($email)->http_code == 200){
       return (object)["http_code" => 409,
         "error" => [
           "code" => "DUPLICATED_EMAIL",
@@ -120,7 +120,7 @@ class Auth{
       ];
     }
 
-    if(!empty($this -> getUserByUserName($username))){
+    if($userModel->getUserByUserName($username)->http_code == 200){
       return (object)["http_code" => 409,
         "error" => [
           "code" => "DUPLICATED_USERNAME",
@@ -139,8 +139,7 @@ class Auth{
       "OTPCode" => $otpCode
     ]);
 
-    $user_data = $this -> getUserByUserName($username);
-    return (object)["http_code" => 200, "data" => $user_data];
+    return $userModel -> getUserByUserName($username);
   }
 
   private function passwordComplexity($newPassword): bool {
@@ -152,7 +151,7 @@ class Auth{
         (preg_match('/[0-9]/', $password) || preg_match('/\W/', $password));  // Debe tener un número O un símbolo
     }
 
-  public function registerGoogle($token, $username){
+  public function registerGoogle($userModel, $token, $username){
     $response = $this -> validateToken("https://oauth2.googleapis.com/tokeninfo?id_token=$token");
     if($response === false){
       return (object)["http_code" => 401,
@@ -164,9 +163,9 @@ class Auth{
     }
 
     $userId = $response -> sub;
-    $user_data = $this -> getUserByOAuthID($userId, "google");
-    if(!empty($user_data)){ # Si el usuario existe lo devuelvo para genera el token
-      return (object)["http_code" => 200, "data" => $user_data];
+    $user_data = $userModel -> getUserByOAuthID($userId, "google");
+    if($user_data->http_code == 200){ # Si el usuario existe lo devuelvo para generar el token
+      return $user_data;
     }
 
     # Fix por posibles campos nulos
@@ -176,7 +175,7 @@ class Auth{
     $picture = !empty($response -> picture) ? $response -> picture : null;
 
     # Verifico si hay otro usuario con ese email
-    if(!empty($email) && !empty($this -> getUserByEmail($email))){
+    if(!empty($email) && $userModel->getUserByEmail($email)->http_code == 200){
       return (object)["http_code" => 409,
         "error" => [
           "code" => "DUPLICATED_EMAIL",
@@ -184,8 +183,8 @@ class Auth{
         ]
       ];
     }
-   # Verifico si hay otro usuario con ese username
-    if(!empty($this -> getUserByUserName($username))){
+    # Verifico si hay otro usuario con ese username
+    if(!empty($username) && $userModel->getUserByUserName($username)->http_code == 200){
       return (object)["http_code" => 409,
         "error" => [
           "code" => "DUPLICATED_USERNAME",
@@ -204,11 +203,10 @@ class Auth{
       "Oauth2Service" => "google"
     ]);
 
-    $user_data = $this -> getUserByOAuthID($userId, "google");
-    return (object)["http_code" => 200, "data" => $user_data];
+    return $userModel -> getUserByOAuthID($userId, "google");
   }
 
-  public function registerFacebook($userId, $token, $username){
+  public function registerFacebook($userModel, $userId, $token, $username){
     $response = $this -> validateToken("https://graph.facebook.com/$userId?fields=id,first_name,last_name,email,picture.width(640)&access_token=$token");
     if($response === false){
       return (object)["http_code" => 401,
@@ -219,9 +217,9 @@ class Auth{
       ];
     }
 
-    $user_data = $this -> getUserByOAuthID($userId, "facebook");
-    if(!empty($user_data)){ # Si el usuario existe lo devuelvo para genera el token
-      return (object)["http_code" => 200, "data" => $user_data];
+    $user_data = $userModel -> getUserByOAuthID($userId, "facebook");
+    if($user_data->http_code == 200){ # Si el usuario existe lo devuelvo para generar el token
+      return $user_data;
     }
 
     # Fix por posibles campos nulos
@@ -231,7 +229,7 @@ class Auth{
     $picture = !empty($response -> picture -> data -> url) ? $response -> picture -> data -> url : null;
 
     # Verifico si hay otro usuario con ese email
-    if(!empty($email) && !empty($this -> getUserByEmail($email))){
+    if(!empty($email) && $userModel->getUserByEmail($email)->http_code == 200){
       return (object)["http_code" => 409,
         "error" => [
           "code" => "DUPLICATED_EMAIL",
@@ -240,7 +238,7 @@ class Auth{
       ];
     }
    # Verifico si hay otro usuario con ese username
-    if(!empty($username) && !empty($this -> getUserByUserName($username))){
+   if(!empty($username) && $userModel->getUserByUserName($username)->http_code == 200){
       return (object)["http_code" => 409,
         "error" => [
           "code" => "DUPLICATED_USERNAME",
@@ -259,8 +257,7 @@ class Auth{
       "Oauth2Service" => "facebook"
     ]);
 
-    $user_data = $this -> getUserByOAuthID($userId, "facebook");
-    return (object)["http_code" => 200, "data" => $user_data];
+    return $userModel -> getUserByOAuthID($userId, "facebook");
   }
 
   /* Validacion OTP, el parametro resetOTP se envia en false para el metodo de resetear
@@ -503,8 +500,8 @@ class Auth{
       $stmt = $this->db->prepare("INSERT INTO Users (Email, UserName, PasswordHash,
       OTPCode, OTPDate, RegistrationDate, ValidatedEmail)
       VALUES (?,?,?,?,?,?,0)");
-      $stmt->execute([$userData -> email, $userData -> username, $userData -> password_hash,
-        $userData -> otpCode, date('YmdHis'), date('YmdHis')]);
+      $stmt->execute([$userData -> Email, $userData -> UserName, $userData -> PasswordHash,
+        $userData -> OTPCode, date('YmdHis'), date('YmdHis')]);
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
@@ -517,41 +514,33 @@ class Auth{
       $stmt = $this->db->prepare("INSERT INTO Users (FirstName, LastName, Email,
       UserName, Oauth2ID, Oauth2Service, RegistrationDate)
       VALUES (?,?,?,?,?,?,?)");
-      $stmt->execute([$userData -> first_name, $userData -> last_name, $userData -> email,
-      $userData -> user_name, $userData -> oauth2_id, $userData -> oauth2_service, date('YmdHis')]);
+      $stmt->execute([$userData -> FirstName, $userData -> LastName, $userData -> Email,
+      $userData -> UserName, $userData -> Oauth2ID, $userData -> Oauth2Service, date('YmdHis')]);
 
       # Obtengo el ID del usuario creado
       $userId = $this->db->lastInsertId();
 
-      if(!is_null($userData -> email)){
+      if(!is_null($userData -> Email)){
         $stmt = $this->db->prepare("UPDATE Users SET ValidatedEmail = 1 WHERE UserID = ?");
         $stmt->execute([$userId]);
       }
 
-      if(!is_null($userData -> picture)){
+      if(!is_null($userData -> Picture)){
         # Inserto la foto de perfil en la tabla media
         $stmt = $this->db->prepare("INSERT INTO Media (UserID, `URL`) VALUES (?,?)");
-        $stmt->execute([$userId, $userData -> picture]);
+        $stmt->execute([$userId, $userData -> Picture]);
       }
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
-  }
-
-  # Trae los datos del usuario luego de loguearse por SSO
-  private function getUserByOAuthID($userId, $service){
-    try{
-      $stmt = $this->db->prepare("SELECT u.*,m.URL FROM Users AS u
-      LEFT JOIN Media as m ON u.UserID = m.UserID
-      WHERE u.Oauth2ID = ? AND u.Oauth2Service = ?");
-      $stmt->execute([$userId, $service]);
-      return $stmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
   }
 
   public function validateReCaptcha($recaptchaToken, $clientIp) {
+    # Si esta el modo debug no se valida esto
+    if(!empty($GLOBALS['config']['debug_mode']) && $GLOBALS['config']['debug_mode']){
+      return (object)["http_code" => 200, "data" => []];
+    }
+
     $secret = $GLOBALS['config']['recaptcha']['secret'];
     $minScore = $GLOBALS['config']['recaptcha']['min_score'];
     $url = "https://www.google.com/recaptcha/api/siteverify?secret=$secret&response=$recaptchaToken&remoteip=$clientIp";
@@ -582,7 +571,7 @@ class Auth{
   }
 
   public function mfaSet($userID, $secret){
-    
+
     try {
       # Creo el usuario con los datos basicos
       $stmt = $this->db->prepare("UPDATE Users
@@ -600,7 +589,7 @@ class Auth{
     try {
       // Verificar si el usuario está bloqueado
       $stmt = $this->db->prepare("SELECT MfaSecret, FailedLoginAttempts, LockedUntil
-            FROM Users WHERE UserID = ? AND MfaSecret IS NOT NULL");
+        FROM Users WHERE UserID = ? AND MfaSecret IS NOT NULL");
       $stmt->execute([$userID]);
       $result = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -657,8 +646,7 @@ class Auth{
       $this->updateFailedLogin($userID, 0, null);
 
       return (object) [
-        "http_code" => 200,
-        "message" => "MFA Verified"
+        "http_code" => 200
       ];
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());

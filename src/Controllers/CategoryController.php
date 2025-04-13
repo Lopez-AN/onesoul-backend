@@ -147,7 +147,6 @@ class CategoryController
   public function deleteCategory(Request $request, Response $response, $args)
   {
     $jwt = $request->getAttribute('jwt');
-    
     # Verificar si el usuario autenticado es el mismo que el que se intenta modificar, o si es un administrador
     if ($jwt['data']->UserType != 'Admin') {
       return $response->withStatus(401)->withJson([
