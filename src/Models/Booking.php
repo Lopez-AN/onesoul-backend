@@ -5,6 +5,7 @@ namespace App\Models;
 use PDO;
 use App\Exceptions\DatabaseException;
 use App\Exceptions\ValidationException;
+use \DateTime;
 
 class Booking
 {
@@ -19,21 +20,38 @@ class Booking
   {
     try {
       $stmt = $this->db->prepare("INSERT INTO Bookings (OfferingID, UserID, Mode, LocationID, CreationDate, ScheduledDate) 
-                                  VALUES (:offeringID, :userID, :mode, :locationid, NOW(), :scheduledDate)");
+                                  VALUES (:offeringID, :userID, :mode, :locationID, NOW(), :scheduledDate)");
       $stmt->bindParam(':offeringID', $data['OfferingID'], PDO::PARAM_INT);
       $stmt->bindParam(':userID', $data['UserID'], PDO::PARAM_INT);
       $stmt->bindParam(':mode', $data['Mode'], PDO::PARAM_STR);
-      $stmt->bindParam(':locationid', $data['LocationID'], $data['LocationID'] === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
+      $stmt->bindParam(':locationID', $data['LocationID'], $data['LocationID'] === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
       $stmt->bindParam(':scheduledDate', $data['ScheduledDate'], PDO::PARAM_STR);
       $stmt->execute();
 
       $bookingID = $this->db->lastInsertId();
 
-      $this->db->prepare("INSERT INTO BookingStatus (BookingID, BookingEventDate, BookingEvent, BookingDate) 
-                          VALUES (:bookingID, NOW(), 'created', NOW())")
-               ->execute([':bookingID' => $bookingID]);
+      $stmt = $this->db->prepare("INSERT INTO BookingStatus (BookingID, BookingEvent, ScheduledDate) 
+                                  VALUES (:bookingID, 'created', :scheduledDate)");
+      $stmt->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);           
+      $stmt->bindParam(':scheduledDate', $data['ScheduledDate'], PDO::PARAM_STR);          
+      $stmt->execute();
 
-      return $bookingID;
+      return $this->getBookingByID($bookingID);
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  public function getLocation($locationID)
+  {
+    try {
+      $stmt = $this->db->prepare("SELECT LocationID 
+                                  FROM OfferingLocations 
+                                  WHERE LocationID = :locationID");
+      $stmt->bindParam(':locationID', $locationID, PDO::PARAM_INT);
+      $stmt->execute();
+
+      return $stmt->fetch(PDO::FETCH_ASSOC);
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
@@ -42,32 +60,120 @@ class Booking
   public function getBookingsByGuide($userID)
   {
     try {
-      $stmt = $this->db->prepare("SELECT b.*, o.Title 
+      // Obtener todos los bookings del guía
+      $stmt = $this->db->prepare("SELECT b.*, o.Title
                                   FROM Bookings AS b 
                                   INNER JOIN Offerings AS o ON b.OfferingID = o.OfferingID 
                                   WHERE b.UserID = :userID");
       $stmt->bindParam(':userID', $userID, PDO::PARAM_INT);
       $stmt->execute();
+      $bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-      return $stmt->fetchAll(PDO::FETCH_ASSOC);
+      if (!$bookings) {
+        return null; // No se encontraron bookings
+      }
+
+      // Para cada booking obtenemos sus eventos
+      foreach ($bookings as &$booking) {
+        $bookingID = $booking['BookingID'];
+
+        $stmt2 = $this->db->prepare("SELECT BookingEventDate, BookingEvent, ScheduledDate 
+                                    FROM BookingStatus 
+                                    WHERE BookingID = :bookingID
+                                    ORDER BY BookingEventDate ASC");
+        $stmt2->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);
+        $stmt2->execute();
+        $events = $stmt2->fetchAll(PDO::FETCH_ASSOC);
+
+        $booking['Events'] = $events; // Le agregamos la lista de eventos a cada booking
+      }
+
+      return $bookings;
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
   }
 
-  public function updateBooking($bookingID, $data)
+  public function getBookingByID($bookingID)
   {
     try {
-      $stmt = $this->db->prepare("UPDATE Bookings SET Mode = :mode, ScheduledDate = :scheduledDate WHERE BookingID = :bookingID");
-      $stmt->bindParam(':mode', $data['Mode'], PDO::PARAM_STR);
-      $stmt->bindParam(':scheduledDate', $data['ScheduledDate'], PDO::PARAM_STR);
+      $stmt = $this->db->prepare("SELECT b.*, o.Title, o.UserID
+                                  FROM Bookings AS b 
+                                  INNER JOIN Offerings AS o ON b.OfferingID = o.OfferingID 
+                                  WHERE b.BookingID = :bookingID");
       $stmt->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);
       $stmt->execute();
+      $booking = $stmt->fetch(PDO::FETCH_ASSOC);
+      
+      if (!$booking) {
+        return null; // No se encontró booking
+      }
+      
+      // Obtener los eventos de la reserva (BookingStatus)
+      $stmt2 = $this->db->prepare("SELECT BookingEventDate, BookingEvent, ScheduledDate 
+                                  FROM BookingStatus 
+                                  WHERE BookingID = :bookingID
+                                  ORDER BY BookingEventDate ASC");
+      $stmt2->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);
+      $stmt2->execute();
 
-      $this->db->prepare("INSERT INTO BookingStatus (BookingID, BookingEventDate, BookingEvent) 
-                          VALUES (:bookingID, NOW(), 'rescheduling')")
-                ->execute([':bookingID' => $bookingID]);
+      $events = $stmt2->fetchAll(PDO::FETCH_ASSOC);
 
+      // Añadir los eventos al booking
+      $booking['Events'] = $events;
+
+      return $booking;
+
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  public function updateBooking($bookingID, $mode, $scheduledDate)
+  {
+    try {
+      $fields = [];
+
+      if (!empty($mode)) {
+        $stmt = $this->db->prepare("UPDATE Bookings 
+                                    SET Mode = :mode, ModificationDate = NOW() 
+                                    WHERE BookingID = :bookingID");
+        $stmt->bindParam(':mode', $mode, PDO::PARAM_STR);
+        $stmt->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);
+        $stmt->execute();
+        $fields[] = 'Mode';
+      } 
+  
+      if (!empty($scheduledDate)) {
+        // Validar que la fecha no sea pasada
+        $currentDate = new \DateTime();
+        $newScheduledDate = new \DateTime($scheduledDate);
+        if ($newScheduledDate < $currentDate) {
+          throw new \Exception("Scheduled date cannot be in the past.");
+        }
+  
+        $stmt = $this->db->prepare("UPDATE Bookings 
+                                    SET ScheduledDate = :scheduledDate 
+                                    WHERE BookingID = :bookingID");
+        $stmt->bindParam(':scheduledDate', $scheduledDate, PDO::PARAM_STR);
+        $stmt->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);
+        $stmt->execute();
+  
+        $fields[] = 'ScheduledDate';
+  
+        // Insertar en BookingStatus
+        $stmt = $this->db->prepare("INSERT INTO BookingStatus (BookingID, BookingEvent, ScheduledDate) 
+                                    VALUES (:bookingID, 'rescheduling', :scheduledDate)");
+        $stmt->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);
+        $stmt->bindParam(':scheduledDate', $scheduledDate, PDO::PARAM_STR);
+        $stmt->execute();
+      }
+  
+      if (empty($fields)) {
+        throw new \Exception("No fields to update");
+      }
+  
+      return $this->getBookingByID($bookingID);
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
@@ -76,13 +182,10 @@ class Booking
   public function cancelBooking($bookingID)
   {
     try {
-      $stmt = $this->db->prepare("DELETE FROM Bookings WHERE BookingID = :bookingID");
+      $stmt = $this->db->prepare("INSERT INTO BookingStatus (BookingID, BookingEvent) 
+                                  VALUES (:bookingID, 'cancellation')");
       $stmt->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);
       $stmt->execute();
-
-      $this->db->prepare("INSERT INTO BookingStatus (BookingID, BookingEventDate, BookingEvent) 
-                          VALUES (:bookingID, NOW(), 'cancellation')")
-               ->execute([':bookingID' => $bookingID]);
 
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
@@ -100,25 +203,6 @@ class Booking
       $stmt->bindParam(':rating', $data['Rating'], PDO::PARAM_INT);
       $stmt->bindParam(':reviewText', $data['ReviewText'], PDO::PARAM_STR);
       $stmt->execute();
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
-  }
-
-  public function getOfferingById($offeringID)
-  {
-    try {
-      $stmt = $this->db->prepare("SELECT * FROM Offerings WHERE OfferingID = :offeringID");
-      $stmt->bindParam(':offeringID', $offeringID, PDO::PARAM_INT);
-      $stmt->execute();
-
-      $offering = $stmt->fetch(PDO::FETCH_ASSOC);
-
-      if (!$offering) {
-        throw new ValidationException("Offering not found");
-      }
-
-      return $offering;
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }

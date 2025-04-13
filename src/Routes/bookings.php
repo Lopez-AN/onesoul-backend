@@ -3,6 +3,7 @@
 use Slim\App;
 use App\Controllers\BookingController;
 use App\Models\Booking;
+use App\Models\Offering;
 
 return function (App $app) {
 
@@ -28,10 +29,12 @@ return function (App $app) {
 
   $pdo = require __DIR__ . './../core/database.php';
   $booking = new Booking($pdo);
-  $bookingController = new BookingController($booking);
+  $offering = new Offering($pdo);
+  $bookingController = new BookingController($booking, $offering);
 
   $app->post('/bookings', [$bookingController, 'createBooking']);
-  $app->get('/bookings/{userID}', [$bookingController, 'getBookingsByGuide']);
+  $app->get('/bookings/{bookingID}', [$bookingController, 'getBookingByID']);
+  $app->get('/bookings/guide/{userID}', [$bookingController, 'getBookingsByGuide']);
   $app->patch('/bookings/{bookingID}', [$bookingController, 'updateBooking']);
   $app->delete('/bookings/{bookingID}', [$bookingController, 'cancelBooking']);
   $app->post('/reviews', [$bookingController, 'createReview']);
