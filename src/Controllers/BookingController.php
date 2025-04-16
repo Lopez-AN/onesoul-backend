@@ -1,407 +1,298 @@
 <?php
 
-namespace App\Controllers;
+namespace App\Models;
 
-use Psr\Http\Message\ResponseInterface as Response;
-use Psr\Http\Message\ServerRequestInterface as Request;
-use App\Models\Booking;
-use App\Models\Offering;
+use PDO;
+use App\Exceptions\DatabaseException;
+use App\Exceptions\ValidationException;
 use \DateTime;
 
-class BookingController
+class Booking
 {
-  protected $booking;
-  protected $offering;
+  protected $db;
 
-  public function __construct(Booking $booking, Offering $offering)
+  public function __construct(PDO $db)
   {
-    $this->booking = $booking;
-    $this->offering = $offering;
+    $this->db = $db;
   }
 
-  public function createBooking(Request $request, Response $response, $args)
+  public function getBookingByID($bookingID)
   {
-    $jwt = $request->getAttribute('jwt');
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN", 
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
-
-    $userID = $jwt['data']->UserID;
-    $data = $request->getParsedBody();
-
     try {
-      // VALIDAR: Offering si existe 
-      $id = $data['OfferingID'] ?? null;
-      if (!$id) {
-        return $response->withStatus(400)->withJson(['error' => 'OfferingID is required.']);
-      }
-
-      $offering = $this->offering->getOfferingById($id);
-      if (!$offering) {
-        return $response->withStatus(400)->withJson(['error' => 'Offering not found.']);
-      }
-
-      // VALIDAR: Fecha de cita
-      $scheduledDate = $data['ScheduledDate'] ?? null;
-      if (!$scheduledDate) {
-        return $response->withStatus(400)->withJson(['error' => 'ScheduledDate is required.']);
-      }
-
-      $scheduledDateTime = DateTime::createFromFormat('Y-m-d H:i:s', $scheduledDate);
-      if (!$scheduledDateTime || $scheduledDateTime->format('Y-m-d H:i:s') !== $scheduledDate) {
-        return $response->withStatus(400)->withJson(['error' => 'Invalid date format. Must be Y-m-d H:i:s']);
-      }
-      if ($scheduledDateTime < new DateTime()) {
-        return $response->withStatus(400)->withJson(['error' => 'You cannot schedule an appointment in the past.']);
-      }
-
-      // VALIDAR: LocationID en caso de ser presencial
-      $mode = $data['Mode'] ?? null;
-      $locationID = $data['LocationID'] ?? null;
-
-      if ($mode === 'in-person') {
-        if (!$locationID) {
-          return $response->withStatus(400)->withJson(['error' => 'LocationID is required for in-person services.']);
-        }
-
-        // Validar que el LocationID exista en offeringLocations
-        $location = $this->booking->getLocation($locationID);
-
-        if (!$location) {
-          return $response->withStatus(400)->withJson(['error' => 'Invalid LocationID.']);
-        }
-      } else {
-        // Si no es presencial, LocationID puede ser NULL
-        $locationID = null;
-      }
-
-      // PREPARAR datos para el modelo
-      $data = [
-        'OfferingID' => $id,
-        'UserID' => $userID,
-        'Mode' => $mode,
-        'LocationID' => $locationID,
-        'ScheduledDate' =>$scheduledDate,
-      ];
-
-      $booking = $this->booking->createBooking($data);
-
-      return $response->withStatus(201)->withJson([
-        "message" => "Booking created successfully", 
-        "booking" => $booking
-      ]);
-
-    } catch (\Throwable $e) {
-      return $response->withStatus(500)->withJson([
-        "error" => [
-          "code" => "INTERNAL_SERVER_ERROR", 
-          "desc" => $e->getMessage()
-        ]
-      ]);
-    }
-  }
-
-  public function getBookingsByGuide(Request $request, Response $response, $args)
-  {
-    $userID = $args['userID'];
-
-    try {
-      $bookings = $this->booking->getBookingsByGuide($userID);
-
-      if (!$bookings) {
-        return $response->withJson(['error' => 'Booking not found'], 404);
-      }
-
-      return $response->withStatus(200)->withJson($bookings);
-    } catch (\Throwable $e) {
-      return $response->withStatus(500)->withJson([
-        "error" => [
-          "code" => "INTERNAL_SERVER_ERROR", 
-          "desc" => $e->getMessage()
-        ]
-      ]);
-    }
-  }
-
-  public function getBookingByID(Request $request, Response $response, $args)
-  {
-    $bookingID = $args['bookingID'];
-
-    try {
-      $booking = $this->booking->getBookingByID($bookingID);
+      $stmt = $this->db->prepare("SELECT b.*, o.Title AS TitleOffering, o.UserID AS Guide
+                                  FROM Bookings AS b 
+                                  INNER JOIN Offerings AS o ON b.OfferingID = o.OfferingID 
+                                  WHERE b.BookingID = :bookingID");
+      $stmt->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);
+      $stmt->execute();
+      $booking = $stmt->fetch(PDO::FETCH_ASSOC);
       
       if (!$booking) {
-        return $response->withJson(['error' => 'Booking not found'], 404);
+        return null; // No se encontró booking
       }
+      
+      // Obtener los eventos de la reserva (BookingStatus)
+      $stmt2 = $this->db->prepare("SELECT BookingEventDate, BookingEvent, ScheduledDate 
+                                  FROM BookingStatus 
+                                  WHERE BookingID = :bookingID
+                                  ORDER BY BookingEventDate ASC");
+      $stmt2->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);
+      $stmt2->execute();
 
-      return $response->withStatus(200)->withJson($booking);
-    } catch (\Throwable $e) {
-      return $response->withStatus(500)->withJson([
-        "error" => [
-          "code" => "INTERNAL_SERVER_ERROR", 
-          "desc" => $e->getMessage()
-        ]
-      ]);
+      $events = $stmt2->fetchAll(PDO::FETCH_ASSOC);
+
+      // Añadir los eventos al booking
+      $booking['Events'] = $events;
+
+      return $booking;
+
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
     }
   }
 
-  public function updateBooking(Request $request, Response $response, $args)
+  public function getBookingsByGuide($userID)
   {
-    $jwt = $request->getAttribute('jwt');
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN", 
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
-
-    $userID = $jwt['data']->UserID;
-    $userType = $jwt['data']->UserType;
-
-    if (!in_array($userType, ['Guide', 'Admin'])) {
-      return $response->withStatus(403)->withJson([
-        "error" => [
-          "code" => "UNAUTHORIZED_ACTION",
-          "desc" => "Only guides or admins can update bookings."
-        ]
-      ]);
-    }
-
-    $bookingID = $args['bookingID'];
-    $data = $request->getParsedBody();
-    $mode = $data['Mode'] ?? null;
-    $scheduledDate = $data['ScheduledDate'] ?? null;
-
     try {
-      // Validar si booking existe y no esta cancelado
-      $booking = $this->booking->getBookingByID($bookingID);
-      if (!$booking) {
-        return $response->withStatus(404)->withJson([
-          "error" => [
-            "code" => "BOOKING_NOT_FOUND",
-            "desc" => "Booking not found."
-            ]
-        ]);
+      // Obtener todos los bookings del guía
+      $stmt = $this->db->prepare("SELECT b.BookingID, b.UserID, u.DisplayName AS Seeker, b.ReviewID, b.PaymentID,
+                                        b.Mode, b.LocationID, b.CreationDate, b.ScheduledDate, b.ModificationDate, 
+                                        o.UserID AS Guide, u2.DisplayName, b.OfferingID, o.Title AS TitleOffering
+                                  FROM Bookings AS b 
+                                  INNER JOIN Offerings AS o ON b.OfferingID = o.OfferingID 
+                                  INNER JOIN Users AS u ON b.UserID = u.UserID
+                                  INNER JOIN Users AS u2 ON o.UserID = u2.UserID
+                                  WHERE o.UserID = :userID");
+      $stmt->bindParam(':userID', $userID, PDO::PARAM_INT);
+      $stmt->execute();
+      $bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+      if (!$bookings) {
+        return null; // No se encontraron bookings
       }
 
-      // Verificar si el booking está cancelado (buscar eventos de tipo "cancellation")
-      if (!empty($booking['Events'])) {
-        foreach ($booking['Events'] as $event) {
-          if ($event['BookingEvent'] === 'cancellation') {
-            return $response->withStatus(400)->withJson([
-              "error" => [
-                "code" => "BOOKING_ALREADY_CANCELLED",
-                "desc" => "Cannot update a cancelled booking."
-              ]
-            ]);
-          }
-        }
+      // Para cada booking obtenemos sus eventos
+      foreach ($bookings as &$booking) {
+        $bookingID = $booking['BookingID'];
+
+        $stmt2 = $this->db->prepare("SELECT BookingEventDate, BookingEvent, ScheduledDate 
+                                    FROM BookingStatus 
+                                    WHERE BookingID = :bookingID
+                                    ORDER BY BookingEventDate ASC");
+        $stmt2->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);
+        $stmt2->execute();
+        $events = $stmt2->fetchAll(PDO::FETCH_ASSOC);
+
+        $booking['Events'] = $events; // Le agregamos la lista de eventos a cada booking
       }
 
-      // Validar que al menos uno venga definido
-      if (empty($scheduledDate) && empty($mode)) {
-        return $response->withStatus(400)->withJson([
-          "error" => [
-            "code" => "NO_FIELDS_TO_UPDATE",
-            "desc" => "No valid fields provided to update."
-          ]
-        ]);
-      }
-
-      if ($scheduledDate) {
-        // Verificar que la reserva NO haya sucedido
-        $scheduledDateTime = DateTime::createFromFormat('Y-m-d H:i:s', $scheduledDate);
-        if (!$scheduledDateTime || $scheduledDateTime->format('Y-m-d H:i:s') !== $scheduledDate) {
-          return $response->withStatus(400)->withJson(['error' => 'Invalid date format. Must be Y-m-d H:i:s']);
-        }
-        if ($scheduledDateTime < new DateTime()) {
-          return $response->withStatus(400)->withJson(['error' => 'You cannot schedule an appointment in the past.']);
-        }
-      }
-
-      $booking = $this->booking->updateBooking($bookingID, $mode, $scheduledDate);
-
-      return $response->withStatus(200)->withJson(["message" => "Booking updated successfully", "booking" => $booking]);
-    } catch (\Throwable $e) {
-      return $response->withStatus(500)->withJson([
-        "error" => [
-          "code" => "INTERNAL_SERVER_ERROR", 
-          "desc" => $e->getMessage()
-        ]
-      ]);
+      return $bookings;
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
     }
   }
 
-  public function cancelBooking(Request $request, Response $response, $args)
+  public function getBookingsBySeeker($userID)
   {
-    $jwt = $request->getAttribute('jwt');
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN", 
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
-
-    $userID = $jwt['data']->UserID;
-    $userType = $jwt['data']->UserType;
-    $bookingID = $args['bookingID'];
-
     try {
-      $booking = $this->booking->getBookingByID($bookingID);
+      // Obtener todos los bookings del buscador
+      $stmt = $this->db->prepare("SELECT b.BookingID, b.UserID, u.DisplayName AS Seeker, b.ReviewID, b.PaymentID,
+                                        b.Mode, b.LocationID, b.CreationDate, b.ScheduledDate, b.ModificationDate, 
+                                        o.UserID AS Guide, u2.DisplayName, b.OfferingID, o.Title AS TitleOffering
+                                  FROM Bookings AS b 
+                                  INNER JOIN Offerings AS o ON b.OfferingID = o.OfferingID 
+                                  INNER JOIN Users AS u ON b.UserID = u.UserID
+                                  INNER JOIN Users AS u2 ON o.UserID = u2.UserID
+                                  WHERE b.UserID = :userID");
+      $stmt->bindParam(':userID', $userID, PDO::PARAM_INT);
+      $stmt->execute();
+      $bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-      if (!$booking) {
-        return $response->withStatus(404)->withJson([
-            "error" => [
-                "code" => "BOOKING_NOT_FOUND",
-                "desc" => "Booking not found"
-            ]
-        ]);
+      if (!$bookings) {
+        return null; // No se encontraron bookings
       }
 
-      $seeker = $booking['UserID'];
-      $id = $booking['OfferingID'];
-      $scheduledDate = $booking['ScheduledDate'];
+      // Para cada booking obtenemos sus eventos
+      foreach ($bookings as &$booking) {
+        $bookingID = $booking['BookingID'];
 
-      // Obtener el dueño del offering
-      $offering = $this->offering->getOfferingById($id);
-      if (!$offering) {
-        return $response->withStatus(404)->withJson([
-          "error" => [
-            "code" => "OFFERING_NOT_FOUND",
-            "desc" => "Offering linked to booking not found"
-          ]
-        ]);
+        $stmt2 = $this->db->prepare("SELECT BookingEventDate, BookingEvent, ScheduledDate 
+                                    FROM BookingStatus 
+                                    WHERE BookingID = :bookingID
+                                    ORDER BY BookingEventDate ASC");
+        $stmt2->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);
+        $stmt2->execute();
+        $events = $stmt2->fetchAll(PDO::FETCH_ASSOC);
+
+        $booking['Events'] = $events; // Le agregamos la lista de eventos a cada booking
       }
 
-      $guide = $offering['Author']['UserID'];
-
-      // Validar permisos
-      if (!($userID == $seeker || $userID == $guide || $userType == 'Admin')) {
-        return $response->withStatus(403)->withJson([
-          "error" => [
-            "code" => "UNAUTHORIZED_ACTION",
-            "desc" => "You don't have permission to cancel this booking."
-          ]
-        ]);
-      }
-
-      // Verificar que la reserva NO haya sucedido
-      $today = new \DateTime();
-      $scheduled = new \DateTime($scheduledDate);
-
-      if ($scheduled < $today) {
-        return $response->withStatus(400)->withJson([
-          "error" => [
-            "code" => "INVALID_BOOKING_DATE",
-            "desc" => "Cannot cancel a booking that is already in the past."
-          ]
-        ]);
-      }
-
-
-      $booking = $this->booking->cancelBooking($bookingID);
-
-      return $response->withStatus(201)->withJson([
-        "message" => "Booking cancelled successfully", 
-        "booking" => $booking
-      ]);
-
-    } catch (\Throwable $e) {
-      return $response->withStatus(500)->withJson([
-        "error" => [
-          "code" => "INTERNAL_SERVER_ERROR", 
-          "desc" => $e->getMessage()
-        ]
-      ]);
+      return $bookings;
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
     }
   }
 
-  public function createReview(Request $request, Response $response, $args)
+  public function createBooking($data)
   {
-    $jwt = $request->getAttribute('jwt');
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN", 
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
-
-    $seekerID = $jwt['data']->UserID;
-    $data = $request->getParsedBody();
-
-    if (!isset($data['Rating']) || !isset($data['ReviewText']) || !isset($data['OfferingID'])) {
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "INVALID_PARAMETERS", 
-          "desc" => "Missing required fields"
-        ]
-      ]);
-    }
-
-    if (!in_array((int)$data['Rating'], [1, 2, 3, 4, 5])) {
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "INVALID_RATING", 
-          "desc" => "Rating must be between 1 and 5"
-        ]
-      ]);
-    }
-
     try {
-      // Buscar el guía asociado al offering
-      $id = $data['OfferingID'];
-      $offering = $this->booking->getOfferingById($id);
+      $stmt = $this->db->prepare("INSERT INTO Bookings (OfferingID, UserID, Mode, LocationID, CreationDate, ScheduledDate) 
+                                  VALUES (:offeringID, :userID, :mode, :locationID, NOW(), :scheduledDate)");
+      $stmt->bindParam(':offeringID', $data['OfferingID'], PDO::PARAM_INT);
+      $stmt->bindParam(':userID', $data['UserID'], PDO::PARAM_INT);
+      $stmt->bindParam(':mode', $data['Mode'], PDO::PARAM_STR);
+      $stmt->bindParam(':locationID', $data['LocationID'], $data['LocationID'] === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
+      $stmt->bindParam(':scheduledDate', $data['ScheduledDate'], PDO::PARAM_STR);
+      $stmt->execute();
 
-      $payload = [
-        'OfferingID' => (int)$data['OfferingID'],
-        'SUserID' => (int)$seekerID,
-        'GUserID' => (int)$offering['UserID'],
-        'Rating' => (int)$data['Rating'],
-        'ReviewText' => $data['ReviewText']
+      $bookingID = $this->db->lastInsertId();
+
+      $stmt = $this->db->prepare("INSERT INTO BookingStatus (BookingID, BookingEvent, ScheduledDate) 
+                                  VALUES (:bookingID, 'created', :scheduledDate)");
+      $stmt->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);           
+      $stmt->bindParam(':scheduledDate', $data['ScheduledDate'], PDO::PARAM_STR);          
+      $stmt->execute();
+
+      return $this->getBookingByID($bookingID);
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  public function updateBooking($bookingID, $mode, $scheduledDate)
+  {
+    try {
+      $fields = [];
+
+      if (!empty($mode)) {
+        $stmt = $this->db->prepare("UPDATE Bookings 
+                                    SET Mode = :mode, ModificationDate = NOW() 
+                                    WHERE BookingID = :bookingID");
+        $stmt->bindParam(':mode', $mode, PDO::PARAM_STR);
+        $stmt->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);
+        $stmt->execute();
+        $fields[] = 'Mode';
+      } 
+  
+      if (!empty($scheduledDate)) {
+        // Validar que la fecha no sea pasada
+        $currentDate = new \DateTime();
+        $newScheduledDate = new \DateTime($scheduledDate);
+        if ($newScheduledDate < $currentDate) {
+          throw new \Exception("Scheduled date cannot be in the past.");
+        }
+  
+        $stmt = $this->db->prepare("UPDATE Bookings 
+                                    SET ScheduledDate = :scheduledDate 
+                                    WHERE BookingID = :bookingID");
+        $stmt->bindParam(':scheduledDate', $scheduledDate, PDO::PARAM_STR);
+        $stmt->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);
+        $stmt->execute();
+  
+        $fields[] = 'ScheduledDate';
+  
+        // Insertar en BookingStatus
+        $stmt = $this->db->prepare("INSERT INTO BookingStatus (BookingID, BookingEvent, ScheduledDate) 
+                                    VALUES (:bookingID, 'rescheduling', :scheduledDate)");
+        $stmt->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);
+        $stmt->bindParam(':scheduledDate', $scheduledDate, PDO::PARAM_STR);
+        $stmt->execute();
+      }
+  
+      if (empty($fields)) {
+        throw new \Exception("No fields to update");
+      }
+  
+      return $this->getBookingByID($bookingID);
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  public function cancelBooking($bookingID)
+  {
+    try {
+      $stmt = $this->db->prepare("INSERT INTO BookingStatus (BookingID, BookingEvent) 
+                                  VALUES (:bookingID, 'cancellation')");
+      $stmt->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);
+      $stmt->execute();
+
+      return $this->getBookingByID($bookingID);
+
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  public function createReview($data)
+  {
+    try {
+      $stmt = $this->db->prepare("INSERT INTO Reviews (OfferingID, SUserID, GUserID, Rating, ReviewText, ReviewType, CreationDate) 
+                                  VALUES (:offeringID, :seekerID, :guideID, :rating, :reviewText, 'service', NOW())");
+      $stmt->bindParam(':offeringID', $data['OfferingID'], PDO::PARAM_INT);
+      $stmt->bindParam(':seekerID', $data['SUserID'], PDO::PARAM_INT);
+      $stmt->bindParam(':guideID', $data['GUserID'], PDO::PARAM_INT);
+      $stmt->bindParam(':rating', $data['Rating'], PDO::PARAM_INT);
+      $stmt->bindParam(':reviewText', $data['ReviewText'], PDO::PARAM_STR);
+      $stmt->execute();
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  public function getReviewsByGuide($userID, $limit, $fromDate)
+  {
+    try {
+      $query = "SELECT SQL_CALC_FOUND_ROWS r.SUserID AS SeekerID, u.DisplayName AS Seeker, u.CountryCode,
+                r.ReviewText, r.Rating, o.Title AS TitleOffering, r.GUserID AS GuideID, u2.DisplayName AS Guide
+                FROM Reviews AS r 
+                INNER JOIN Offerings AS o ON r.OfferingID = o.OfferingID
+                INNER JOIN Users AS u ON r.SUserID = u.UserID
+                INNER JOIN Users AS u2 ON r.GUserID = u2.UserID                
+                WHERE r.GUserID = :userID";
+                
+      if ($fromDate) {
+        $query .= " AND r.CreationDate >= :fromDate";
+      }
+   
+      $query .= " ORDER BY r.CreationDate DESC LIMIT :limit";
+
+      $stmt = $this->db->prepare($query);
+      $stmt->bindParam(':userID', $userID, PDO::PARAM_INT);
+      if ($fromDate) {
+        $stmt->bindParam(':fromDate', $fromDate);
+      }
+      $stmt->bindParam(':limit', $limit, PDO::PARAM_INT);
+      $stmt->execute();
+
+      $reviews = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+      $total = $this->db->query("SELECT FOUND_ROWS() as total")->fetch(PDO::FETCH_ASSOC);
+
+      return [
+        "Data" => $reviews,
+        "Rows" => [
+            "total" => (int)$total['total'],
+            "fetched" => count($reviews)
+        ]
       ];
-
-      $this->booking->createReview($payload);
-
-      return $response->withStatus(201)->withJson(["message" => "Review created successfully"]);
-    } catch (\Throwable $e) {
-      return $response->withStatus(500)->withJson([
-        "error" => [
-          "code" => "INTERNAL_SERVER_ERROR", 
-          "desc" => $e->getMessage()
-        ]
-      ]);
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
     }
   }
 
-  public function getReviewsByGuide(Request $request, Response $response, $args)
+  public function getLocation($locationID)
   {
-    $userID = $args['userID'];
-    $queryParams = $request->getQueryParams();
-
-    $fromDate = $queryParams['from'] ?? null;
-    $limit = isset($queryParams['limit']) ? (int)$queryParams['limit'] : 50;
-
     try {
-      $reviews = $this->booking->getReviewsByGuide($userID, $limit, $fromDate);
-      return $response->withStatus(200)->withJson($reviews);
-    } catch (\Throwable $e) {
-      return $response->withStatus(500)->withJson([
-        "error" => [
-          "code" => "INTERNAL_SERVER_ERROR", 
-          "desc" => $e->getMessage()
-        ]
-      ]);
+      $stmt = $this->db->prepare("SELECT LocationID 
+                                  FROM OfferingLocations 
+                                  WHERE LocationID = :locationID");
+      $stmt->bindParam(':locationID', $locationID, PDO::PARAM_INT);
+      $stmt->execute();
+
+      return $stmt->fetch(PDO::FETCH_ASSOC);
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
     }
   }
 }

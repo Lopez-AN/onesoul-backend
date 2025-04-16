@@ -11,17 +11,28 @@ return function (App $app) {
   $app->add(new Tuupola\Middleware\JwtAuthentication([
     "secret" => $GLOBALS['config']['jwt']['secret'],
     "rules" => [
-      new Tuupola\Middleware\JwtAuthentication\RequestPathRule([
-        "path" => [
-          "/bookings",
-          "/bookings/{userID}",
-          "/bookings/{bookingID}",
-          "/reviews",
-          "/reviews/{userID}"
-        ]
-      ]),
+      // new Tuupola\Middleware\JwtAuthentication\RequestPathRule([
+      //   "path" => [
+      //     "/bookings",
+      //     "/bookings/{userID}",
+      //     "/bookings/{bookingID}",
+      //     "/reviews"
+      //   ],
+      //   "ignore" => ["/reviews/{userID}"] 
+      // ]),
+      function ($request): bool {
+        $path = $request->getUri()->getPath();
+        $method = $request->getMethod();
+      
+        // Desactiva JWT solo en GET /reviews/{userID}
+        if ($method === 'GET' && preg_match('#^/reviews/\d+$#', $path)) {
+          return false;
+        }
+      
+        return true; // aplica JWT para el resto
+      },
       new Tuupola\Middleware\JwtAuthentication\RequestMethodRule([
-        "ignore" => ["OPTIONS", "GET"]
+        "ignore" => ["OPTIONS"]
       ])
     ],
     "attribute" => "jwt"
@@ -32,9 +43,10 @@ return function (App $app) {
   $offering = new Offering($pdo);
   $bookingController = new BookingController($booking, $offering);
 
-  $app->post('/bookings', [$bookingController, 'createBooking']);
   $app->get('/bookings/{bookingID}', [$bookingController, 'getBookingByID']);
   $app->get('/bookings/guide/{userID}', [$bookingController, 'getBookingsByGuide']);
+  $app->get('/bookings/seeker/{userID}', [$bookingController, 'getBookingsBySeeker']);
+  $app->post('/bookings', [$bookingController, 'createBooking']);
   $app->patch('/bookings/{bookingID}', [$bookingController, 'updateBooking']);
   $app->delete('/bookings/{bookingID}', [$bookingController, 'cancelBooking']);
   $app->post('/reviews', [$bookingController, 'createReview']);
