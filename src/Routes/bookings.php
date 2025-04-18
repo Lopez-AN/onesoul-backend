@@ -4,48 +4,29 @@ use Slim\App;
 use App\Controllers\BookingController;
 use App\Models\Booking;
 use App\Models\Offering;
+use Tuupola\Middleware\JwtAuthentication;
 
 return function (App $app) {
-
-  # Proteccion de rutas
-  $app->add(new Tuupola\Middleware\JwtAuthentication([
+  $jwtMiddleware = new JwtAuthentication([
     "secret" => $GLOBALS['config']['jwt']['secret'],
-    "rules" => [
-      // new Tuupola\Middleware\JwtAuthentication\RequestPathRule([
-      //   "path" => [
-      //     "/bookings",
-      //     "/bookings/{userID}",
-      //     "/bookings/{bookingID}",
-      //     "/reviews"
-      //   ],
-      // ]),
-      function ($request): bool {
-        $path = $request->getUri()->getPath();
-        $method = $request->getMethod();
-      
-        // Desactiva JWT solo en GET /reviews/{reviewID}
-        if ($method === 'GET' && preg_match('#^/reviews/\d+$#', $path)) {
-          return false;
-        }
-      
-        return true; // aplica JWT para el resto
-      }
-    ],
     "attribute" => "jwt"
-  ]));
+  ]);
 
   $pdo = require __DIR__ . './../core/database.php';
   $booking = new Booking($pdo);
   $offering = new Offering($pdo);
   $bookingController = new BookingController($booking, $offering);
 
-  $app->get('/bookings/{bookingID}', [$bookingController, 'getBookingByID']);
-  $app->get('/bookings/guide/{userID}', [$bookingController, 'getBookingsByGuide']);
-  $app->get('/bookings/seeker/{userID}', [$bookingController, 'getBookingsBySeeker']);
-  $app->post('/bookings', [$bookingController, 'createBooking']);
-  $app->patch('/bookings/{bookingID}', [$bookingController, 'updateBooking']);
-  $app->delete('/bookings/{bookingID}', [$bookingController, 'cancelBooking']);
-  $app->post('/reviews', [$bookingController, 'createReview']);
+  // Bookings protegidos
+  $app->get('/bookings/{bookingID}', [$bookingController, 'getBookingByID'])->add($jwtMiddleware);
+  $app->get('/bookings/guide/{userID}', [$bookingController, 'getBookingsByGuide'])->add($jwtMiddleware);
+  $app->get('/bookings/seeker/{userID}', [$bookingController, 'getBookingsBySeeker'])->add($jwtMiddleware);
+  $app->post('/bookings', [$bookingController, 'createBooking'])->add($jwtMiddleware);
+  $app->patch('/bookings/{bookingID}', [$bookingController, 'updateBooking'])->add($jwtMiddleware);
+  $app->delete('/bookings/{bookingID}', [$bookingController, 'cancelBooking'])->add($jwtMiddleware);
+
+  // Reviews: solo POST protegido
+  $app->post('/reviews', [$bookingController, 'createReview'])->add($jwtMiddleware);
   $app->get('/reviews', [$bookingController, 'getReviews']);
   $app->get('/reviews/{reviewID}', [$bookingController, 'getReviewsByID']);
   $app->get('/reviews/guide/{userID}', [$bookingController, 'getReviewsByGuide']);
