@@ -18,22 +18,18 @@ return function (App $app) {
       //     "/bookings/{bookingID}",
       //     "/reviews"
       //   ],
-      //   "ignore" => ["/reviews/{userID}"] 
       // ]),
       function ($request): bool {
         $path = $request->getUri()->getPath();
         $method = $request->getMethod();
       
-        // Desactiva JWT solo en GET /reviews/{userID}
+        // Desactiva JWT solo en GET /reviews/{reviewID}
         if ($method === 'GET' && preg_match('#^/reviews/\d+$#', $path)) {
           return false;
         }
       
         return true; // aplica JWT para el resto
-      },
-      new Tuupola\Middleware\JwtAuthentication\RequestMethodRule([
-        "ignore" => ["OPTIONS"]
-      ])
+      }
     ],
     "attribute" => "jwt"
   ]));
@@ -50,6 +46,8 @@ return function (App $app) {
   $app->patch('/bookings/{bookingID}', [$bookingController, 'updateBooking']);
   $app->delete('/bookings/{bookingID}', [$bookingController, 'cancelBooking']);
   $app->post('/reviews', [$bookingController, 'createReview']);
-  $app->get('/reviews/{userID}', [$bookingController, 'getReviewsByGuide']);
-
+  $app->get('/reviews', [$bookingController, 'getReviews']);
+  $app->get('/reviews/{reviewID}', [$bookingController, 'getReviewsByID']);
+  $app->get('/reviews/guide/{userID}', [$bookingController, 'getReviewsByGuide']);
+  $app->get('/reviews/offering/{offeringID}', [$bookingController, 'getReviewsByOffering']);
 };

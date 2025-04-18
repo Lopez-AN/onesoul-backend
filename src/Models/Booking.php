@@ -235,6 +235,50 @@ class Booking
       $stmt->bindParam(':rating', $data['Rating'], PDO::PARAM_INT);
       $stmt->bindParam(':reviewText', $data['ReviewText'], PDO::PARAM_STR);
       $stmt->execute();
+
+      $reviewID = $this->db->lastInsertId();
+
+      return $this->getReviewsByID($reviewID);
+
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  public function getReviews($limit, $fromDate)
+  {
+    try {
+      $query = "SELECT SQL_CALC_FOUND_ROWS r.ReviewID, r.SUserID AS SeekerID, u.DisplayName AS Seeker, u.CountryCode,
+                r.ReviewText, r.Rating, o.Title AS TitleOffering, r.GUserID AS GuideID, u2.DisplayName AS Guide
+                FROM Reviews AS r 
+                INNER JOIN Offerings AS o ON r.OfferingID = o.OfferingID
+                INNER JOIN Users AS u ON r.SUserID = u.UserID
+                INNER JOIN Users AS u2 ON r.GUserID = u2.UserID";
+                
+      if ($fromDate) {
+        $query .= " AND r.CreationDate >= :fromDate";
+      }
+   
+      $query .= " ORDER BY r.CreationDate DESC LIMIT :limit";
+
+      $stmt = $this->db->prepare($query);
+      if ($fromDate) {
+        $stmt->bindParam(':fromDate', $fromDate);
+      }
+      $stmt->bindParam(':limit', $limit, PDO::PARAM_INT);
+      $stmt->execute();
+
+      $reviews = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+      $total = $this->db->query("SELECT FOUND_ROWS() as total")->fetch(PDO::FETCH_ASSOC);
+
+      return [
+        "Data" => $reviews,
+        "Rows" => [
+            "total" => (int)$total['total'],
+            "fetched" => count($reviews)
+        ]
+      ];
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
@@ -243,7 +287,7 @@ class Booking
   public function getReviewsByGuide($userID, $limit, $fromDate)
   {
     try {
-      $query = "SELECT SQL_CALC_FOUND_ROWS r.SUserID AS SeekerID, u.DisplayName AS Seeker, u.CountryCode,
+      $query = "SELECT SQL_CALC_FOUND_ROWS r.ReviewID, r.SUserID AS SeekerID, u.DisplayName AS Seeker, u.CountryCode,
                 r.ReviewText, r.Rating, o.Title AS TitleOffering, r.GUserID AS GuideID, u2.DisplayName AS Guide
                 FROM Reviews AS r 
                 INNER JOIN Offerings AS o ON r.OfferingID = o.OfferingID
@@ -276,6 +320,57 @@ class Booking
             "fetched" => count($reviews)
         ]
       ];
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  public function getReviewsByID($reviewID)
+  {
+    try {
+      $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS r.ReviewID, r.SUserID AS SeekerID, u.DisplayName AS Seeker, u.CountryCode,
+              r.ReviewText, r.Rating, o.Title AS TitleOffering, r.GUserID AS GuideID, u2.DisplayName AS Guide
+              FROM Reviews AS r 
+              INNER JOIN Offerings AS o ON r.OfferingID = o.OfferingID
+              INNER JOIN Users AS u ON r.SUserID = u.UserID
+              INNER JOIN Users AS u2 ON r.GUserID = u2.UserID                
+              WHERE r.ReviewID = :reviewID");
+      $stmt->bindParam(':reviewID', $reviewID, PDO::PARAM_INT);
+      $stmt->execute();
+
+      $review = $stmt->fetch(PDO::FETCH_ASSOC);
+
+      if (!$review) {
+        return null; // No se encontró booking
+      }
+
+      return $review;
+
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  public function getReviewsByOffering($offeringID)
+  {
+    try {
+      $stmt = $this->db->prepare("SELECT r.ReviewID, r.Rating,
+        r.ReviewText, IF(u.DisplayName IS NULL,
+        CONCAT(u.FirstName, ' ', u.Lastname), u.DisplayName) AS Reviewer,
+        m.URL as ReviewerProfilePhoto
+        FROM Reviews AS r
+        INNER JOIN Users AS u ON r.SUserID = u.UserID
+        LEFT JOIN Media AS m ON r.SUserID = m.UserID
+        WHERE r.OfferingID = :offeringID");
+
+      $stmt->bindParam(':offeringID', $offeringID, PDO::PARAM_INT);
+      $stmt->execute();
+
+      $reviews = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+      // Si no hay reviews, retornar NULL para manejarlo en el controlador
+      return !empty($reviews) ? $reviews : null;
+
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }

@@ -623,31 +623,6 @@ class Offering
     }
   }
 
-  public function getReviewsByOffering($id)
-  {
-    try {
-      $stmt = $this->db->prepare("SELECT r.ReviewID, r.Rating,
-        r.ReviewText, IF(u.DisplayName IS NULL,
-        CONCAT(u.FirstName, ' ', u.Lastname), u.DisplayName) AS Reviewer,
-        m.URL as ReviewerProfilePhoto
-        FROM Reviews AS r
-        INNER JOIN Users AS u ON r.SUserID = u.UserID
-        LEFT JOIN Media AS m ON r.SUserID = m.UserID
-        WHERE r.OfferingID = :id");
-
-      $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-      $stmt->execute();
-
-      $reviews = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-      // Si no hay reviews, retornar NULL para manejarlo en el controlador
-      return !empty($reviews) ? $reviews : null;
-
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
-  }
-
   public function createOffering($data)
   {
     if (empty($data)) {
