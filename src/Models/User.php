@@ -29,9 +29,9 @@ class User
       u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
       -- Subconsulta para reviews
       (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-        FROM Reviews as r WHERE r.SUserID = u.UserID) AS Rating,
+        FROM Reviews as r WHERE r.GUserID = u.UserID) AS Rating,
       (SELECT COUNT(DISTINCT r.ReviewID)
-        FROM Reviews as r WHERE r.SUserID = u.UserID) AS TotalReviews
+        FROM Reviews as r WHERE r.GUserID = u.UserID) AS TotalReviews
       FROM Users as u
       LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
       LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
@@ -105,9 +105,9 @@ class User
       u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
       -- Subconsulta para reviews
       (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-        FROM Reviews as r WHERE r.SUserID = u.UserID) AS Rating,
+        FROM Reviews as r WHERE r.GUserID = u.UserID) AS Rating,
       (SELECT COUNT(DISTINCT r.ReviewID)
-        FROM Reviews as r WHERE r.SUserID = u.UserID) AS TotalReviews
+        FROM Reviews as r WHERE r.GUserID = u.UserID) AS TotalReviews
       FROM Users as u
       LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
       LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
@@ -192,9 +192,9 @@ class User
       u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
       -- Subconsulta para reviews
       (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-        FROM Reviews as r WHERE r.SUserID = u.UserID) AS Rating,
+        FROM Reviews as r WHERE r.GUserID = u.UserID) AS Rating,
       (SELECT COUNT(DISTINCT r.ReviewID)
-        FROM Reviews as r WHERE r.SUserID = u.UserID) AS TotalReviews
+        FROM Reviews as r WHERE r.GUserID = u.UserID) AS TotalReviews
       FROM Users as u
       LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
       LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
@@ -279,9 +279,9 @@ class User
       u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
       -- Subconsulta para reviews
       (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-        FROM Reviews as r WHERE r.SUserID = u.UserID) AS Rating,
+        FROM Reviews as r WHERE r.GUserID = u.UserID) AS Rating,
       (SELECT COUNT(DISTINCT r.ReviewID)
-        FROM Reviews as r WHERE r.SUserID = u.UserID) AS TotalReviews
+        FROM Reviews as r WHERE r.GUserID = u.UserID) AS TotalReviews
       FROM Users as u
       LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
       LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
@@ -366,9 +366,9 @@ class User
       u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
       -- Subconsulta para reviews
       (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-        FROM Reviews as r WHERE r.SUserID = u.UserID) AS Rating,
+        FROM Reviews as r WHERE r.GUserID = u.UserID) AS Rating,
       (SELECT COUNT(DISTINCT r.ReviewID)
-        FROM Reviews as r WHERE r.SUserID = u.UserID) AS TotalReviews
+        FROM Reviews as r WHERE r.GUserID = u.UserID) AS TotalReviews
       FROM Users as u
       LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
       LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
@@ -455,9 +455,9 @@ class User
         u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
         -- Subconsulta para reviews
         (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-          FROM Reviews as r WHERE r.SUserID = u.UserID) AS Rating,
+          FROM Reviews as r WHERE r.GUserID = u.UserID) AS Rating,
         (SELECT COUNT(DISTINCT r.ReviewID)
-          FROM Reviews as r WHERE r.SUserID = u.UserID) AS TotalReviews
+          FROM Reviews as r WHERE r.GUserID = u.UserID) AS TotalReviews
         FROM Users as u
         LEFT JOIN UsersCategories as uc ON uc.UserID = u.UserID
         LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
@@ -484,9 +484,9 @@ class User
         u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
         -- Subconsulta para reviews
         (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-          FROM Reviews as r WHERE r.SUserID = u.UserID) AS Rating,
+          FROM Reviews as r WHERE r.GUserID = u.UserID) AS Rating,
         (SELECT COUNT(DISTINCT r.ReviewID)
-          FROM Reviews as r WHERE r.SUserID = u.UserID) AS TotalReviews
+          FROM Reviews as r WHERE r.GUserID = u.UserID) AS TotalReviews
         FROM Users as u
         LEFT JOIN UsersCategories as uc ON uc.UserID = u.UserID
         LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
@@ -563,9 +563,9 @@ class User
       u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
       -- Subconsulta para reviews
       (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-        FROM Reviews as r WHERE r.SUserID = u.UserID) AS Rating,
+        FROM Reviews as r WHERE r.GUserID = u.UserID) AS Rating,
       (SELECT COUNT(DISTINCT r.ReviewID)
-        FROM Reviews as r WHERE r.SUserID = u.UserID) AS TotalReviews
+        FROM Reviews as r WHERE r.GUserID = u.UserID) AS TotalReviews
       FROM Users as u
       LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
       LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
@@ -626,31 +626,6 @@ class User
         "http_code" => 200,
         "data" => $rs
       ];
-
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
-  }
-
-  public function getReviewsByUser($userID)
-  {
-    try{
-      $stmt = $this->db->prepare("SELECT r.ReviewID, o.OfferingID,
-      o.Title AS OfferingTitle, r.Rating, r.ReviewText,
-      IF(u.DisplayName IS NULL, CONCAT(u.FirstName,' ',u.Lastname), u.DisplayName) AS Reviewer,
-      m.URL as ReviewerProfilePhoto
-      FROM Reviews AS r
-      INNER JOIN Users AS u ON r.SUserID = u.UserID
-      INNER JOIN Offerings AS o ON r.OfferingID = o.OfferingID
-      LEFT JOIN Media AS m ON r.SUserID = m.UserID
-      WHERE r.GUserID = :userID");
-      $stmt->bindParam(':userID', $userID, PDO::PARAM_INT);
-      $stmt->execute();
-
-      $reviews = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-      // Si no hay reviews, retornar NULL para manejarlo en el controlador
-      return !empty($reviews) ? $reviews : null;
 
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());

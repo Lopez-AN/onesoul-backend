@@ -30,5 +30,7 @@ return function (App $app) {
   $app->get('/reviews', [$bookingController, 'getReviews']);
   $app->get('/reviews/{reviewID}', [$bookingController, 'getReviewsByID']);
   $app->get('/reviews/guide/{userID}', [$bookingController, 'getReviewsByGuide']);
+  $app->get('/reviews/seeker/{userID}', [$bookingController, 'getReviewsBySeeker']);
+  $app->get('/reviews/user/{userID}', [$bookingController, 'getReviewsByUser']);
   $app->get('/reviews/offering/{offeringID}', [$bookingController, 'getReviewsByOffering']);
 };

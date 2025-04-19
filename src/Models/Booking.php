@@ -245,26 +245,48 @@ class Booking
     }
   }
 
-  public function getReviews($limit, $fromDate)
+  public function getReviews($limit, $from = null, $to = null, $rating = null)
   {
     try {
-      $query = "SELECT SQL_CALC_FOUND_ROWS r.ReviewID, r.SUserID AS SeekerID, u.DisplayName AS Seeker, u.CountryCode,
-                r.ReviewText, r.Rating, o.Title AS TitleOffering, r.GUserID AS GuideID, u2.DisplayName AS Guide
-                FROM Reviews AS r 
-                INNER JOIN Offerings AS o ON r.OfferingID = o.OfferingID
-                INNER JOIN Users AS u ON r.SUserID = u.UserID
-                INNER JOIN Users AS u2 ON r.GUserID = u2.UserID";
+      $query = "SELECT SQL_CALC_FOUND_ROWS r.ReviewID, r.CreationDate, r.SUserID AS SeekerID, 
+              IF(u.DisplayName IS NULL, CONCAT(u.FirstName, ' ', u.LastName), u.DisplayName) AS Reviewer,
+              u.CountryCode, r.ReviewText, r.Rating, 
+              r.OfferingID, o.Title AS TitleOffering,
+              r.GUserID AS GuideID,
+              IF(u2.DisplayName IS NULL, CONCAT(u2.FirstName, ' ', u2.LastName), u2.DisplayName) AS Guide,
+              m.URL as ReviewerProfilePhoto
+              FROM Reviews AS r
+              INNER JOIN Offerings AS o ON r.OfferingID = o.OfferingID
+              INNER JOIN Users AS u ON r.SUserID = u.UserID
+              INNER JOIN Users AS u2 ON r.GUserID = u2.UserID
+              LEFT JOIN Media AS m ON r.SUserID = m.UserID";
                 
-      if ($fromDate) {
-        $query .= " AND r.CreationDate >= :fromDate";
+      // Construimos el WHERE condicionalmente
+      $whereClauses = [];
+      if ($from) $whereClauses[] = "r.CreationDate >= :fromDate";
+      if ($to) $whereClauses[] = "r.CreationDate <= :toDate";
+      if ($rating) $whereClauses[] = "r.Rating = :rating";
+
+      if (!empty($whereClauses)) {
+        $query .= " WHERE " . implode(" AND ", $whereClauses);
       }
    
       $query .= " ORDER BY r.CreationDate DESC LIMIT :limit";
 
       $stmt = $this->db->prepare($query);
-      if ($fromDate) {
-        $stmt->bindParam(':fromDate', $fromDate);
+
+      if ($from) {
+        $fromFormatted = DateTime::createFromFormat('Ymd', $from)->format('Y-m-d');
+        $stmt->bindParam(':fromDate', $fromFormatted);
       }
+      if ($to) {
+        $toFormatted = DateTime::createFromFormat('Ymd', $to)->format('Y-m-d');
+        $stmt->bindParam(':toDate', $toFormatted);
+      }
+      if ($rating) {
+        $stmt->bindParam(':rating', $rating, PDO::PARAM_INT);
+      }
+
       $stmt->bindParam(':limit', $limit, PDO::PARAM_INT);
       $stmt->execute();
 
@@ -275,8 +297,8 @@ class Booking
       return [
         "Data" => $reviews,
         "Rows" => [
-            "total" => (int)$total['total'],
-            "fetched" => count($reviews)
+            "Total" => (int)$total['total'],
+            "Fetched" => count($reviews)
         ]
       ];
     } catch (\PDOException $e) {
@@ -284,28 +306,50 @@ class Booking
     }
   }
 
-  public function getReviewsByGuide($userID, $limit, $fromDate)
+  public function getReviewsByGuide($userID, $limit, $from = null, $to = null, $rating = null)
   {
     try {
-      $query = "SELECT SQL_CALC_FOUND_ROWS r.ReviewID, r.SUserID AS SeekerID, u.DisplayName AS Seeker, u.CountryCode,
-                r.ReviewText, r.Rating, o.Title AS TitleOffering, r.GUserID AS GuideID, u2.DisplayName AS Guide
-                FROM Reviews AS r 
-                INNER JOIN Offerings AS o ON r.OfferingID = o.OfferingID
-                INNER JOIN Users AS u ON r.SUserID = u.UserID
-                INNER JOIN Users AS u2 ON r.GUserID = u2.UserID                
-                WHERE r.GUserID = :userID";
+      $query = "SELECT SQL_CALC_FOUND_ROWS r.ReviewID, r.CreationDate, r.SUserID AS SeekerID, 
+              IF(u.DisplayName IS NULL, CONCAT(u.FirstName, ' ', u.LastName), u.DisplayName) AS Reviewer,
+              u.CountryCode, r.ReviewText, r.Rating, 
+              r.OfferingID, o.Title AS TitleOffering,
+              r.GUserID AS GuideID,
+              IF(u2.DisplayName IS NULL, CONCAT(u2.FirstName, ' ', u2.LastName), u2.DisplayName) AS Guide,
+              m.URL as ReviewerProfilePhoto
+              FROM Reviews AS r
+              INNER JOIN Offerings AS o ON r.OfferingID = o.OfferingID
+              INNER JOIN Users AS u ON r.SUserID = u.UserID
+              INNER JOIN Users AS u2 ON r.GUserID = u2.UserID
+              LEFT JOIN Media AS m ON r.SUserID = m.UserID";
                 
-      if ($fromDate) {
-        $query .= " AND r.CreationDate >= :fromDate";
+      // Construimos el WHERE condicionalmente
+      $whereClauses = ["r.GUserID = :userID"];
+      if ($from) $whereClauses[] = "r.CreationDate >= :fromDate";
+      if ($to) $whereClauses[] = "r.CreationDate <= :toDate";
+      if ($rating) $whereClauses[] = "r.Rating = :rating";
+
+      if (!empty($whereClauses)) {
+        $query .= " WHERE " . implode(" AND ", $whereClauses);
       }
    
       $query .= " ORDER BY r.CreationDate DESC LIMIT :limit";
 
       $stmt = $this->db->prepare($query);
+
       $stmt->bindParam(':userID', $userID, PDO::PARAM_INT);
-      if ($fromDate) {
-        $stmt->bindParam(':fromDate', $fromDate);
+
+      if ($from) {
+        $fromFormatted = DateTime::createFromFormat('Ymd', $from)->format('Y-m-d');
+        $stmt->bindParam(':fromDate', $fromFormatted);
       }
+      if ($to) {
+        $toFormatted = DateTime::createFromFormat('Ymd', $to)->format('Y-m-d');
+        $stmt->bindParam(':toDate', $toFormatted);
+      }
+      if ($rating) {
+        $stmt->bindParam(':rating', $rating, PDO::PARAM_INT);
+      }
+
       $stmt->bindParam(':limit', $limit, PDO::PARAM_INT);
       $stmt->execute();
 
@@ -316,8 +360,139 @@ class Booking
       return [
         "Data" => $reviews,
         "Rows" => [
-            "total" => (int)$total['total'],
-            "fetched" => count($reviews)
+            "Total" => (int)$total['total'],
+            "Fetched" => count($reviews)
+        ]
+      ];
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  public function getReviewsBySeeker($userID, $limit, $from = null, $to = null, $rating = null)
+  {
+    try {
+      $query = "SELECT SQL_CALC_FOUND_ROWS r.ReviewID, r.CreationDate, r.SUserID AS SeekerID, 
+              IF(u.DisplayName IS NULL, CONCAT(u.FirstName, ' ', u.LastName), u.DisplayName) AS Reviewer,
+              u.CountryCode, r.ReviewText, r.Rating, 
+              r.OfferingID, o.Title AS TitleOffering,
+              r.GUserID AS GuideID,
+              IF(u2.DisplayName IS NULL, CONCAT(u2.FirstName, ' ', u2.LastName), u2.DisplayName) AS Guide,
+              m.URL as ReviewerProfilePhoto
+              FROM Reviews AS r
+              INNER JOIN Offerings AS o ON r.OfferingID = o.OfferingID
+              INNER JOIN Users AS u ON r.SUserID = u.UserID
+              INNER JOIN Users AS u2 ON r.GUserID = u2.UserID
+              LEFT JOIN Media AS m ON r.SUserID = m.UserID";
+                
+      // Construimos el WHERE condicionalmente
+      $whereClauses = ["r.SUserID = :userID"];
+      if ($from) $whereClauses[] = "r.CreationDate >= :fromDate";
+      if ($to) $whereClauses[] = "r.CreationDate <= :toDate";
+      if ($rating) $whereClauses[] = "r.Rating = :rating";
+
+      if (!empty($whereClauses)) {
+        $query .= " WHERE " . implode(" AND ", $whereClauses);
+      }
+   
+      $query .= " ORDER BY r.CreationDate DESC LIMIT :limit";
+
+      $stmt = $this->db->prepare($query);
+
+      $stmt->bindParam(':userID', $userID, PDO::PARAM_INT);
+
+      if ($from) {
+        $fromFormatted = DateTime::createFromFormat('Ymd', $from)->format('Y-m-d');
+        $stmt->bindParam(':fromDate', $fromFormatted);
+      }
+      if ($to) {
+        $toFormatted = DateTime::createFromFormat('Ymd', $to)->format('Y-m-d');
+        $stmt->bindParam(':toDate', $toFormatted);
+      }
+      if ($rating) {
+        $stmt->bindParam(':rating', $rating, PDO::PARAM_INT);
+      }
+
+      $stmt->bindParam(':limit', $limit, PDO::PARAM_INT);
+      $stmt->execute();
+
+      $reviews = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+      $total = $this->db->query("SELECT FOUND_ROWS() as total")->fetch(PDO::FETCH_ASSOC);
+
+      return [
+        "Data" => $reviews,
+        "Rows" => [
+            "Total" => (int)$total['total'],
+            "Fetched" => count($reviews)
+        ]
+      ];  
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+  
+  //TRAE TODAS LAS REVIEWS DEL USUARIO, TANTO COMO GUIA Y COMO BUSCADOR 
+  public function getReviewsByUser($userID, $limit, $from = null, $to = null, $rating = null)
+  {
+    try {
+      // Determinar el rol del usuario en las reviews
+      $stmt = $this->db->prepare("SELECT UserType FROM Users WHERE UserID = :userID");
+      $stmt->execute([':userID' => $userID]);
+      $role = $stmt->fetch(PDO::FETCH_ASSOC);
+  
+      if (!$role) {
+        throw new \Exception("User not found.");
+      }
+  
+      $isGuide = $role['UserType'] == 'Guide';
+
+      $type = $isGuide ? 'r.GUserID' : 'r.SUserID';
+  
+      $query = "SELECT SQL_CALC_FOUND_ROWS r.ReviewID, r.CreationDate, r.SUserID AS SeekerID, 
+                IF(u.DisplayName IS NULL, CONCAT(u.FirstName, ' ', u.LastName), u.DisplayName) AS Reviewer,
+                u.CountryCode, r.ReviewText, r.Rating, 
+                r.OfferingID, o.Title AS TitleOffering,
+                r.GUserID AS GuideID,
+                IF(u2.DisplayName IS NULL, CONCAT(u2.FirstName, ' ', u2.LastName), u2.DisplayName) AS Guide,
+                m.URL as ReviewerProfilePhoto
+                FROM Reviews AS r
+                INNER JOIN Offerings AS o ON r.OfferingID = o.OfferingID
+                INNER JOIN Users AS u ON r.SUserID = u.UserID
+                INNER JOIN Users AS u2 ON r.GUserID = u2.UserID
+                LEFT JOIN Media AS m ON r.SUserID = m.UserID
+                WHERE $type = :userID";
+  
+      if ($from) $query .= " AND r.CreationDate >= :fromDate";
+      if ($to) $query .= " AND r.CreationDate <= :toDate";
+      if ($rating) $query .= " AND r.Rating = :rating";
+  
+      $query .= " ORDER BY r.CreationDate DESC LIMIT :limit";
+  
+      $stmt = $this->db->prepare($query);
+      $stmt->bindParam(':userID', $userID, PDO::PARAM_INT);
+      if ($from) {
+        $fromFormatted = DateTime::createFromFormat('Ymd', $from)->format('Y-m-d');
+        $stmt->bindParam(':fromDate', $fromFormatted);
+      }
+      if ($to) {
+        $toFormatted = DateTime::createFromFormat('Ymd', $to)->format('Y-m-d');
+        $stmt->bindParam(':toDate', $toFormatted);
+      }
+      if ($rating) {
+        $stmt->bindParam(':rating', $rating, PDO::PARAM_INT);
+      }
+      $stmt->bindParam(':limit', $limit, PDO::PARAM_INT);
+      $stmt->execute();
+  
+      $reviews = $stmt->fetchAll(PDO::FETCH_ASSOC);
+      $total = $this->db->query("SELECT FOUND_ROWS() as total")->fetch(PDO::FETCH_ASSOC);
+  
+      return [
+        "Data" => $reviews,
+        "Rows" => [
+          "Total" => (int)$total['total'],
+          "Fetched" => count($reviews)
         ]
       ];
     } catch (\PDOException $e) {
@@ -328,12 +503,18 @@ class Booking
   public function getReviewsByID($reviewID)
   {
     try {
-      $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS r.ReviewID, r.SUserID AS SeekerID, u.DisplayName AS Seeker, u.CountryCode,
-              r.ReviewText, r.Rating, o.Title AS TitleOffering, r.GUserID AS GuideID, u2.DisplayName AS Guide
-              FROM Reviews AS r 
+      $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS r.ReviewID, r.CreationDate, r.SUserID AS SeekerID, 
+              IF(u.DisplayName IS NULL, CONCAT(u.FirstName, ' ', u.LastName), u.DisplayName) AS Reviewer,
+              u.CountryCode, r.ReviewText, r.Rating, 
+              r.OfferingID, o.Title AS TitleOffering,
+              r.GUserID AS GuideID,
+              IF(u2.DisplayName IS NULL, CONCAT(u2.FirstName, ' ', u2.LastName), u2.DisplayName) AS Guide,
+              m.URL as ReviewerProfilePhoto
+              FROM Reviews AS r
               INNER JOIN Offerings AS o ON r.OfferingID = o.OfferingID
               INNER JOIN Users AS u ON r.SUserID = u.UserID
-              INNER JOIN Users AS u2 ON r.GUserID = u2.UserID                
+              INNER JOIN Users AS u2 ON r.GUserID = u2.UserID
+              LEFT JOIN Media AS m ON r.SUserID = m.UserID       
               WHERE r.ReviewID = :reviewID");
       $stmt->bindParam(':reviewID', $reviewID, PDO::PARAM_INT);
       $stmt->execute();
@@ -351,26 +532,63 @@ class Booking
     }
   }
 
-  public function getReviewsByOffering($offeringID)
+  public function getReviewsByOffering($offeringID, $limit, $from = null, $to = null, $rating = null)
   {
     try {
-      $stmt = $this->db->prepare("SELECT r.ReviewID, r.Rating,
-        r.ReviewText, IF(u.DisplayName IS NULL,
-        CONCAT(u.FirstName, ' ', u.Lastname), u.DisplayName) AS Reviewer,
-        m.URL as ReviewerProfilePhoto
-        FROM Reviews AS r
-        INNER JOIN Users AS u ON r.SUserID = u.UserID
-        LEFT JOIN Media AS m ON r.SUserID = m.UserID
-        WHERE r.OfferingID = :offeringID");
+      $query = "SELECT SQL_CALC_FOUND_ROWS r.ReviewID, r.CreationDate, r.SUserID AS SeekerID, 
+              IF(u.DisplayName IS NULL, CONCAT(u.FirstName, ' ', u.LastName), u.DisplayName) AS Reviewer,
+              u.CountryCode, r.ReviewText, r.Rating, 
+              r.OfferingID, o.Title AS TitleOffering,
+              r.GUserID AS GuideID,
+              IF(u2.DisplayName IS NULL, CONCAT(u2.FirstName, ' ', u2.LastName), u2.DisplayName) AS Guide,
+              m.URL as ReviewerProfilePhoto
+              FROM Reviews AS r
+              INNER JOIN Offerings AS o ON r.OfferingID = o.OfferingID
+              INNER JOIN Users AS u ON r.SUserID = u.UserID
+              INNER JOIN Users AS u2 ON r.GUserID = u2.UserID
+              LEFT JOIN Media AS m ON r.SUserID = m.UserID";
+      
+      // Construimos el WHERE condicionalmente
+      $whereClauses = ["r.OfferingID = :offeringID"];
+      if ($from) $whereClauses[] = "r.CreationDate >= :fromDate";
+      if ($to) $whereClauses[] = "r.CreationDate <= :toDate";
+      if ($rating) $whereClauses[] = "r.Rating = :rating";
+
+      if (!empty($whereClauses)) {
+        $query .= " WHERE " . implode(" AND ", $whereClauses);
+      }
+   
+      $query .= " ORDER BY r.CreationDate DESC LIMIT :limit";
+
+      $stmt = $this->db->prepare($query);
 
       $stmt->bindParam(':offeringID', $offeringID, PDO::PARAM_INT);
+      if ($from) {
+        $fromFormatted = DateTime::createFromFormat('Ymd', $from)->format('Y-m-d');
+        $stmt->bindParam(':fromDate', $fromFormatted);
+      }
+      if ($to) {
+        $toFormatted = DateTime::createFromFormat('Ymd', $to)->format('Y-m-d');
+        $stmt->bindParam(':toDate', $toFormatted);
+      }
+      if ($rating) {
+        $stmt->bindParam(':rating', $rating, PDO::PARAM_INT);
+      }
+
+      $stmt->bindParam(':limit', $limit, PDO::PARAM_INT);
       $stmt->execute();
 
       $reviews = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-      // Si no hay reviews, retornar NULL para manejarlo en el controlador
-      return !empty($reviews) ? $reviews : null;
+      $total = $this->db->query("SELECT FOUND_ROWS() as total")->fetch(PDO::FETCH_ASSOC);
 
+      return [
+        "Data" => $reviews,
+        "Rows" => [
+          "Total" => (int)$total['total'],
+          "Fetched" => count($reviews)
+        ]
+      ];
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }

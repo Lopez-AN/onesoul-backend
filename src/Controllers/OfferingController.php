@@ -158,7 +158,7 @@ class OfferingController {
       }
 
       $result = $this->offering->createOffering($data);
-      return $response->withStatus(200)->withJson($result);
+      return $response->withStatus(200)->withJson($result->data);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [

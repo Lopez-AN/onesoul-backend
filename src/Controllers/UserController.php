@@ -129,32 +129,6 @@ class UserController
     }
   }
 
-  public function getReviewsByUser(Request $request, Response $response, $args){
-    $id = $args['id'];
-
-    try {
-      $reviews = $this->user->getReviewsByUser($id);
-
-      if ($reviews === null) {
-        return $response->withStatus(404)->withJson([
-          "error" => [
-            "code" => "NO_REVIEWS_FOUND",
-            "desc" => "No reviews found for this specific User."
-          ]
-        ]);
-      }
-
-      return $response->withStatus(200)->withJson($reviews);
-    } catch (\Throwable $e) {
-      return $response->withStatus(500)->withJson([
-       "error" => [
-          "code" => "INTERNAL_SERVER_ERROR",
-        "desc" => $e->getMessage()
-        ]
-      ]);
-    }
-  }
-
   public function updateUser(Request $request, Response $response, $args){
     $userId = $args['id'];
     $data = $request->getParsedBody();

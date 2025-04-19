@@ -132,7 +132,7 @@ class BookingController
       $bookings = $this->booking->getBookingsBySeeker($userID);
 
       if (!$bookings) {
-        return $response->withJson(['error' => 'Booking not found'], 404);
+        return $response->withJson(['error' => 'No bookings found for this user.'], 404);
       }
 
       // Validar si el user es el cliente o el guía
@@ -495,11 +495,36 @@ class BookingController
   {
     $queryParams = $request->getQueryParams();
 
-    $fromDate = $queryParams['from'] ?? null;
+    $from = $queryParams['from'] ?? null;
+    $to = $queryParams['to'] ?? null;
+    $rating = $queryParams['rating'] ?? null;
     $limit = isset($queryParams['limit']) ? (int)$queryParams['limit'] : 50;
 
+    // Validar formato YYYYMMDD
+    $isValidDate = function($date) {
+      return preg_match('/^\d{8}$/', $date) && DateTime::createFromFormat('Ymd', $date) !== false;
+    };
+
+    if (($to !== null && !$isValidDate($to)) || ($from !== null && !$isValidDate($from))) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_TO_DATE",
+          "desc" => "El parámetro debe tener el formato YYYYMMDD"
+        ]
+      ]);
+    }
+
+    if ($rating !== null && (!is_numeric($rating) || $rating < 1 || $rating > 5)) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_RATING", 
+          "desc" => "El parámetro 'rating' debe estar entre 1 y 5."
+        ]
+      ]);
+    }
+
     try {
-      $reviews = $this->booking->getReviews($limit, $fromDate);
+      $reviews = $this->booking->getReviews($limit, $from, $to, $rating);
       return $response->withStatus(200)->withJson($reviews);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
@@ -516,11 +541,127 @@ class BookingController
     $userID = $args['userID'];
     $queryParams = $request->getQueryParams();
 
-    $fromDate = $queryParams['from'] ?? null;
+    $from = $queryParams['from'] ?? null;
+    $to = $queryParams['to'] ?? null;
+    $rating = $queryParams['rating'] ?? null;
     $limit = isset($queryParams['limit']) ? (int)$queryParams['limit'] : 50;
 
+    // Validar formato YYYYMMDD
+    $isValidDate = function($date) {
+      return preg_match('/^\d{8}$/', $date) && DateTime::createFromFormat('Ymd', $date) !== false;
+    };
+
+    if (($to !== null && !$isValidDate($to)) || ($from !== null && !$isValidDate($from))) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_TO_DATE",
+          "desc" => "El parámetro debe tener el formato YYYYMMDD"
+        ]
+      ]);
+    }
+
+    if ($rating !== null && (!is_numeric($rating) || $rating < 1 || $rating > 5)) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_RATING", 
+          "desc" => "El parámetro 'rating' debe estar entre 1 y 5."
+        ]
+      ]);
+    }
+
     try {
-      $reviews = $this->booking->getReviewsByGuide($userID, $limit, $fromDate);
+      $reviews = $this->booking->getReviewsByGuide($userID, $limit, $from, $to, $rating);
+      return $response->withStatus(200)->withJson($reviews);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR", 
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  public function getReviewsBySeeker(Request $request, Response $response, $args)
+  {
+    $userID = $args['userID'];
+    $queryParams = $request->getQueryParams();
+
+    $from = $queryParams['from'] ?? null;
+    $to = $queryParams['to'] ?? null;
+    $rating = $queryParams['rating'] ?? null;
+    $limit = isset($queryParams['limit']) ? (int)$queryParams['limit'] : 50;
+
+    // Validar formato YYYYMMDD
+    $isValidDate = function($date) {
+      return preg_match('/^\d{8}$/', $date) && DateTime::createFromFormat('Ymd', $date) !== false;
+    };
+
+    if (($to !== null && !$isValidDate($to)) || ($from !== null && !$isValidDate($from))) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_TO_DATE",
+          "desc" => "El parámetro debe tener el formato YYYYMMDD"
+        ]
+      ]);
+    }
+
+    if ($rating !== null && (!is_numeric($rating) || $rating < 1 || $rating > 5)) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_RATING", 
+          "desc" => "El parámetro 'rating' debe estar entre 1 y 5."
+        ]
+      ]);
+    }
+
+    try {
+      $reviews = $this->booking->getReviewsBySeeker($userID, $limit, $from, $to, $rating);
+      return $response->withStatus(200)->withJson($reviews);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR", 
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  public function getReviewsByUser(Request $request, Response $response, $args){
+    $userID = $args['userID'];
+    $queryParams = $request->getQueryParams();
+  
+    $from = $queryParams['from'] ?? null;
+    $to = $queryParams['to'] ?? null;
+    $rating = $queryParams['rating'] ?? null;
+    $limit = isset($queryParams['limit']) ? (int)$queryParams['limit'] : 50;
+  
+    // Validar formato YYYYMMDD
+    $isValidDate = function($date) {
+      return preg_match('/^\d{8}$/', $date) && DateTime::createFromFormat('Ymd', $date) !== false;
+    };
+  
+    if (($to !== null && !$isValidDate($to)) || ($from !== null && !$isValidDate($from))) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_DATE",
+          "desc" => "El parámetro debe tener el formato YYYYMMDD"
+        ]
+      ]);
+    }
+  
+    if ($rating !== null && (!is_numeric($rating) || $rating < 1 || $rating > 5)) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_RATING", 
+          "desc" => "El parámetro 'rating' debe estar entre 1 y 5."
+        ]
+      ]);
+    }
+  
+    try {
+      $reviews = $this->booking->getReviewsByUser($userID, $limit, $from, $to, $rating);
       return $response->withStatus(200)->withJson($reviews);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
@@ -540,7 +681,7 @@ class BookingController
       $review = $this->booking->getReviewsByID($reviewID);
       
       if (!$review) {
-        return $response->withJson(['error' => 'Booking not found'], 404);
+        return $response->withJson(['error' => 'Review not found'], 404);
       }
 
       return $response->withStatus(200)->withJson($review);
@@ -556,8 +697,38 @@ class BookingController
 
   public function getReviewsByOffering(Request $request, Response $response, $args)  {
     $offeringID = $args['offeringID'];
+    $queryParams = $request->getQueryParams();
+
+    $from = $queryParams['from'] ?? null;
+    $to = $queryParams['to'] ?? null;
+    $rating = $queryParams['rating'] ?? null;
+    $limit = isset($queryParams['limit']) ? (int)$queryParams['limit'] : 50;
+
+    // Validar formato YYYYMMDD
+    $isValidDate = function($date) {
+      return preg_match('/^\d{8}$/', $date) && DateTime::createFromFormat('Ymd', $date) !== false;
+    };
+
+    if (($to !== null && !$isValidDate($to)) || ($from !== null && !$isValidDate($from))) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_TO_DATE",
+          "desc" => "El parámetro debe tener el formato YYYYMMDD"
+        ]
+      ]);
+    }
+
+    if ($rating !== null && (!is_numeric($rating) || $rating < 1 || $rating > 5)) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_RATING", 
+          "desc" => "El parámetro 'rating' debe estar entre 1 y 5."
+        ]
+      ]);
+    }
+
     try {
-      $reviews = $this->booking->getReviewsByOffering($offeringID);
+      $reviews = $this->booking->getReviewsByOffering($offeringID, $limit, $from, $to, $rating);
 
       if ($reviews === null) {
         return $response->withStatus(404)->withJson([

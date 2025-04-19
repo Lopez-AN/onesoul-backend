@@ -230,9 +230,9 @@ class Search
         u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
         -- Subconsulta para reviews
         (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-          FROM Reviews as r WHERE r.SUserID = u.UserID) AS Rating,
+          FROM Reviews as r WHERE r.GUserID = u.UserID) AS Rating,
         (SELECT COUNT(DISTINCT r.ReviewID)
-          FROM Reviews as r WHERE r.SUserID = u.UserID) AS TotalReviews
+          FROM Reviews as r WHERE r.GUserID = u.UserID) AS TotalReviews
         FROM Users as u
         LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
         LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
@@ -272,9 +272,9 @@ class Search
         u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
         -- Subconsulta para reviews
         (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-          FROM Reviews as r WHERE r.SUserID = u.UserID) AS Rating,
+          FROM Reviews as r WHERE r.GUserID = u.UserID) AS Rating,
         (SELECT COUNT(DISTINCT r.ReviewID)
-          FROM Reviews as r WHERE r.SUserID = u.UserID) AS TotalReviews
+          FROM Reviews as r WHERE r.GUserID = u.UserID) AS TotalReviews
         FROM Users as u
         LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
         LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
