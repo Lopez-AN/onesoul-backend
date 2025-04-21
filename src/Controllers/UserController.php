@@ -129,6 +129,25 @@ class UserController
     }
   }
 
+  public function getUserByRefCode(Request $request, Response $response, $args){
+    $referralCode = $args['referralCode'];
+
+    try {
+      $result = $this->user->getUserByRefCode($referralCode);
+      if($result->http_code != 200){
+        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+      }
+      return $response->withStatus(200)->withJson($result->data);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
   public function updateUser(Request $request, Response $response, $args){
     $userId = $args['id'];
     $data = $request->getParsedBody();
@@ -198,7 +217,56 @@ class UserController
     }
   }
 
-  public function deleteUser(Request $request, Response $response, $args)  {
+  public function createConsent(Request $request, Response $response, $args)
+  {
+    try {
+      $data = $request->getParsedBody();
+
+      $result = $this->user->createConsent($data);
+
+      if (isset($result['error'])) {
+        $response->getBody()->write(json_encode($result));
+        return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+      }
+
+      $response->getBody()->write(json_encode(['message' => 'Consent saved successfully']));
+      return $response->withStatus(201)->withHeader('Content-Type', 'application/json');
+
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  public function getLatestConsent(Request $request, Response $response, $args)
+  {
+    $id = $args['id'];
+    try {
+      $result = $this->user->getLatestConsent($id);
+
+      if($result->http_code != 200){
+        return $response->withStatus(404)->withJson((object)["error" => [
+          "code" => "CONSENT_NOT_FOUND",
+          "desc" => "No consent associated for this specified user."
+        ]]);
+      }
+      return $response->withStatus(200)->withJson($result->data);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  public function deleteUser(Request $request, Response $response, $args)  
+  {
     $id = $args['id'];
     $jwt = $request->getAttribute('jwt');
     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
@@ -245,7 +313,8 @@ class UserController
     }
   }
 
-  public function updateProfilePhoto(Request $request, Response $response, $args)  {
+  public function updateProfilePhoto(Request $request, Response $response, $args)  
+  {
     $userId = $args['id'];
     $jwt = $request->getAttribute('jwt');
     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
@@ -307,7 +376,8 @@ class UserController
     }
   }
 
-  public function deleteProfilePhoto(Request $request, Response $response, $args) {
+  public function deleteProfilePhoto(Request $request, Response $response, $args) 
+  {
     $userId = $args['id'];
     $jwt = $request->getAttribute('jwt');
 
@@ -346,7 +416,8 @@ class UserController
     }
   }
 
-  public function updateUserCategories(Request $request, Response $response, $args) {
+  public function updateUserCategories(Request $request, Response $response, $args) 
+  {
     $userId = $args['id'];
     $jwt = $request->getAttribute('jwt');
 
@@ -419,7 +490,8 @@ class UserController
     }
   }
 
-  private function containsInappropriateContent($text) {
+  private function containsInappropriateContent($text) 
+  {
     return validateContentWithPerspective($text);
   }
 }

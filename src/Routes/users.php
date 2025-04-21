@@ -33,9 +33,12 @@ return function (App $app) {
   $app->get('/users/email/{email}', [$userController, 'getUserByEmail']);
   $app->get('/users/username/{username}', [$userController, 'getUserByUserName']);
   $app->get('/users/category/{id}', [$userController, 'getUserByCategory']);
+  $app->get('/users/referred/{referralCode}', [$userController, 'getUserByRefCode']);
   $app->post('/users/profile_photo/{id}', [$userController, 'updateProfilePhoto']);
   $app->delete('/users/profile_photo/{id}', [$userController, 'deleteProfilePhoto']);
   $app->patch('/users/{id}', [$userController, 'updateUser']);
+  $app->post('/users/consent', [$userController, 'createConsent']);
+  $app->get('/users/consent/{id}', [$userController, 'getLatestConsent']);
   $app->delete('/users/{id}', [$userController, 'deleteUser']);
   $app->post('/users/categories/{id}', [$userController, 'updateUserCategories']);
 };

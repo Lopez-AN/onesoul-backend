@@ -225,7 +225,7 @@ class Search
         u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
         u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType,
         u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
-        u.SignedContract, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
+        u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
           ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
         u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
         -- Subconsulta para reviews
@@ -267,7 +267,7 @@ class Search
         u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
         u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType,
         u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
-        u.SignedContract, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
+        u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
           ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
         u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
         -- Subconsulta para reviews

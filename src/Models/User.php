@@ -24,7 +24,7 @@ class User
       u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
       u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType,
       u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
-      u.SignedContract, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
+      u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
         ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
       u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
       -- Subconsulta para reviews
@@ -100,7 +100,7 @@ class User
       u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
       u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType,
       u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
-      u.SignedContract, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
+      u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
         ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
       u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
       -- Subconsulta para reviews
@@ -180,14 +180,15 @@ class User
   }
 
   # Busca un usuario por username
-  public function getUserByUserName($username) {
+  public function getUserByUserName($username)
+  {
     try {
       $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
       u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
       u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
       u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType,
       u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
-      u.SignedContract, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
+      u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
         ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
       u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
       -- Subconsulta para reviews
@@ -267,14 +268,15 @@ class User
   }
 
   # Busca un usuario por email
-  public function getUserByEmail($email){
+  public function getUserByEmail($email)
+  {
     try {
       $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
       u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
       u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
       u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType,
       u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
-      u.SignedContract, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
+      u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
         ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
       u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
       -- Subconsulta para reviews
@@ -354,14 +356,15 @@ class User
   }
 
   # Busca un usuario por oAuthID
-  public function getUserByOAuthID($oAuthID, $oAuthService){
+  public function getUserByOAuthID($oAuthID, $oAuthService)
+  {
     try {
       $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
       u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
       u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
       u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType,
       u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
-      u.SignedContract, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
+      u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
         ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
       u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
       -- Subconsulta para reviews
@@ -450,7 +453,7 @@ class User
         u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
         u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType,
         u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
-        u.SignedContract, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
+        u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
           ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
         u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
         -- Subconsulta para reviews
@@ -479,7 +482,7 @@ class User
         u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
         u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType,
         u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
-        u.SignedContract, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
+        u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
           ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
         u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
         -- Subconsulta para reviews
@@ -558,7 +561,7 @@ class User
       u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
       u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType,
       u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
-      u.SignedContract, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
+      u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
         ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
       u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
       -- Subconsulta para reviews
@@ -625,6 +628,93 @@ class User
       return (object) [
         "http_code" => 200,
         "data" => $rs
+      ];
+
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  public function getUserByRefCode($referralCode)
+  {
+    try {
+      $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
+      u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
+      u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
+      u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType,
+      u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
+      u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
+        ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
+      u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
+      -- Subconsulta para reviews
+      (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
+        FROM Reviews as r WHERE r.GUserID = u.UserID) AS Rating,
+      (SELECT COUNT(DISTINCT r.ReviewID)
+        FROM Reviews as r WHERE r.GUserID = u.UserID) AS TotalReviews
+      FROM Users as u
+      LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
+      LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
+      LEFT JOIN Media as m ON u.UserID = m.UserID
+      LEFT JOIN (
+        SELECT ROUND(AVG(p.Price),0) as AvgRate, o.UserID,
+        MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
+        MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
+        FROM Offerings as o
+        INNER JOIN OfferingsPackages as p ON o.OfferingID = p.OfferingID
+        WHERE o.Status = 'Active'
+        GROUP BY o.UserID
+      ) as sub ON sub.UserID = u.UserID
+      WHERE u.ReferralCode = :referralCode
+      GROUP BY u.UserID
+      ORDER BY u.UserID");
+
+      $stmt->bindParam(':referralCode', $referralCode, PDO::PARAM_INT);
+      $stmt->execute();
+      $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+      if (empty($rs)) {
+        return (object) [
+          "http_code" => 404,
+          "error" => [
+            "code" => "USER_NOT_FOUND",
+            "desc" => "No user was found with the specified Referral Code"
+          ]
+        ];
+      }
+      $user = $rs[0];
+      $user['Floor'] = is_null($user['Floor']) ? null : (int)$user['Floor'];
+      $user['UserLevel'] = !$user['UserLevel'] ? 1 : (int)$user['UserLevel'];
+      $user['ValidatedEmail'] = (bool)$user['ValidatedEmail'];
+      $user['TwoFactorAuth'] = (bool)$user['TwoFactorAuth'];
+      $user['Categories'] = is_null($user['Categories']) ? [] : array_map(
+        function ($a) {
+          $a = explode(":", $a);
+          return ["Id" => intval($a[0]), "Name" => $a[1]];
+        },
+        explode(",", $user['Categories'])
+      );
+
+      // Agregar sessionType con valores booleanos
+      $user['SessionType'] = [
+        "Virtual" => $user['hasVirtual'] == 1,
+        "InPerson" => $user['hasInPerson'] == 1
+      ];
+      unset($user['hasVirtual'], $user['hasInPerson']);
+
+      // Verificar si la cuenta está desactivada
+      if (!is_null($user['DeactivationDate']) && strtotime($user['DeactivationDate']) <= time()) {
+        return (object) [
+          "http_code" => 401,
+          "error" => [
+            "code" => "USER_DISABLED",
+            "desc" => "The specified user is disabled"
+          ]
+        ];
+      }
+
+      return (object) [
+        "http_code" => 200,
+        "data" => $user
       ];
 
     } catch (\PDOException $e) {
@@ -719,6 +809,50 @@ class User
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
+  }
+
+  public function createConsent($data)
+  {
+    // Validar que el usuario exista
+    $stmt = $this->db->prepare("SELECT 1 FROM Users WHERE UserID = ?");
+    $stmt->execute([$data['UserID']]);
+    if (!$stmt->fetch()) {
+      return ['error' => 'User not found'];
+    }
+
+    // Validar IP
+    if (!filter_var($data['UserIP'], FILTER_VALIDATE_IP)) {
+      return ['error' => 'Invalid IP address'];
+    }
+
+    // Insertar consentimiento
+    $stmt = $db->prepare("INSERT INTO UserLegalConsents 
+          (UserID, AcceptedTerms, AcceptedPrivacyPolicy, UserIP, UserAgent, TyCVersion, PrivacyPolicyVersion) 
+          VALUES (?, ?, ?, ?, ?, ?, ?)");
+
+    $stmt->execute([
+      $data['UserID'],
+      $data['AcceptedTerms'] ? 1 : 0,
+      $data['AcceptedPrivacyPolicy'] ? 1 : 0,
+      $data['UserIP'],
+      $data['UserAgent'],
+      $data['TyCVersion'],
+      $data['PrivacyPolicyVersion']
+    ]);
+
+    return ['success' => true];
+  }
+
+  public function getLatestConsent($id)
+  {
+    $stmt = $this->db->prepare("SELECT * FROM UserLegalConsents 
+                          WHERE UserID = :id 
+                          ORDER BY ConsentDate DESC 
+                          LIMIT 1");
+    $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+    $stmt->execute();
+
+    return $stmt->fetch(PDO::FETCH_ASSOC);
   }
 
   public function deleteUser($id)
