@@ -28,6 +28,16 @@ class OfferingController {
     $paginator = paginator($request);
     try {
       $result = $this->offering->getOfferings($paginator);
+
+      if ($result === null) {
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "OFFERING_NOT_FOUND",
+            "desc" => "No offerings found for this specific user."
+          ]
+        ]);
+      }
+
       return $response->withStatus(200)->withJson($result);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
@@ -43,9 +53,16 @@ class OfferingController {
     $id = $args['id'];
     try {
       $result = $this->offering->getOfferingById($id);
-      if($result->http_code != 200){
-        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+
+      if ($result->http_code != 200) {
+        return $response->withStatus(400)->WithJson([
+          "error" => [
+            "code" => "INVALID_OFFERING",
+            "desc"=> "Provided OfferingID is not valid."
+          ]
+        ]);
       }
+
       return $response->withStatus(200)->withJson($result->data);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
@@ -62,6 +79,16 @@ class OfferingController {
     $categoryId = $args['categoryID'];
     try {
       $result = $this->offering->getOfferingsByCategoryId($paginator, $categoryId);
+
+      if ($result === null) {
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "OFFERING_NOT_FOUND",
+            "desc" => "No offerings found for this specific user."
+          ]
+        ]);
+      }
+
       return $response->withStatus(200)->withJson($result);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
@@ -78,6 +105,16 @@ class OfferingController {
     $userId = $args['userID'];
     try {
       $result = $this->offering->getOfferingsByUserId($paginator, $userId);
+
+      if ($result === null) {
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "OFFERING_NOT_FOUND",
+            "desc" => "No offerings found for this specific user."
+          ]
+        ]);
+      }
+
       return $response->withStatus(200)->withJson($result);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
@@ -183,9 +220,14 @@ class OfferingController {
     }
 
     try {
-      $result = $this->offering->getOfferingById($id);
-      if($result->http_code != 200){
-        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+      $result = $this->offering->getOfferingById($data['id']);
+      if ($result->http_code != 200) {
+        return $response->withStatus(404)->WithJson([
+          "error" => [
+            "code" => "OFFERING_NOT_FOUND",
+            "desc"=> "No Offering found for this specific ID."
+          ]
+        ]);
       }
       $offeringData = $result->data;
 
@@ -244,9 +286,14 @@ class OfferingController {
     $data = $request->getParsedBody();
 
     try {
-      $result = $this->offering->getOfferingById($id);
-      if($result->http_code != 200){
-        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+      $result = $this->offering->getOfferingById($data['id']);
+      if ($result->http_code != 200) {
+        return $response->withStatus(404)->WithJson([
+          "error" => [
+            "code" => "OFFERING_NOT_FOUND",
+            "desc"=> "No Offering found for this specific ID."
+          ]
+        ]);
       }
       $offeringData = $result->data;
 
@@ -329,9 +376,14 @@ class OfferingController {
     $data = $request->getParsedBody();
 
     try {
-      $result = $this->offering->getOfferingById($id);
-      if($result->http_code != 200){
-        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+      $result = $this->offering->getOfferingById($data['id']);
+      if ($result->http_code != 200) {
+        return $response->withStatus(404)->WithJson([
+          "error" => [
+            "code" => "OFFERING_NOT_FOUND",
+            "desc"=> "No Offering found for this specific ID."
+          ]
+        ]);
       }
       $offeringData = $result->data;
 
@@ -389,9 +441,14 @@ class OfferingController {
 
     try {
       // Verificar que el offering existe
-      $result = $this->offering->getOfferingById($id);
+      $result = $this->offering->getOfferingById($data['id']);
       if ($result->http_code != 200) {
-        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+        return $response->withStatus(404)->WithJson([
+          "error" => [
+            "code" => "OFFERING_NOT_FOUND",
+            "desc"=> "No Offering found for this specific ID."
+          ]
+        ]);
       }
       $offeringData = $result->data;
 
@@ -528,9 +585,14 @@ class OfferingController {
 
     try {
       // Verificar que el offering existe
-      $result = $this->offering->getOfferingById($id);
+      $result = $this->offering->getOfferingById($data['id']);
       if ($result->http_code != 200) {
-        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+        return $response->withStatus(404)->WithJson([
+          "error" => [
+            "code" => "OFFERING_NOT_FOUND",
+            "desc"=> "No Offering found for this specific ID."
+          ]
+        ]);
       }
 
       $offeringData = $result->data;
@@ -718,9 +780,14 @@ class OfferingController {
     }
 
     try {
-      $result = $this->offering->getOfferingById($id);
-      if($result->http_code != 200){
-        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+      $result = $this->offering->getOfferingById($data['id']);
+      if ($result->http_code != 200) {
+        return $response->withStatus(404)->WithJson([
+          "error" => [
+            "code" => "OFFERING_NOT_FOUND",
+            "desc"=> "No Offering found for this specific ID."
+          ]
+        ]);
       }
       $offeringData = $result->data;
 

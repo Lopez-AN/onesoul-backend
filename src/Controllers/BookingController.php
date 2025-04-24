@@ -43,12 +43,17 @@ class BookingController
       $booking = $this->booking->getBookingByID($bookingID);
       
       if (!$booking) {
-        return $response->withJson(['error' => 'Booking not found'], 404);
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "BOOKING_NOT_FOUND",
+            "desc" => "Booking not found"
+          ]
+        ]);
       }
       
       // Validar si el user es el cliente o el guía
       if ($booking['UserID'] != $userID && $booking['Guide'] != $userID) {
-        return $response->withStatus(403)->withJson([
+        return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "FORBIDDEN",
             "desc" => "You are not authorized to view this booking."
@@ -87,13 +92,18 @@ class BookingController
     try {
       $bookings = $this->booking->getBookingsByGuide($userID);
 
-      if (!$bookings) {
-        return $response->withJson(['error' => 'No bookings found for this user.'], 404);
+      if ($bookings === null) {
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "BOOKING_NOT_FOUND",
+            "desc" => "No Bookings found for this specific user."
+          ]
+        ]);
       }
 
       // Validar si el user es el cliente o el guía
       if ($userJWT != $userID && $userType != 'Admin') {
-        return $response->withStatus(403)->withJson([
+        return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "FORBIDDEN",
             "desc" => "You are not authorized to view this booking."
@@ -131,13 +141,18 @@ class BookingController
     try {
       $bookings = $this->booking->getBookingsBySeeker($userID);
 
-      if (!$bookings) {
-        return $response->withJson(['error' => 'No bookings found for this user.'], 404);
+      if ($bookings === null) {
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "BOOKING_NOT_FOUND", 
+            "desc" => "No Bookings found for this specific user."
+          ]
+        ]);
       }
 
       // Validar si el user es el cliente o el guía
       if ($userJWT != $userID && $userType != 'Admin') {
-        return $response->withStatus(403)->withJson([
+        return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "FORBIDDEN",
             "desc" => "You are not authorized to view this booking."
@@ -175,46 +190,121 @@ class BookingController
       // VALIDAR: Offering si existe 
       $id = $data['OfferingID'] ?? null;
       if (!$id) {
-        return $response->withStatus(400)->withJson(['error' => 'OfferingID is required.']);
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "INVALID_OFFERING", 
+            "desc" => "Offering is required."
+          ]
+        ]);
       }
 
-      $offering = $this->offering->getOfferingById($id);
-      if (!$offering) {
-        return $response->withStatus(400)->withJson(['error' => 'Offering not found.']);
+      $result = $this->offering->getOfferingById($id);
+      if (!$result) {
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "OFFERING_NOT_FOUND", 
+            "desc" => "Offering not found."
+          ]
+        ]);
       }
-
+      
       // VALIDAR: Fecha de cita
       $scheduledDate = $data['ScheduledDate'] ?? null;
       if (!$scheduledDate) {
-        return $response->withStatus(400)->withJson(['error' => 'ScheduledDate is required.']);
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "INVALID_BOOKING_DATE",
+            "desc" => "ScheduledDate is required."
+          ]
+        ]);
       }
 
       $scheduledDateTime = DateTime::createFromFormat('Y-m-d H:i:s', $scheduledDate);
       if (!$scheduledDateTime || $scheduledDateTime->format('Y-m-d H:i:s') !== $scheduledDate) {
-        return $response->withStatus(400)->withJson(['error' => 'Invalid date format. Must be Y-m-d H:i:s']);
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "INVALID_BOOKING_DATE",
+            "desc" => "Invalid date format. Must be Y-m-d H:i:s"
+          ]
+        ]);
       }
       if ($scheduledDateTime < new DateTime()) {
-        return $response->withStatus(400)->withJson(['error' => 'You cannot schedule an appointment in the past.']);
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "INVALID_BOOKING_DATE",
+            "desc" => "Cannot cancel a booking that is already in the past."
+          ]
+        ]);
+      }
+
+      $mode = strtolower($data['Mode'] ?? '');
+      $allowedModes = ['in-person', 'virtual'];
+
+      if (!in_array($mode, $allowedModes)) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "INVALID_MODE",
+            "desc" => "Invalid session mode. Allowed values: in-person, virtual."
+          ]
+        ]);
       }
 
       // VALIDAR: LocationID en caso de ser presencial
-      $mode = $data['Mode'] ?? null;
       $locationID = $data['LocationID'] ?? null;
 
       if ($mode === 'in-person') {
         if (!$locationID) {
-          return $response->withStatus(400)->withJson(['error' => 'LocationID is required for in-person services.']);
+          return $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "INVALID_LOCATION",
+              "desc" => "LocationID is required for in-person services."
+            ]
+          ]);
         }
 
         // Validar que el LocationID exista en offeringLocations
         $location = $this->booking->getLocation($locationID);
 
         if (!$location) {
-          return $response->withStatus(400)->withJson(['error' => 'Invalid LocationID.']);
+          return $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "INVALID_LOCATION",
+              "desc" => "Invalid LocationID."
+            ]
+          ]);
         }
       } else {
         // Si no es presencial, LocationID puede ser NULL
         $locationID = null;
+      }
+
+      // Revisar si hay al menos un OfferingPackage con un SessionType válido
+      $sessionTypes = [
+        'in-person' => ['in-person', 'both'],
+        'virtual' => ['virtual', 'both']
+      ];
+
+      $offering = $result->data;
+
+      $validTypes = $sessionTypes[$mode];
+      $hasValidPackage = false;
+      
+      if (!empty($offering['Packages'])) {
+        foreach ($offering['Packages'] as $package) {
+          if (in_array(strtolower($package['SessionType']), $validTypes)) {
+            $hasValidPackage = true;
+            break;
+          }
+        }
+      }
+
+      if (!$hasValidPackage) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "INVALID_SESSION_TYPE",
+            "desc" => "The offering does not support the selected mode: $mode"
+          ]
+        ]);
       }
 
       // PREPARAR datos para el modelo
@@ -228,10 +318,7 @@ class BookingController
 
       $booking = $this->booking->createBooking($data);
 
-      return $response->withStatus(201)->withJson([
-        "Message" => "Booking created successfully", 
-        "Booking" => $booking
-      ]);
+      return $response->withStatus(200)->withJson($booking);
 
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
@@ -267,8 +354,8 @@ class BookingController
 
     $bookingID = $args['bookingID'];
     $data = $request->getParsedBody();
-    $mode = $data['Mode'] ?? null;
     $scheduledDate = $data['ScheduledDate'] ?? null;
+    $mode = strtolower($data['Mode'] ?? '');
 
     try {
       // Validar si booking existe y no esta cancelado
@@ -310,19 +397,78 @@ class BookingController
         // Verificar que la reserva NO haya sucedido
         $scheduledDateTime = DateTime::createFromFormat('Y-m-d H:i:s', $scheduledDate);
         if (!$scheduledDateTime || $scheduledDateTime->format('Y-m-d H:i:s') !== $scheduledDate) {
-          return $response->withStatus(400)->withJson(['error' => 'Invalid date format. Must be Y-m-d H:i:s']);
+          return $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "INVALID_BOOKING_DATE",
+              "desc" => "Invalid date format. Must be Y-m-d H:i:s"
+            ]
+          ]);
         }
         if ($scheduledDateTime < new DateTime()) {
-          return $response->withStatus(400)->withJson(['error' => 'You cannot schedule an appointment in the past.']);
+          return $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "INVALID_BOOKING_DATE",
+              "desc" => "Cannot cancel a booking that is already in the past."
+            ]
+          ]);
         }
+      }
+
+      $id = $booking['OfferingID'];
+
+      $result = $this->offering->getOfferingById($id);
+      if (!$result) {
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "OFFERING_NOT_FOUND", 
+            "desc" => "Offering not found."
+          ]
+        ]);
+      }
+
+      $allowedModes = ['in-person', 'virtual'];
+
+      if (!in_array($mode, $allowedModes)) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "INVALID_MODE",
+            "desc" => "Invalid session mode. Allowed values: in-person, virtual."
+          ]
+        ]);
+      }
+
+      // Revisar si hay al menos un OfferingPackage con un SessionType válido
+      $sessionTypes = [
+        'in-person' => ['in-person', 'both'],
+        'virtual' => ['virtual', 'both']
+      ];
+
+      $offering = $result->data;
+
+      $validTypes = $sessionTypes[$mode];
+      $hasValidPackage = false;
+      
+      if (!empty($offering['Packages'])) {
+        foreach ($offering['Packages'] as $package) {
+          if (in_array(strtolower($package['SessionType']), $validTypes)) {
+            $hasValidPackage = true;
+            break;
+          }
+        }
+      }
+
+      if (!$hasValidPackage) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "INVALID_SESSION_TYPE",
+            "desc" => "The offering does not support the selected mode: $mode"
+          ]
+        ]);
       }
 
       $booking = $this->booking->updateBooking($bookingID, $mode, $scheduledDate);
 
-      return $response->withStatus(200)->withJson([
-        "Message" => "Booking updated successfully", 
-        "Booking" => $booking
-      ]);
+      return $response->withStatus(200)->withJson($booking);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -366,7 +512,7 @@ class BookingController
 
       // Validar permisos
       if (($userID != $seeker && $userID != $guide && $userType != 'Admin')) {
-        return $response->withStatus(403)->withJson([
+        return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED_ACTION",
             "desc" => "You don't have permission to cancel this booking."
@@ -404,10 +550,7 @@ class BookingController
 
       $booking = $this->booking->cancelBooking($bookingID);
 
-      return $response->withStatus(201)->withJson([
-        "Message" => "Booking cancelled successfully", 
-        "Booking" => $booking
-      ]);
+      return $response->withStatus(200)->withJson($booking);
 
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
@@ -453,22 +596,23 @@ class BookingController
     }
 
     try {
-      // Buscar el guía asociado al offering
-      $reviewID = $data['OfferingID'];
-      if (!$reviewID) {
-        return $response->withStatus(400)->withJson(['error' => 'OfferingID is required.']);
-      }
+      $id = $data['OfferingID'];
 
-      $result = $this->offering->getOfferingById($reviewID);
-      if (!$result) {
-        return $response->withStatus(400)->withJson(['error' => 'Offering not found.']);
+      $result = $this->offering->getOfferingById($id);
+      if ($result->http_code != 200) {
+        return $response->withStatus(404)->WithJson([
+          "error" => [
+            "code" => "OFFERING_NOT_FOUND",
+            "desc"=> "No Offering found for this specific ID."
+          ]
+        ]);
       }
 
       $offering = $result->data;
       $guide = $offering['Author']['UserID'];
 
       $data = [
-        'OfferingID' => $reviewID,
+        'OfferingID' => $id,
         'SUserID' => $seekerID,
         'GUserID' => $guide,
         'Rating' => $data['Rating'],
@@ -477,10 +621,7 @@ class BookingController
 
       $review = $this->booking->createReview($data);
 
-      return $response->withStatus(201)->withJson([
-        "Message" => "Review created successfully",
-        "Review" => $review
-      ]);
+      return $response->withStatus(200)->withJson($review);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -525,6 +666,16 @@ class BookingController
 
     try {
       $reviews = $this->booking->getReviews($limit, $from, $to, $rating);
+
+      if ($reviews === null) {
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "NO_REVIEWS_FOUND",
+            "desc" => "No reviews found."
+          ]
+        ]);
+      }
+
       return $response->withStatus(200)->withJson($reviews);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
@@ -571,6 +722,16 @@ class BookingController
 
     try {
       $reviews = $this->booking->getReviewsByGuide($userID, $limit, $from, $to, $rating);
+
+      if ($reviews === null) {
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "NO_REVIEWS_FOUND",
+            "desc" => "No reviews found for this specific user."
+          ]
+        ]);
+      }
+
       return $response->withStatus(200)->withJson($reviews);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
@@ -617,6 +778,16 @@ class BookingController
 
     try {
       $reviews = $this->booking->getReviewsBySeeker($userID, $limit, $from, $to, $rating);
+
+      if ($reviews === null) {
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "NO_REVIEWS_FOUND",
+            "desc" => "No reviews found for this specific user."
+          ]
+        ]);
+      }
+
       return $response->withStatus(200)->withJson($reviews);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
@@ -662,6 +833,16 @@ class BookingController
   
     try {
       $reviews = $this->booking->getReviewsByUser($userID, $limit, $from, $to, $rating);
+
+      if ($reviews === null) {
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "NO_REVIEWS_FOUND",
+            "desc" => "No reviews found for this specific user."
+          ]
+        ]);
+      }
+
       return $response->withStatus(200)->withJson($reviews);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
@@ -681,7 +862,12 @@ class BookingController
       $review = $this->booking->getReviewsByID($reviewID);
       
       if (!$review) {
-        return $response->withJson(['error' => 'Review not found'], 404);
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "REVIEW_NOT_FOUND", 
+            "desc" => "Review not found."
+          ]
+        ]);
       }
 
       return $response->withStatus(200)->withJson($review);

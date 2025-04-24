@@ -238,6 +238,18 @@ class Booking
 
       $reviewID = $this->db->lastInsertId();
 
+      if (!$reviewID) {
+        return null; // No se encontraron reviews
+      }
+
+      $update = $this->db->prepare("UPDATE Bookings 
+                                    SET ReviewID = :reviewID 
+                                    WHERE OfferingID = :offeringID AND UserID = :seekerID");
+      $update->bindParam(':reviewID', $reviewID, PDO::PARAM_INT);
+      $update->bindParam(':offeringID', $data['OfferingID'], PDO::PARAM_INT);
+      $update->bindParam(':seekerID', $data['SUserID'], PDO::PARAM_INT);
+      $update->execute();
+
       return $this->getReviewsByID($reviewID);
 
     } catch (\PDOException $e) {
@@ -292,13 +304,17 @@ class Booking
 
       $reviews = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+      if (!$reviews) {
+        return null;
+      }
+
       $total = $this->db->query("SELECT FOUND_ROWS() as total")->fetch(PDO::FETCH_ASSOC);
 
       return [
-        "Data" => $reviews,
-        "Rows" => [
-            "Total" => (int)$total['total'],
-            "Fetched" => count($reviews)
+        "data" => $reviews,
+        "rows" => [
+          "total" => (int)$total['total'],
+          "fetched" => count($reviews)
         ]
       ];
     } catch (\PDOException $e) {
@@ -355,13 +371,17 @@ class Booking
 
       $reviews = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+      if (!$reviews) {
+        return null;
+      }
+
       $total = $this->db->query("SELECT FOUND_ROWS() as total")->fetch(PDO::FETCH_ASSOC);
 
       return [
-        "Data" => $reviews,
-        "Rows" => [
-            "Total" => (int)$total['total'],
-            "Fetched" => count($reviews)
+          "data" => $reviews,
+          "rows" => [
+            "total" => (int)$total['total'],
+            "fetched" => count($reviews)
         ]
       ];
     } catch (\PDOException $e) {
@@ -418,13 +438,17 @@ class Booking
 
       $reviews = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+      if (!$reviews) {
+        return null;
+      }
+
       $total = $this->db->query("SELECT FOUND_ROWS() as total")->fetch(PDO::FETCH_ASSOC);
 
       return [
-        "Data" => $reviews,
-        "Rows" => [
-            "Total" => (int)$total['total'],
-            "Fetched" => count($reviews)
+        "data" => $reviews,
+        "rows" => [
+          "total" => (int)$total['total'],
+          "fetched" => count($reviews)
         ]
       ];  
     } catch (\PDOException $e) {
@@ -486,13 +510,18 @@ class Booking
       $stmt->execute();
   
       $reviews = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+      if (!$reviews) {
+        return null;
+      }
+
       $total = $this->db->query("SELECT FOUND_ROWS() as total")->fetch(PDO::FETCH_ASSOC);
   
       return [
-        "Data" => $reviews,
-        "Rows" => [
-          "Total" => (int)$total['total'],
-          "Fetched" => count($reviews)
+        "data" => $reviews,
+        "rows" => [
+          "total" => (int)$total['total'],
+          "fetched" => count($reviews)
         ]
       ];
     } catch (\PDOException $e) {
@@ -579,14 +608,18 @@ class Booking
       $stmt->execute();
 
       $reviews = $stmt->fetchAll(PDO::FETCH_ASSOC);
+      
+      if (empty($reviews)) {
+        return null;
+      }
 
       $total = $this->db->query("SELECT FOUND_ROWS() as total")->fetch(PDO::FETCH_ASSOC);
 
       return [
-        "Data" => $reviews,
-        "Rows" => [
-          "Total" => (int)$total['total'],
-          "Fetched" => count($reviews)
+        "data" => $reviews,
+        "rows" => [
+          "total" => (int)$total['total'],
+          "fetched" => count($reviews)
         ]
       ];
     } catch (\PDOException $e) {

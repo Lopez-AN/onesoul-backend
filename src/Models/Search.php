@@ -101,6 +101,7 @@ class Search
         -- Subconsulta para locations
         (SELECT JSON_ARRAYAGG(
           JSON_OBJECT(
+            'LocationID', l.LocationID,          
             'CountryCode', l.CountryCode,
             'CountryName', c.CountryName,
             'State', l.State,

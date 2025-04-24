@@ -23,8 +23,8 @@ class Offering
         u.DisplayName AS author_DisplayName,
         u.FirstName AS author_FirstName,
         u.LastName AS author_LastName,
-        u.UserName as author_UserName,
-        round(avg(ru.Rating),2) as author_Rating,
+        u.UserName AS author_UserName,
+        round(avg(ru.Rating),2) AS author_Rating,
         COUNT(DISTINCT ru.ReviewID) AS author_TotalReviews,
         (SELECT URL FROM Media WHERE UserID = u.UserID LIMIT 1) AS author_ImgURL,
         -- Subconsulta para media_images
@@ -36,7 +36,7 @@ class Offering
             'Description', m.Description,
             'Position', m.Position
           )
-        ) FROM Media m WHERE m.OfferingID = o.OfferingID AND m.MediaType = 'image') AS media_images,
+        ) FROM Media AS m WHERE m.OfferingID = o.OfferingID AND m.MediaType = 'image') AS media_images,
         -- Subconsulta para media_videos
         (SELECT JSON_ARRAYAGG(
           JSON_OBJECT(
@@ -46,7 +46,7 @@ class Offering
             'Description', m.Description,
             'Position', m.Position
           )
-        ) FROM Media m WHERE m.OfferingID = o.OfferingID AND m.MediaType = 'video') AS media_videos,
+        ) FROM Media AS m WHERE m.OfferingID = o.OfferingID AND m.MediaType = 'video') AS media_videos,
         -- Subconsulta para faqs
         (SELECT JSON_ARRAYAGG(
           JSON_OBJECT(
@@ -54,7 +54,7 @@ class Offering
             'Question', f.Question,
             'Answer', f.Answer
           )
-        ) FROM OfferingsFaqs f WHERE f.OfferingID = o.OfferingID) AS Faqs,
+        ) FROM OfferingsFaqs AS f WHERE f.OfferingID = o.OfferingID) AS Faqs,
         -- Subconsulta para packages
         (SELECT JSON_ARRAYAGG(
           JSON_OBJECT(
@@ -64,21 +64,22 @@ class Offering
             'Conditions', p.Conditions,
             'SessionType', p.SessionType
           )
-        ) FROM OfferingsPackages p WHERE p.OfferingID = o.OfferingID) AS Packages,
+        ) FROM OfferingsPackages AS p WHERE p.OfferingID = o.OfferingID) AS Packages,
         -- Subconsulta para locations
         (SELECT JSON_ARRAYAGG(
           JSON_OBJECT(
+            'LocationID', l.LocationID,
             'CountryCode', l.CountryCode,
             'CountryName', c.CountryName,
             'State', l.State,
             'City', l.City
           )
-        ) FROM OfferingLocations l WHERE l.OfferingID = o.OfferingID) AS Locations,
-        ROUND(AVG(r.Rating),2) as Rating
+        ) FROM OfferingLocations AS l WHERE l.OfferingID = o.OfferingID) AS Locations,
+        ROUND(AVG(r.Rating),2) AS Rating
         FROM Offerings AS o
         INNER JOIN Users AS u ON u.UserID = o.UserID
-        LEFT JOIN Reviews as r ON o.OfferingID = r.OfferingID
-        LEFT JOIN Reviews as ru ON u.UserID = ru.SUserID
+        LEFT JOIN Reviews AS r ON o.OfferingID = r.OfferingID
+        LEFT JOIN Reviews AS ru ON u.UserID = ru.SUserID
         LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
         LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode
         GROUP BY o.OfferingID
@@ -90,6 +91,11 @@ class Offering
       $stmt->execute();
 
       $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+      if (empty($rs)) {
+        return null;
+      }
+
       $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
       $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -174,8 +180,8 @@ class Offering
         u.DisplayName AS author_DisplayName,
         u.FirstName AS author_FirstName,
         u.LastName AS author_LastName,
-        u.UserName as author_UserName,
-        round(avg(ru.Rating),2) as author_Rating,
+        u.UserName AS author_UserName,
+        round(avg(ru.Rating),2) AS author_Rating,
         COUNT(DISTINCT ru.ReviewID) AS author_TotalReviews,
         (SELECT URL FROM Media WHERE UserID = u.UserID LIMIT 1) AS author_ImgURL,
         -- Subconsulta para media_images
@@ -187,7 +193,7 @@ class Offering
             'Description', m.Description,
             'Position', m.Position
           )
-        ) FROM Media m WHERE m.OfferingID = o.OfferingID AND m.MediaType = 'image') AS media_images,
+        ) FROM Media AS m WHERE m.OfferingID = o.OfferingID AND m.MediaType = 'image') AS media_images,
         -- Subconsulta para media_videos
         (SELECT JSON_ARRAYAGG(
           JSON_OBJECT(
@@ -197,7 +203,7 @@ class Offering
             'Description', m.Description,
             'Position', m.Position
           )
-        ) FROM Media m WHERE m.OfferingID = o.OfferingID AND m.MediaType = 'video') AS media_videos,
+        ) FROM Media AS m WHERE m.OfferingID = o.OfferingID AND m.MediaType = 'video') AS media_videos,
         -- Subconsulta para faqs
         (SELECT JSON_ARRAYAGG(
           JSON_OBJECT(
@@ -205,7 +211,7 @@ class Offering
             'Question', f.Question,
             'Answer', f.Answer
           )
-        ) FROM OfferingsFaqs f WHERE f.OfferingID = o.OfferingID) AS Faqs,
+        ) FROM OfferingsFaqs AS f WHERE f.OfferingID = o.OfferingID) AS Faqs,
         -- Subconsulta para packages
         (SELECT JSON_ARRAYAGG(
           JSON_OBJECT(
@@ -215,21 +221,22 @@ class Offering
             'Conditions', p.Conditions,
             'SessionType', p.SessionType
           )
-        ) FROM OfferingsPackages p WHERE p.OfferingID = o.OfferingID) AS Packages,
+        ) FROM OfferingsPackages AS p WHERE p.OfferingID = o.OfferingID) AS Packages,
         -- Subconsulta para locations
         (SELECT JSON_ARRAYAGG(
           JSON_OBJECT(
+            'LocationID', l.LocationID,          
             'CountryCode', l.CountryCode,
             'CountryName', c.CountryName,
             'State', l.State,
             'City', l.City
           )
-        ) FROM OfferingLocations l WHERE l.OfferingID = o.OfferingID) AS Locations,
-        ROUND(AVG(r.Rating),2) as Rating
+        ) FROM OfferingLocations AS l WHERE l.OfferingID = o.OfferingID) AS Locations,
+        ROUND(AVG(r.Rating),2) AS Rating
         FROM Offerings AS o
         INNER JOIN Users AS u ON u.UserID = o.UserID
-        LEFT JOIN Reviews as r ON o.OfferingID = r.OfferingID
-        LEFT JOIN Reviews as ru ON u.UserID = ru.SUserID
+        LEFT JOIN Reviews AS r ON o.OfferingID = r.OfferingID
+        LEFT JOIN Reviews AS ru ON u.UserID = ru.SUserID
         LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
         LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode
         WHERE o.OfferingID = :id
@@ -239,7 +246,7 @@ class Offering
       $stmt->execute();
 
       $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
+      
       if (empty($rs)) {
         return (object) [
           "http_code" => 404,
@@ -249,6 +256,7 @@ class Offering
           ]
         ];
       }
+
       $offering = $rs[0];
 
       // Desagrupo los json traidos por MYSQL para armar el JSON anidado de respuesta
@@ -325,8 +333,8 @@ class Offering
         u.DisplayName AS author_DisplayName,
         u.FirstName AS author_FirstName,
         u.LastName AS author_LastName,
-        u.UserName as author_UserName,
-        round(avg(ru.Rating),2) as author_Rating,
+        u.UserName AS author_UserName,
+        round(avg(ru.Rating),2) AS author_Rating,
         COUNT(DISTINCT ru.ReviewID) AS author_TotalReviews,
         (SELECT URL FROM Media WHERE UserID = u.UserID LIMIT 1) AS author_ImgURL,
         -- Subconsulta para media_images
@@ -338,7 +346,7 @@ class Offering
             'Description', m.Description,
             'Position', m.Position
           )
-        ) FROM Media m WHERE m.OfferingID = o.OfferingID AND m.MediaType = 'image') AS media_images,
+        ) FROM Media AS m WHERE m.OfferingID = o.OfferingID AND m.MediaType = 'image') AS media_images,
         -- Subconsulta para media_videos
         (SELECT JSON_ARRAYAGG(
           JSON_OBJECT(
@@ -348,7 +356,7 @@ class Offering
             'Description', m.Description,
             'Position', m.Position
           )
-        ) FROM Media m WHERE m.OfferingID = o.OfferingID AND m.MediaType = 'video') AS media_videos,
+        ) FROM Media AS m WHERE m.OfferingID = o.OfferingID AND m.MediaType = 'video') AS media_videos,
         -- Subconsulta para faqs
         (SELECT JSON_ARRAYAGG(
           JSON_OBJECT(
@@ -356,7 +364,7 @@ class Offering
             'Question', f.Question,
             'Answer', f.Answer
           )
-        ) FROM OfferingsFaqs f WHERE f.OfferingID = o.OfferingID) AS Faqs,
+        ) FROM OfferingsFaqs AS f WHERE f.OfferingID = o.OfferingID) AS Faqs,
         -- Subconsulta para packages
         (SELECT JSON_ARRAYAGG(
           JSON_OBJECT(
@@ -366,21 +374,22 @@ class Offering
             'Conditions', p.Conditions,
             'SessionType', p.SessionType
           )
-        ) FROM OfferingsPackages p WHERE p.OfferingID = o.OfferingID) AS Packages,
+        ) FROM OfferingsPackages AS p WHERE p.OfferingID = o.OfferingID) AS Packages,
         -- Subconsulta para locations
         (SELECT JSON_ARRAYAGG(
           JSON_OBJECT(
+            'LocationID', l.LocationID,          
             'CountryCode', l.CountryCode,
             'CountryName', c.CountryName,
             'State', l.State,
             'City', l.City
           )
-        ) FROM OfferingLocations l WHERE l.OfferingID = o.OfferingID) AS Locations,
-        ROUND(AVG(r.Rating),2) as Rating
+        ) FROM OfferingLocations AS l WHERE l.OfferingID = o.OfferingID) AS Locations,
+        ROUND(AVG(r.Rating),2) AS Rating
         FROM Offerings AS o
         INNER JOIN Users AS u ON u.UserID = o.UserID
-        LEFT JOIN Reviews as r ON o.OfferingID = r.OfferingID
-        LEFT JOIN Reviews as ru ON u.UserID = ru.SUserID
+        LEFT JOIN Reviews AS r ON o.OfferingID = r.OfferingID
+        LEFT JOIN Reviews AS ru ON u.UserID = ru.SUserID
         LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
         LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode
         WHERE o.CategoryID = :categoryId
@@ -394,6 +403,11 @@ class Offering
       $stmt->execute();
 
       $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+      if (empty($rs)) {
+        return null;
+      }
+
       $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
       $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -478,8 +492,8 @@ class Offering
         u.DisplayName AS author_DisplayName,
         u.FirstName AS author_FirstName,
         u.LastName AS author_LastName,
-        u.UserName as author_UserName,
-        round(avg(ru.Rating),2) as author_Rating,
+        u.UserName AS author_UserName,
+        round(avg(ru.Rating),2) AS author_Rating,
         COUNT(DISTINCT ru.ReviewID) AS author_TotalReviews,
         (SELECT URL FROM Media WHERE UserID = u.UserID LIMIT 1) AS author_ImgURL,
         -- Subconsulta para media_images
@@ -491,7 +505,7 @@ class Offering
             'Description', m.Description,
             'Position', m.Position
           )
-        ) FROM Media m WHERE m.OfferingID = o.OfferingID AND m.MediaType = 'image') AS media_images,
+        ) FROM Media AS m WHERE m.OfferingID = o.OfferingID AND m.MediaType = 'image') AS media_images,
         -- Subconsulta para media_videos
         (SELECT JSON_ARRAYAGG(
           JSON_OBJECT(
@@ -501,7 +515,7 @@ class Offering
             'Description', m.Description,
             'Position', m.Position
           )
-        ) FROM Media m WHERE m.OfferingID = o.OfferingID AND m.MediaType = 'video') AS media_videos,
+        ) FROM Media AS m WHERE m.OfferingID = o.OfferingID AND m.MediaType = 'video') AS media_videos,
         -- Subconsulta para faqs
         (SELECT JSON_ARRAYAGG(
           JSON_OBJECT(
@@ -509,7 +523,7 @@ class Offering
             'Question', f.Question,
             'Answer', f.Answer
           )
-        ) FROM OfferingsFaqs f WHERE f.OfferingID = o.OfferingID) AS Faqs,
+        ) FROM OfferingsFaqs AS f WHERE f.OfferingID = o.OfferingID) AS Faqs,
         -- Subconsulta para packages
         (SELECT JSON_ARRAYAGG(
           JSON_OBJECT(
@@ -519,21 +533,22 @@ class Offering
             'Conditions', p.Conditions,
             'SessionType', p.SessionType
           )
-        ) FROM OfferingsPackages p WHERE p.OfferingID = o.OfferingID) AS Packages,
+        ) FROM OfferingsPackages AS p WHERE p.OfferingID = o.OfferingID) AS Packages,
         -- Subconsulta para locations
         (SELECT JSON_ARRAYAGG(
           JSON_OBJECT(
+            'LocationID', l.LocationID,          
             'CountryCode', l.CountryCode,
             'CountryName', c.CountryName,
             'State', l.State,
             'City', l.City
           )
-        ) FROM OfferingLocations l WHERE l.OfferingID = o.OfferingID) AS Locations,
-        ROUND(AVG(r.Rating),2) as Rating
+        ) FROM OfferingLocations AS l WHERE l.OfferingID = o.OfferingID) AS Locations,
+        ROUND(AVG(r.Rating),2) AS Rating
         FROM Offerings AS o
         INNER JOIN Users AS u ON u.UserID = o.UserID
-        LEFT JOIN Reviews as r ON o.OfferingID = r.OfferingID
-        LEFT JOIN Reviews as ru ON u.UserID = ru.SUserID
+        LEFT JOIN Reviews AS r ON o.OfferingID = r.OfferingID
+        LEFT JOIN Reviews AS ru ON u.UserID = ru.SUserID
         LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
         LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode
         WHERE o.UserID = :userId
@@ -547,6 +562,11 @@ class Offering
       $stmt->execute();
 
       $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+      if (empty($rs)) {
+        return null;
+      }
+
       $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
       $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -649,7 +669,8 @@ class Offering
 
       $stmt = $this->db->prepare("INSERT INTO Offerings (Title, ShortDescription, Description, CategoryID, UserID,
             Status, CreationDate, IsActive, Currency, Tags, SKU, Stock, ServiceType)
-            VALUES (:Title, :ShortDescription, :Description, :CategoryID, :UserID, :Status, :CreationDate, 0, :Currency, :Tags, :SKU, :Stock, :ServiceType)");
+            VALUES (:Title, :ShortDescription, :Description, :CategoryID, :UserID, :Status, 
+            :CreationDate, 0, :Currency, :Tags, :SKU, :Stock, :ServiceType)");
 
       $stmt->bindParam(':Title', $data['Title'], PDO::PARAM_STR);
       $stmt->bindParam(':ShortDescription', $data['ShortDescription'], PDO::PARAM_STR);
@@ -879,7 +900,8 @@ class Offering
       $stmt->bindParam(':id', $id, PDO::PARAM_INT);
       $stmt->execute();
 
-      $stmt = $this->db->prepare("INSERT INTO OfferingsFaqs (OfferingID, Position, Question, Answer) VALUES (:id, :position, :question, :answer)");
+      $stmt = $this->db->prepare("INSERT INTO OfferingsFaqs (OfferingID, Position, Question, Answer) 
+      VALUES (:id, :position, :question, :answer)");
       foreach ($faqs as $faq) {
         $stmt->bindParam(':id', $id, PDO::PARAM_INT);
         $stmt->bindParam(':position', $faq['Position'], PDO::PARAM_INT);
@@ -897,7 +919,8 @@ class Offering
       $stmt->bindParam(':id', $id, PDO::PARAM_INT);
       $stmt->execute();
 
-      $stmt = $this->db->prepare("INSERT INTO OfferingsPackages (OfferingID, Package, Price, Description, Conditions, SessionType) VALUES (:id, :package, :price, :description, :conditions, :sessionType)");
+      $stmt = $this->db->prepare("INSERT INTO OfferingsPackages (OfferingID, Package, Price, Description, Conditions, SessionType) 
+      VALUES (:id, :package, :price, :description, :conditions, :sessionType)");
       foreach ($packages as $package) {
         $stmt->bindParam(':id', $id, PDO::PARAM_INT);
         $stmt->bindParam(':package', $package['Package'], PDO::PARAM_STR);
@@ -981,7 +1004,8 @@ class Offering
       if ($fileURL) {
         // Actualización para Media con archivo
         $stmt = $this->db->prepare("UPDATE Media
-                SET Title = :title, Description = :description, URL = :fileURL, Path = :filePath, MediaType = :mediaType, Position = :position
+                SET Title = :title, Description = :description, URL = :fileURL, Path = :filePath, MediaType = :mediaType, 
+                Position = :position
                 WHERE MediaID = :mediaID AND OfferingID = :id");
 
         $stmt->bindParam(':fileURL', $fileURL, PDO::PARAM_STR);
@@ -1058,7 +1082,7 @@ class Offering
   public function getMediaCountByType($id)
   {
     try {
-      $stmt = $this->db->prepare("SELECT MediaType, COUNT(*) as count FROM Media
+      $stmt = $this->db->prepare("SELECT MediaType, COUNT(*) AS count FROM Media
             WHERE OfferingID = :id GROUP BY MediaType");
       $stmt->bindParam(':id', $id, PDO::PARAM_INT);
       $stmt->execute();
