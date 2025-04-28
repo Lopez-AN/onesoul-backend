@@ -632,11 +632,15 @@ class Booking
     try {
       $stmt = $this->db->prepare("SELECT LocationID 
                                   FROM OfferingLocations 
-                                  WHERE LocationID = :locationID");
+                                  WHERE LocationID = :locationID 
+                                  AND OfferingID = :id");
       $stmt->bindParam(':locationID', $locationID, PDO::PARAM_INT);
       $stmt->execute();
 
-      return $stmt->fetch(PDO::FETCH_ASSOC);
+      $result = $stmt->fetch(PDO::FETCH_ASSOC);
+      
+      return $result ?: null;
+
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }

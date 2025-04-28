@@ -199,11 +199,11 @@ class BookingController
       }
 
       $result = $this->offering->getOfferingById($id);
-      if (!$result) {
-        return $response->withStatus(404)->withJson([
+      if ($result->http_code != 200) {
+        return $response->withStatus(404)->WithJson([
           "error" => [
-            "code" => "OFFERING_NOT_FOUND", 
-            "desc" => "Offering not found."
+            "code" => "OFFERING_NOT_FOUND",
+            "desc"=> "No Offering found for this specific ID."
           ]
         ]);
       }
@@ -417,11 +417,11 @@ class BookingController
       $id = $booking['OfferingID'];
 
       $result = $this->offering->getOfferingById($id);
-      if (!$result) {
-        return $response->withStatus(404)->withJson([
+      if ($result->http_code != 200) {
+        return $response->withStatus(404)->WithJson([
           "error" => [
-            "code" => "OFFERING_NOT_FOUND", 
-            "desc" => "Offering not found."
+            "code" => "OFFERING_NOT_FOUND",
+            "desc"=> "No Offering found for this specific ID."
           ]
         ]);
       }
