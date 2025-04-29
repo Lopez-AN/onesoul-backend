@@ -96,6 +96,38 @@ class Auth{
     return $user_data;
   }
 
+  public function createConsent($data)
+  {
+    // Validar que el usuario exista
+    $stmt = $this->db->prepare("SELECT 1 FROM Users WHERE UserID = ?");
+    $stmt->execute([$data['UserID']]);
+    if (!$stmt->fetch()) {
+      return ['error' => 'User not found'];
+    }
+
+    // Validar IP
+    if (!filter_var($data['UserIP'], FILTER_VALIDATE_IP)) {
+      return ['error' => 'Invalid IP address'];
+    }
+
+    // Insertar consentimiento
+    $stmt = $db->prepare("INSERT INTO UserLegalConsents 
+          (UserID, AcceptedTerms, AcceptedPrivacyPolicy, UserIP, UserAgent, TyCVersion, PrivacyPolicyVersion) 
+          VALUES (?, ?, ?, ?, ?, ?, ?)");
+
+    $stmt->execute([
+      $data['UserID'],
+      $data['AcceptedTerms'] ? 1 : 0,
+      $data['AcceptedPrivacyPolicy'] ? 1 : 0,
+      $data['UserIP'],
+      $data['UserAgent'],
+      $data['TyCVersion'],
+      $data['PrivacyPolicyVersion']
+    ]);
+
+    return ['success' => true];
+  }
+  
   /*
   * Registro usuario
   */
@@ -675,7 +707,7 @@ class Auth{
     }
   }
 
-  public function storeBrowserData($userId, $request, $newMfaId) {
+  public function storeBrowserData($userId, $request, $newMfaId, $clientIp) {
     // Obtener información del navegador desde el encabezado User-Agent
     $userAgent = $request->getHeader('User-Agent')[0];
     $parser = new \WhichBrowser\Parser($userAgent);
@@ -685,7 +717,7 @@ class Auth{
     $version = $parser->browser->getVersion();
     $os = $parser->os->getName();
     $device = $parser->device->type;
-    $ip = $request->getAttribute('ip_address');
+    $ip = $clientIp;
     $expiry = date('Y-m-d H:i:s', strtotime('+90 days'));
 
     try {

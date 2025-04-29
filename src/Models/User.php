@@ -7,7 +7,7 @@ use App\Exceptions\DatabaseException;
 
 require_once(ROOT . '/src/Utils/AWSRekognition.php');
 
-class User
+clASs User
 {
   protected $db;
 
@@ -26,25 +26,28 @@ class User
       u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
       u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
         ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
-      u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
+      u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
+      s.PlanID, s.StartDate, sp.Name, sp.Description,
       -- Subconsulta para reviews
       (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-        FROM Reviews as r WHERE r.GUserID = u.UserID) AS Rating,
+        FROM Reviews AS r WHERE r.GUserID = u.UserID) AS Rating,
       (SELECT COUNT(DISTINCT r.ReviewID)
-        FROM Reviews as r WHERE r.GUserID = u.UserID) AS TotalReviews
-      FROM Users as u
-      LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
-      LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
-      LEFT JOIN Media as m ON u.UserID = m.UserID
+        FROM Reviews AS r WHERE r.GUserID = u.UserID) AS TotalReviews
+      FROM Users AS u
+      LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
+      LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
+      LEFT JOIN Media AS m ON u.UserID = m.UserID
+      LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
+      LEFT JOIN SubscriptionPlans AS sp ON s.PlanID = sp.PlanID
       LEFT JOIN (
-        SELECT ROUND(AVG(p.Price),0) as AvgRate, o.UserID,
+        SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
         MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
         MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
-        FROM Offerings as o
-        INNER JOIN OfferingsPackages as p ON o.OfferingID = p.OfferingID
+        FROM Offerings AS o
+        INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
         WHERE o.Status = 'Active'
         GROUP BY o.UserID
-      ) as sub ON sub.UserID = u.UserID
+      ) AS sub ON sub.UserID = u.UserID
       GROUP BY u.UserID
       ORDER BY u.UserID
       LIMIT :_limit OFFSET :_offset");
@@ -54,7 +57,7 @@ class User
       $stmt->execute();
 
       $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
-      $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
+      $stmt = $this->db->query("SELECT FOUND_ROWS() AS total");
       $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
       $rs = array_map(function ($e) {
@@ -77,6 +80,21 @@ class User
         ];
 
         unset($e['hasVirtual'], $e['hasInPerson']);
+
+        // Agregar información de suscripción
+        $e['Subscription'] = is_null($e['PlanID']) ? null : [
+          "PlanID" => (int)$e['PlanID'],
+          "StartDate" => $e['StartDate'],
+          "Name" => $e['Name'],
+          "Description" => $e['Description']
+        ];
+        unset(
+          $e['PlanID'],
+          $e['StartDate'],
+          $e['Name'],
+          $e['Description']
+        );
+
         return $e;
       }, $rs);
 
@@ -102,25 +120,28 @@ class User
       u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
       u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
         ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
-      u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
+      u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
+      s.PlanID, s.StartDate, sp.Name, sp.Description,
       -- Subconsulta para reviews
       (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-        FROM Reviews as r WHERE r.GUserID = u.UserID) AS Rating,
+        FROM Reviews AS r WHERE r.GUserID = u.UserID) AS Rating,
       (SELECT COUNT(DISTINCT r.ReviewID)
-        FROM Reviews as r WHERE r.GUserID = u.UserID) AS TotalReviews
-      FROM Users as u
-      LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
-      LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
-      LEFT JOIN Media as m ON u.UserID = m.UserID
+        FROM Reviews AS r WHERE r.GUserID = u.UserID) AS TotalReviews
+      FROM Users AS u
+      LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
+      LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
+      LEFT JOIN Media AS m ON u.UserID = m.UserID
+      LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
+      LEFT JOIN SubscriptionPlans AS sp ON s.PlanID = sp.PlanID
       LEFT JOIN (
-        SELECT ROUND(AVG(p.Price),0) as AvgRate, o.UserID,
+        SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
         MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
         MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
-        FROM Offerings as o
-        INNER JOIN OfferingsPackages as p ON o.OfferingID = p.OfferingID
+        FROM Offerings AS o
+        INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
         WHERE o.Status = 'Active'
         GROUP BY o.UserID
-      ) as sub ON sub.UserID = u.UserID
+      ) AS sub ON sub.UserID = u.UserID
       WHERE u.UserID = :id
       GROUP BY u.UserID
       ORDER BY u.UserID");
@@ -158,6 +179,20 @@ class User
       ];
       unset($user['hasVirtual'], $user['hasInPerson']);
 
+      // Agregar información de suscripción
+      $user['Subscription'] = is_null($user['PlanID']) ? null : [
+        "PlanID" => (int)$user['PlanID'],
+        "StartDate" => $user['StartDate'],
+        "Name" => $user['Name'],
+        "Description" => $user['Description']
+      ];
+      unset(
+        $user['PlanID'],
+        $user['StartDate'],
+        $user['Name'],
+        $user['Description']
+      );
+
       // Verificar si la cuenta está desactivada
       if (!is_null($user['DeactivationDate']) && strtotime($user['DeactivationDate']) <= time()) {
         return (object) [
@@ -190,25 +225,28 @@ class User
       u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
       u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
         ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
-      u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
+      u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
+      s.PlanID, s.StartDate, sp.Name, sp.Description,      
       -- Subconsulta para reviews
       (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-        FROM Reviews as r WHERE r.GUserID = u.UserID) AS Rating,
+        FROM Reviews AS r WHERE r.GUserID = u.UserID) AS Rating,
       (SELECT COUNT(DISTINCT r.ReviewID)
-        FROM Reviews as r WHERE r.GUserID = u.UserID) AS TotalReviews
-      FROM Users as u
-      LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
-      LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
-      LEFT JOIN Media as m ON u.UserID = m.UserID
+        FROM Reviews AS r WHERE r.GUserID = u.UserID) AS TotalReviews
+      FROM Users AS u
+      LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
+      LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
+      LEFT JOIN Media AS m ON u.UserID = m.UserID
+      LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
+      LEFT JOIN SubscriptionPlans AS sp ON s.PlanID = sp.PlanID
       LEFT JOIN (
-        SELECT ROUND(AVG(p.Price),0) as AvgRate, o.UserID,
+        SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
         MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
         MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
-        FROM Offerings as o
-        INNER JOIN OfferingsPackages as p ON o.OfferingID = p.OfferingID
+        FROM Offerings AS o
+        INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
         WHERE o.Status = 'Active'
         GROUP BY o.UserID
-      ) as sub ON sub.UserID = u.UserID
+      ) AS sub ON sub.UserID = u.UserID
       WHERE u.UserName = :username
       GROUP BY u.UserID
       ORDER BY u.UserID");
@@ -246,6 +284,20 @@ class User
     ];
     unset($user['hasVirtual'], $user['hasInPerson']);
 
+    // Agregar información de suscripción
+     $user['Subscription'] = is_null($user['PlanID']) ? null : [
+      "PlanID" => (int)$user['PlanID'],
+      "StartDate" => $user['StartDate'],
+      "Name" => $user['Name'],
+      "Description" => $user['Description']
+    ];
+    unset(
+      $user['PlanID'],
+      $user['StartDate'],
+      $user['Name'],
+      $user['Description']
+    );    
+
     // Verificar si la cuenta está desactivada
     if (!is_null($user['DeactivationDate']) && strtotime($user['DeactivationDate']) <= time()) {
       return (object) [
@@ -278,25 +330,28 @@ class User
       u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
       u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
         ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
-      u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
+      u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
+      s.PlanID, s.StartDate, sp.Name, sp.Description,      
       -- Subconsulta para reviews
       (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-        FROM Reviews as r WHERE r.GUserID = u.UserID) AS Rating,
+        FROM Reviews AS r WHERE r.GUserID = u.UserID) AS Rating,
       (SELECT COUNT(DISTINCT r.ReviewID)
-        FROM Reviews as r WHERE r.GUserID = u.UserID) AS TotalReviews
-      FROM Users as u
-      LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
-      LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
-      LEFT JOIN Media as m ON u.UserID = m.UserID
+        FROM Reviews AS r WHERE r.GUserID = u.UserID) AS TotalReviews
+      FROM Users AS u
+      LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
+      LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
+      LEFT JOIN Media AS m ON u.UserID = m.UserID
+      LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
+      LEFT JOIN SubscriptionPlans AS sp ON s.PlanID = sp.PlanID
       LEFT JOIN (
-        SELECT ROUND(AVG(p.Price),0) as AvgRate, o.UserID,
+        SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
         MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
         MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
-        FROM Offerings as o
-        INNER JOIN OfferingsPackages as p ON o.OfferingID = p.OfferingID
+        FROM Offerings AS o
+        INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
         WHERE o.Status = 'Active'
         GROUP BY o.UserID
-      ) as sub ON sub.UserID = u.UserID
+      ) AS sub ON sub.UserID = u.UserID
       WHERE u.Email = :email
       GROUP BY u.UserID
       ORDER BY u.UserID");
@@ -334,6 +389,20 @@ class User
       ];
       unset($user['hasVirtual'], $user['hasInPerson']);
 
+      // Agregar información de suscripción
+      $user['Subscription'] = is_null($user['PlanID']) ? null : [
+        "PlanID" => (int)$user['PlanID'],
+        "StartDate" => $user['StartDate'],
+        "Name" => $user['Name'],
+        "Description" => $user['Description']
+      ];
+      unset(
+        $user['PlanID'],
+        $user['StartDate'],
+        $user['Name'],
+        $user['Description']
+      );    
+
       // Verificar si la cuenta está desactivada
       if (!is_null($user['DeactivationDate']) && strtotime($user['DeactivationDate']) <= time()) {
         return (object) [
@@ -366,25 +435,28 @@ class User
       u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
       u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
         ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
-      u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
+      u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
+      s.PlanID, s.StartDate, sp.Name, sp.Description,      
       -- Subconsulta para reviews
       (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-        FROM Reviews as r WHERE r.GUserID = u.UserID) AS Rating,
+        FROM Reviews AS r WHERE r.GUserID = u.UserID) AS Rating,
       (SELECT COUNT(DISTINCT r.ReviewID)
-        FROM Reviews as r WHERE r.GUserID = u.UserID) AS TotalReviews
-      FROM Users as u
-      LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
-      LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
-      LEFT JOIN Media as m ON u.UserID = m.UserID
+        FROM Reviews AS r WHERE r.GUserID = u.UserID) AS TotalReviews
+      FROM Users AS u
+      LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
+      LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
+      LEFT JOIN Media AS m ON u.UserID = m.UserID
+      LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
+      LEFT JOIN SubscriptionPlans AS sp ON s.PlanID = sp.PlanID
       LEFT JOIN (
-        SELECT ROUND(AVG(p.Price),0) as AvgRate, o.UserID,
+        SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
         MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
         MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
-        FROM Offerings as o
-        INNER JOIN OfferingsPackages as p ON o.OfferingID = p.OfferingID
+        FROM Offerings AS o
+        INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
         WHERE o.Status = 'Active'
         GROUP BY o.UserID
-      ) as sub ON sub.UserID = u.UserID
+      ) AS sub ON sub.UserID = u.UserID
       WHERE u.Oauth2ID = :oAuthID AND u.Oauth2Service = :oAuthService
       GROUP BY u.UserID
       ORDER BY u.UserID");
@@ -423,6 +495,20 @@ class User
       ];
       unset($user['hasVirtual'], $user['hasInPerson']);
 
+      // Agregar información de suscripción
+      $user['Subscription'] = is_null($user['PlanID']) ? null : [
+        "PlanID" => (int)$user['PlanID'],
+        "StartDate" => $user['StartDate'],
+        "Name" => $user['Name'],
+        "Description" => $user['Description']
+      ];
+      unset(
+        $user['PlanID'],
+        $user['StartDate'],
+        $user['Name'],
+        $user['Description']
+      );    
+
       // Verificar si la cuenta está desactivada
       if (!is_null($user['DeactivationDate']) && strtotime($user['DeactivationDate']) <= time()) {
         return (object) [
@@ -455,25 +541,28 @@ class User
         u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
         u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
           ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
-        u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
+        u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
+        s.PlanID, s.StartDate, sp.Name, sp.Description,        
         -- Subconsulta para reviews
         (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-          FROM Reviews as r WHERE r.GUserID = u.UserID) AS Rating,
+          FROM Reviews AS r WHERE r.GUserID = u.UserID) AS Rating,
         (SELECT COUNT(DISTINCT r.ReviewID)
-          FROM Reviews as r WHERE r.GUserID = u.UserID) AS TotalReviews
-        FROM Users as u
-        LEFT JOIN UsersCategories as uc ON uc.UserID = u.UserID
-        LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
-        LEFT JOIN Media as m ON u.UserID = m.UserID
+          FROM Reviews AS r WHERE r.GUserID = u.UserID) AS TotalReviews
+        FROM Users AS u
+        LEFT JOIN UsersCategories AS uc ON uc.UserID = u.UserID
+        LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
+        LEFT JOIN Media AS m ON u.UserID = m.UserID
+        LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
+        LEFT JOIN SubscriptionPlans AS sp ON s.PlanID = sp.PlanID
         LEFT JOIN (
-          SELECT ROUND(AVG(p.Price),0) as AvgRate, o.UserID,
+          SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
           MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
           MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
-          FROM Offerings as o
-          INNER JOIN OfferingsPackages as p ON o.OfferingID = p.OfferingID
+          FROM Offerings AS o
+          INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
           WHERE o.Status = 'Active'
           GROUP BY o.UserID
-        ) as sub ON sub.UserID = u.UserID
+        ) AS sub ON sub.UserID = u.UserID
         ORDER BY u.UserID
         LIMIT :_limit OFFSET :_offset");
       } else {
@@ -484,25 +573,28 @@ class User
         u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
         u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
           ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
-        u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
+        u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
+        s.PlanID, s.StartDate, sp.Name, sp.Description,      
         -- Subconsulta para reviews
         (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-          FROM Reviews as r WHERE r.GUserID = u.UserID) AS Rating,
+          FROM Reviews AS r WHERE r.GUserID = u.UserID) AS Rating,
         (SELECT COUNT(DISTINCT r.ReviewID)
-          FROM Reviews as r WHERE r.GUserID = u.UserID) AS TotalReviews
-        FROM Users as u
-        LEFT JOIN UsersCategories as uc ON uc.UserID = u.UserID
-        LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
-        LEFT JOIN Media as m ON u.UserID = m.UserID
+          FROM Reviews AS r WHERE r.GUserID = u.UserID) AS TotalReviews
+        FROM Users AS u
+        LEFT JOIN UsersCategories AS uc ON uc.UserID = u.UserID
+        LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
+        LEFT JOIN Media AS m ON u.UserID = m.UserID
+        LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
+        LEFT JOIN SubscriptionPlans AS sp ON s.PlanID = sp.PlanID
         LEFT JOIN (
-          SELECT ROUND(AVG(p.Price),0) as AvgRate, o.UserID,
+          SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
           MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
           MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
-          FROM Offerings as o
-          INNER JOIN OfferingsPackages as p ON o.OfferingID = p.OfferingID
+          FROM Offerings AS o
+          INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
           WHERE o.Status = 'Active'
           GROUP BY o.UserID
-        ) as sub ON sub.UserID = u.UserID
+        ) AS sub ON sub.UserID = u.UserID
         WHERE u.UserType = :userType
         GROUP BY u.UserID
         ORDER BY u.UserID
@@ -515,7 +607,7 @@ class User
       $stmt->execute();
 
       $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
-      $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
+      $stmt = $this->db->query("SELECT FOUND_ROWS() AS total");
       $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
       $rs = array_map(function ($e) {
@@ -538,6 +630,21 @@ class User
         ];
 
         unset($e['hasVirtual'], $e['hasInPerson']);
+
+        // Agregar información de suscripción
+        $e['Subscription'] = is_null($e['PlanID']) ? null : [
+          "PlanID" => (int)$e['PlanID'],
+          "StartDate" => $e['StartDate'],
+          "Name" => $e['Name'],
+          "Description" => $e['Description']
+        ];
+        unset(
+          $e['PlanID'],
+          $e['StartDate'],
+          $e['Name'],
+          $e['Description']
+        );   
+
         return $e;
       }, $rs);
 
@@ -563,26 +670,29 @@ class User
       u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
       u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
         ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
-      u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
+      u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
+      s.PlanID, s.StartDate, sp.Name, sp.Description,      
       -- Subconsulta para reviews
       (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-        FROM Reviews as r WHERE r.GUserID = u.UserID) AS Rating,
+        FROM Reviews AS r WHERE r.GUserID = u.UserID) AS Rating,
       (SELECT COUNT(DISTINCT r.ReviewID)
-        FROM Reviews as r WHERE r.GUserID = u.UserID) AS TotalReviews
-      FROM Users as u
-      LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
-      LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
-      LEFT JOIN Media as m ON u.UserID = m.UserID
-      LEFT JOIN Reviews as r ON u.UserID = r.GUserID OR u.UserID = r.SUserID
+        FROM Reviews AS r WHERE r.GUserID = u.UserID) AS TotalReviews
+      FROM Users AS u
+      LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
+      LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
+      LEFT JOIN Media AS m ON u.UserID = m.UserID
+      LEFT JOIN Reviews AS r ON u.UserID = r.GUserID OR u.UserID = r.SUserID
+      LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
+      LEFT JOIN SubscriptionPlans AS sp ON s.PlanID = sp.PlanID
       LEFT JOIN (
-        SELECT ROUND(AVG(p.Price),0) as AvgRate, o.UserID,
+        SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
         MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
         MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
-        FROM Offerings as o
-        INNER JOIN OfferingsPackages as p ON o.OfferingID = p.OfferingID
+        FROM Offerings AS o
+        INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
         WHERE o.Status = 'Active'
         GROUP BY o.UserID
-      ) as sub ON sub.UserID = u.UserID
+      ) AS sub ON sub.UserID = u.UserID
       WHERE uc.CategoryID = :categoryID AND u.DeactivationDate is null
       GROUP BY u.UserID
       ORDER BY u.UserID");
@@ -612,6 +722,21 @@ class User
         ];
 
         unset($e['hasVirtual'], $e['hasInPerson']);
+
+        // Agregar información de suscripción
+        $e['Subscription'] = is_null($e['PlanID']) ? null : [
+          "PlanID" => (int)$e['PlanID'],
+          "StartDate" => $e['StartDate'],
+          "Name" => $e['Name'],
+          "Description" => $e['Description']
+        ];
+        unset(
+          $e['PlanID'],
+          $e['StartDate'],
+          $e['Name'],
+          $e['Description']
+        );   
+
         return $e;
       }, $rs);
 
@@ -645,25 +770,28 @@ class User
       u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
       u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
         ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
-      u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
+      u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
+      s.PlanID, s.StartDate, sp.Name, sp.Description,      
       -- Subconsulta para reviews
       (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-        FROM Reviews as r WHERE r.GUserID = u.UserID) AS Rating,
+        FROM Reviews AS r WHERE r.GUserID = u.UserID) AS Rating,
       (SELECT COUNT(DISTINCT r.ReviewID)
-        FROM Reviews as r WHERE r.GUserID = u.UserID) AS TotalReviews
-      FROM Users as u
-      LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
-      LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
-      LEFT JOIN Media as m ON u.UserID = m.UserID
+        FROM Reviews AS r WHERE r.GUserID = u.UserID) AS TotalReviews
+      FROM Users AS u
+      LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
+      LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
+      LEFT JOIN Media AS m ON u.UserID = m.UserID
+      LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
+      LEFT JOIN SubscriptionPlans AS sp ON s.PlanID = sp.PlanID
       LEFT JOIN (
-        SELECT ROUND(AVG(p.Price),0) as AvgRate, o.UserID,
+        SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
         MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
         MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
-        FROM Offerings as o
-        INNER JOIN OfferingsPackages as p ON o.OfferingID = p.OfferingID
+        FROM Offerings AS o
+        INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
         WHERE o.Status = 'Active'
         GROUP BY o.UserID
-      ) as sub ON sub.UserID = u.UserID
+      ) AS sub ON sub.UserID = u.UserID
       WHERE u.ReferralCode = :referralCode
       GROUP BY u.UserID
       ORDER BY u.UserID");
@@ -700,6 +828,20 @@ class User
         "InPerson" => $user['hasInPerson'] == 1
       ];
       unset($user['hasVirtual'], $user['hasInPerson']);
+
+      // Agregar información de suscripción
+      $user['Subscription'] = is_null($user['PlanID']) ? null : [
+        "PlanID" => (int)$user['PlanID'],
+        "StartDate" => $user['StartDate'],
+        "Name" => $user['Name'],
+        "Description" => $user['Description']
+      ];
+      unset(
+        $user['PlanID'],
+        $user['StartDate'],
+        $user['Name'],
+        $user['Description']
+      );   
 
       // Verificar si la cuenta está desactivada
       if (!is_null($user['DeactivationDate']) && strtotime($user['DeactivationDate']) <= time()) {
@@ -768,7 +910,7 @@ class User
 
       // Filtrar y preparar los campos a actualizar
       $fields = [];
-      foreach ($data as $key => $value) {
+      foreach ($data AS $key => $value) {
         if (!in_array($key, $allowedFields)) {
           return (object) [
             "http_code" => 400,
@@ -786,7 +928,7 @@ class User
       $stmt = $this->db->prepare($sql);
 
       // Vincular parámetros y manejar valores NULL
-      foreach ($data as $key => $value) {
+      foreach ($data AS $key => $value) {
         $stmt->bindValue(":$key", $value === null ? null : $value, $value === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
       }
 
@@ -809,38 +951,6 @@ class User
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
-  }
-
-  public function createConsent($data)
-  {
-    // Validar que el usuario exista
-    $stmt = $this->db->prepare("SELECT 1 FROM Users WHERE UserID = ?");
-    $stmt->execute([$data['UserID']]);
-    if (!$stmt->fetch()) {
-      return ['error' => 'User not found'];
-    }
-
-    // Validar IP
-    if (!filter_var($data['UserIP'], FILTER_VALIDATE_IP)) {
-      return ['error' => 'Invalid IP address'];
-    }
-
-    // Insertar consentimiento
-    $stmt = $db->prepare("INSERT INTO UserLegalConsents 
-          (UserID, AcceptedTerms, AcceptedPrivacyPolicy, UserIP, UserAgent, TyCVersion, PrivacyPolicyVersion) 
-          VALUES (?, ?, ?, ?, ?, ?, ?)");
-
-    $stmt->execute([
-      $data['UserID'],
-      $data['AcceptedTerms'] ? 1 : 0,
-      $data['AcceptedPrivacyPolicy'] ? 1 : 0,
-      $data['UserIP'],
-      $data['UserAgent'],
-      $data['TyCVersion'],
-      $data['PrivacyPolicyVersion']
-    ]);
-
-    return ['success' => true];
   }
 
   public function getLatestConsent($id)
@@ -892,8 +1002,8 @@ class User
     $fileWritten = false; # Indica que se grabo el archivo en el FS
     try {
       # Busco al usuario y si tenia imagen antes
-      $stmt = $this->db->prepare("SELECT u.UserID,m.MediaID,m.Path FROM Users as u
-            LEFT JOIN Media as m ON u.UserID = m.UserID WHERE u.UserID = :id");
+      $stmt = $this->db->prepare("SELECT u.UserID,m.MediaID,m.Path FROM Users AS u
+            LEFT JOIN Media AS m ON u.UserID = m.UserID WHERE u.UserID = :id");
       $stmt->bindParam(':id', $userId, PDO::PARAM_INT);
       $stmt->execute();
       $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -931,7 +1041,7 @@ class User
             "http_code" => 400,
             "error" => [
               "code" => "INAPPROPRIATE_CONTENT",
-              "desc" => $rekognitionResult['reason']
+              "desc" => $rekognitionResult['reASon']
             ]
           ];
         }
@@ -945,8 +1055,8 @@ class User
       # Genero la URL del archivo
       $fileURL = $GLOBALS['config']['media_folder']['url'] . "/user/" . $imgID . ".webp";
 
-      # Borro las imagenes que tuviera antes (si son locales)
-      foreach ($rs as $r) {
+      # Borro lAS imagenes que tuviera antes (si son locales)
+      foreach ($rs AS $r) {
         if (!is_null($r['Path']) && is_file($r['Path'])) {
           unlink($r['Path']);
         }
@@ -990,7 +1100,7 @@ class User
   {
     try {
       # Seleccionar el MediaID para eliminar la entrada
-      $stmt = $this->db->prepare("SELECT m.MediaID, m.URL, m.Path FROM Media as m WHERE m.UserID = :id");
+      $stmt = $this->db->prepare("SELECT m.MediaID, m.URL, m.Path FROM Media AS m WHERE m.UserID = :id");
       $stmt->bindParam(':id', $userId, PDO::PARAM_INT);
       $stmt->execute();
       $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);

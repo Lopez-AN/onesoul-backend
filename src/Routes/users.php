@@ -37,7 +37,6 @@ return function (App $app) {
   $app->post('/users/profile_photo/{id}', [$userController, 'updateProfilePhoto']);
   $app->delete('/users/profile_photo/{id}', [$userController, 'deleteProfilePhoto']);
   $app->patch('/users/{id}', [$userController, 'updateUser']);
-  $app->post('/users/consent', [$userController, 'createConsent']);
   $app->get('/users/consent/{id}', [$userController, 'getLatestConsent']);
   $app->delete('/users/{id}', [$userController, 'deleteUser']);
   $app->post('/users/categories/{id}', [$userController, 'updateUserCategories']);

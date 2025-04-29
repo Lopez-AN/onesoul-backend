@@ -18,9 +18,9 @@ class Search
   {
     try {
       $searchQuery = "%$query%";
-      $stmt = $this->pdo->prepare("SELECT SQL_CALC_FOUND_ROWS c.*,m.URL as ImgURL
+      $stmt = $this->pdo->prepare("SELECT SQL_CALC_FOUND_ROWS c.*,m.URL AS ImgURL
             FROM Categories AS c
-            LEFT JOIN Media as m ON c.CategoryID = m.CategoryID
+            LEFT JOIN Media AS m ON c.CategoryID = m.CategoryID
             WHERE (c.Name LIKE :search1 OR c.Description LIKE :search2) AND c.IsActive = 1
             ORDER BY c.CategoryID
             LIMIT :_limit OFFSET :_offset");
@@ -32,7 +32,7 @@ class Search
       $stmt->execute();
 
       $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
-      $stmt = $this->pdo->query("SELECT FOUND_ROWS() as total");
+      $stmt = $this->pdo->query("SELECT FOUND_ROWS() AS total");
       $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
       return [
@@ -56,8 +56,8 @@ class Search
         u.DisplayName AS author_DisplayName,
         u.FirstName AS author_FirstName,
         u.LastName AS author_LastName,
-        u.UserName as author_UserName,
-        round(avg(ru.Rating),2) as author_Rating,
+        u.UserName AS author_UserName,
+        round(avg(ru.Rating),2) AS author_Rating,
         COUNT(DISTINCT ru.ReviewID) AS author_TotalReviews,
         (SELECT URL FROM Media WHERE UserID = u.UserID LIMIT 1) AS author_ImgURL,
         -- Subconsulta para media_images
@@ -132,7 +132,7 @@ class Search
       $stmt->execute();
 
       $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
-      $stmt = $this->pdo->query("SELECT FOUND_ROWS() as total");
+      $stmt = $this->pdo->query("SELECT FOUND_ROWS() AS total");
       $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
       // Desagrupo los json traidos por MYSQL para armar el JSON anidado de respuesta
@@ -228,26 +228,29 @@ class Search
         u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
         u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
           ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
-        u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
+        u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
+        s.PlanID, s.StartDate, sp.Name, sp.Description,        
         -- Subconsulta para reviews
         (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-          FROM Reviews as r WHERE r.GUserID = u.UserID) AS Rating,
+          FROM Reviews AS r WHERE r.GUserID = u.UserID) AS Rating,
         (SELECT COUNT(DISTINCT r.ReviewID)
-          FROM Reviews as r WHERE r.GUserID = u.UserID) AS TotalReviews
-        FROM Users as u
-        LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
-        LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
-        LEFT JOIN Media as m ON u.UserID = m.UserID
-        LEFT JOIN Offerings as o ON u.UserID = o.UserID
+          FROM Reviews AS r WHERE r.GUserID = u.UserID) AS TotalReviews
+        FROM Users AS u
+        LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
+        LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
+        LEFT JOIN Media AS m ON u.UserID = m.UserID
+        LEFT JOIN Offerings AS o ON u.UserID = o.UserID
+        LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
+        LEFT JOIN SubscriptionPlans AS sp ON s.PlanID = sp.PlanID
         LEFT JOIN (
-          SELECT ROUND(AVG(p.Price),0) as AvgRate, o.UserID,
+          SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
           MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
           MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
-          FROM Offerings as o
-          INNER JOIN OfferingsPackages as p ON o.OfferingID = p.OfferingID
+          FROM Offerings AS o
+          INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
           WHERE o.Status = 'Active'
           GROUP BY o.UserID
-        ) as sub ON sub.UserID = u.UserID
+        ) AS sub ON sub.UserID = u.UserID
         WHERE (
           u.FirstName LIKE :search1 OR
           u.LastName LIKE :search2 OR
@@ -270,23 +273,26 @@ class Search
         u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
         u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
           ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
-        u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL as ImgURL,
+        u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
+        s.PlanID, s.StartDate, sp.Name, sp.Description,      
         -- Subconsulta para reviews
         (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-          FROM Reviews as r WHERE r.GUserID = u.UserID) AS Rating,
+          FROM Reviews AS r WHERE r.GUserID = u.UserID) AS Rating,
         (SELECT COUNT(DISTINCT r.ReviewID)
-          FROM Reviews as r WHERE r.GUserID = u.UserID) AS TotalReviews
-        FROM Users as u
-        LEFT JOIN UsersCategories as uc ON uc.userID = u.userID
-        LEFT JOIN Categories as c ON uc.CategoryID = c.CategoryID
-        LEFT JOIN Media as m ON u.UserID = m.UserID
-        LEFT JOIN Offerings as o ON u.UserID = o.UserID
+          FROM Reviews AS r WHERE r.GUserID = u.UserID) AS TotalReviews
+        FROM Users AS u
+        LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
+        LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
+        LEFT JOIN Media AS m ON u.UserID = m.UserID
+        LEFT JOIN Offerings AS o ON u.UserID = o.UserID
+        LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
+        LEFT JOIN SubscriptionPlans AS sp ON s.PlanID = sp.PlanID
         LEFT JOIN (
-          SELECT ROUND(AVG(p.Price),0) as AvgRate, o.UserID,
+          SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
           MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
           MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
-          FROM Offerings as o
-          INNER JOIN OfferingsPackages as p ON o.OfferingID = p.OfferingID
+          FROM Offerings AS o
+          INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
           WHERE o.Status = 'Active'
           GROUP BY o.UserID
         ) as sub ON sub.UserID = u.UserID
@@ -311,7 +317,7 @@ class Search
       $stmt->execute();
 
       $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
-      $stmt = $this->pdo->query("SELECT FOUND_ROWS() as total");
+      $stmt = $this->pdo->query("SELECT FOUND_ROWS() AS total");
       $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
       $rs = array_map(function ($e) {
@@ -334,6 +340,21 @@ class Search
         ];
 
         unset($e['hasVirtual'], $e['hasInPerson']);
+
+        // Agregar información de suscripción
+        $e['Subscription'] = is_null($e['PlanID']) ? null : [
+          "PlanID" => (int)$e['PlanID'],
+          "StartDate" => $e['StartDate'],
+          "Name" => $e['Name'],
+          "Description" => $e['Description']
+        ];
+        unset(
+          $e['PlanID'],
+          $e['StartDate'],
+          $e['Name'],
+          $e['Description']
+        );   
+
         return $e;
       }, $rs);
 

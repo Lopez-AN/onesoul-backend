@@ -126,7 +126,7 @@ class AuthController{
       // Si se esta vinculando un nuevo navegador guardarlo
       if($newMfaId !== null){
         // Guardar datos del navegador
-        $this->auth->storeBrowserData($user['UserID'], $request, $newMfaId);
+        $this->auth->storeBrowserData($user['UserID'], $request, $newMfaId, $clientIp);
       }
 
       $userData = $this->user->getUserById($user['UserID']);

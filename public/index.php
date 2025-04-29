@@ -28,6 +28,7 @@ $errorMiddleware = $app->addErrorMiddleware(true, true, true);
 (require ROOT . '/src/Routes/auth.php')($app);
 (require ROOT . '/src/Routes/subscription.php')($app);
 (require ROOT . '/src/Routes/bookings.php')($app);
+(require ROOT . '/src/Routes/util.php')($app);
 
 $app->run();
 
