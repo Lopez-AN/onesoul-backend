@@ -17,7 +17,8 @@ class Subscription
   public function getSubscriptionPlans() {
     try {
       $stmt = $this->db->prepare("SELECT sp.PlanID, sp.Name, sp.Description, sp.Beneficts, sp.Price, sp.CurrencyCode, sp.Duration,
-                    sf.FeatureCode, sf.Description AS FeatureDescription
+                    sf.FeatureCode, sf.Description AS FeatureDescription,
+                    si.Value, si.Type, si.Description AS ItemDescription
                 FROM SubscriptionPlans AS sp
                 LEFT JOIN SubscriptionItems AS si ON sp.PlanID = si.PlanID
                 LEFT JOIN SubscriptionFeatures AS sf ON si.FeatureCode = sf.FeatureCode
@@ -30,6 +31,26 @@ class Subscription
       $plans = [];
       foreach ($results as $row) {
         $planId = $row['PlanID'];
+
+        // Castear el valor según el tipo
+        $value = $row['Value'];
+        if (isset($value) && isset($row['Type'])) {
+          switch ($row['Type']) {
+            case 'INTEGER':
+              $value = is_numeric($value) ? (int)$value : 0;
+              break;
+            case 'FLOAT':
+              $value = is_numeric($value) ? (float)$value : 0.0;
+              break;
+            case 'BOOLEAN':
+              $value = filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+              break;
+            case 'STRING':
+            default:
+              $value = (string)$value;
+              break;
+          }
+        }
 
         // Si el plan no está en el array, inicializarlo
         if (!isset($plans[$planId])) {
@@ -49,7 +70,9 @@ class Subscription
         if (!empty($row['FeatureCode'])) {
           $plans[$planId]['Features'][] = [
             "FeatureCode"  => $row['FeatureCode'],
-            "Description"  => $row['FeatureDescription']
+            "Description"  => $row['FeatureDescription'],
+            "Value"  => $value,
+            "ItemDescription"  => $row['ItemDescription']
           ];
         }
       }
@@ -64,7 +87,8 @@ class Subscription
   public function getSubscriptionPlanByID($id) {
     try {
       $stmt = $this->db->prepare("SELECT sp.PlanID, sp.Name, sp.Description, sp.Beneficts, sp.Price, sp.CurrencyCode, sp.Duration,
-                                sf.FeatureCode, sf.Description AS FeatureDescription
+                                sf.FeatureCode, sf.Description AS FeatureDescription,
+                                si.Value, si.Type, si.Description AS ItemDescription
                                 FROM SubscriptionPlans AS sp
                                 LEFT JOIN SubscriptionItems AS si ON sp.PlanID = si.PlanID
                                 LEFT JOIN SubscriptionFeatures AS sf ON si.FeatureCode = sf.FeatureCode
@@ -95,9 +119,32 @@ class Subscription
       // Agregar las features
       foreach ($rows as $row) {
         if (!empty($row['FeatureCode'])) {
+        
+          // Castear el valor según el tipo
+          $value = $row['Value'];
+          if (isset($value) && isset($row['Type'])) {
+            switch ($row['Type']) {
+              case 'INTEGER':
+                $value = is_numeric($value) ? (int)$value : 0;
+                break;
+              case 'FLOAT':
+                $value = is_numeric($value) ? (float)$value : 0.0;
+                break;
+              case 'BOOLEAN':
+                $value = filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+                break;
+              case 'STRING':
+              default:
+                $value = (string)$value;
+                break;
+            }
+          }
+
           $subscription['Features'][] = [
             "FeatureCode"  => $row['FeatureCode'],
-            "Description"  => $row['FeatureDescription']
+            "Description"  => $row['FeatureDescription'],
+            "Value"  => $value,
+            "ItemDescription"  => $row['ItemDescription']
           ];
         }
       }
@@ -185,14 +232,17 @@ class Subscription
                                                  VALUES (:FeatureCode, :Description, 1)");
 
         // Preparar inserción en SubscriptionItems
-        $insertItemStmt = $this->db->prepare("INSERT INTO SubscriptionItems (PlanID, FeatureCode)
-                                              VALUES (:planID, :FeatureCode)");
+        $insertItemStmt = $this->db->prepare("INSERT INTO SubscriptionItems (PlanID, FeatureCode, Value, Type, Description)
+                                              VALUES (:planID, :FeatureCode, :Value, :Type, :ItemDescription)");
 
         foreach ($data['Features'] as $feature) {
           // Insertar en SubscriptionFeatures si no existe
           $featureCode = $feature['FeatureCode'];
           $description = $feature['Description'];
-
+          $value = isset($feature['Value']) ? $feature['Value'] : null;
+          $type = isset($feature['Type']) ? $feature['Type'] : null;
+          $itemDescription = isset($feature['ItemDescription']) ? $feature['ItemDescription'] : null;
+  
           $insertFeatureStmt->bindParam(':FeatureCode', $featureCode, PDO::PARAM_STR);
           $insertFeatureStmt->bindParam(':Description', $description, PDO::PARAM_STR);
           $insertFeatureStmt->execute();
@@ -200,6 +250,11 @@ class Subscription
           // Insertar la relación en SubscriptionItems
           $insertItemStmt->bindParam(':planID', $planID, PDO::PARAM_INT);
           $insertItemStmt->bindParam(':FeatureCode', $featureCode, PDO::PARAM_STR);
+          $insertItemStmt->bindParam(':planID', $planID, PDO::PARAM_INT);
+          $insertItemStmt->bindParam(':FeatureCode', $featureCode, PDO::PARAM_STR);
+          $insertItemStmt->bindParam(':Value', $value);
+          $insertItemStmt->bindParam(':Type', $type, PDO::PARAM_STR);
+          $insertItemStmt->bindParam(':ItemDescription', $itemDescription, PDO::PARAM_STR);
           $insertItemStmt->execute();
         }
       }
