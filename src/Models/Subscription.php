@@ -22,6 +22,7 @@ class Subscription
                 FROM SubscriptionPlans AS sp
                 LEFT JOIN SubscriptionItems AS si ON sp.PlanID = si.PlanID
                 LEFT JOIN SubscriptionFeatures AS sf ON si.FeatureCode = sf.FeatureCode
+                WHERE sf.IsActive = 1
                 ORDER BY sp.PlanID, sf.FeatureCode");
 
       $stmt->execute();
@@ -59,7 +60,7 @@ class Subscription
             "Name"         => $row['Name'],
             "Description"  => $row['Description'],
             "Beneficts"    => $row['Beneficts'],
-            "Price"        => $row['Price'],
+            "Price"        => (float)$row['Price'],
             "CurrencyCode" => $row['CurrencyCode'],
             "Duration"     => $row['Duration'],
             "Features"     => []
@@ -92,7 +93,7 @@ class Subscription
                                 FROM SubscriptionPlans AS sp
                                 LEFT JOIN SubscriptionItems AS si ON sp.PlanID = si.PlanID
                                 LEFT JOIN SubscriptionFeatures AS sf ON si.FeatureCode = sf.FeatureCode
-                                WHERE sp.PlanID = :id
+                                WHERE sp.PlanID = :id AND sf.IsActive = 1
                                 ORDER BY sf.FeatureCode");
 
       $stmt->bindParam(':id', $id, PDO::PARAM_INT);
@@ -110,7 +111,7 @@ class Subscription
         "Name"         => $rows[0]['Name'],
         "Description"  => $rows[0]['Description'],
         "Beneficts"    => $rows[0]['Beneficts'],
-        "Price"        => $rows[0]['Price'],
+        "Price"        => (float)$rows[0]['Price'],
         "CurrencyCode" => $rows[0]['CurrencyCode'],
         "Duration"     => $rows[0]['Duration'],
         "Features"     => []
