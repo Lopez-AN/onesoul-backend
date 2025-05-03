@@ -864,6 +864,41 @@ clASs User
     }
   }
 
+  public function latestConsentByUser($id)
+  {
+    try {
+      $stmt = $this->db->prepare("SELECT * FROM UserLegalConsents 
+                            WHERE UserID = :id 
+                            ORDER BY ConsentDate DESC 
+                            LIMIT 1");
+      $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+      $stmt->execute();
+
+      return $stmt->fetch(PDO::FETCH_ASSOC);
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  public function referralsByUser ($id)
+  {
+    try {
+      $stmt = $this->db->prepare("SELECT u.UserID, u.DisplayName, u.FirstName, u.LastName, u.RegistrationDate,
+                                  m.URL AS ProfilePhoto, r.ReferralStatus
+                                FROM Referrals AS r
+                                LEFT JOIN Users AS u ON u.UserID = r.ReferredUserID
+                                LEFT JOIN Media AS m ON u.UserID = m.UserID
+                                WHERE r.UserID = :id
+                                ORDER BY u.RegistrationDate DESC");
+      $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+      $stmt->execute();
+
+      return $stmt->fetchAll(\PDO::FETCH_ASSOC);
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }      
+    
   public function updateUser($userId, $data)
   {
     try {
@@ -951,18 +986,6 @@ clASs User
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
-  }
-
-  public function getLatestConsent($id)
-  {
-    $stmt = $this->db->prepare("SELECT * FROM UserLegalConsents 
-                          WHERE UserID = :id 
-                          ORDER BY ConsentDate DESC 
-                          LIMIT 1");
-    $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-    $stmt->execute();
-
-    return $stmt->fetch(PDO::FETCH_ASSOC);
   }
 
   public function deleteUser($id)

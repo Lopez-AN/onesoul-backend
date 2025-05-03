@@ -3,25 +3,13 @@
 use Slim\App;
 use App\Controllers\UserController;
 use App\Models\User;
+use Tuupola\Middleware\JwtAuthentication;
 
 return function (App $app) {
-  # Proteccion de rutas
-  $app->add(new Tuupola\Middleware\JwtAuthentication([
+  $jwtMiddleware = new JwtAuthentication([
     "secret" => $GLOBALS['config']['jwt']['secret'],
-    "rules" => [
-      new Tuupola\Middleware\JwtAuthentication\RequestPathRule([
-        "path" => [
-          "/users",
-          "/users/{id}"
-        ],
-        "ignore" => []
-      ]),
-      new Tuupola\Middleware\JwtAuthentication\RequestMethodRule([
-        "ignore" => ["OPTIONS", "GET"]
-      ])
-    ],
-    "attribute" => "jwt", // Este atributo lo podes usar para leer el token desde el controller
-  ]));
+    "attribute" => "jwt"
+  ]);
 
   $pdo = require __DIR__ . './../core/database.php';
   $user = new User($pdo);
@@ -34,10 +22,11 @@ return function (App $app) {
   $app->get('/users/username/{username}', [$userController, 'getUserByUserName']);
   $app->get('/users/category/{id}', [$userController, 'getUserByCategory']);
   $app->get('/users/referred/{referralCode}', [$userController, 'getUserByRefCode']);
-  $app->post('/users/profile_photo/{id}', [$userController, 'updateProfilePhoto']);
-  $app->delete('/users/profile_photo/{id}', [$userController, 'deleteProfilePhoto']);
-  $app->patch('/users/{id}', [$userController, 'updateUser']);
-  $app->get('/users/consent/{id}', [$userController, 'getLatestConsent']);
-  $app->delete('/users/{id}', [$userController, 'deleteUser']);
-  $app->post('/users/categories/{id}', [$userController, 'updateUserCategories']);
+  $app->get('/users/consent/{id}', [$userController, 'latestConsentByUser']);
+  $app->get('/users/{id}/referrals', [$userController, 'referralsByUser'])->add($jwtMiddleware);
+  $app->post('/users/profile_photo/{id}', [$userController, 'updateProfilePhoto'])->add($jwtMiddleware);
+  $app->delete('/users/profile_photo/{id}', [$userController, 'deleteProfilePhoto'])->add($jwtMiddleware);
+  $app->patch('/users/{id}', [$userController, 'updateUser'])->add($jwtMiddleware);
+  $app->delete('/users/{id}', [$userController, 'deleteUser'])->add($jwtMiddleware);
+  $app->post('/users/categories/{id}', [$userController, 'updateUserCategories'])->add($jwtMiddleware);
 };
