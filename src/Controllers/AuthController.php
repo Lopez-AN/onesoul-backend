@@ -374,7 +374,7 @@ class AuthController{
     }
 
     try {
-      $result = $this->auth->register($this->user, $email, $username, $password);
+      $result = $this->auth->register($this->user, $email, $username, $password, $clientIp, $request);
       switch($result->http_code) {
         case 200: # Logueo correcto o usuario existente
           $jwt = $this -> JWTgen($result -> data);

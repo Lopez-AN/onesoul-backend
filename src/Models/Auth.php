@@ -95,43 +95,11 @@ class Auth{
     }
     return $user_data;
   }
-
-  public function createConsent($data)
-  {
-    // Validar que el usuario exista
-    $stmt = $this->db->prepare("SELECT 1 FROM Users WHERE UserID = ?");
-    $stmt->execute([$data['UserID']]);
-    if (!$stmt->fetch()) {
-      return ['error' => 'User not found'];
-    }
-
-    // Validar IP
-    if (!filter_var($data['UserIP'], FILTER_VALIDATE_IP)) {
-      return ['error' => 'Invalid IP address'];
-    }
-
-    // Insertar consentimiento
-    $stmt = $db->prepare("INSERT INTO UserLegalConsents 
-          (UserID, AcceptedTerms, AcceptedPrivacyPolicy, UserIP, UserAgent, TyCVersion, PrivacyPolicyVersion) 
-          VALUES (?, ?, ?, ?, ?, ?, ?)");
-
-    $stmt->execute([
-      $data['UserID'],
-      $data['AcceptedTerms'] ? 1 : 0,
-      $data['AcceptedPrivacyPolicy'] ? 1 : 0,
-      $data['UserIP'],
-      $data['UserAgent'],
-      $data['TyCVersion'],
-      $data['PrivacyPolicyVersion']
-    ]);
-
-    return ['success' => true];
-  }
   
   /*
   * Registro usuario
   */
-  public function register($userModel, $email, $username, $newPassword){
+  public function register($userModel, $email, $username, $newPassword, $clientIp, $request){
     # Validación de fortaleza de contraseña
     if(!$this->passwordComplexity($newPassword)) {
       return (object)[
@@ -171,17 +139,43 @@ class Auth{
       "OTPCode" => $otpCode
     ]);
 
-    return $userModel -> getUserByUserName($username);
+    $newUser = $userModel->getUserByUserName($username);
+    if ($newUser->http_code !== 200 || !isset($newUser->data["UserID"])) {
+      return (object)[
+        "http_code" => 500,
+        "error" => [
+          "code" => "USER_CREATION_FAILED",
+          "desc" => "User created but could not be retrieved"
+        ]
+      ];
+    }
+  
+    $userId = $newUser->data["UserID"];
+  
+    // Crear consentimiento legal
+    $consentData = [
+      "UserID" => $userId,
+      "AcceptedTerms" => 1,
+      "AcceptedPrivacyPolicy" => 1,
+      "UserIP" => $clientIp,
+      "UserAgent" => $request->getHeader('User-Agent')[0] ?? '',
+      "TyCVersion" => '1.0',
+      "PrivacyPolicyVersion" => '1.0'
+    ];
+    $this->createConsent($consentData);
+
+    return $newUser;
   }
 
   private function passwordComplexity($newPassword): bool {
     $password = trim($newPassword);
 
     return strlen($password) >= 8 &&
-        preg_match('/[A-Z]/', $password) &&   // Debe tener al menos una mayúscula
-        preg_match('/[a-z]/', $password) &&   // Debe tener al menos una minúscula
-        (preg_match('/[0-9]/', $password) || preg_match('/\W/', $password));  // Debe tener un número O un símbolo
-    }
+      preg_match('/[A-Z]/', $password) &&   // Debe tener al menos una mayúscula
+      preg_match('/[a-z]/', $password) &&   // Debe tener al menos una minúscula
+      (preg_match('/[0-9]/', $password) || preg_match('/\W/', $password));  // Debe tener un número O un símbolo
+  }
+  
 
   public function registerGoogle($userModel, $token, $username){
     $response = $this -> validateToken("https://oauth2.googleapis.com/tokeninfo?id_token=$token");
@@ -290,6 +284,38 @@ class Auth{
     ]);
 
     return $userModel -> getUserByOAuthID($userId, "facebook");
+  }
+
+  public function createConsent($consentData)
+  {
+    // Validar que el usuario exista
+    $stmt = $this->db->prepare("SELECT 1 FROM Users WHERE UserID = ?");
+    $stmt->execute([$consentData['UserID']]);
+    if (!$stmt->fetch()) {
+      return ['error' => 'User not found'];
+    }
+
+    // Validar IP
+    if (!filter_var($consentData['UserIP'], FILTER_VALIDATE_IP)) {
+      return ['error' => 'Invalid IP address'];
+    }
+
+    // Insertar consentimiento
+    $stmt = $this->db->prepare("INSERT INTO UserLegalConsents 
+      (UserID, AcceptedTerms, AcceptedPrivacyPolicy, UserIP, UserAgent, TyCVersion, PrivacyPolicyVersion) 
+      VALUES (?, ?, ?, ?, ?, ?, ?)");
+
+    $stmt->execute([
+      $consentData['UserID'],
+      $consentData['AcceptedTerms'] ? 1 : 0,
+      $consentData['AcceptedPrivacyPolicy'] ? 1 : 0,
+      $consentData['UserIP'],
+      $consentData['UserAgent'],
+      $consentData['TyCVersion'],
+      $consentData['PrivacyPolicyVersion']
+    ]);
+
+    return ['success' => true];
   }
 
   /* Validacion OTP, el parametro resetOTP se envia en false para el metodo de resetear

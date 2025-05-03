@@ -217,31 +217,6 @@ class UserController
     }
   }
 
-  public function createConsent(Request $request, Response $response, $args)
-  {
-    try {
-      $data = $request->getParsedBody();
-
-      $result = $this->user->createConsent($data);
-
-      if (isset($result['error'])) {
-        $response->getBody()->write(json_encode($result));
-        return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
-      }
-
-      $response->getBody()->write(json_encode(['message' => 'Consent saved successfully']));
-      return $response->withStatus(201)->withHeader('Content-Type', 'application/json');
-
-    } catch (\Throwable $e) {
-      return $response->withStatus(500)->withJson([
-        "error" => [
-          "code" => "INTERNAL_SERVER_ERROR",
-          "desc" => $e->getMessage()
-        ]
-      ]);
-    }
-  }
-
   public function getLatestConsent(Request $request, Response $response, $args)
   {
     $id = $args['id'];
