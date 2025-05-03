@@ -99,7 +99,7 @@ class Auth{
   /*
   * Registro usuario
   */
-  public function register($userModel, $email, $username, $newPassword, $clientIp, $request){
+  public function register($userModel, $email, $username, $newPassword, $clientIp, $request, $referralCode){
     # Validación de fortaleza de contraseña
     if(!$this->passwordComplexity($newPassword)) {
       return (object)[
@@ -128,6 +128,22 @@ class Auth{
         ]
       ];
     }
+    
+    // Validación del referral code si fue proporcionado
+    $referrerUserID = null;
+    if (!empty($referralCode)) {
+      $referrerResult = $userModel->getUserByRefCode($referralCode);
+      if ($referrerResult->http_code !== 200 || empty($referrerResult->data['UserID'])) {
+        return (object)[
+          "http_code" => 400,
+          "error" => [
+            "code" => "INVALID_REFERRAL_CODE",
+            "desc" => "The provided referral code is not valid"
+          ]
+        ];
+      }
+      $referrerUserID = $referrerResult->data['UserID'];
+    }
 
     $password_hash = password_hash($newPassword,PASSWORD_BCRYPT); #El password se guarda hasheado (obvio!)
     $otpCode = rand(100000, 999999); # Codigo que se enviara por mail
@@ -152,6 +168,13 @@ class Auth{
   
     $userId = $newUser->data["UserID"];
   
+    // Insertar el referral si corresponde
+    if ($referrerUserID) {
+      $stmt = $this->db->prepare("INSERT INTO Referrals (UserID, ReferredUserID, ReferralStatus) 
+              VALUES (?, ?, 'Pending')");
+      $stmt->execute([$referrerUserID, $userId]);
+    }
+
     // Crear consentimiento legal
     $consentData = [
       "UserID" => $userId,
@@ -177,7 +200,7 @@ class Auth{
   }
   
 
-  public function registerGoogle($userModel, $token, $username, $clientIp, $request){
+  public function registerGoogle($userModel, $token, $username, $clientIp, $request, $referralCode){
     $response = $this -> validateToken("https://oauth2.googleapis.com/tokeninfo?id_token=$token");
     if($response === false){
       return (object)["http_code" => 401,
@@ -219,6 +242,22 @@ class Auth{
       ];
     }
 
+    // Validación del referral code si fue proporcionado
+    $referrerUserID = null;
+    if (!empty($referralCode)) {
+      $referrerResult = $userModel->getUserByRefCode($referralCode);
+      if ($referrerResult->http_code !== 200 || empty($referrerResult->data['UserID'])) {
+        return (object)[
+          "http_code" => 400,
+          "error" => [
+            "code" => "INVALID_REFERRAL_CODE",
+            "desc" => "The provided referral code is not valid"
+          ]
+        ];
+      }
+      $referrerUserID = $referrerResult->data['UserID'];
+    }
+
     $this -> registerUserSSO((object)[
       "FirstName" => $first_name,
       "LastName" => $last_name,
@@ -229,6 +268,13 @@ class Auth{
       "Oauth2Service" => "google"
     ]);
   
+    // Insertar el referral si corresponde
+    if ($referrerUserID) {
+      $stmt = $this->db->prepare("INSERT INTO Referrals (UserID, ReferredUserID, ReferralStatus) 
+              VALUES (?, ?, 'Pending')");
+      $stmt->execute([$referrerUserID, $userId]);
+    }
+
     // Crear consentimiento legal
     $consentData = [
       "UserID" => $userId,
@@ -244,7 +290,7 @@ class Auth{
     return $userModel -> getUserByOAuthID($userId, "google");
   }
 
-  public function registerFacebook($userModel, $userId, $token, $username, $clientIp, $request){
+  public function registerFacebook($userModel, $userId, $token, $username, $clientIp, $request, $referralCode){
     $response = $this -> validateToken("https://graph.facebook.com/$userId?fields=id,first_name,last_name,email,picture.width(640)&access_token=$token");
     if($response === false){
       return (object)["http_code" => 401,
@@ -285,6 +331,22 @@ class Auth{
       ];
     }
 
+    // Validación del referral code si fue proporcionado
+    $referrerUserID = null;
+    if (!empty($referralCode)) {
+      $referrerResult = $userModel->getUserByRefCode($referralCode);
+      if ($referrerResult->http_code !== 200 || empty($referrerResult->data['UserID'])) {
+        return (object)[
+          "http_code" => 400,
+          "error" => [
+            "code" => "INVALID_REFERRAL_CODE",
+            "desc" => "The provided referral code is not valid"
+          ]
+        ];
+      }
+      $referrerUserID = $referrerResult->data['UserID'];
+    }
+        
     $this -> registerUserSSO((object)[
       "FirstName" => $first_name,
       "LastName" => $last_name,
@@ -294,6 +356,13 @@ class Auth{
       "Oauth2ID" => $userId,
       "Oauth2Service" => "facebook"
     ]);
+
+    // Insertar el referral si corresponde
+    if ($referrerUserID) {
+      $stmt = $this->db->prepare("INSERT INTO Referrals (UserID, ReferredUserID, ReferralStatus) 
+              VALUES (?, ?, 'Pending')");
+      $stmt->execute([$referrerUserID, $userId]);
+    }
 
     // Crear consentimiento legal
     $consentData = [

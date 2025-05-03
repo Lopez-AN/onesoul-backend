@@ -358,6 +358,7 @@ class AuthController{
     $password = $data['Password'] ?? '';
     $recaptchaToken = $data['RecaptchaToken'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
+    $referralCode = $data['ReferralCode'] ?? null;
 
     if(empty($email) || empty($username) || empty($password) || empty($recaptchaToken)){
       return $response->withStatus(400)->withJson([
@@ -374,7 +375,7 @@ class AuthController{
     }
 
     try {
-      $result = $this->auth->register($this->user, $email, $username, $password, $clientIp, $request);
+      $result = $this->auth->register($this->user, $email, $username, $password, $clientIp, $request, $referralCode);
       switch($result->http_code) {
         case 200: # Logueo correcto o usuario existente
           $jwt = $this -> JWTgen($result -> data);
@@ -401,6 +402,7 @@ class AuthController{
     $username = $data['UserName'] ?? '';
     $recaptchaToken = $data['RecaptchaToken'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
+    $referralCode = $data['ReferralCode'] ?? '';    
 
     if(empty($token) || empty($username) || empty($recaptchaToken)){
       return $response->withStatus(400)->withJson([
@@ -417,7 +419,7 @@ class AuthController{
     }
 
     try {
-      $result = $this->auth->registerGoogle($this->user, $token, $username);
+      $result = $this->auth->registerGoogle($this->user, $token, $username, $clientIp, $request, $referralCode);
       switch($result->http_code) {
         case 200: # Logueo correcto o usuario existente
           $jwt = $this -> JWTgen($result -> data);
@@ -445,6 +447,7 @@ class AuthController{
     $username = $data['UserName'] ?? '';
     $recaptchaToken = $data['RecaptchaToken'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
+    $referralCode = $data['ReferralCode'] ?? '';    
 
     if(empty($user_id) || empty($token) || empty($username) || empty($recaptchaToken)){
       return $response->withStatus(400)->withJson([
@@ -461,7 +464,7 @@ class AuthController{
     }
 
     try{
-      $result = $this->auth->registerFacebook($this->user, $user_id, $token, $username);
+      $result = $this->auth->registerFacebook($this->user, $user_id, $token, $username, $clientIp, $request, $referralCode);
       switch($result->http_code) {
         case 200: # Logueo correcto o usuario existente
           $jwt = $this -> JWTgen($result -> data);
