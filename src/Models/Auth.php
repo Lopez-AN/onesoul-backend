@@ -177,7 +177,7 @@ class Auth{
   }
   
 
-  public function registerGoogle($userModel, $token, $username){
+  public function registerGoogle($userModel, $token, $username, $clientIp, $request){
     $response = $this -> validateToken("https://oauth2.googleapis.com/tokeninfo?id_token=$token");
     if($response === false){
       return (object)["http_code" => 401,
@@ -228,11 +228,23 @@ class Auth{
       "Oauth2ID" => $userId,
       "Oauth2Service" => "google"
     ]);
+  
+    // Crear consentimiento legal
+    $consentData = [
+      "UserID" => $userId,
+      "AcceptedTerms" => 1,
+      "AcceptedPrivacyPolicy" => 1,
+      "UserIP" => $clientIp,
+      "UserAgent" => $request->getHeader('User-Agent')[0] ?? '',
+      "TyCVersion" => '1.0',
+      "PrivacyPolicyVersion" => '1.0'
+    ];
+    $this->createConsent($consentData);
 
     return $userModel -> getUserByOAuthID($userId, "google");
   }
 
-  public function registerFacebook($userModel, $userId, $token, $username){
+  public function registerFacebook($userModel, $userId, $token, $username, $clientIp, $request){
     $response = $this -> validateToken("https://graph.facebook.com/$userId?fields=id,first_name,last_name,email,picture.width(640)&access_token=$token");
     if($response === false){
       return (object)["http_code" => 401,
@@ -282,6 +294,18 @@ class Auth{
       "Oauth2ID" => $userId,
       "Oauth2Service" => "facebook"
     ]);
+
+    // Crear consentimiento legal
+    $consentData = [
+      "UserID" => $userId,
+      "AcceptedTerms" => 1,
+      "AcceptedPrivacyPolicy" => 1,
+      "UserIP" => $clientIp,
+      "UserAgent" => $request->getHeader('User-Agent')[0] ?? '',
+      "TyCVersion" => '1.0',
+      "PrivacyPolicyVersion" => '1.0'
+    ];
+    $this->createConsent($consentData);
 
     return $userModel -> getUserByOAuthID($userId, "facebook");
   }
