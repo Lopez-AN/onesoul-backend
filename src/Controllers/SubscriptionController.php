@@ -126,11 +126,12 @@ class SubscriptionController {
     }
   }
 
-  public function updateSubscriptionByUser(Request $request, Response $response, array $args) {
+  public function updateSubscriptionByUser(Request $request, Response $response, array $args)
+  {
     $userID = $args['userID'];
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
-
+  
     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
       return $response->withStatus(401)->withJson([
         "error" => [
@@ -139,9 +140,8 @@ class SubscriptionController {
         ]
       ]);
     }
-
+  
     try {
-      # Verificar si el usuario autenticado es un administrador o el mismo usuario
       if ($jwt['data']->UserID != $userID && $jwt['data']->UserType != 'Admin') {
         return $response->withStatus(401)->withJson([
           "error" => [
@@ -150,16 +150,30 @@ class SubscriptionController {
           ]
         ]);
       }
-
-      $subscription = $this->subscription->getSubscriptionByUser($userID);
-
+  
       $newPlanID = $data['PlanID'] ?? null;
 
       // Actualizar suscripción
       $result = $this->subscription->updateSubscriptionByUser($userID, $newPlanID);
+  
+      // Si requiere cobro inmediato (upgrade), podrías aquí llamar la API de pago
+      // if ($result['isUpgrade'] && $result['chargeAmount'] > 0) {
+      //   Aquí llamarías a la API de cobro con $result['chargeAmount']
+      //   // Por ejemplo:
+      //   // $paymentResponse = $this->paymentService->charge($userID, $result['chargeAmount']);
+  
+      //   $result['payment_required'] = true;
+      //   $result['message'] .= ' Payment required for upgrade.';
+      // }
 
+      return $response->withStatus(200)->withJson([
+        "message" => $result['message'],
+        "upgrade" => $result['upgrade'],
+        "proportional_charge" => $result['proportional_charge']
+      ]);
+  
       return $response->withStatus(200)->withJson($result);
-
+  
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -211,6 +225,36 @@ class SubscriptionController {
         'success' => true,
         'message' => $result
       ]);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  public function getPriceInfo(Request $request, Response $response, array $args)
+  {
+    $jwt = $request->getAttribute('jwt');
+    $targetPlanID = $args['planID'];
+  
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
+      return $response->withStatus(401)->withJson([
+        "error" => [
+          "code" => "INVALID_TOKEN",
+          "desc" => "Invalid JWT token"
+        ]
+      ]);
+    }
+  
+    try {
+      $userID = $jwt['data']->UserID;
+      $result = $this->subscription->getPriceInfo($userID, $targetPlanID);
+  
+      return $response->withStatus(200)->withJson($result);
+  
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
