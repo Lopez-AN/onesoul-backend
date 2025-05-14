@@ -4,30 +4,13 @@ use Slim\App;
 use App\Controllers\AuthController;
 use App\Models\User;
 use App\Models\Auth;
+use Tuupola\Middleware\JwtAuthentication;
 
 return function (App $app) {
-  # Proteccion de rutas
-  $app->add(new Tuupola\Middleware\JwtAuthentication([
+  $jwtMiddleware = new JwtAuthentication([
     "secret" => $GLOBALS['config']['jwt']['secret'],
-    "rules" => [
-      new Tuupola\Middleware\JwtAuthentication\RequestPathRule([
-        "path" => [
-          "/register/otp",
-          "/register/send_otp_mail",
-          "/auth/refresh_token",
-          "/auth/mfa_req",
-          "/auth/mfa_set",
-          "/auth/mfa_check",
-          "/auth/mfa_del"
-        ],
-        "ignore" => []
-      ]),
-      new Tuupola\Middleware\JwtAuthentication\RequestMethodRule([
-        "ignore" => ["OPTIONS"]
-      ])
-    ],
-    "attribute" => "jwt", // Este atributo lo podes usar para leer el token desde el controller
-  ]));
+    "attribute" => "jwt"
+  ]);
 
   $pdo = require __DIR__ . './../core/database.php';
   $user = new User($pdo);
@@ -40,14 +23,16 @@ return function (App $app) {
   $app->post('/register', [$authController, 'register']);
   $app->post('/register/facebook', [$authController, 'registerFacebook']);
   $app->post('/register/google', [$authController, 'registerGoogle']);
-  $app->post('/register/otp', [$authController, 'validateOTP']);
-  $app->post('/register/send_otp_mail', [$authController, 'sendOtpMail']);
+  $app->post('/register/otp', [$authController, 'validateOTP'])->add($jwtMiddleware);
+  $app->post('/register/send_otp_mail', [$authController, 'sendOtpMail'])->add($jwtMiddleware);
   $app->post('/recaptcha', [$authController, 'validateReCaptcha']);
-  $app->get('/auth/refresh_token', [$authController, 'refreshToken']);
+  $app->get('/auth/refresh_token', [$authController, 'refreshToken'])->add($jwtMiddleware);
   $app->post('/auth/request_password_reset', [$authController, 'requestPasswordReset']);
   $app->post('/auth/password_reset', [$authController, 'resetPassword']);
-  $app->get('/auth/mfa_req', [$authController, 'mfaReq']);
-  $app->post('/auth/mfa_set', [$authController, 'mfaSet']);
-  $app->delete('/auth/mfa_del', [$authController, 'mfaDel']);
-  $app->get('/auth/mfa_check/{code}', [$authController, 'mfaCheck']);
+  $app->get('/auth/mfa_req', [$authController, 'mfaReq'])->add($jwtMiddleware);
+  $app->post('/auth/mfa_set', [$authController, 'mfaSet'])->add($jwtMiddleware);
+  $app->delete('/auth/mfa_del', [$authController, 'mfaDel'])->add($jwtMiddleware);
+  $app->get('/auth/mfa_check/{code}', [$authController, 'mfaCheck'])->add($jwtMiddleware);
+  $app->post('/legal', [$authController, 'uploadLegalDocuments'])->add($jwtMiddleware);
+  $app->get('/legal', [$authController, 'legalDocuments']);
 };

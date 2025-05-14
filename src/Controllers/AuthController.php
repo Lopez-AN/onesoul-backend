@@ -940,4 +940,75 @@ class AuthController{
     $secret = $GLOBALS['config']['jwt']['secret'];
     return JWT::encode($payload, $secret, 'HS256');
   }
+
+  public function uploadLegalDocuments(Request $request, Response $response, $args) {
+    $jwt = $request->getAttribute('jwt');
+
+    if(!isset($jwt['data']) || !property_exists($jwt['data'],'UserID')){
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_TOKEN",
+          "desc" => "Invalid JWT token"
+        ]
+      ]);
+    }
+
+    $data = $request->getParsedBody();
+    $userType = $jwt['data']->UserType;
+    
+    // Validar permisos
+    if (($userType !== 'Admin')) {
+      return $response->withStatus(401)->withJson([
+        "error" => [
+          "code" => "UNAUTHORIZED_ACTION",
+          "desc" => "You don't have permission to create legal documents."
+        ]
+      ]);
+    }
+
+    // Validación de campos requeridos
+    if (!isset($data['Type']) || !isset($data['Version'])) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "VALIDATION_ERROR",
+          "desc" => "Both 'Type' and 'Version' fields are required."
+        ]
+      ]);
+    }
+
+    $type = $data['Type'];
+    $version = $data['Version'];
+    $releaseDate = $data['ReleaseDate'];
+    $content = is_array($data['Content']) ? json_encode($data['Content'], JSON_UNESCAPED_UNICODE) : $data['Content'];
+    
+    try {
+
+      $consent = $this->auth->uploadLegalDocuments($type, $version, $releaseDate, $content);
+
+      return $response->withStatus(200)->withJson($consent);
+
+    } catch (\Exception $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+           "desc" => $e->getMessage()
+        ]
+      ]);
+    }  
+  }
+  public function legalDocuments(Request $request, Response $response, $args) {
+    try {
+      $documents = $this->auth->legalDocuments();
+  
+      return $response->withStatus(200)->withJson($documents);
+
+    } catch (\Exception $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    } 
+  }      
 }

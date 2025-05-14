@@ -176,16 +176,39 @@ class Auth{
     }
 
     // Crear consentimiento legal
+    $body = $request->getParsedBody();
     $consentData = [
       "UserID" => $userId,
-      "AcceptedTerms" => 1,
-      "AcceptedPrivacyPolicy" => 1,
+      "AcceptedTerms" => $body['AcceptedTerms'] ?? null,
+      "AcceptedPrivacyPolicy" => $body['AcceptedPrivacyPolicy'] ?? null,
       "UserIP" => $clientIp,
       "UserAgent" => $request->getHeader('User-Agent')[0] ?? '',
-      "TyCVersion" => '1.0',
-      "PrivacyPolicyVersion" => '1.0'
+      "TyCVersion" => $body['TyCVersion'] ?? null,
+      "PrivacyPolicyVersion" => $body['PrivacyPolicyVersion'] ?? null
     ];
-    $this->createConsent($consentData);
+
+    // Validar que AcceptedTerms y AcceptedPrivacyPolicy sean 0 o 1
+    if (!in_array($consentData["AcceptedTerms"], [0, 1], true) ||
+      !in_array($consentData["AcceptedPrivacyPolicy"], [0, 1], true)) {
+      return (object)[
+        "http_code" => 400,
+        "error" => [
+          "code" => "INVALID_CONSENT_VALUES",
+          "desc" => "AcceptedTerms and AcceptedPrivacyPolicy must be 0 or 1"
+        ]
+      ];
+    }
+
+    $consentResult = $this->createConsent($consentData);
+    if (isset($consentResult['error'])) {
+      return (object)[
+        "http_code" => 400,
+        "error" => [
+          "code" => "CONSENT_ERROR",
+          "desc" => $consentResult['error']
+        ]
+      ];
+    }
 
     return $newUser;
   }
@@ -276,16 +299,27 @@ class Auth{
     }
 
     // Crear consentimiento legal
+    $body = $request->getParsedBody();
     $consentData = [
       "UserID" => $userId,
-      "AcceptedTerms" => 1,
-      "AcceptedPrivacyPolicy" => 1,
+      "AcceptedTerms" => $body['AcceptedTerms'] ?? null,
+      "AcceptedPrivacyPolicy" => $body['AcceptedPrivacyPolicy'] ?? null,
       "UserIP" => $clientIp,
       "UserAgent" => $request->getHeader('User-Agent')[0] ?? '',
-      "TyCVersion" => '1.0',
-      "PrivacyPolicyVersion" => '1.0'
+      "TyCVersion" => $body['TyCVersion'] ?? null,
+      "PrivacyPolicyVersion" => $body['PrivacyPolicyVersion'] ?? null
     ];
-    $this->createConsent($consentData);
+
+    $consentResult = $this->createConsent($consentData);
+    if (isset($consentResult['error'])) {
+      return (object)[
+        "http_code" => 400,
+        "error" => [
+          "code" => "CONSENT_ERROR",
+          "desc" => $consentResult['error']
+        ]
+      ];
+    }
 
     return $userModel -> getUserByOAuthID($userId, "google");
   }
@@ -365,16 +399,27 @@ class Auth{
     }
 
     // Crear consentimiento legal
+    $body = $request->getParsedBody();
     $consentData = [
       "UserID" => $userId,
-      "AcceptedTerms" => 1,
-      "AcceptedPrivacyPolicy" => 1,
+      "AcceptedTerms" => $body['AcceptedTerms'] ?? null,
+      "AcceptedPrivacyPolicy" => $body['AcceptedPrivacyPolicy'] ?? null,
       "UserIP" => $clientIp,
       "UserAgent" => $request->getHeader('User-Agent')[0] ?? '',
-      "TyCVersion" => '1.0',
-      "PrivacyPolicyVersion" => '1.0'
+      "TyCVersion" => $body['TyCVersion'] ?? null,
+      "PrivacyPolicyVersion" => $body['PrivacyPolicyVersion'] ?? null
     ];
-    $this->createConsent($consentData);
+
+    $consentResult = $this->createConsent($consentData);
+    if (isset($consentResult['error'])) {
+      return (object)[
+        "http_code" => 400,
+        "error" => [
+          "code" => "CONSENT_ERROR",
+          "desc" => $consentResult['error']
+        ]
+      ];
+    }
 
     return $userModel -> getUserByOAuthID($userId, "facebook");
   }
@@ -393,20 +438,42 @@ class Auth{
       return ['error' => 'Invalid IP address'];
     }
 
+    // Validar que al menos uno de los consentimientos esté presente
+    $hasTerms = isset($consentData['AcceptedTerms']) && isset($consentData['TyCVersion']);
+    $hasPrivacy = isset($consentData['AcceptedPrivacyPolicy']) && isset($consentData['PrivacyPolicyVersion']);
+
+    if (!$hasTerms && !$hasPrivacy) {
+      return ['error' => 'At least one legal document consent must be provided'];
+    }
+
     // Insertar consentimiento
     $stmt = $this->db->prepare("INSERT INTO UserLegalConsents 
-      (UserID, AcceptedTerms, AcceptedPrivacyPolicy, UserIP, UserAgent, TyCVersion, PrivacyPolicyVersion) 
-      VALUES (?, ?, ?, ?, ?, ?, ?)");
+      (UserID, Accepted, UserIP, UserAgent, DocumentType, Version) 
+      VALUES (?, ?, ?, ?, ?, ?)");
 
-    $stmt->execute([
-      $consentData['UserID'],
-      $consentData['AcceptedTerms'] ? 1 : 0,
-      $consentData['AcceptedPrivacyPolicy'] ? 1 : 0,
-      $consentData['UserIP'],
-      $consentData['UserAgent'],
-      $consentData['TyCVersion'],
-      $consentData['PrivacyPolicyVersion']
-    ]);
+    // Insertar consentimiento para Términos y Condiciones
+    if ($hasTerms) {
+      $stmt->execute([
+        $consentData['UserID'],
+        $consentData['AcceptedTerms'] ? 1 : 0,
+        $consentData['UserIP'],
+        $consentData['UserAgent'],
+        'TermsAndConditions',
+        $consentData['TyCVersion']
+      ]);
+    }
+
+    // Insertar consentimiento para Política de Privacidad
+    if ($hasPrivacy) {
+      $stmt->execute([
+        $consentData['UserID'],
+        $consentData['AcceptedPrivacyPolicy'] ? 1 : 0,
+        $consentData['UserIP'],
+        $consentData['UserAgent'],
+        'PrivacyPolicy',
+        $consentData['PrivacyPolicyVersion']
+      ]);
+    }
 
     return ['success' => true];
   }
@@ -874,4 +941,55 @@ class Auth{
     }
     return $lockTime ? date("Y-m-d H:i:s", strtotime($lockTime)) : null;
   }
+
+  // Subir documentacion legal
+  public function uploadLegalDocuments($type, $version, $releaseDate, $content){
+    try {
+      $stmt = $this->db->prepare("INSERT INTO LegalDocuments (DocumentType, Version, ReleaseDate, Content)
+                                  VALUES (:type, :version, :releaseDate, :content)");
+
+      $stmt->bindParam(':type', $type, PDO::PARAM_STR);
+      $stmt->bindParam(':version', $version, PDO::PARAM_STR);
+      $stmt->bindParam(':releaseDate', $releaseDate, PDO::PARAM_STR);
+      $stmt->bindParam(':content', $content, PDO::PARAM_STR);
+      $stmt->execute();
+
+      return [
+        "Message" => "Legal document uploaded successfully",
+        "Document" => [
+          "Type" => $type,
+          "Version" => $version
+        ]
+      ];
+
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    } 
+  }  
+
+  public function legalDocuments() {
+    try {
+      $stmt = $this->db->prepare("SELECT t.*
+                                  FROM LegalDocuments t
+                                  INNER JOIN (
+                                    SELECT DocumentType, MAX(ReleaseDate) AS MaxDate
+                                    FROM LegalDocuments
+                                    GROUP BY DocumentType
+                                  ) latest
+                                  ON t.DocumentType = latest.DocumentType AND t.ReleaseDate = latest.MaxDate");
+      $stmt->execute();
+      $documents = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+      $result = [];
+      foreach ($documents as $doc) {
+        $result[$doc['DocumentType']] = $doc;
+      }
+
+      return $result;
+
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
 }
+

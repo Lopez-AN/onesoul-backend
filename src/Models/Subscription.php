@@ -289,6 +289,23 @@ class Subscription
       $proportionalAmount = 0;
       $isUpgrade = false;
 
+      if ($newPlanID == null) {
+        // Cancelar anterior
+        $stmt = $this->db->prepare("UPDATE Subscriptions
+                                    SET EndDate = CURDATE(), Status = 'CANCELED'
+                                    WHERE UserID = :userID
+                                    AND Status = 'ACTIVE'
+                                    ORDER BY StartDate DESC
+                                    LIMIT 1");
+        $stmt->execute(['userID' => $userID]);
+
+        return [
+          'message' => 'Subscription canceled successfully.',
+          'upgrade' => $isUpgrade,
+          'proportional_charge' => $proportionalAmount
+        ];
+      }
+
       if ($currentSubscription) {
         $currentPlanID = (int)$currentSubscription['PlanID'];
         $remainingDaysActual = (int)$currentSubscription['RemainingDays'];
@@ -338,12 +355,11 @@ class Subscription
 
             // Cancelar anterior
             $stmt = $this->db->prepare("UPDATE Subscriptions
-                                      SET EndDate = CURDATE(),
-                                          Status = 'CANCELED'
+                                      SET EndDate = CURDATE(), Status = 'CANCELED'
                                       WHERE SubscriptionID = :subscriptionID");
             $stmt->execute(['subscriptionID' => $subscriptionID]);
           }
-        } 
+        }
       }
 
       // Insertar nueva suscripción
