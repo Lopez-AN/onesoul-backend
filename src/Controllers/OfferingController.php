@@ -220,7 +220,7 @@ class OfferingController {
     }
 
     try {
-      $result = $this->offering->getOfferingById($data['id']);
+      $result = $this->offering->getOfferingById($id);
       if ($result->http_code != 200) {
         return $response->withStatus(404)->WithJson([
           "error" => [
@@ -286,7 +286,7 @@ class OfferingController {
     $data = $request->getParsedBody();
 
     try {
-      $result = $this->offering->getOfferingById($data['id']);
+      $result = $this->offering->getOfferingById($id);
       if ($result->http_code != 200) {
         return $response->withStatus(404)->WithJson([
           "error" => [
@@ -376,7 +376,7 @@ class OfferingController {
     $data = $request->getParsedBody();
 
     try {
-      $result = $this->offering->getOfferingById($data['id']);
+      $result = $this->offering->getOfferingById($id);
       if ($result->http_code != 200) {
         return $response->withStatus(404)->WithJson([
           "error" => [
@@ -441,7 +441,7 @@ class OfferingController {
 
     try {
       // Verificar que el offering existe
-      $result = $this->offering->getOfferingById($data['id']);
+      $result = $this->offering->getOfferingById($id);
       if ($result->http_code != 200) {
         return $response->withStatus(404)->WithJson([
           "error" => [
@@ -585,7 +585,7 @@ class OfferingController {
 
     try {
       // Verificar que el offering existe
-      $result = $this->offering->getOfferingById($data['id']);
+      $result = $this->offering->getOfferingById($id);
       if ($result->http_code != 200) {
         return $response->withStatus(404)->WithJson([
           "error" => [
@@ -780,7 +780,7 @@ class OfferingController {
     }
 
     try {
-      $result = $this->offering->getOfferingById($data['id']);
+      $result = $this->offering->getOfferingById($id);
       if ($result->http_code != 200) {
         return $response->withStatus(404)->WithJson([
           "error" => [

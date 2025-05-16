@@ -17,7 +17,7 @@ return function (App $app) {
 
   $app->get('/subscription/plans', [$subscriptionController, 'getSubscriptionPlans']);
   $app->get('/subscription/plans/{id}', [$subscriptionController, 'getSubscriptionPlanByID']);
-  $app->get('/subscription/{userID}', [$subscriptionController, 'getSubscriptionByUser']);
+  $app->get('/subscription/{userID}', [$subscriptionController, 'getSubscriptionByUser'])->add($jwtMiddleware);
   $app->get('/subscription/priceInfo/{planID}', [$subscriptionController, 'getPriceInfo'])->add($jwtMiddleware);
   $app->post('/subscription/plans/{id}', [$subscriptionController, 'updateSubscriptionPlan'])->add($jwtMiddleware);
   $app->patch('/subscription/{userID}', [$subscriptionController, 'updateSubscriptionByUser'])->add($jwtMiddleware);

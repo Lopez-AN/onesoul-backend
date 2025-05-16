@@ -64,8 +64,28 @@ class SubscriptionController {
 
   public function getSubscriptionByUser(Request $request, Response $response, array $args) {
     $userID = $args['userID'];
+    $jwt = $request->getAttribute('jwt');
+
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+      return $response->withStatus(401)->withJson([
+        "error" => [
+          "code" => "INVALID_TOKEN",
+          "desc" => "Invalid JWT token"
+        ]
+      ]);
+    }
 
     try {
+      # Verificar si el usuario autenticado es un administrador
+      if ($jwt['data']->UserType != 'Admin') {
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "UNAUTHORIZED",
+            "desc" => "You do not have permission to modify this user"
+          ]
+        ]);
+      }
+
       $subscription = $this->subscription->getSubscriptionByUser($userID);
 
       if (!$subscription) {
