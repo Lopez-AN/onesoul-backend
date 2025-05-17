@@ -160,9 +160,11 @@ class Subscription
 
   public function getSubscriptionByUser($userID) {
     try {
-      $stmt = $this->db->prepare("SELECT SubscriptionID, UserID, PlanID, StartDate, EndDate, TrialPeriod
-                                  FROM Subscriptions
-                                  WHERE UserID = :userID");
+      $stmt = $this->db->prepare("SELECT * FROM Subscriptions 
+                                  WHERE UserID = :userID
+                                  AND (Status = 'ACTIVE' OR (Status = 'CANCELED' AND RemainingDays > 0))
+                                  ORDER BY StartDate DESC
+                                  LIMIT 1");
 
       $stmt->bindParam(':userID', $userID, PDO::PARAM_INT);
       $stmt->execute();
@@ -299,10 +301,10 @@ class Subscription
                                     LIMIT 1");
         $stmt->execute(['userID' => $userID]);
 
+        $suscription = $this->getSubscriptionByUser($userID);
         return [
-          'message' => 'Subscription canceled successfully.',
-          'upgrade' => $isUpgrade,
-          'proportional_charge' => $proportionalAmount
+          'Suscription' => $suscription,
+          'ProportionalCharge' => $proportionalAmount
         ];
       }
 
@@ -379,10 +381,10 @@ class Subscription
                                   AND ReferralStatus = 'Pending'");
       $stmt->execute(['userID' => $userID]);
 
+      $suscription = $this->getSubscriptionByUser($userID);
       return [
-        'message' => 'Subscription updated successfully.',
-        'upgrade' => $isUpgrade,
-        'proportional_charge' => $proportionalAmount
+        'Suscription' => $suscription,
+        'ProportionalCharge' => $proportionalAmount
       ];
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());

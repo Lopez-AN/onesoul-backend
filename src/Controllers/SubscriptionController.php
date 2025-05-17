@@ -187,9 +187,8 @@ class SubscriptionController {
       // }
 
       return $response->withStatus(200)->withJson([
-        "message" => $result['message'],
-        "upgrade" => $result['upgrade'],
-        "proportional_charge" => $result['proportional_charge']
+        "Subscription" => $result['Suscription'],
+        "ProportionalCharge" => $result['ProportionalCharge']
       ]);
   
       return $response->withStatus(200)->withJson($result);
