@@ -372,6 +372,13 @@ class Subscription
         'nextBillingDate'=> $nextBillingDateNew
       ]);
 
+      // Marcar el estado del referido como exitoso si existía una pendiente
+      $stmt = $this->db->prepare("UPDATE Referrals 
+                                  SET ReferralStatus = 'Successful' 
+                                  WHERE ReferredUserID = :userID 
+                                  AND ReferralStatus = 'Pending'");
+      $stmt->execute(['userID' => $userID]);
+
       return [
         'message' => 'Subscription updated successfully.',
         'upgrade' => $isUpgrade,
