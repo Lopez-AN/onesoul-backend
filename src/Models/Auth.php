@@ -145,6 +145,41 @@ class Auth{
       $referrerUserID = $referrerResult->data['UserID'];
     }
 
+    $body = $request->getParsedBody();
+
+    $acceptedTerms = $body['AcceptedTerms'] ?? null;
+    $acceptedPrivacy = $body['AcceptedPrivacyPolicy'] ?? null;
+    $TyCVersion = $body['TyCVersion'] ?? null;
+    $PrivacyPolicyVersion = $body['PrivacyPolicyVersion'] ?? null;
+
+    // Verificar que las versiones legales existan en la base de datos
+    $legalCheckStmt = $this->db->prepare("SELECT COUNT(*) as total FROM LegalDocuments
+                      WHERE (DocumentType = 'TermsAndConditions' AND Version = ?) 
+                        OR (DocumentType = 'PrivacyPolicy' AND Version = ?)");
+    $legalCheckStmt->execute([$TyCVersion, $PrivacyPolicyVersion]);
+    $result = $legalCheckStmt->fetch(PDO::FETCH_ASSOC);
+
+    if ((int)$result['total'] < 2) {
+      return (object)[
+        "http_code" => 400,
+        "error" => [
+          "code" => "INVALID_LEGAL_DOCUMENT_VERSION",
+          "desc" => "One or both legal document versions are invalid."
+        ]
+      ];
+    }
+
+    // Validar que AcceptedTerms y AcceptedPrivacyPolicy esten aceptados
+    if ($acceptedTerms !== 1 || $acceptedPrivacy !== 1) {
+      return (object)[
+        "http_code" => 400,
+        "error" => [
+          "code" => "CONSENT_REQUIRED",
+          "desc" => "AcceptedTerms and AcceptedPrivacyPolicy must both be accepted."
+        ]
+      ];
+    }
+
     $password_hash = password_hash($newPassword,PASSWORD_BCRYPT); #El password se guarda hasheado (obvio!)
     $otpCode = rand(100000, 999999); # Codigo que se enviara por mail
 
@@ -176,29 +211,16 @@ class Auth{
     }
 
     // Crear consentimiento legal
-    $body = $request->getParsedBody();
     $consentData = [
       "UserID" => $userId,
-      "AcceptedTerms" => $body['AcceptedTerms'] ?? null,
-      "AcceptedPrivacyPolicy" => $body['AcceptedPrivacyPolicy'] ?? null,
+      "AcceptedTerms" => 1,
+      "AcceptedPrivacyPolicy" => 1,
       "UserIP" => $clientIp,
       "UserAgent" => $request->getHeader('User-Agent')[0] ?? '',
-      "TyCVersion" => $body['TyCVersion'] ?? null,
-      "PrivacyPolicyVersion" => $body['PrivacyPolicyVersion'] ?? null
+      "TyCVersion" => $TyCVersion,
+      "PrivacyPolicyVersion" => $PrivacyPolicyVersion
     ];
-
-    // Validar que AcceptedTerms y AcceptedPrivacyPolicy sean 0 o 1
-    if (!in_array($consentData["AcceptedTerms"], [0, 1], true) ||
-      !in_array($consentData["AcceptedPrivacyPolicy"], [0, 1], true)) {
-      return (object)[
-        "http_code" => 400,
-        "error" => [
-          "code" => "INVALID_CONSENT_VALUES",
-          "desc" => "AcceptedTerms and AcceptedPrivacyPolicy must be 0 or 1"
-        ]
-      ];
-    }
-
+    
     $consentResult = $this->createConsent($consentData);
     if (isset($consentResult['error'])) {
       return (object)[
@@ -281,6 +303,41 @@ class Auth{
       $referrerUserID = $referrerResult->data['UserID'];
     }
 
+    $body = $request->getParsedBody();
+
+    $acceptedTerms = $body['AcceptedTerms'] ?? null;
+    $acceptedPrivacy = $body['AcceptedPrivacyPolicy'] ?? null;
+    $TyCVersion = $body['TyCVersion'] ?? null;
+    $PrivacyPolicyVersion = $body['PrivacyPolicyVersion'] ?? null;
+
+    // Verificar que las versiones legales existan en la base de datos
+    $legalCheckStmt = $this->db->prepare("SELECT COUNT(*) as total FROM LegalDocuments
+                      WHERE (DocumentType = 'TermsAndConditions' AND Version = ?) 
+                        OR (DocumentType = 'PrivacyPolicy' AND Version = ?)");
+    $legalCheckStmt->execute([$TyCVersion, $PrivacyPolicyVersion]);
+    $result = $legalCheckStmt->fetch(PDO::FETCH_ASSOC);
+
+    if ((int)$result['total'] < 2) {
+      return (object)[
+        "http_code" => 400,
+        "error" => [
+          "code" => "INVALID_LEGAL_DOCUMENT_VERSION",
+          "desc" => "One or both legal document versions are invalid."
+        ]
+      ];
+    }
+
+    // Validar que AcceptedTerms y AcceptedPrivacyPolicy esten aceptados
+    if ($acceptedTerms !== 1 || $acceptedPrivacy !== 1) {
+      return (object)[
+        "http_code" => 400,
+        "error" => [
+          "code" => "CONSENT_REQUIRED",
+          "desc" => "AcceptedTerms and AcceptedPrivacyPolicy must both be accepted."
+        ]
+      ];
+    }
+
     $this -> registerUserSSO((object)[
       "FirstName" => $first_name,
       "LastName" => $last_name,
@@ -299,17 +356,16 @@ class Auth{
     }
 
     // Crear consentimiento legal
-    $body = $request->getParsedBody();
     $consentData = [
       "UserID" => $userId,
-      "AcceptedTerms" => $body['AcceptedTerms'] ?? null,
-      "AcceptedPrivacyPolicy" => $body['AcceptedPrivacyPolicy'] ?? null,
+      "AcceptedTerms" => 1,
+      "AcceptedPrivacyPolicy" => 1,
       "UserIP" => $clientIp,
       "UserAgent" => $request->getHeader('User-Agent')[0] ?? '',
-      "TyCVersion" => $body['TyCVersion'] ?? null,
-      "PrivacyPolicyVersion" => $body['PrivacyPolicyVersion'] ?? null
+      "TyCVersion" => $TyCVersion,
+      "PrivacyPolicyVersion" => $PrivacyPolicyVersion
     ];
-
+    
     $consentResult = $this->createConsent($consentData);
     if (isset($consentResult['error'])) {
       return (object)[
@@ -380,6 +436,41 @@ class Auth{
       }
       $referrerUserID = $referrerResult->data['UserID'];
     }
+
+    $body = $request->getParsedBody();
+
+    $acceptedTerms = $body['AcceptedTerms'] ?? null;
+    $acceptedPrivacy = $body['AcceptedPrivacyPolicy'] ?? null;
+    $TyCVersion = $body['TyCVersion'] ?? null;
+    $PrivacyPolicyVersion = $body['PrivacyPolicyVersion'] ?? null;
+
+    // Verificar que las versiones legales existan en la base de datos
+    $legalCheckStmt = $this->db->prepare("SELECT COUNT(*) as total FROM LegalDocuments
+                      WHERE (DocumentType = 'TermsAndConditions' AND Version = ?) 
+                        OR (DocumentType = 'PrivacyPolicy' AND Version = ?)");
+    $legalCheckStmt->execute([$TyCVersion, $PrivacyPolicyVersion]);
+    $result = $legalCheckStmt->fetch(PDO::FETCH_ASSOC);
+
+    if ((int)$result['total'] < 2) {
+      return (object)[
+        "http_code" => 400,
+        "error" => [
+          "code" => "INVALID_LEGAL_DOCUMENT_VERSION",
+          "desc" => "One or both legal document versions are invalid."
+        ]
+      ];
+    }
+
+    // Validar que AcceptedTerms y AcceptedPrivacyPolicy esten aceptados
+    if ($acceptedTerms !== 1 || $acceptedPrivacy !== 1) {
+      return (object)[
+        "http_code" => 400,
+        "error" => [
+          "code" => "CONSENT_REQUIRED",
+          "desc" => "AcceptedTerms and AcceptedPrivacyPolicy must both be accepted."
+        ]
+      ];
+    }
         
     $this -> registerUserSSO((object)[
       "FirstName" => $first_name,
@@ -399,17 +490,16 @@ class Auth{
     }
 
     // Crear consentimiento legal
-    $body = $request->getParsedBody();
     $consentData = [
       "UserID" => $userId,
-      "AcceptedTerms" => $body['AcceptedTerms'] ?? null,
-      "AcceptedPrivacyPolicy" => $body['AcceptedPrivacyPolicy'] ?? null,
+      "AcceptedTerms" => 1,
+      "AcceptedPrivacyPolicy" => 1,
       "UserIP" => $clientIp,
       "UserAgent" => $request->getHeader('User-Agent')[0] ?? '',
-      "TyCVersion" => $body['TyCVersion'] ?? null,
-      "PrivacyPolicyVersion" => $body['PrivacyPolicyVersion'] ?? null
+      "TyCVersion" => $TyCVersion,
+      "PrivacyPolicyVersion" => $PrivacyPolicyVersion
     ];
-
+    
     $consentResult = $this->createConsent($consentData);
     if (isset($consentResult['error'])) {
       return (object)[
