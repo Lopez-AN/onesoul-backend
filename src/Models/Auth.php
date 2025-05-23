@@ -99,7 +99,7 @@ class Auth{
   /*
   * Registro usuario
   */
-  public function register($userModel, $email, $username, $newPassword, $clientIp, $request, $referralCode){
+  public function register($userModel, $email, $username, $newPassword, $clientIp, $request, $referralCode, $receiveNewsletters){
     # Validación de fortaleza de contraseña
     if(!$this->passwordComplexity($newPassword)) {
       return (object)[
@@ -232,7 +232,15 @@ class Auth{
       ];
     }
 
+    // Insertar recibir novedades si existe
+    if ($receiveNewsletters) {
+      $stmt = $this->db->prepare("INSERT INTO UserSettings (UserID, ReceiveNewsletters) 
+                                  VALUES (:userId, 1)");
+      $stmt->execute([':userId' => $userId]);
+    }
+
     return $newUser;
+
   }
 
   private function passwordComplexity($newPassword): bool {
@@ -245,7 +253,7 @@ class Auth{
   }
   
 
-  public function registerGoogle($userModel, $token, $username, $clientIp, $request, $referralCode){
+  public function registerGoogle($userModel, $token, $username, $clientIp, $request, $referralCode, $receiveNewsletters){
     $response = $this -> validateToken("https://oauth2.googleapis.com/tokeninfo?id_token=$token");
     if($response === false){
       return (object)["http_code" => 401,
@@ -377,10 +385,17 @@ class Auth{
       ];
     }
 
+    // Insertar recibir novedades si existe
+    if ($receiveNewsletters) {
+      $stmt = $this->db->prepare("INSERT INTO UserSettings (UserID, ReceiveNewsletters) 
+                                  VALUES (:userId, 1)");
+      $stmt->execute([':userId' => $userId]);
+    }
+
     return $userModel -> getUserByOAuthID($userId, "google");
   }
 
-  public function registerFacebook($userModel, $userId, $token, $username, $clientIp, $request, $referralCode){
+  public function registerFacebook($userModel, $userId, $token, $username, $clientIp, $request, $referralCode, $receiveNewsletters){
     $response = $this -> validateToken("https://graph.facebook.com/$userId?fields=id,first_name,last_name,email,picture.width(640)&access_token=$token");
     if($response === false){
       return (object)["http_code" => 401,
@@ -509,6 +524,13 @@ class Auth{
           "desc" => $consentResult['error']
         ]
       ];
+    }
+
+    // Insertar recibir novedades si existe
+    if ($receiveNewsletters) {
+      $stmt = $this->db->prepare("INSERT INTO UserSettings (UserID, ReceiveNewsletters) 
+                                  VALUES (:userId, 1)");
+      $stmt->execute([':userId' => $userId]);
     }
 
     return $userModel -> getUserByOAuthID($userId, "facebook");

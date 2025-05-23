@@ -359,8 +359,9 @@ class AuthController{
     $recaptchaToken = $data['RecaptchaToken'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
     $referralCode = $data['ReferralCode'] ?? null;
+    $receiveNewsletters = $data['ReceiveNewsletters'] ?? '';
 
-    if(empty($email) || empty($username) || empty($password) || empty($recaptchaToken)){
+    if(empty($email) || empty($username) || empty($password) || empty($recaptchaToken) || empty($receiveNewsletters)){
       return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "INVALID_PARAMETERS",
@@ -375,7 +376,7 @@ class AuthController{
     }
 
     try {
-      $result = $this->auth->register($this->user, $email, $username, $password, $clientIp, $request, $referralCode);
+      $result = $this->auth->register($this->user, $email, $username, $password, $clientIp, $request, $referralCode, $receiveNewsletters);
       switch($result->http_code) {
         case 200: # Logueo correcto o usuario existente
           $jwt = $this -> JWTgen($result -> data);
@@ -403,8 +404,9 @@ class AuthController{
     $recaptchaToken = $data['RecaptchaToken'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
     $referralCode = $data['ReferralCode'] ?? '';    
+    $receiveNewsletters = $data['ReceiveNewsletters'] ?? '';
 
-    if(empty($token) || empty($username) || empty($recaptchaToken)){
+    if(empty($token) || empty($username) || empty($recaptchaToken) || empty($receiveNewsletters)){
       return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "INVALID_PARAMETERS",
@@ -419,7 +421,7 @@ class AuthController{
     }
 
     try {
-      $result = $this->auth->registerGoogle($this->user, $token, $username, $clientIp, $request, $referralCode);
+      $result = $this->auth->registerGoogle($this->user, $token, $username, $clientIp, $request, $referralCode, $receiveNewsletters);
       switch($result->http_code) {
         case 200: # Logueo correcto o usuario existente
           $jwt = $this -> JWTgen($result -> data);
@@ -447,9 +449,10 @@ class AuthController{
     $username = $data['UserName'] ?? '';
     $recaptchaToken = $data['RecaptchaToken'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
-    $referralCode = $data['ReferralCode'] ?? '';    
+    $referralCode = $data['ReferralCode'] ?? '';
+    $receiveNewsletters = $data['ReceiveNewsletters'] ?? '';
 
-    if(empty($user_id) || empty($token) || empty($username) || empty($recaptchaToken)){
+    if(empty($user_id) || empty($token) || empty($username) || empty($recaptchaToken) || empty($receiveNewsletters)){
       return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "INVALID_PARAMETERS",
@@ -464,7 +467,7 @@ class AuthController{
     }
 
     try{
-      $result = $this->auth->registerFacebook($this->user, $user_id, $token, $username, $clientIp, $request, $referralCode);
+      $result = $this->auth->registerFacebook($this->user, $user_id, $token, $username, $clientIp, $request, $referralCode, $receiveNewsletters);
       switch($result->http_code) {
         case 200: # Logueo correcto o usuario existente
           $jwt = $this -> JWTgen($result -> data);
