@@ -355,17 +355,30 @@ class Auth{
       "Oauth2ID" => $userId,
       "Oauth2Service" => "google"
     ]);
+
+    $newUser = $userModel->getUserByUserName($username);
+    if ($newUser->http_code !== 200 || !isset($newUser->data["UserID"])) {
+      return (object)[
+        "http_code" => 500,
+        "error" => [
+          "code" => "USER_CREATION_FAILED",
+          "desc" => "User created but could not be retrieved"
+        ]
+      ];
+    }
+  
+    $userID = $newUser->data["UserID"];
   
     // Insertar el referral si corresponde
     if ($referrerUserID) {
       $stmt = $this->db->prepare("INSERT INTO Referrals (UserID, ReferredUserID, ReferralStatus) 
               VALUES (?, ?, 'Pending')");
-      $stmt->execute([$referrerUserID, $userId]);
+      $stmt->execute([$referrerUserID, $userID]);
     }
 
     // Crear consentimiento legal
     $consentData = [
-      "UserID" => $userId,
+      "UserID" => $userID,
       "AcceptedTerms" => 1,
       "AcceptedPrivacyPolicy" => 1,
       "UserIP" => $clientIp,
@@ -388,8 +401,8 @@ class Auth{
     // Insertar recibir novedades si existe
     if ($receiveNewsletters) {
       $stmt = $this->db->prepare("INSERT INTO UserSettings (UserID, ReceiveNewsletters) 
-                                  VALUES (:userId, 1)");
-      $stmt->execute([':userId' => $userId]);
+                                  VALUES (:userID, 1)");
+      $stmt->execute([':userID' => $userID]);
     }
 
     return $userModel -> getUserByOAuthID($userId, "google");
@@ -497,16 +510,29 @@ class Auth{
       "Oauth2Service" => "facebook"
     ]);
 
+    $newUser = $userModel->getUserByUserName($username);
+    if ($newUser->http_code !== 200 || !isset($newUser->data["UserID"])) {
+      return (object)[
+        "http_code" => 500,
+        "error" => [
+          "code" => "USER_CREATION_FAILED",
+          "desc" => "User created but could not be retrieved"
+        ]
+      ];
+    }
+  
+    $userID = $newUser->data["UserID"];
+
     // Insertar el referral si corresponde
     if ($referrerUserID) {
       $stmt = $this->db->prepare("INSERT INTO Referrals (UserID, ReferredUserID, ReferralStatus) 
               VALUES (?, ?, 'Pending')");
-      $stmt->execute([$referrerUserID, $userId]);
+      $stmt->execute([$referrerUserID, $userID]);
     }
 
     // Crear consentimiento legal
     $consentData = [
-      "UserID" => $userId,
+      "UserID" => $userID,
       "AcceptedTerms" => 1,
       "AcceptedPrivacyPolicy" => 1,
       "UserIP" => $clientIp,
@@ -529,8 +555,8 @@ class Auth{
     // Insertar recibir novedades si existe
     if ($receiveNewsletters) {
       $stmt = $this->db->prepare("INSERT INTO UserSettings (UserID, ReceiveNewsletters) 
-                                  VALUES (:userId, 1)");
-      $stmt->execute([':userId' => $userId]);
+                                  VALUES (:userID, 1)");
+      $stmt->execute([':userID' => $userID]);
     }
 
     return $userModel -> getUserByOAuthID($userId, "facebook");
