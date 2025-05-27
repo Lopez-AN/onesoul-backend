@@ -56,7 +56,7 @@ class Booking
     try {
       // Obtener todos los bookings del guía
       $stmt = $this->db->prepare("SELECT b.BookingID, b.UserID, u.DisplayName AS Seeker, b.ReviewID, b.PaymentID,
-                                        b.Mode, b.LocationID, b.CreationDate, b.ScheduledDate, b.ModificationDate, 
+                                        b.Mode, b.LocationID, b.CreationDate, b.ScheduledDate, b.ModificationDate, b.Message,
                                         o.UserID AS Guide, u2.DisplayName, b.OfferingID, o.Title AS TitleOffering
                                   FROM Bookings AS b 
                                   INNER JOIN Offerings AS o ON b.OfferingID = o.OfferingID 
@@ -97,7 +97,7 @@ class Booking
     try {
       // Obtener todos los bookings del buscador
       $stmt = $this->db->prepare("SELECT b.BookingID, b.UserID, u.DisplayName AS Seeker, b.ReviewID, b.PaymentID,
-                                        b.Mode, b.LocationID, b.CreationDate, b.ScheduledDate, b.ModificationDate, 
+                                        b.Mode, b.LocationID, b.CreationDate, b.ScheduledDate, b.ModificationDate, b.Message,
                                         o.UserID AS Guide, u2.DisplayName, b.OfferingID, o.Title AS TitleOffering
                                   FROM Bookings AS b 
                                   INNER JOIN Offerings AS o ON b.OfferingID = o.OfferingID 
@@ -136,13 +136,14 @@ class Booking
   public function createBooking($data)
   {
     try {
-      $stmt = $this->db->prepare("INSERT INTO Bookings (OfferingID, UserID, Mode, LocationID, CreationDate, ScheduledDate) 
-                                  VALUES (:offeringID, :userID, :mode, :locationID, NOW(), :scheduledDate)");
+      $stmt = $this->db->prepare("INSERT INTO Bookings (OfferingID, UserID, Mode, LocationID, CreationDate, ScheduledDate, Message) 
+                                  VALUES (:offeringID, :userID, :mode, :locationID, NOW(), :scheduledDate, :message)");
       $stmt->bindParam(':offeringID', $data['OfferingID'], PDO::PARAM_INT);
       $stmt->bindParam(':userID', $data['UserID'], PDO::PARAM_INT);
       $stmt->bindParam(':mode', $data['Mode'], PDO::PARAM_STR);
       $stmt->bindParam(':locationID', $data['LocationID'], $data['LocationID'] === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
       $stmt->bindParam(':scheduledDate', $data['ScheduledDate'], PDO::PARAM_STR);
+      $stmt->bindParam(':message', $data['Message'], $data['Message'] === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
       $stmt->execute();
 
       $bookingID = $this->db->lastInsertId();
@@ -159,14 +160,14 @@ class Booking
     }
   }
 
-  public function updateBooking($bookingID, $mode, $scheduledDate)
+  public function updateBooking($bookingID, $mode, $scheduledDate, $message)
   {
     try {
       $fields = [];
 
       if (!empty($mode)) {
         $stmt = $this->db->prepare("UPDATE Bookings 
-                                    SET Mode = :mode, ModificationDate = NOW() 
+                                    SET Mode = :mode, ModificationDate = NOW()
                                     WHERE BookingID = :bookingID");
         $stmt->bindParam(':mode', $mode, PDO::PARAM_STR);
         $stmt->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);
@@ -199,6 +200,16 @@ class Booking
         $stmt->execute();
       }
   
+      if (!empty($message)) {
+        $stmt = $this->db->prepare("UPDATE Bookings 
+                                    SET ModificationDate = NOW(), Message = :message
+                                    WHERE BookingID = :bookingID");
+        $stmt->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);
+        $stmt->bindParam(':message', $message, PDO::PARAM_STR);
+        $stmt->execute();
+        $fields[] = 'Message';
+      } 
+
       if (empty($fields)) {
         throw new \Exception("No fields to update");
       }

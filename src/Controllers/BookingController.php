@@ -185,6 +185,7 @@ class BookingController
 
     $userID = $jwt['data']->UserID;
     $data = $request->getParsedBody();
+    $message = $data['Message'] ?? null;
 
     try {
       // VALIDAR: Offering si existe 
@@ -313,7 +314,8 @@ class BookingController
         'UserID' => $userID,
         'Mode' => $mode,
         'LocationID' => $locationID,
-        'ScheduledDate' =>$scheduledDate,
+        'ScheduledDate' => $scheduledDate,
+        'Message' => $message
       ];
 
       $booking = $this->booking->createBooking($data);
@@ -356,6 +358,7 @@ class BookingController
     $data = $request->getParsedBody();
     $scheduledDate = $data['ScheduledDate'] ?? null;
     $mode = strtolower($data['Mode'] ?? '');
+    $message = $data['Message'] ?? null;
 
     try {
       // Validar si booking existe y no esta cancelado
@@ -466,7 +469,7 @@ class BookingController
         ]);
       }
 
-      $booking = $this->booking->updateBooking($bookingID, $mode, $scheduledDate);
+      $booking = $this->booking->updateBooking($bookingID, $mode, $scheduledDate, $message);
 
       return $response->withStatus(200)->withJson($booking);
     } catch (\Throwable $e) {
