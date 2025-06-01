@@ -233,11 +233,12 @@ class Auth{
     }
 
     // Insertar recibir novedades si existe
-    if ($receiveNewsletters) {
-      $stmt = $this->db->prepare("INSERT INTO UserSettings (UserID, ReceiveNewsletters) 
-                                  VALUES (:userId, 1)");
-      $stmt->execute([':userId' => $userId]);
-    }
+    $stmt = $this->db->prepare("INSERT INTO UserSettings (UserID, ReceiveNewsletters) 
+                                VALUES (:userId , :receiveNewsletters)");
+    $stmt->execute([
+      ':userId' => $userId, 
+      ':receiveNewsletters' => (int)$receiveNewsletters
+    ]);
 
     return $newUser;
 
@@ -399,11 +400,12 @@ class Auth{
     }
 
     // Insertar recibir novedades si existe
-    if ($receiveNewsletters) {
-      $stmt = $this->db->prepare("INSERT INTO UserSettings (UserID, ReceiveNewsletters) 
-                                  VALUES (:userID, 1)");
-      $stmt->execute([':userID' => $userID]);
-    }
+    $stmt = $this->db->prepare("INSERT INTO UserSettings (UserID, ReceiveNewsletters) 
+                                VALUES (:userId , :receiveNewsletters)");
+    $stmt->execute([
+      ':userId' => $userId, 
+      ':receiveNewsletters' => (int)$receiveNewsletters
+    ]);
 
     return $userModel -> getUserByOAuthID($userId, "google");
   }
@@ -553,11 +555,12 @@ class Auth{
     }
 
     // Insertar recibir novedades si existe
-    if ($receiveNewsletters) {
-      $stmt = $this->db->prepare("INSERT INTO UserSettings (UserID, ReceiveNewsletters) 
-                                  VALUES (:userID, 1)");
-      $stmt->execute([':userID' => $userID]);
-    }
+    $stmt = $this->db->prepare("INSERT INTO UserSettings (UserID, ReceiveNewsletters) 
+                                VALUES (:userId , :receiveNewsletters)");
+    $stmt->execute([
+      ':userId' => $userId, 
+      ':receiveNewsletters' => (int)$receiveNewsletters
+    ]);
 
     return $userModel -> getUserByOAuthID($userId, "facebook");
   }

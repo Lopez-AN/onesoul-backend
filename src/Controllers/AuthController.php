@@ -359,9 +359,9 @@ class AuthController{
     $recaptchaToken = $data['RecaptchaToken'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
     $referralCode = $data['ReferralCode'] ?? null;
-    $receiveNewsletters = $data['ReceiveNewsletters'] ?? '';
+    $receiveNewsletters = $data['ReceiveNewsletters'] ?? null;
 
-    if(empty($email) || empty($username) || empty($password) || empty($recaptchaToken) || empty($receiveNewsletters)){
+    if(empty($email) || empty($username) || empty($password) || empty($recaptchaToken) || is_null($receiveNewsletters)){
       return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "INVALID_PARAMETERS",
@@ -403,10 +403,10 @@ class AuthController{
     $username = $data['UserName'] ?? '';
     $recaptchaToken = $data['RecaptchaToken'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
-    $referralCode = $data['ReferralCode'] ?? '';    
-    $receiveNewsletters = $data['ReceiveNewsletters'] ?? '';
+    $referralCode = $data['ReferralCode'] ?? null;    
+    $receiveNewsletters = $data['ReceiveNewsletters'] ?? null;
 
-    if(empty($token) || empty($username) || empty($recaptchaToken) || empty($receiveNewsletters)){
+    if(empty($token) || empty($username) || empty($recaptchaToken) || is_null($receiveNewsletters)){
       return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "INVALID_PARAMETERS",
@@ -449,10 +449,10 @@ class AuthController{
     $username = $data['UserName'] ?? '';
     $recaptchaToken = $data['RecaptchaToken'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
-    $referralCode = $data['ReferralCode'] ?? '';
-    $receiveNewsletters = $data['ReceiveNewsletters'] ?? '';
+    $referralCode = $data['ReferralCode'] ?? null;
+    $receiveNewsletters = $data['ReceiveNewsletters'] ?? null;
 
-    if(empty($user_id) || empty($token) || empty($username) || empty($recaptchaToken) || empty($receiveNewsletters)){
+    if(empty($user_id) || empty($token) || empty($username) || empty($recaptchaToken) || is_null($receiveNewsletters)){
       return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "INVALID_PARAMETERS",

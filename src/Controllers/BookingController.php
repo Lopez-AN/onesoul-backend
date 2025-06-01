@@ -264,7 +264,7 @@ class BookingController
         }
 
         // Validar que el LocationID exista en offeringLocations
-        $location = $this->booking->getLocation($locationID);
+        $location = $this->booking->getLocation($id, $locationID);
 
         if (!$location) {
           return $response->withStatus(400)->withJson([

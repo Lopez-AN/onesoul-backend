@@ -638,14 +638,15 @@ class Booking
     }
   }
 
-  public function getLocation($locationID)
+  public function getLocation($offeringID, $locationID)
   {
     try {
       $stmt = $this->db->prepare("SELECT LocationID 
                                   FROM OfferingLocations 
                                   WHERE LocationID = :locationID 
-                                  AND OfferingID = :id");
+                                  AND OfferingID = :offeringID");
       $stmt->bindParam(':locationID', $locationID, PDO::PARAM_INT);
+      $stmt->bindParam(':offeringID', $offeringID, PDO::PARAM_INT);
       $stmt->execute();
 
       $result = $stmt->fetch(PDO::FETCH_ASSOC);
