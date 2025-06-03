@@ -189,22 +189,12 @@ class UserController
     }
 
     try {
-      # Ver si estan las propiedades del token jwt
-      if (!property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
-        return $response->withStatus(401)->withJson([
-          "error" => [
-            "code" => "UNAUTHORIZED",
-            "desc" => "Invalid token"
-          ]
-        ]);
-      }
-      
-      # Verificar si el usuario autenticado es el mismo que el que se intenta modificar, o si es un administrador
+      # Verificar si el usuario autenticado es el mismo o si es un administrador
       if ($jwt['data']->UserID != $id && $jwt['data']->UserType != 'Admin') {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
-            "desc" => "You do not have permission to modify this user"
+            "desc" => "You do not have permission to view the referrals of this user."
           ]
         ]);
       }
@@ -216,6 +206,53 @@ class UserController
           "error" => [
             "code" => "REFERRED_USER_NOT_FOUND",
             "desc" => "There are no referred users associated with this specific user."
+          ]
+        ]);
+      }
+  
+      return $response->withStatus(200)->withJson($result);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  public function rewardsByUser(Request $request, Response $response, $args)
+  {
+    $id = $args['id'];
+    $jwt = $request->getAttribute('jwt');
+
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+      return $response->withStatus(401)->withJson([
+        "error" => [
+          "code" => "INVALID_TOKEN",
+          "desc" => "Invalid JWT token"
+        ]
+      ]);
+    }
+
+    try {
+      # Verificar si el usuario autenticado es el mismo o si es un administrador
+      if ($jwt['data']->UserID != $id && $jwt['data']->UserType != 'Admin') {
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "UNAUTHORIZED",
+            "desc" => "You do not have permission to view the rewards of this user."
+          ]
+        ]);
+      }
+
+      $result = $this->user->rewardsByUser($id);
+  
+      if (!$result) {
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "REWARDS_NOT_FOUND",
+            "desc" => "There are no rewards associated with this specific user."
           ]
         ]);
       }

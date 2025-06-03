@@ -898,6 +898,26 @@ clASs User
       throw new DatabaseException($e->getMessage());
     }
   }      
+
+  public function rewardsByUser ($id) 
+  {
+    try {
+      $stmt = $this->db->prepare("SELECT * FROM ReferralRewards
+                                  WHERE UserID = :id");
+      $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+      $stmt->execute();
+
+      $rs = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+
+      return (object) [
+        "Data" => $rs,
+        "Rows" => count($rs)
+      ];
+
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
     
   public function updateUser($userId, $data)
   {

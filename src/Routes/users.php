@@ -24,6 +24,7 @@ return function (App $app) {
   $app->get('/users/referred/{referralCode}', [$userController, 'getUserByRefCode']);
   $app->get('/users/consent/{id}', [$userController, 'latestConsentByUser']);
   $app->get('/users/{id}/referrals', [$userController, 'referralsByUser'])->add($jwtMiddleware);
+  $app->get('/users/{id}/rewards', [$userController, 'rewardsByUser'])->add($jwtMiddleware);
   $app->post('/users/profile_photo/{id}', [$userController, 'updateProfilePhoto'])->add($jwtMiddleware);
   $app->delete('/users/profile_photo/{id}', [$userController, 'deleteProfilePhoto'])->add($jwtMiddleware);
   $app->patch('/users/{id}', [$userController, 'updateUser'])->add($jwtMiddleware);
