@@ -268,6 +268,68 @@ class UserController
     }
   }
 
+  public function inviteByEmail(Request $request, Response $response, $args)
+  {
+    $data = $request->getParsedBody();
+    $jwt = $request->getAttribute('jwt');
+    $email = $data['Email'] ?? '';
+    // $recaptchaToken = $data['RecaptchaToken'] ?? '';
+    $clientIp = $request->getServerParams()['REMOTE_ADDR'];
+
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+      return $response->withStatus(401)->withJson([
+        "error" => [
+          "code" => "INVALID_TOKEN",
+          "desc" => "Invalid JWT token"
+        ]
+      ]);
+    }
+
+    // Validación de parámetros
+    if (empty($email)) {
+      return $response->withStatus(401)->withJson([
+        "error" => [
+          "code" => "INVALID_PARAMETERS",
+          "desc" => "Parameters are missing or invalid"
+        ]
+      ]);
+    }
+
+    // Validar formato de email
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_EMAIL",
+          "desc" => "Provided email format is invalid"
+        ]
+      ]);
+    }
+
+    $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
+    if ($result->http_code !== 200) {
+      return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+    }
+
+    try {
+      $userID = $jwt['data'] -> UserID;
+      
+      $result = $this->user->inviteByEmail($userID, $email);
+      if (isset($result['error'])) {
+        return $response->withStatus(400)->withJson(["error" => $result['error']]);
+      }
+    
+      return $response->withStatus(200)->withJson(["success" => true]);
+    
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
   public function updateUser(Request $request, Response $response, $args){
     $userId = $args['id'];
     $data = $request->getParsedBody();

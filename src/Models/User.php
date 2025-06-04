@@ -4,6 +4,8 @@ namespace App\Models;
 
 use PDO;
 use App\Exceptions\DatabaseException;
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
 
 require_once(ROOT . '/src/Utils/AWSRekognition.php');
 
@@ -916,6 +918,61 @@ clASs User
 
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  public function inviteByEmail ($userID, $email)
+  {
+    $userResult = $this->getUserById($userID);
+    if ($userResult->http_code !== 200 || empty($userResult->data['ReferralCode'])) {
+      return [
+        "error" => [
+          "code" => "USER_NOT_FOUND",
+          "desc" => "Could not retrieve referral code for the user"
+        ]
+      ];
+    }
+
+    $referralCode = $userResult->data['ReferralCode'];
+    $username = $userResult->data['UserName'];
+
+    // Construir enlace de referido
+    $referralUrl = "https://onesoul.app/onboard/register?refid=" . urlencode($referralCode);
+
+    // Cargar plantilla HTML
+    $template = file_get_contents(ROOT."/src/templates/email_refCode.html");
+    $template = str_replace("{LINK}", $referralUrl, $template);
+    $template = str_replace("{USERNAME}", $username, $template);
+
+    $smtpAccount = $GLOBALS['config']['mailer']['account'];
+    $smtpPassword = $GLOBALS['config']['mailer']['password'];
+
+    # Configuración de PHPMailer
+    $mail = new PHPMailer(true);
+    try {
+      # Configuración del servidor SMTP
+      $mail->isSMTP();
+      $mail->Host = 'smtp.gmail.com';
+      $mail->SMTPAuth = true;
+      $mail->Username = $smtpAccount;
+      $mail->Password = $smtpPassword;
+      $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+      $mail->Port = 587;
+
+      # Configuración del remitente y destinatario
+      $mail->setFrom($smtpAccount,'Contacto OneSoul');
+      $mail->addAddress($email, $username);
+      
+      # Contenido del correo
+      $mail->isHTML(true);
+      $mail->Subject = "Te invitan a OneSoul.app";
+      $mail->Body    = $template;
+      $mail->addEmbeddedImage(ROOT."/src/templates/logo2.png", 'logo');
+
+      # Enviar el correo
+      $mail->send();
+    } catch (Exception $e) {
+      # echo "No se pudo enviar el correo. Error: {$mail->ErrorInfo}";
     }
   }
     
