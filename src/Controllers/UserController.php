@@ -273,7 +273,7 @@ class UserController
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
     $email = $data['Email'] ?? '';
-    // $recaptchaToken = $data['RecaptchaToken'] ?? '';
+    $recaptchaToken = $data['RecaptchaToken'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
