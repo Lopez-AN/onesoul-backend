@@ -29,6 +29,7 @@ $errorMiddleware = $app->addErrorMiddleware(true, true, true);
 (require ROOT . '/src/Routes/subscription.php')($app);
 (require ROOT . '/src/Routes/bookings.php')($app);
 (require ROOT . '/src/Routes/util.php')($app);
+(require ROOT . '/src/Routes/stripe.php')($app);
 
 $app->run();
 
