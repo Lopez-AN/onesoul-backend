@@ -5,6 +5,7 @@ namespace App\Controllers;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use App\Models\User;
+use App\Models\Auth;
 
 require_once(ROOT . '/src/Utils/Paginator.php');
 require_once(ROOT . '/src/Utils/OptimizeImg.php');
@@ -13,10 +14,12 @@ require_once(ROOT . '/src/Utils/PerspectiveText.php');
 class UserController
 {
   protected $user;
+  protected $auth;
 
-  public function __construct(User $user)
+  public function __construct(User $user, Auth $auth)
   {
     $this->user = $user;
+    $this->auth = $auth;
   }
 
   public function getUsers(Request $request, Response $response, $args){

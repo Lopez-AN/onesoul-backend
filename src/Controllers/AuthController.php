@@ -225,7 +225,7 @@ class AuthController{
 
       // Guardar datos del navegador si es necesario
       if ($newMfaId !== null) {
-        $this->auth->storeBrowserData($user['UserID'], $request, $newMfaId);
+        $this->auth->storeBrowserData($user['UserID'], $request, $newMfaId, $clientIp);
       }
 
       return $response->withStatus(200)->withJson([
@@ -325,7 +325,7 @@ class AuthController{
 
       // Guardar datos del navegador si es necesario
       if ($newMfaId !== null) {
-        $this->auth->storeBrowserData($user['UserID'], $request, $newMfaId);
+        $this->auth->storeBrowserData($user['UserID'], $request, $newMfaId, $clientIp);
       }
 
       // Obtener datos completos del usuario

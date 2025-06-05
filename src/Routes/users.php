@@ -3,6 +3,7 @@
 use Slim\App;
 use App\Controllers\UserController;
 use App\Models\User;
+use App\Models\Auth;
 use Tuupola\Middleware\JwtAuthentication;
 
 return function (App $app) {
@@ -13,7 +14,8 @@ return function (App $app) {
 
   $pdo = require __DIR__ . './../core/database.php';
   $user = new User($pdo);
-  $userController = new UserController($user);
+  $auth = new Auth($pdo);
+  $userController = new UserController($user, $auth);
 
   $app->get('/users', [$userController, 'getUsers']);
   $app->get('/users/{id}', [$userController, 'getUserById']);
