@@ -463,7 +463,7 @@ class OfferingController {
       }
 
       // Verifico si el archivo multimedia es valido
-      $uploadedMedia = $this->_getUploadedMedia($request);
+      $uploadedMedia = $this->_getUploadedMedia($request, true);
       if (isset($uploadedMedia->error)) {
         return $response->withStatus(400)->withJson($uploadedMedia->error);
       }
@@ -568,7 +568,7 @@ class OfferingController {
   public function updateOfferingMedia(Request $request, Response $response, $args)
   {
     $id = $args['id']; // ID de offering
-    $media_id = $args['media_id']; // ID del archivo de medios
+    $mediaID = $args['mediaID']; // ID del archivo de medios
     $position = $args['position']; // Posicion del archivo multimedia
 
     $jwt = $request->getAttribute('jwt');
@@ -608,7 +608,7 @@ class OfferingController {
       }
 
       // Busco el media del offering
-      $media = $this->offering->getMediaById($id, $media_id);
+      $media = $this->offering->getMediaById($id, $mediaID);
       if (empty($media)) {
         return $response->withStatus(404)->withJson([
           "error" => [
@@ -619,16 +619,10 @@ class OfferingController {
       }
 
       // Verifico si el archivo multimedia es valido (si se subio)
-      $uploadedMedia = $this->_getUploadedMedia($request);
+      $uploadedMedia = $this->_getUploadedMedia($request, false);
       if (isset($uploadedMedia->error)) {
         return $response->withStatus(400)->withJson($uploadedMedia->error);
       }
-
-      // Obtengo la extención del archivo media
-      $fileExtension = $uploadedMedia->Extension;
-
-      // Ruta temporal del archivo
-      $tempFilePath = $uploadedMedia->File->getStream()->getMetadata('uri');
 
       // Analizar la imagen con Amazon Rekognition
       if(empty($GLOBALS['config']['debug_mode']) || !$GLOBALS['config']['debug_mode']){
@@ -665,6 +659,11 @@ class OfferingController {
       }
 
       if ($uploadedMedia !== false) {
+        // Obtengo la extención del archivo media
+        $fileExtension = $uploadedMedia->Extension;
+        // Ruta temporal del archivo
+        $tempFilePath = $uploadedMedia->File->getStream()->getMetadata('uri');
+
         if (isset($uploadedMedia->error)) {
           return $response->withStatus(400)->withJson($uploadedMedia->error);
         }
@@ -676,13 +675,15 @@ class OfferingController {
         $fileURL = $GLOBALS['config']['media_folder']['url'] . "/offering/$uid.$fileExtension";
 
         // Mover el archivo al destino
-        $uploadedMedia->file->moveTo($filePath);
+        $uploadedMedia->File->moveTo($filePath);
 
-        $this->offering->updateOfferingMedia($id, $title, $description, $position, $media_id, $fileURL, $filePath, $this->_isImage($uploadedMedia->mimeType) ? 'image' : 'video');
+        $this->offering->updateOfferingMedia($id, $title, $description, $position, $mediaID, $fileURL, $filePath,
+          $this->_isImage($uploadedMedia->MimeType) ? 'image' : 'video');
         // Elimino el archivo antiguo si se actualizo con uno nuevo
         unlink($media['Path']);
       } else {
-        $this->offering->updateOfferingMedia($id, $title, $description, $position, $media_id);
+        $fileURL = null;
+        $this->offering->updateOfferingMedia($id, $title, $description, $position, $mediaID);
       }
 
       return $response->withStatus(200)->withJson([
@@ -704,10 +705,22 @@ class OfferingController {
   }
 
   // Extrae el archivo multimedia del request y analiza si es valido
-  private function _getUploadedMedia($request){
+  private function _getUploadedMedia($request, $required){
     // Obtener el archivo del request
     $uploadedFiles = $request->getUploadedFiles();
     $uploadedFile = $uploadedFiles['Media'] ?? null;
+
+    if(!$uploadedFile){
+      if($required){
+        return (object) [
+          "error" => [
+            "code" => "UPLOAD_ERROR",
+            "desc" => "Cannot read the attached file"
+          ]
+        ];
+      }
+      return false;
+    }
 
     if (!$uploadedFile || $uploadedFile->getError() !== UPLOAD_ERR_OK) {
       return (object) [
@@ -759,14 +772,9 @@ class OfferingController {
     ];
   }
 
-  // Función para validar si el archivo es imagen
-  private function _isImage($mimeType)  {
-    return in_array($mimeType, ['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
-  }
-
   public function deleteOfferingMedia(Request $request, Response $response, $args)  {
     $id = $args['id'];
-    $media_id = $args['media_id'];
+    $mediaID = $args['mediaID'];
     $jwt = $request->getAttribute('jwt');
     $userId = $jwt['data']->UserID;
 
@@ -802,7 +810,7 @@ class OfferingController {
       }
 
       // Obtener el archivo multimedia por mediaId y offeringId
-      $media = $this->offering->getMediaById($id, $media_id);
+      $media = $this->offering->getMediaById($id, $mediaID);
 
       if (empty($media)) {
         return $response->withStatus(404)->withJson([
@@ -824,7 +832,7 @@ class OfferingController {
       }
 
       // Eliminar el registro de la tabla MEDIA
-      $this->offering->deleteOfferingMedia($media_id);
+      $this->offering->deleteOfferingMedia($mediaID);
 
       return $response->withStatus(200)->withJson([
         "Message" => "Media file deleted successfully"
