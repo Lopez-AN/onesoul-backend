@@ -771,6 +771,11 @@ class OfferingController {
       "Extension" => $extension
     ];
   }
+  
+  // Función para validar si el archivo es imagen
+  private function _isImage($mimeType)  {
+    return in_array($mimeType, ['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+  }
 
   public function deleteOfferingMedia(Request $request, Response $response, $args)  {
     $id = $args['id'];
