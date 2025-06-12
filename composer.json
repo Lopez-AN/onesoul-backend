@@ -9,7 +9,8 @@
     "phpmailer/phpmailer": "^6.9",
     "whichbrowser/parser": "^2.1",
     "pragmarx/google2fa": "^8.0",
-    "aws/aws-sdk-php": "^3.339"
+    "aws/aws-sdk-php": "^3.339",
+    "stripe/stripe-php": "^17.3"
   },
   "autoload": {
     "psr-4": {

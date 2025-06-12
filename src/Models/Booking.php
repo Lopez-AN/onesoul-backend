@@ -160,7 +160,7 @@ class Booking
     }
   }
 
-  public function updateBooking($bookingID, $mode, $scheduledDate, $message)
+  public function updateBooking($bookingID, $mode, $scheduledDate, $message, $locationID)
   {
     try {
       $fields = [];
@@ -173,6 +173,16 @@ class Booking
         $stmt->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);
         $stmt->execute();
         $fields[] = 'Mode';
+      } 
+
+      if (!empty($locationID)) {
+        $stmt = $this->db->prepare("UPDATE Bookings 
+                                    SET LocationID = :locationID, ModificationDate = NOW()
+                                    WHERE BookingID = :bookingID");
+        $stmt->bindParam(':locationID', $locationID, PDO::PARAM_STR);
+        $stmt->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);
+        $stmt->execute();
+        $fields[] = 'LocationID';
       } 
   
       if (!empty($scheduledDate)) {
@@ -201,11 +211,22 @@ class Booking
       }
   
       if (!empty($message)) {
-        $stmt = $this->db->prepare("UPDATE Bookings 
-                                    SET ModificationDate = NOW(), Message = :message
+        $stmt = $this->db->prepare("SELECT Message 
+                                    FROM Bookings
                                     WHERE BookingID = :bookingID");
         $stmt->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);
-        $stmt->bindParam(':message', $message, PDO::PARAM_STR);
+        $stmt->execute();
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        $existingMessage = $result ? $result['Message'] : '';
+
+        // Concatenar mensaje antiguo con el nuevo
+        $fullMessage = $existingMessage . "\n" . $message;
+
+        $stmt = $this->db->prepare("UPDATE Bookings 
+                                    SET ModificationDate = NOW(), Message = $fullMessage
+                                    WHERE BookingID = :bookingID");
+        $stmt->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);
+        $stmt->bindParam(':fullMessage', $fullMessage, PDO::PARAM_STR);
         $stmt->execute();
         $fields[] = 'Message';
       } 

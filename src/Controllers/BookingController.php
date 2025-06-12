@@ -361,7 +361,7 @@ class BookingController
     $message = $data['Message'] ?? null;
 
     try {
-      // Validar si booking existe y no esta cancelado
+      // Validar si booking existe
       $booking = $this->booking->getBookingByID($bookingID);
       if (!$booking) {
         return $response->withStatus(404)->withJson([
@@ -387,7 +387,7 @@ class BookingController
       }
 
       // Validar que al menos uno venga definido
-      if (empty($scheduledDate) && empty($mode)) {
+      if (empty($scheduledDate) && empty($mode) && empty($locationID)) {
         return $response->withStatus(400)->withJson([
           "error" => [
             "code" => "NO_FIELDS_TO_UPDATE",
@@ -446,6 +446,35 @@ class BookingController
         'virtual' => ['virtual', 'both']
       ];
 
+      // VALIDAR: LocationID en caso de ser presencial
+      $locationID = $data['LocationID'] ?? null;
+
+      if ($mode === 'in-person') {
+        if (!$locationID) {
+          return $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "INVALID_LOCATION",
+              "desc" => "LocationID is required for in-person services."
+            ]
+          ]);
+        }
+
+        // Validar que el LocationID exista en offeringLocations
+        $location = $this->booking->getLocation($id, $locationID);
+
+        if (!$location) {
+          return $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "INVALID_LOCATION",
+              "desc" => "Invalid LocationID."
+            ]
+          ]);
+        }
+      } else {
+        // Si no es presencial, LocationID puede ser NULL
+        $locationID = null;
+      }
+
       $offering = $result->data;
 
       $validTypes = $sessionTypes[$mode];
@@ -469,7 +498,7 @@ class BookingController
         ]);
       }
 
-      $booking = $this->booking->updateBooking($bookingID, $mode, $scheduledDate, $message);
+      $booking = $this->booking->updateBooking($bookingID, $mode, $scheduledDate, $message, $locationID);
 
       return $response->withStatus(200)->withJson($booking);
     } catch (\Throwable $e) {
