@@ -223,7 +223,7 @@ class Booking
         $fullMessage = $existingMessage . "\n" . $message;
 
         $stmt = $this->db->prepare("UPDATE Bookings 
-                                    SET ModificationDate = NOW(), Message = $fullMessage
+                                    SET ModificationDate = NOW(), Message = :fullMessage
                                     WHERE BookingID = :bookingID");
         $stmt->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);
         $stmt->bindParam(':fullMessage', $fullMessage, PDO::PARAM_STR);

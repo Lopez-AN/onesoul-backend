@@ -359,6 +359,7 @@ class BookingController
     $scheduledDate = $data['ScheduledDate'] ?? null;
     $mode = strtolower($data['Mode'] ?? '');
     $message = $data['Message'] ?? null;
+    $locationID = $data['LocationID'] ?? null;
 
     try {
       // Validar si booking existe
@@ -447,8 +448,6 @@ class BookingController
       ];
 
       // VALIDAR: LocationID en caso de ser presencial
-      $locationID = $data['LocationID'] ?? null;
-
       if ($mode === 'in-person') {
         if (!$locationID) {
           return $response->withStatus(400)->withJson([
