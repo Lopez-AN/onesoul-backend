@@ -430,71 +430,73 @@ class BookingController
         ]);
       }
 
-      $allowedModes = ['in-person', 'virtual'];
+      if ($mode) {
+        $allowedModes = ['in-person', 'virtual'];
 
-      if (!in_array($mode, $allowedModes)) {
-        return $response->withStatus(400)->withJson([
-          "error" => [
-            "code" => "INVALID_MODE",
-            "desc" => "Invalid session mode. Allowed values: in-person, virtual."
-          ]
-        ]);
-      }
-
-      // Revisar si hay al menos un OfferingPackage con un SessionType válido
-      $sessionTypes = [
-        'in-person' => ['in-person', 'both'],
-        'virtual' => ['virtual', 'both']
-      ];
-
-      // VALIDAR: LocationID en caso de ser presencial
-      if ($mode === 'in-person') {
-        if (!$locationID) {
+        if (!in_array($mode, $allowedModes)) {
           return $response->withStatus(400)->withJson([
             "error" => [
-              "code" => "INVALID_LOCATION",
-              "desc" => "LocationID is required for in-person services."
+              "code" => "INVALID_MODE",
+              "desc" => "Invalid session mode. Allowed values: in-person, virtual."
             ]
           ]);
         }
 
-        // Validar que el LocationID exista en offeringLocations
-        $location = $this->booking->getLocation($id, $locationID);
+        // Revisar si hay al menos un OfferingPackage con un SessionType válido
+        $sessionTypes = [
+          'in-person' => ['in-person', 'both'],
+          'virtual' => ['virtual', 'both']
+        ];
 
-        if (!$location) {
-          return $response->withStatus(400)->withJson([
-            "error" => [
-              "code" => "INVALID_LOCATION",
-              "desc" => "Invalid LocationID."
-            ]
-          ]);
+        // VALIDAR: LocationID en caso de ser presencial
+        if ($mode === 'in-person') {
+          if (!$locationID) {
+            return $response->withStatus(400)->withJson([
+              "error" => [
+                "code" => "INVALID_LOCATION",
+                "desc" => "LocationID is required for in-person services."
+              ]
+            ]);
+          }
+
+          // Validar que el LocationID exista en offeringLocations
+          $location = $this->booking->getLocation($id, $locationID);
+
+          if (!$location) {
+            return $response->withStatus(400)->withJson([
+              "error" => [
+                "code" => "INVALID_LOCATION",
+                "desc" => "Invalid LocationID."
+              ]
+            ]);
+          }
+        } else {
+          // Si no es presencial, LocationID puede ser NULL
+          $locationID = null;
         }
-      } else {
-        // Si no es presencial, LocationID puede ser NULL
-        $locationID = null;
-      }
 
-      $offering = $result->data;
+        $offering = $result->data;
 
-      $validTypes = $sessionTypes[$mode];
-      $hasValidPackage = false;
+        $validTypes = $sessionTypes[$mode];
+        $hasValidPackage = false;
       
-      if (!empty($offering['Packages'])) {
-        foreach ($offering['Packages'] as $package) {
-          if (in_array(strtolower($package['SessionType']), $validTypes)) {
-            $hasValidPackage = true;
-            break;
+        if (!empty($offering['Packages'])) {
+          foreach ($offering['Packages'] as $package) {
+            if (in_array(strtolower($package['SessionType']), $validTypes)) {
+              $hasValidPackage = true;
+              break;
+            }
           }
         }
-      }
 
-      if (!$hasValidPackage) {
-        return $response->withStatus(400)->withJson([
-          "error" => [
-            "code" => "INVALID_SESSION_TYPE",
-            "desc" => "The offering does not support the selected mode: $mode"
-          ]
-        ]);
+        if (!$hasValidPackage) {
+          return $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "INVALID_SESSION_TYPE",
+              "desc" => "The offering does not support the selected mode: $mode"
+            ]
+          ]);
+        }
       }
 
       $booking = $this->booking->updateBooking($bookingID, $mode, $scheduledDate, $message, $locationID);
@@ -522,19 +524,31 @@ class BookingController
       ]);
     }
 
+    $data = $request->getParsedBody();
     $userID = $jwt['data']->UserID;
     $userType = $jwt['data']->UserType;
     $bookingID = $args['bookingID'];
+    $message = $data['Message'] ?? null;
+
+    // Validar que defina el motivo de la anulación (se guarda en campo Message)
+    if (!$message) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_PARAMETERS",
+          "desc" => "The reason is required for cancellation."
+        ]
+      ]);
+    }    
 
     try {
       $booking = $this->booking->getBookingByID($bookingID);
 
       if (!$booking) {
         return $response->withStatus(404)->withJson([
-            "error" => [
-                "code" => "BOOKING_NOT_FOUND",
-                "desc" => "Booking not found"
-            ]
+          "error" => [
+            "code" => "BOOKING_NOT_FOUND",
+            "desc" => "Booking not found"
+          ]
         ]);
       }
 
@@ -550,11 +564,11 @@ class BookingController
           ]
         ]);
       }
-
+      
       // Verificar si el booking está cancelado (buscar eventos de tipo "cancellation")
       if (!empty($booking['Events'])) {
         foreach ($booking['Events'] as $event) {
-          if ($event['BookingEvent'] === 'cancellation') {
+          if ($event['BookingEvent'] === 'Cancellation') {
             return $response->withStatus(400)->withJson([
               "error" => [
                 "code" => "BOOKING_ALREADY_CANCELLED",
@@ -579,7 +593,7 @@ class BookingController
         ]);
       }
 
-      $booking = $this->booking->cancelBooking($bookingID);
+      $booking = $this->booking->cancelBooking($bookingID, $message);
 
       return $response->withStatus(200)->withJson($booking);
 
