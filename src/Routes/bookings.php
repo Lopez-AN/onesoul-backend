@@ -4,6 +4,7 @@ use Slim\App;
 use App\Controllers\BookingController;
 use App\Models\Booking;
 use App\Models\Offering;
+use App\Models\User;
 use Tuupola\Middleware\JwtAuthentication;
 
 return function (App $app) {
@@ -15,7 +16,8 @@ return function (App $app) {
   $pdo = require __DIR__ . './../core/database.php';
   $booking = new Booking($pdo);
   $offering = new Offering($pdo);
-  $bookingController = new BookingController($booking, $offering);
+  $user = new User($pdo);
+  $bookingController = new BookingController($booking, $offering, $user);
 
   // Bookings protegidos
   $app->get('/bookings/{bookingID}', [$bookingController, 'getBookingByID'])->add($jwtMiddleware);

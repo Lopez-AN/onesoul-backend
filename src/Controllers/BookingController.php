@@ -6,6 +6,7 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use App\Models\Booking;
 use App\Models\Offering;
+use App\Models\User;
 use \DateTime;
 use Firebase\JWT\JWT;
 
@@ -16,11 +17,13 @@ class BookingController
 {
   protected $booking;
   protected $offering;
+  protected $user;
 
-  public function __construct(Booking $booking, Offering $offering)
+  public function __construct(Booking $booking, Offering $offering, User $user)
   {
     $this->booking = $booking;
     $this->offering = $offering;
+    $this->user = $user;
   }
 
   public function getBookingByID(Request $request, Response $response, $args)
@@ -308,8 +311,25 @@ class BookingController
         ]);
       }
 
+      // OBTENER CountryCode del usuario
+      $result = $this->user->getUserById($userID);
+
+      if ($result->http_code !== 200 || empty($result->data['CountryCode'])) {
+        return [
+          "error" => [
+            "code" => "USER_NOT_FOUND",
+            "desc" => "Could not retrieve a CountryCode for the user."
+          ]
+        ];
+      }
+
+      $countryCode = $result->data['CountryCode'];
+      $type = 'C';
+      $publicID = $this->booking->generatePublicId($countryCode, $type);
+
       // PREPARAR datos para el modelo
       $data = [
+        'PublicID' => $publicID,
         'OfferingID' => $id,
         'UserID' => $userID,
         'Mode' => $mode,

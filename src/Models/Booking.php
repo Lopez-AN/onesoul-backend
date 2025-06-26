@@ -15,6 +15,12 @@ class Booking
   {
     $this->db = $db;
   }
+  
+  public function generatePublicId ($countryCode, $type) {
+    $dateCode = date('ym'); // AñoMes
+    $random = substr(bin2hex(random_bytes(5)), 0, 8); // Hash corto
+    return strtoupper("{$countryCode}-{$dateCode}-{$type}-{$random}");
+  }
 
   public function getBookingByID($bookingID)
   {
@@ -55,7 +61,7 @@ class Booking
   {
     try {
       // Obtener todos los bookings del guía
-      $stmt = $this->db->prepare("SELECT b.BookingID, b.UserID, u.DisplayName AS Seeker, b.ReviewID, b.PaymentID,
+      $stmt = $this->db->prepare("SELECT b.BookingID, b.PublicID, b.UserID, u.DisplayName AS Seeker, b.ReviewID, b.PaymentID,
                                         b.Mode, b.LocationID, b.CreationDate, b.ScheduledDate, b.ModificationDate,
                                         o.UserID AS Guide, u2.DisplayName, b.OfferingID, o.Title AS TitleOffering
                                   FROM Bookings AS b 
@@ -96,7 +102,7 @@ class Booking
   {
     try {
       // Obtener todos los bookings del buscador
-      $stmt = $this->db->prepare("SELECT b.BookingID, b.UserID, u.DisplayName AS Seeker, b.ReviewID, b.PaymentID,
+      $stmt = $this->db->prepare("SELECT b.BookingID, b.PublicID, b.UserID, u.DisplayName AS Seeker, b.ReviewID, b.PaymentID,
                                         b.Mode, b.LocationID, b.CreationDate, b.ScheduledDate, b.ModificationDate,
                                         o.UserID AS Guide, u2.DisplayName, b.OfferingID, o.Title AS TitleOffering
                                   FROM Bookings AS b 
@@ -136,9 +142,10 @@ class Booking
   public function createBooking($data)
   {
     try {
-      $stmt = $this->db->prepare("INSERT INTO Bookings (OfferingID, UserID, Mode, LocationID, CreationDate, ScheduledDate) 
-                                  VALUES (:offeringID, :userID, :mode, :locationID, NOW(), :scheduledDate)");
+      $stmt = $this->db->prepare("INSERT INTO Bookings (OfferingID, PublicID, UserID, Mode, LocationID, CreationDate, ScheduledDate) 
+                                  VALUES (:offeringID, :publicID, :userID, :mode, :locationID, NOW(), :scheduledDate)");
       $stmt->bindParam(':offeringID', $data['OfferingID'], PDO::PARAM_INT);
+      $stmt->bindParam(':publicID', $data['PublicID'], PDO::PARAM_STR);
       $stmt->bindParam(':userID', $data['UserID'], PDO::PARAM_INT);
       $stmt->bindParam(':mode', $data['Mode'], PDO::PARAM_STR);
       $stmt->bindParam(':locationID', $data['LocationID'], $data['LocationID'] === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
