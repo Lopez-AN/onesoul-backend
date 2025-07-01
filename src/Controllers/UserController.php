@@ -277,6 +277,7 @@ class UserController
     $jwt = $request->getAttribute('jwt');
     $email = $data['Email'] ?? '';
     $recaptchaToken = $data['RecaptchaToken'] ?? '';
+    $subDomain = $data['SubDomain'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
@@ -308,6 +309,18 @@ class UserController
       ]);
     }
 
+    // Validar formato de subdominio (solo letras A-Z, a-z)
+    if (!empty($subDomain)) {
+      if (!preg_match('/^[a-zA-Z]+$/', $subDomain)) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "INVALID_SUBDOMAIN",
+            "desc" => "Subdomain must contain only letters A-Z"
+          ]
+        ]);
+      }
+    }
+    
     $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
     if ($result->http_code !== 200) {
       return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
@@ -316,7 +329,7 @@ class UserController
     try {
       $userID = $jwt['data'] -> UserID;
       
-      $result = $this->user->inviteByEmail($userID, $email);
+      $result = $this->user->inviteByEmail($userID, $email, $subDomain);
       if (isset($result['error'])) {
         return $response->withStatus(400)->withJson(["error" => $result['error']]);
       }

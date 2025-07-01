@@ -921,7 +921,7 @@ clASs User
     }
   }
 
-  public function inviteByEmail ($userID, $email)
+  public function inviteByEmail ($userID, $email, $subDomain)
   {
     $userResult = $this->getUserById($userID);
     if ($userResult->http_code !== 200 || empty($userResult->data['ReferralCode'])) {
@@ -937,7 +937,8 @@ clASs User
     $username = $userResult->data['UserName'];
 
     // Construir enlace de referido
-    $referralUrl = "https://onesoul.app/onboard/register?refid=" . urlencode($referralCode);
+    $origin = $subDomain ? "https://{$subDomain}.onesoul.app" : "https://onesoul.app";
+    $referralUrl = $origin ."/onboard/register?refid=" . urlencode($referralCode);
 
     // Cargar plantilla HTML
     $template = file_get_contents(ROOT."/src/templates/email_refCode.html");
