@@ -572,19 +572,16 @@ class BookingController
         ]);
       }
 
-      $seeker = $booking['UserID'];
-      $guide = $booking['Guide'];
-
-      // Validar permisos
-      if (($userID != $seeker && $userID != $guide && $userType != 'Admin')) {
+      // Validar si el user es el cliente o el guía o un administrador
+      if ($booking['UserID'] != $userID && $booking['Guide'] != $userID && $userType != 'Admin'){
         return $response->withStatus(401)->withJson([
           "error" => [
-            "code" => "UNAUTHORIZED_ACTION",
-            "desc" => "You don't have permission to cancel this booking."
+            "code" => "FORBIDDEN",
+            "desc" => "You are not authorized to cancel this booking."
           ]
         ]);
       }
-      
+
       // Verificar si el booking está cancelado (buscar eventos de tipo "cancellation")
       if (!empty($booking['Events'])) {
         foreach ($booking['Events'] as $event) {
