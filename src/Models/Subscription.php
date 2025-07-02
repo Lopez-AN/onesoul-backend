@@ -4,6 +4,8 @@ namespace App\Models;
 
 use PDO;
 use App\Exceptions\DatabaseException;
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
 
 class Subscription
 {
@@ -16,7 +18,7 @@ class Subscription
 
   public function getSubscriptionPlans() {
     try {
-      $stmt = $this->db->prepare("SELECT sp.PlanID, sp.Name, sp.Description, sp.Beneficts, sp.Price, sp.CurrencyCode, sp.Duration,
+      $stmt = $this->db->prepare("SELECT sp.PlanID, sp.StripeID, sp.Name, sp.Description, sp.Beneficts, sp.Price, sp.CurrencyCode, sp.Duration,
                     sf.FeatureCode, sf.Description AS FeatureDescription,
                     si.Value, si.Type, si.Description AS ItemDescription
                 FROM SubscriptionPlans AS sp
@@ -57,6 +59,7 @@ class Subscription
         if (!isset($plans[$planId])) {
           $plans[$planId] = [
             "PlanID"       => $row['PlanID'],
+            "StripeID"     => $row['StripeID'],
             "Name"         => $row['Name'],
             "Description"  => $row['Description'],
             "Beneficts"    => $row['Beneficts'],
@@ -87,7 +90,7 @@ class Subscription
 
   public function getSubscriptionPlanByID($id) {
     try {
-      $stmt = $this->db->prepare("SELECT sp.PlanID, sp.Name, sp.Description, sp.Beneficts, sp.Price, sp.CurrencyCode, sp.Duration,
+      $stmt = $this->db->prepare("SELECT sp.PlanID, sp.StripeID, sp.Name, sp.Description, sp.Beneficts, sp.Price, sp.CurrencyCode, sp.Duration,
                                 sf.FeatureCode, sf.Description AS FeatureDescription,
                                 si.Value, si.Type, si.Description AS ItemDescription
                                 FROM SubscriptionPlans AS sp
@@ -108,6 +111,7 @@ class Subscription
       // Inicializar el plan
       $subscription = [
         "PlanID"       => $rows[0]['PlanID'],
+        "StripeID"     => $rows[0]['StripeID'],
         "Name"         => $rows[0]['Name'],
         "Description"  => $rows[0]['Description'],
         "Beneficts"    => $rows[0]['Beneficts'],
@@ -202,14 +206,15 @@ class Subscription
             Beneficts = :Beneficts,
             Price = :Price,
             CurrencyCode = :CurrencyCode,
-            Duration = :Duration
+            Duration = :Duration,
+            StripeID = :StripeID
           WHERE PlanID = :planID
         ");
       } else {
         // 2. Si no existe, insertar el plan
         $stmt = $this->db->prepare("
-          INSERT INTO SubscriptionPlans (PlanID, Name, Description, Beneficts, Price, CurrencyCode, Duration)
-          VALUES (:planID, :Name, :Description, :Beneficts, :Price, :CurrencyCode, :Duration)
+          INSERT INTO SubscriptionPlans (PlanID, Name, Description, Beneficts, Price, CurrencyCode, Duration, StripeID)
+          VALUES (:planID, :Name, :Description, :Beneficts, :Price, :CurrencyCode, :Duration, :StripeID)
         ");
       }
 
@@ -220,6 +225,7 @@ class Subscription
       $stmt->bindParam(':Price', $data['Price']);
       $stmt->bindParam(':CurrencyCode', $data['CurrencyCode'], PDO::PARAM_STR);
       $stmt->bindParam(':Duration', $data['Duration'], PDO::PARAM_INT);
+      $stmt->bindParam(':StripeID', $data['StripeID'], PDO::PARAM_STR);
       $stmt->execute();
 
       // 3. Si hay Features en el body

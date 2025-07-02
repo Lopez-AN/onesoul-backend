@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use PDO;
+use App\Exceptions\DatabaseException;
 use Stripe\Stripe;
 use Stripe\Checkout\Session;
 

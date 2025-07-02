@@ -5,13 +5,19 @@ namespace App\Controllers;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use App\Models\Subscription;
+use App\Models\User;
+use App\Models\StripeService;
 use Firebase\JWT\JWT;
 
 class SubscriptionController {
   protected $subscription;
+  protected $user;
+  protected $stripe;
 
-  public function __construct(Subscription $subscription)  {
+  public function __construct(Subscription $subscription, User $user, StripeService $stripe)  {
     $this->subscription = $subscription;
+    $this->user = $user;
+    $this->stripe = $stripe;
   }
 
   public function getSubscriptionPlans(Request $request, Response $response) {
@@ -148,10 +154,10 @@ class SubscriptionController {
 
   public function updateSubscriptionByUser(Request $request, Response $response, array $args)
   {
-    $userID = $args['userID'];
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
-  
+    $userID = $jwt['data'] -> UserID;
+
     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
       return $response->withStatus(401)->withJson([
         "error" => [
@@ -176,22 +182,55 @@ class SubscriptionController {
       // Actualizar suscripción
       $result = $this->subscription->updateSubscriptionByUser($userID, $newPlanID);
   
-      // Si requiere cobro inmediato (upgrade), podrías aquí llamar la API de pago
-      // if ($result['isUpgrade'] && $result['chargeAmount'] > 0) {
-      //   Aquí llamarías a la API de cobro con $result['chargeAmount']
-      //   // Por ejemplo:
-      //   // $paymentResponse = $this->paymentService->charge($userID, $result['chargeAmount']);
-  
-      //   $result['payment_required'] = true;
-      //   $result['message'] .= ' Payment required for upgrade.';
-      // }
+      // Si es un alta (no hay prorrateo ni upgrade/downgrade)
+      if ($result['ProportionalCharge'] === 0 && $newPlanID !== null) {
+        // Obtener el email del usuario
+        $userResult = $this->user->getUserById($userID);
+        if ($userResult->http_code !== 200 || empty($userResult->data['Email'])) {
+          return $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "USER_NOT_FOUND",
+              "desc" => "Could not retrieve user email"
+            ]
+          ]);
+        }
 
+        // Obtener el ID de Stripe desde el plan
+        $plan = $this->subscription->getSubscriptionPlanByID($newPlanID);
+        if (!$plan || empty($plan['StripeID'])) {
+          return $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "STRIPE_PLAN_MISSING",
+              "desc" => "Stripe ID not configured for this plan"
+            ]
+          ]);
+        }
+
+        // Crear sesión de checkout
+        $stripePriceId = $plan['StripeID'];
+        $userEmail = $userResult->data['Email'];
+
+        $checkout = $this->stripe->createCheckoutSession($stripePriceId, $userEmail);
+
+        if (isset($checkout['error'])) {
+          return $response->withStatus(400)->withJson([
+            "error" => $checkout['error']
+          ]);
+        }
+
+        return $response->withStatus(200)->withJson([
+          "payment_required" => true,
+          "checkout_url" => $checkout['url'],
+          "session_id" => $checkout['sessionId'],
+          "Subscription" => $result['Suscription']
+        ]);
+      }
+
+      // Si no es nueva suscripción pura, devolver normalmente
       return $response->withStatus(200)->withJson([
         "Subscription" => $result['Suscription'],
         "ProportionalCharge" => $result['ProportionalCharge']
       ]);
-  
-      return $response->withStatus(200)->withJson($result);
   
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
