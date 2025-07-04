@@ -210,7 +210,7 @@ class SubscriptionController {
         $stripePriceId = $plan['StripeID'];
         $userEmail = $userResult->data['Email'];
 
-        $checkout = $this->stripe->createCheckoutSession($stripePriceId, $userEmail);
+        $checkout = $this->stripe->createCheckoutSession($stripePriceId, $userEmail, $userID, $newPlanID);
 
         if (isset($checkout['error'])) {
           return $response->withStatus(400)->withJson([
@@ -222,7 +222,7 @@ class SubscriptionController {
           "payment_required" => true,
           "checkout_url" => $checkout['url'],
           "session_id" => $checkout['sessionId'],
-          "Subscription" => $result['Suscription']
+        //  "Subscription" => $result['Suscription']
         ]);
       }
 

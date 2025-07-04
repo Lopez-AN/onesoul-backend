@@ -7,8 +7,16 @@ use App\Exceptions\DatabaseException;
 use Stripe\Stripe;
 use Stripe\Checkout\Session;
 
-class StripeService {
-  public function createCheckoutSession($priceId, $userEmail) 
+class StripeService 
+{
+  protected $db;
+
+  public function __construct(PDO $db)
+  {
+    $this->db = $db;
+  }
+
+  public function createCheckoutSession($priceId, $userEmail, $userID, $planID) 
   {
     try {
       // Configurar la clave secreta de Stripe
@@ -23,7 +31,11 @@ class StripeService {
         ]],
         'customer_email' => $userEmail,
         'success_url' => 'https://onesoul.app/success?session_id={CHECKOUT_SESSION_ID}',
-        'cancel_url' => 'https://onesoul.app/cancel'
+        'cancel_url' => 'https://onesoul.app/cancel',
+        'metadata' => [
+          'user_id' => $userID,
+          'plan_id' => $planID
+        ]
       ]);
 
       return [

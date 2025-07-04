@@ -68,7 +68,7 @@ class StripeController{
         ]);
       }
 
-      $result = $this->stripe->createCheckoutSession($priceId, $userEmail);
+      $result = $this->stripe->createCheckoutSession($priceId, $userEmail, $userID, $planID);
       if (isset($result['error'])) {
         return $response->withStatus(400)->withJson(["error" => $result['error']]);
       }
@@ -87,48 +87,103 @@ class StripeController{
     }
   }
 
+  // public function handleWebhook(Request $request, Response $response, $args)
+  // {
+  //   $payload = $request->getBody()->getContents();
+  //   $sig_header = $_SERVER['HTTP_STRIPE_SIGNATURE'] ?? '';
+  //   $webhookSecret = $GLOBALS['config']['stripe']['STRIPE_WEBHOOK_SECRET'];
+
+  //   try {
+  //     \Stripe\Stripe::setApiKey($GLOBALS['config']['stripe']['STRIPE_SECRET_KEY']);
+
+  //     $event = \Stripe\Webhook::constructEvent($payload, $sig_header, $webhookSecret);
+
+  //     // Lógica según el tipo de evento
+  //     switch ($event->type) {
+  //       case 'checkout.session.completed':
+  //         $session = $event->data->object;
+  //         // Aquí podés guardar la sesión en la base de datos
+  //         error_log("Checkout session completed: " . $session->id);
+  //         break;
+
+  //       case 'invoice.paid':
+  //         $invoice = $event->data->object;
+  //         // Registrar pago exitoso de suscripción
+  //         error_log("Invoice paid for subscription: " . $invoice->subscription);
+  //         break;
+
+  //       case 'customer.subscription.deleted':
+  //         $subscription = $event->data->object;
+  //         // Cancelar o marcar como terminada la suscripción del usuario
+  //         error_log("Subscription deleted: " . $subscription->id);
+  //         break;
+
+  //       default:
+  //         error_log("Unhandled event type: " . $event->type);
+  //     }
+
+  //     return $response->withStatus(200);
+  //   } catch (\UnexpectedValueException $e) {
+  //     // Error de decodificación del payload
+  //     return $response->withStatus(400);
+  //   } catch (\Stripe\Exception\SignatureVerificationException $e) {
+  //     // Firma inválida
+  //     return $response->withStatus(400);
+  //   }
+  // }
   public function handleWebhook(Request $request, Response $response, $args)
-  {
-    $payload = $request->getBody()->getContents();
-    $sig_header = $_SERVER['HTTP_STRIPE_SIGNATURE'] ?? '';
-    $webhookSecret = $GLOBALS['config']['stripe']['STRIPE_WEBHOOK_SECRET'];
+{
+  $payload = $request->getBody()->getContents();
+  $sig_header = $_SERVER['HTTP_STRIPE_SIGNATURE'] ?? '';
+  $webhookSecret = $GLOBALS['config']['stripe']['STRIPE_WEBHOOK_SECRET'];
 
-    try {
-      \Stripe\Stripe::setApiKey($GLOBALS['config']['stripe']['STRIPE_SECRET_KEY']);
+  try {
+    \Stripe\Stripe::setApiKey($GLOBALS['config']['stripe']['STRIPE_SECRET_KEY']);
+    $event = \Stripe\Webhook::constructEvent($payload, $sig_header, $webhookSecret);
 
-      $event = \Stripe\Webhook::constructEvent($payload, $sig_header, $webhookSecret);
+    switch ($event->type) {
+      case 'checkout.session.completed':
+        $session = $event->data->object;
 
-      // Lógica según el tipo de evento
-      switch ($event->type) {
-        case 'checkout.session.completed':
-          $session = $event->data->object;
-          // Aquí podés guardar la sesión en la base de datos
-          error_log("Checkout session completed: " . $session->id);
-          break;
+        // Validar que tenga metadata
+        if (!isset($session->metadata->user_id) || !isset($session->metadata->plan_id)) {
+          error_log("Session missing metadata");
+          return $response->withStatus(400);
+        }
 
-        case 'invoice.paid':
-          $invoice = $event->data->object;
-          // Registrar pago exitoso de suscripción
-          error_log("Invoice paid for subscription: " . $invoice->subscription);
-          break;
+        $userID = $session->metadata->user_id;
+        $planID = $session->metadata->plan_id;
 
-        case 'customer.subscription.deleted':
-          $subscription = $event->data->object;
-          // Cancelar o marcar como terminada la suscripción del usuario
-          error_log("Subscription deleted: " . $subscription->id);
-          break;
+        // Crear suscripción directamente en la base de datos
+        $subscriptionModel = new \App\Models\SubscriptionModel(); // ajustá namespace si difiere
+        $subscriptionModel->createConfirmedSubscription($userID, $planID);
 
-        default:
-          error_log("Unhandled event type: " . $event->type);
-      }
+        error_log("✅ Subscription created for UserID: $userID | PlanID: $planID");
+        break;
 
-      return $response->withStatus(200);
-    } catch (\UnexpectedValueException $e) {
-      // Error de decodificación del payload
-      return $response->withStatus(400);
-    } catch (\Stripe\Exception\SignatureVerificationException $e) {
-      // Firma inválida
-      return $response->withStatus(400);
+      case 'invoice.paid':
+        $invoice = $event->data->object;
+        error_log("Invoice paid for subscription: " . $invoice->subscription);
+        break;
+
+      case 'customer.subscription.deleted':
+        $subscription = $event->data->object;
+        error_log("Subscription deleted: " . $subscription->id);
+        break;
+
+      default:
+        error_log("Unhandled event type: " . $event->type);
     }
+
+    return $response->withStatus(200);
+
+  } catch (\UnexpectedValueException $e) {
+    return $response->withStatus(400);
+  } catch (\Stripe\Exception\SignatureVerificationException $e) {
+    return $response->withStatus(400);
+  } catch (\Throwable $e) {
+    error_log("Webhook error: " . $e->getMessage());
+    return $response->withStatus(500);
   }
+}
 }

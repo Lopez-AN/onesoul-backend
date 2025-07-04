@@ -370,22 +370,22 @@ class Subscription
         }
       }
 
-      // Insertar nueva suscripción
-      $stmt = $this->db->prepare("INSERT INTO Subscriptions (UserID, PlanID, StartDate, Status, RemainingDays, NextBillingDate)
-                                VALUES (:userID, :planID, CURDATE(), 'ACTIVE', :remainingDays, :nextBillingDate)");
-      $stmt->execute([
-        'userID'         => $userID,
-        'planID'         => $newPlanID,
-        'remainingDays'  => $remainingDaysNew,
-        'nextBillingDate'=> $nextBillingDateNew
-      ]);
+      // // Insertar nueva suscripción
+      // $stmt = $this->db->prepare("INSERT INTO Subscriptions (UserID, PlanID, StartDate, Status, RemainingDays, NextBillingDate)
+      //                           VALUES (:userID, :planID, CURDATE(), 'ACTIVE', :remainingDays, :nextBillingDate)");
+      // $stmt->execute([
+      //   'userID'         => $userID,
+      //   'planID'         => $newPlanID,
+      //   'remainingDays'  => $remainingDaysNew,
+      //   'nextBillingDate'=> $nextBillingDateNew
+      // ]);
 
-      // Marcar el estado del referido como exitoso si existía una pendiente
-      $stmt = $this->db->prepare("UPDATE Referrals 
-                                  SET ReferralStatus = 'Successful' 
-                                  WHERE ReferredUserID = :userID 
-                                  AND ReferralStatus = 'Pending'");
-      $stmt->execute(['userID' => $userID]);
+      // // Marcar el estado del referido como exitoso si existía una pendiente
+      // $stmt = $this->db->prepare("UPDATE Referrals 
+      //                             SET ReferralStatus = 'Successful' 
+      //                             WHERE ReferredUserID = :userID 
+      //                             AND ReferralStatus = 'Pending'");
+      // $stmt->execute(['userID' => $userID]);
 
       $suscription = $this->getSubscriptionByUser($userID);
       return [
@@ -470,6 +470,44 @@ class Subscription
         'NextBillingDate'   => date('Y-m-d', strtotime('+30 days'))
       ];
   
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  public function createConfirmedSubscription($userID, $planID)
+  {
+    try {
+      $remainingDays = 30;
+      $nextBillingDate = date('Y-m-d', strtotime("+30 days"));
+
+      // Cancelar suscripción anterior si existe
+      $stmt = $this->db->prepare("UPDATE Subscriptions
+                                SET EndDate = CURDATE(), Status = 'CANCELED'
+                                WHERE UserID = :userID AND Status = 'ACTIVE'");
+      $stmt->execute(['userID' => $userID]);
+
+      // Insertar nueva suscripción
+      $stmt = $this->db->prepare("INSERT INTO Subscriptions (UserID, PlanID, StartDate, Status, RemainingDays, NextBillingDate)
+                                VALUES (:userID, :planID, CURDATE(), 'ACTIVE', :remainingDays, :nextBillingDate)");
+      $stmt->execute([
+        'userID' => $userID,
+        'planID' => $planID,
+        'remainingDays' => $remainingDays,
+        'nextBillingDate' => $nextBillingDate
+      ]);
+
+      // Marcar referido como exitoso si corresponde
+      $stmt = $this->db->prepare("UPDATE Referrals 
+                                SET ReferralStatus = 'Successful' 
+                                WHERE ReferredUserID = :userID AND ReferralStatus = 'Pending'");
+      $stmt->execute(['userID' => $userID]);
+
+      $suscription = $this->getSubscriptionByUser($userID);
+      return [
+        'Suscription' => $suscription,
+        'ProportionalCharge' => $proportionalAmount
+      ];
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
