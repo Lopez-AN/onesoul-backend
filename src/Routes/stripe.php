@@ -4,6 +4,7 @@ use Slim\App;
 use App\Controllers\StripeController;
 use App\Models\StripeService;
 use App\Models\User;
+use App\Models\Subscription;
 use Tuupola\Middleware\JwtAuthentication;
 
 return function (App $app) {
@@ -15,7 +16,8 @@ return function (App $app) {
   $pdo = require __DIR__ . './../core/database.php';
   $stripeService = new StripeService($pdo);
   $user = new User($pdo);
-  $stripeController = new StripeController($stripeService, $user);
+  $subscription = new Subscription($pdo);
+  $stripeController = new StripeController($stripeService, $user, $subscription);
 
   $app->post('/stripe/subscribe', [$stripeController, 'createCheckoutSession'])->add($jwtMiddleware);
   $app->post('/stripe/webhook', [$stripeController, 'handleWebhook']);

@@ -6,16 +6,19 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use App\Models\StripeService;
 use App\Models\User;
+use App\Models\Subscription;
 use Firebase\JWT\JWT;
 
 class StripeController{
 
   protected $stripe;
   protected $user;
+  protected $subscription;
 
-  public function __construct(StripeService $stripe, User $user){
+  public function __construct(StripeService $stripe, User $user, Subscription $subscription){
     $this->stripe = $stripe;
     $this->user = $user;
+    $this->subscription = $subscription;
   }
 
   public function createCheckoutSession(Request $request, Response $response, $args)
@@ -67,6 +70,17 @@ class StripeController{
           ]
         ]);
       }
+
+      $plan = $this->subscription->getSubscriptionPlanByStripeID($priceId); // Debés tener esta función
+      if (!$plan || empty($plan['PlanID'])) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "PLAN_NOT_FOUND",
+            "desc" => "No matching plan found for the given Stripe Price ID."
+          ]
+        ]);
+      }
+      $planID = $plan['PlanID'];
 
       $result = $this->stripe->createCheckoutSession($priceId, $userEmail, $userID, $planID);
       if (isset($result['error'])) {
@@ -155,8 +169,7 @@ class StripeController{
         $planID = $session->metadata->plan_id;
 
         // Crear suscripción directamente en la base de datos
-        $subscriptionModel = new \App\Models\SubscriptionModel(); // ajustá namespace si difiere
-        $subscriptionModel->createConfirmedSubscription($userID, $planID);
+        $subscription = $this->subscription->createConfirmedSubscription($userID, $planID);
 
         error_log("✅ Subscription created for UserID: $userID | PlanID: $planID");
         break;

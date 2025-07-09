@@ -189,6 +189,78 @@ class Subscription
     }
   }
 
+  public function getSubscriptionPlanByStripeID($priceID) {
+    try {
+      $stmt = $this->db->prepare("SELECT sp.PlanID, sp.StripeID, sp.Name, sp.Description, sp.Beneficts, sp.Price, sp.CurrencyCode, sp.Duration,
+                                sf.FeatureCode, sf.Description AS FeatureDescription,
+                                si.Value, si.Type, si.Description AS ItemDescription
+                                FROM SubscriptionPlans AS sp
+                                LEFT JOIN SubscriptionItems AS si ON sp.PlanID = si.PlanID
+                                LEFT JOIN SubscriptionFeatures AS sf ON si.FeatureCode = sf.FeatureCode
+                                WHERE sp.StripeID = :priceID AND sf.IsActive = 1
+                                ORDER BY sf.FeatureCode");
+
+      $stmt->bindParam(':priceID', $priceID, PDO::PARAM_INT);
+      $stmt->execute();
+
+      $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+      if (empty($rows)) {
+        return null; // No existe el plan
+      }
+
+      // Inicializar el plan
+      $subscription = [
+        "PlanID"       => $rows[0]['PlanID'],
+        "StripeID"     => $rows[0]['StripeID'],
+        "Name"         => $rows[0]['Name'],
+        "Description"  => $rows[0]['Description'],
+        "Beneficts"    => $rows[0]['Beneficts'],
+        "Price"        => (float)$rows[0]['Price'],
+        "CurrencyCode" => $rows[0]['CurrencyCode'],
+        "Duration"     => $rows[0]['Duration'],
+        "Features"     => []
+      ];
+
+      // Agregar las features
+      foreach ($rows as $row) {
+        if (!empty($row['FeatureCode'])) {
+        
+          // Castear el valor según el tipo
+          $value = $row['Value'];
+          if (isset($value) && isset($row['Type'])) {
+            switch ($row['Type']) {
+              case 'INTEGER':
+                $value = is_numeric($value) ? (int)$value : 0;
+                break;
+              case 'FLOAT':
+                $value = is_numeric($value) ? (float)$value : 0.0;
+                break;
+              case 'BOOLEAN':
+                $value = filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+                break;
+              case 'STRING':
+              default:
+                $value = (string)$value;
+                break;
+            }
+          }
+
+          $subscription['Features'][] = [
+            "FeatureCode"  => $row['FeatureCode'],
+            "Description"  => $row['FeatureDescription'],
+            "Value"  => $value,
+            "ItemDescription"  => $row['ItemDescription']
+          ];
+        }
+      }
+
+      return $subscription;
+
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
 
   public function updateSubscriptionPlan($planID, $data)
   {
@@ -505,8 +577,7 @@ class Subscription
 
       $suscription = $this->getSubscriptionByUser($userID);
       return [
-        'Suscription' => $suscription,
-        'ProportionalCharge' => $proportionalAmount
+        'Suscription' => $suscription
       ];
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());

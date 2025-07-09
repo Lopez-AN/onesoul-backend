@@ -113,6 +113,30 @@ class SubscriptionController {
     }
   }
 
+  public function getSubscriptionPlanByStripeID(Request $request, Response $response, array $args) {
+    $priceID = $args['priceID'];
+
+    try {
+      $subscription = $this->subscription->getSubscriptionPlanByStripeID($priceID);
+
+      if (!$subscription) {
+        return $response->withStatus(404)->withJson((object)["error" => [
+          "code" => "SUBSCRIPTION_NOT_FOUND",
+          "desc" => "Plan not found with the ID {$id}."
+        ]]);
+      }
+
+      return $response->withStatus(200)->withJson($subscription);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
   public function updateSubscriptionPlan(Request $request, Response $response, array $args) {
     $id = $args['id'];
     $data = $request->getParsedBody();
