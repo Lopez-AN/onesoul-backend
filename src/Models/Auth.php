@@ -213,8 +213,8 @@ class Auth{
     // Crear consentimiento legal
     $consentData = [
       "UserID" => $userId,
-      "AcceptedTerms" => 1,
-      "AcceptedPrivacyPolicy" => 1,
+      "AcceptedTerms" => $acceptedTerms,
+      "AcceptedPrivacyPolicy" => $acceptedPrivacy,
       "UserIP" => $clientIp,
       "UserAgent" => $request->getHeader('User-Agent')[0] ?? '',
       "TyCVersion" => $TyCVersion,
@@ -237,7 +237,7 @@ class Auth{
                                 VALUES (:userId , :receiveNewsletters)");
     $stmt->execute([
       ':userId' => $userId, 
-      ':receiveNewsletters' => (int)$receiveNewsletters
+      ':receiveNewsletters' => (int) filter_var($receiveNewsletters, FILTER_VALIDATE_BOOLEAN)
     ]);
 
     return $newUser;
@@ -380,8 +380,8 @@ class Auth{
     // Crear consentimiento legal
     $consentData = [
       "UserID" => $userID,
-      "AcceptedTerms" => 1,
-      "AcceptedPrivacyPolicy" => 1,
+      "AcceptedTerms" => $acceptedTerms,
+      "AcceptedPrivacyPolicy" => $acceptedPrivacy,
       "UserIP" => $clientIp,
       "UserAgent" => $request->getHeader('User-Agent')[0] ?? '',
       "TyCVersion" => $TyCVersion,
@@ -404,7 +404,7 @@ class Auth{
                                 VALUES (:userId , :receiveNewsletters)");
     $stmt->execute([
       ':userId' => $userId, 
-      ':receiveNewsletters' => (int)$receiveNewsletters
+      ':receiveNewsletters' => (int) filter_var($receiveNewsletters, FILTER_VALIDATE_BOOLEAN)
     ]);
 
     return $userModel -> getUserByOAuthID($userId, "google");
@@ -535,8 +535,8 @@ class Auth{
     // Crear consentimiento legal
     $consentData = [
       "UserID" => $userID,
-      "AcceptedTerms" => 1,
-      "AcceptedPrivacyPolicy" => 1,
+      "AcceptedTerms" => $acceptedTerms,
+      "AcceptedPrivacyPolicy" => $acceptedPrivacy,
       "UserIP" => $clientIp,
       "UserAgent" => $request->getHeader('User-Agent')[0] ?? '',
       "TyCVersion" => $TyCVersion,
@@ -559,7 +559,7 @@ class Auth{
                                 VALUES (:userId , :receiveNewsletters)");
     $stmt->execute([
       ':userId' => $userId, 
-      ':receiveNewsletters' => (int)$receiveNewsletters
+      ':receiveNewsletters' => (int) filter_var($receiveNewsletters, FILTER_VALIDATE_BOOLEAN)
     ]);
 
     return $userModel -> getUserByOAuthID($userId, "facebook");

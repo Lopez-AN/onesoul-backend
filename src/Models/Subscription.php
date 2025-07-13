@@ -161,7 +161,6 @@ class Subscription
     }
   }
 
-
   public function getSubscriptionByUser($userID) {
     try {
       $stmt = $this->db->prepare("SELECT * FROM Subscriptions 
@@ -262,6 +261,220 @@ class Subscription
     }
   }
 
+  // SUSCRIPCION DE UN USUARIO A UN PLAN 
+  public function updateSubscriptionByUser($userID, $subDomain, $newPlanID = null)
+  {
+    try {
+      // Buscar la suscripción activa
+      $stmt = $this->db->prepare("SELECT SubscriptionID, PlanID, RemainingDays
+                                FROM Subscriptions
+                                WHERE UserID = :userID
+                                AND Status = 'ACTIVE'
+                                ORDER BY StartDate DESC
+                                LIMIT 1");
+      $stmt->execute(['userID' => $userID]);
+      $currentSubscription = $stmt->fetch(PDO::FETCH_ASSOC);
+
+      $currentPlanID = null;
+      $remainingDaysNew = 30; // Default para nueva suscripción sin historial
+      $nextBillingDateNew = date('Y-m-d', strtotime("+30 days"));
+      $proportionalAmount = 0;
+      $isUpgrade = false;
+
+      if ($currentSubscription) {
+        $currentPlanID = (int)$currentSubscription['PlanID'];
+        $remainingDaysActual = (int)$currentSubscription['RemainingDays'];
+        $subscriptionID  = (int)$currentSubscription['SubscriptionID'];
+
+
+        // Obtener precios de los planes actual y nuevo
+        $stmt = $this->db->prepare("SELECT PlanID, Price
+                                  FROM SubscriptionPlans
+                                  WHERE PlanID IN (:currentPlanID, :newPlanID)");
+        $stmt->execute([
+          'currentPlanID' => $currentPlanID,
+          'newPlanID'     => $newPlanID
+        ]);
+
+        $prices = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
+
+        $oldPrice = (float)($prices[$currentPlanID] ?? 0);
+        $newPrice = (float)($prices[$newPlanID] ?? 0);
+
+        // Si cambia de plan
+        if ($newPlanID !== null && $newPlanID !== $currentPlanID) {
+          if($newPrice > $oldPrice) {
+            // Upgrade: cobrar proporcional y reiniciar
+            $proportionalAmount = round((($newPrice - $oldPrice) / 30) * $remainingDaysActual, 2);
+            $isUpgrade = true;
+
+            $stmt = $this->db->prepare("UPDATE Subscriptions
+                                        SET EndDate = CURDATE(),
+                                        Status = 'CANCELED',
+                                        RemainingDays = 0,
+                                        NextBillingDate = CURDATE()
+                                        WHERE SubscriptionID = :subscriptionID");
+            $stmt->execute(['subscriptionID' => $subscriptionID]);
+
+            // Nueva suscripción normal por 30 días
+            $remainingDaysNew = 30;
+            $nextBillingDateNew = date('Y-m-d', strtotime("+30 days"));
+
+          } else {
+            // Downgrade: extender días
+            $remainingDaysNew = $remainingDaysActual + 30;
+            $nextBillingDateNew = date('Y-m-d', strtotime("+$remainingDaysNew days"));
+
+            // Cancelar anterior
+            $stmt = $this->db->prepare("UPDATE Subscriptions
+                                      SET EndDate = CURDATE(), Status = 'CANCELED'
+                                      WHERE SubscriptionID = :subscriptionID");
+            $stmt->execute(['subscriptionID' => $subscriptionID]);
+          }
+        }
+      }
+
+      $suscription = $this->getSubscriptionByUser($userID);
+      return [
+        'Suscription' => $suscription,
+        'ProportionalCharge' => $proportionalAmount
+      ];
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  public function createConfirmedSubscription($userID, $planID, $stripeSubscriptionID)
+  {
+    try {
+      $remainingDays = 30;
+      $nextBillingDate = date('Y-m-d', strtotime("+30 days"));
+
+      // Cancelar suscripción anterior si existe
+      $stmt = $this->db->prepare("UPDATE Subscriptions
+                                SET EndDate = CURDATE(), Status = 'CANCELED'
+                                WHERE UserID = :userID AND Status = 'ACTIVE'");
+      $stmt->execute(['userID' => $userID]);
+
+      // Insertar nueva suscripción
+      $stmt = $this->db->prepare("INSERT INTO Subscriptions (UserID, PlanID, StartDate, Status, RemainingDays, NextBillingDate, StripeID)
+                                VALUES (:userID, :planID, CURDATE(), 'ACTIVE', :remainingDays, :nextBillingDate, :stripeSubscriptionID)");
+      $stmt->execute([
+        'userID' => $userID,
+        'planID' => $planID,
+        'remainingDays' => $remainingDays,
+        'nextBillingDate' => $nextBillingDate,
+        'stripeID' => $stripeSubscriptionID
+      ]);
+
+      // Marcar referido como exitoso si corresponde
+      $stmt = $this->db->prepare("UPDATE Referrals 
+                                SET ReferralStatus = 'Successful' 
+                                WHERE ReferredUserID = :userID AND ReferralStatus = 'Pending'");
+      $stmt->execute(['userID' => $userID]);
+
+      $suscription = $this->getSubscriptionByUser($userID);
+      return [
+        'Suscription' => $suscription
+      ];
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  public function cancelSubscription($stripeSubscriptionID)
+  {
+    try {
+      $stmt = $this->db->prepare("SELECT * FROM Subscriptions 
+                                  WHERE StripeID = :stripeID AND Status = 'ACTIVE'
+                                  ORDER BY StartDate DESC LIMIT 1");
+      $stmt->execute(['stripeID' => $stripeSubscriptionID]);
+      $subscription = $stmt->fetch(PDO::FETCH_ASSOC);
+
+      if (!$subscription) {
+        throw new DatabaseException("Subscription not found with that StripeID.");
+      }
+
+      $subscriptionID = $subscription['SubscriptionID'];
+
+      $stmt = $this->db->prepare("UPDATE Subscriptions 
+                                  SET Status = 'CANCELED', EndDate = CURDATE()
+                                  WHERE SubscriptionID = :id");
+      $stmt->execute(['id' => $subscriptionID]);
+
+      return true;
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  public function subscriptionByEmail($username, $email, $subscriptionID, $subDomain)
+  {
+    $subscriptionInfo = $this->getSubscriptionPlanByID($subscriptionID);
+    if (!$subscriptionInfo) {
+      return [
+        "error" => [
+          "code" => "PLAN_NOT_FOUND",
+          "desc" => "Subscription plan not found"
+        ]
+      ];
+    }
+
+    // Construir el contenido dinámico del email
+    $planName = $subscriptionInfo['Name'];
+    $planPrice = number_format($subscriptionInfo['Price'], 2);
+    $planDuration = $subscriptionInfo['Duration'];
+    $planCurrency = $subscriptionInfo['CurrencyCode'];
+
+    // Construir lista de features
+    $featuresHTML = '';
+    foreach ($subscriptionInfo['Features'] as $feature) {
+      $desc = $feature['Description'];
+      $value = $feature['Value'];
+      $item = $feature['ItemDescription'];
+      $featuresHTML .= "<li><strong>{$desc}</strong>: {$value} <em>({$item})</em></li>";
+    }
+
+    // Cargar plantilla HTML
+    $origin = $subDomain ? "https://{$subDomain}.onesoul.app" : "https://onesoul.app";
+    $template = file_get_contents(ROOT . "/src/templates/email_subscription.html");
+
+    // Reemplazos
+    $template = str_replace("{USERNAME}", htmlspecialchars($username), $template);
+    $template = str_replace("{PLAN_NAME}", htmlspecialchars($planName), $template);
+    $template = str_replace("{PLAN_PRICE}", "$planPrice $planCurrency", $template);
+    $template = str_replace("{PLAN_DURATION}", $planDuration . " mes", $template);
+    $template = str_replace("{FEATURES}", $featuresHTML, $template);
+    $template = str_replace("{DASHBOARD_URL}", $origin, $template); // por si querés insertar botón
+
+    // Envío del email
+    $smtpAccount = $GLOBALS['config']['mailer']['account'];
+    $smtpPassword = $GLOBALS['config']['mailer']['password'];
+
+    $mail = new PHPMailer(true);
+    try {
+      $mail->isSMTP();
+      $mail->Host = 'smtp.gmail.com';
+      $mail->SMTPAuth = true;
+      $mail->Username = $smtpAccount;
+      $mail->Password = $smtpPassword;
+      $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+      $mail->Port = 587;
+
+      $mail->setFrom($smtpAccount, 'Contacto OneSoul');
+      $mail->addAddress($email, $username);
+
+      $mail->isHTML(true);
+      $mail->Subject = "🎉 Te has suscripto a un nuevo plan en OneSoul!";
+      $mail->Body = $template;
+      $mail->addEmbeddedImage(ROOT . "/src/templates/logo2.png", 'logo');
+
+      $mail->send();
+    } catch (Exception $e) {
+      error_log("Error al enviar correo de suscripción: " . $mail->ErrorInfo);
+    }
+  }
+
   public function updateSubscriptionPlan($planID, $data)
   {
     try{
@@ -349,126 +562,6 @@ class Subscription
     }
   }
 
-  // SUSCRIPCION DE UN USUARIO A UN PLAN 
-  public function updateSubscriptionByUser($userID, $newPlanID = null)
-  {
-    try {
-      // Buscar la suscripción activa
-      $stmt = $this->db->prepare("SELECT SubscriptionID, PlanID, RemainingDays
-                                FROM Subscriptions
-                                WHERE UserID = :userID
-                                AND Status = 'ACTIVE'
-                                ORDER BY StartDate DESC
-                                LIMIT 1");
-      $stmt->execute(['userID' => $userID]);
-      $currentSubscription = $stmt->fetch(PDO::FETCH_ASSOC);
-
-      $currentPlanID = null;
-      $remainingDaysNew = 30; // Default para nueva suscripción sin historial
-      $nextBillingDateNew = date('Y-m-d', strtotime("+30 days"));
-      $proportionalAmount = 0;
-      $isUpgrade = false;
-
-      if ($newPlanID == null) {
-        // Cancelar anterior
-        $stmt = $this->db->prepare("UPDATE Subscriptions
-                                    SET EndDate = CURDATE(), Status = 'CANCELED'
-                                    WHERE UserID = :userID
-                                    AND Status = 'ACTIVE'
-                                    ORDER BY StartDate DESC
-                                    LIMIT 1");
-        $stmt->execute(['userID' => $userID]);
-
-        $suscription = $this->getSubscriptionByUser($userID);
-        return [
-          'Suscription' => $suscription,
-          'ProportionalCharge' => $proportionalAmount
-        ];
-      }
-
-      if ($currentSubscription) {
-        $currentPlanID = (int)$currentSubscription['PlanID'];
-        $remainingDaysActual = (int)$currentSubscription['RemainingDays'];
-        $subscriptionID  = (int)$currentSubscription['SubscriptionID'];
-
-
-        // Obtener precios de los planes actual y nuevo
-        $stmt = $this->db->prepare("SELECT PlanID, Price
-                                  FROM SubscriptionPlans
-                                  WHERE PlanID IN (:currentPlanID, :newPlanID)");
-        $stmt->execute([
-          'currentPlanID' => $currentPlanID,
-          'newPlanID'     => $newPlanID
-        ]);
-
-        $prices = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
-
-        $oldPrice = (float)($prices[$currentPlanID] ?? 0);
-        $newPrice = (float)($prices[$newPlanID] ?? 0);
-
-        // Si cambia de plan
-        if ($newPlanID !== null && $newPlanID !== $currentPlanID) {
-          if($newPrice > $oldPrice) {
-            // Upgrade: cobrar proporcional y reiniciar
-            $proportionalAmount = round((($newPrice - $oldPrice) / 30) * $remainingDaysActual, 2);
-            $isUpgrade = true;
-
-            $stmt = $this->db->prepare("UPDATE Subscriptions
-                                        SET EndDate = CURDATE(),
-                                        Status = 'CANCELED',
-                                        RemainingDays = 0,
-                                        NextBillingDate = CURDATE()
-                                        WHERE SubscriptionID = :subscriptionID");
-            $stmt->execute(['subscriptionID' => $subscriptionID]);
-
-            // Nueva suscripción normal por 30 días
-            $remainingDaysNew = 30;
-            $nextBillingDateNew = date('Y-m-d', strtotime("+30 days"));
-
-            // Forzar Cobro 
-            // Aquí deberías invocar la API de cobro con $proportionalAmount
-
-          } else {
-            // Downgrade: extender días
-            $remainingDaysNew = $remainingDaysActual + 30;
-            $nextBillingDateNew = date('Y-m-d', strtotime("+$remainingDaysNew days"));
-
-            // Cancelar anterior
-            $stmt = $this->db->prepare("UPDATE Subscriptions
-                                      SET EndDate = CURDATE(), Status = 'CANCELED'
-                                      WHERE SubscriptionID = :subscriptionID");
-            $stmt->execute(['subscriptionID' => $subscriptionID]);
-          }
-        }
-      }
-
-      // // Insertar nueva suscripción
-      // $stmt = $this->db->prepare("INSERT INTO Subscriptions (UserID, PlanID, StartDate, Status, RemainingDays, NextBillingDate)
-      //                           VALUES (:userID, :planID, CURDATE(), 'ACTIVE', :remainingDays, :nextBillingDate)");
-      // $stmt->execute([
-      //   'userID'         => $userID,
-      //   'planID'         => $newPlanID,
-      //   'remainingDays'  => $remainingDaysNew,
-      //   'nextBillingDate'=> $nextBillingDateNew
-      // ]);
-
-      // // Marcar el estado del referido como exitoso si existía una pendiente
-      // $stmt = $this->db->prepare("UPDATE Referrals 
-      //                             SET ReferralStatus = 'Successful' 
-      //                             WHERE ReferredUserID = :userID 
-      //                             AND ReferralStatus = 'Pending'");
-      // $stmt->execute(['userID' => $userID]);
-
-      $suscription = $this->getSubscriptionByUser($userID);
-      return [
-        'Suscription' => $suscription,
-        'ProportionalCharge' => $proportionalAmount
-      ];
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
-  }
-
   public function updateFeatureStatus($featureCode, $isActive)
   {
     try {
@@ -542,43 +635,6 @@ class Subscription
         'NextBillingDate'   => date('Y-m-d', strtotime('+30 days'))
       ];
   
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
-  }
-
-  public function createConfirmedSubscription($userID, $planID)
-  {
-    try {
-      $remainingDays = 30;
-      $nextBillingDate = date('Y-m-d', strtotime("+30 days"));
-
-      // Cancelar suscripción anterior si existe
-      $stmt = $this->db->prepare("UPDATE Subscriptions
-                                SET EndDate = CURDATE(), Status = 'CANCELED'
-                                WHERE UserID = :userID AND Status = 'ACTIVE'");
-      $stmt->execute(['userID' => $userID]);
-
-      // Insertar nueva suscripción
-      $stmt = $this->db->prepare("INSERT INTO Subscriptions (UserID, PlanID, StartDate, Status, RemainingDays, NextBillingDate)
-                                VALUES (:userID, :planID, CURDATE(), 'ACTIVE', :remainingDays, :nextBillingDate)");
-      $stmt->execute([
-        'userID' => $userID,
-        'planID' => $planID,
-        'remainingDays' => $remainingDays,
-        'nextBillingDate' => $nextBillingDate
-      ]);
-
-      // Marcar referido como exitoso si corresponde
-      $stmt = $this->db->prepare("UPDATE Referrals 
-                                SET ReferralStatus = 'Successful' 
-                                WHERE ReferredUserID = :userID AND ReferralStatus = 'Pending'");
-      $stmt->execute(['userID' => $userID]);
-
-      $suscription = $this->getSubscriptionByUser($userID);
-      return [
-        'Suscription' => $suscription
-      ];
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }

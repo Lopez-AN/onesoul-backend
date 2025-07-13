@@ -6,17 +6,20 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use App\Models\Subscription;
 use App\Models\User;
+use App\Models\Auth;
 use App\Models\StripeService;
 use Firebase\JWT\JWT;
 
 class SubscriptionController {
   protected $subscription;
   protected $user;
+  protected $auth;
   protected $stripe;
 
-  public function __construct(Subscription $subscription, User $user, StripeService $stripe)  {
+  public function __construct(Subscription $subscription, User $user, Auth $auth, StripeService $stripe)  {
     $this->subscription = $subscription;
     $this->user = $user;
+    $this->auth = $auth;
     $this->stripe = $stripe;
   }
 
@@ -137,50 +140,12 @@ class SubscriptionController {
     }
   }
 
-  public function updateSubscriptionPlan(Request $request, Response $response, array $args) {
-    $id = $args['id'];
-    $data = $request->getParsedBody();
-    $jwt = $request->getAttribute('jwt');
-
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
-
-    try {
-      # Verificar si el usuario autenticado es un administrador
-      if ($jwt['data']->UserType != 'Admin') {
-        return $response->withStatus(401)->withJson([
-          "error" => [
-            "code" => "UNAUTHORIZED",
-            "desc" => "You do not have permission to modify this user"
-          ]
-        ]);
-      }
-
-      $result = $this->subscription->updateSubscriptionPlan($id, $data);
-
-      return $response->withStatus(200)->withJson($result);
-
-    } catch (\Throwable $e) {
-      return $response->withStatus(500)->withJson([
-        "error" => [
-          "code" => "INTERNAL_SERVER_ERROR",
-          "desc" => $e->getMessage()
-        ]
-      ]);
-    }
-  }
-
   public function updateSubscriptionByUser(Request $request, Response $response, array $args)
   {
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
     $userID = $jwt['data'] -> UserID;
+    $subDomain = $data['SubDomain'] ?? '';
 
     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
       return $response->withStatus(401)->withJson([
@@ -190,7 +155,19 @@ class SubscriptionController {
         ]
       ]);
     }
-  
+
+    // Validar formato de subdominio (solo letras A-Z, a-z)
+    if (!empty($subDomain)) {
+      if (!preg_match('/^[a-zA-Z]+$/', $subDomain)) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "INVALID_SUBDOMAIN",
+            "desc" => "Subdomain must contain only letters A-Z"
+          ]
+        ]);
+      }
+    }
+
     try {
       if ($jwt['data']->UserID != $userID && $jwt['data']->UserType != 'Admin') {
         return $response->withStatus(401)->withJson([
@@ -204,7 +181,7 @@ class SubscriptionController {
       $newPlanID = $data['PlanID'] ?? null;
 
       // Actualizar suscripción
-      $result = $this->subscription->updateSubscriptionByUser($userID, $newPlanID);
+      $result = $this->subscription->updateSubscriptionByUser($userID, $subDomain, $newPlanID);
   
       // Si es un alta (no hay prorrateo ni upgrade/downgrade)
       if ($result['ProportionalCharge'] === 0 && $newPlanID !== null) {
@@ -234,7 +211,7 @@ class SubscriptionController {
         $stripePriceId = $plan['StripeID'];
         $userEmail = $userResult->data['Email'];
 
-        $checkout = $this->stripe->createCheckoutSession($stripePriceId, $userEmail, $userID, $newPlanID);
+        $checkout = $this->stripe->createCheckoutSession($stripePriceId, $userEmail, $userID, $newPlanID, $subDomain);
 
         if (isset($checkout['error'])) {
           return $response->withStatus(400)->withJson([
@@ -245,8 +222,7 @@ class SubscriptionController {
         return $response->withStatus(200)->withJson([
           "payment_required" => true,
           "checkout_url" => $checkout['url'],
-          "session_id" => $checkout['sessionId'],
-        //  "Subscription" => $result['Suscription']
+          "session_id" => $checkout['sessionId']
         ]);
       }
 
@@ -256,6 +232,173 @@ class SubscriptionController {
         "ProportionalCharge" => $result['ProportionalCharge']
       ]);
   
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  public function subscriptionByEmail(Request $request, Response $response, $args)
+  {
+    $data = $request->getParsedBody();
+    $jwt = $request->getAttribute('jwt');
+    $recaptchaToken = $data['RecaptchaToken'] ?? '';
+    $subDomain = $data['SubDomain'] ?? '';
+    $clientIp = $request->getServerParams()['REMOTE_ADDR'];
+    $userID = $jwt['data'] -> UserID;
+
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+      return $response->withStatus(401)->withJson([
+        "error" => [
+          "code" => "INVALID_TOKEN",
+          "desc" => "Invalid JWT token"
+        ]
+      ]);
+    }
+
+    // Validar formato de subdominio (solo letras A-Z, a-z)
+    if (!empty($subDomain)) {
+      if (!preg_match('/^[a-zA-Z]+$/', $subDomain)) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "INVALID_SUBDOMAIN",
+            "desc" => "Subdomain must contain only letters A-Z"
+          ]
+        ]);
+      }
+    }
+    
+    $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
+    if ($result->http_code !== 200) {
+      return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+    }
+
+    try {
+      $userResult = $this->user->getUserById($userID);
+
+      if ($userResult->http_code !== 200 || empty($userResult->data['Subscription']['PlanID'])) {
+        return [
+            "error" => [
+            "code" => "USER_NOT_FOUND",
+            "desc" => "Could not retrieve subscription for the user"
+          ]
+        ];
+      }
+
+      $email = $userResult->data['Email'];
+      $username = $userResult->data['UserName'];
+      $subscriptionID = $userResult->data['Subscription']['PlanID'];
+
+      // Validación de parámetros
+      if (empty($email) || empty($username) || empty($subscriptionID)) {
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "INVALID_PARAMETERS",
+            "desc" => "Parameters are missing or invalid"
+          ]
+        ]);
+      }
+
+      $result = $this->subscription->subscriptionByEmail($username, $email, $subscriptionID, $subDomain);
+      if (isset($result['error'])) {
+        return $response->withStatus(400)->withJson(["error" => $result['error']]);
+      }
+    
+      return $response->withStatus(200)->withJson(["success" => true]);
+    
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  public function cancelSubscription(Request $request, Response $response, array $args)
+  {
+    $jwt = $request->getAttribute('jwt');
+
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
+      return $response->withStatus(401)->withJson([
+        "error" => [
+          "code" => "INVALID_TOKEN",
+          "desc" => "Invalid JWT token"
+        ]
+      ]);
+    }
+
+    try {
+      $userID = $jwt['data']->UserID;
+
+      $subscription = $this->subscription->getSubscriptionByUser($userID);
+      if (!$subscription || empty($subscription['StripeID'])) {
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "NO_ACTIVE_SUBSCRIPTION",
+            "desc" => "No active subscription to cancel."
+          ]
+        ]);
+      }
+
+      $stripeSubscriptionID = $subscription['StripeID'];
+
+      $stripeResult = $this->stripe->cancelStripeSubscription($stripeSubscriptionID);
+      if (isset($stripeResult['error'])) {
+        return $response->withStatus(400)->withJson(["error" => $stripeResult['error']]);
+      }
+
+      $this->subscription->cancelSubscription($stripeSubscriptionID);
+
+      return $response->withStatus(200)->withJson([
+        "success" => true,
+        "message" => "Subscription cancelled successfully."
+      ]);
+
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }  
+
+  public function updateSubscriptionPlan(Request $request, Response $response, array $args) {
+    $id = $args['id'];
+    $data = $request->getParsedBody();
+    $jwt = $request->getAttribute('jwt');
+
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+      return $response->withStatus(401)->withJson([
+        "error" => [
+          "code" => "INVALID_TOKEN",
+          "desc" => "Invalid JWT token"
+        ]
+      ]);
+    }
+
+    try {
+      # Verificar si el usuario autenticado es un administrador
+      if ($jwt['data']->UserType != 'Admin') {
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "UNAUTHORIZED",
+            "desc" => "You do not have permission to modify this user"
+          ]
+        ]);
+      }
+
+      $result = $this->subscription->updateSubscriptionPlan($id, $data);
+
+      return $response->withStatus(200)->withJson($result);
+
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [

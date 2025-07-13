@@ -361,7 +361,7 @@ class AuthController{
     $referralCode = $data['ReferralCode'] ?? null;
     $receiveNewsletters = $data['ReceiveNewsletters'] ?? null;
 
-    if(empty($email) || empty($username) || empty($password) || empty($recaptchaToken) || is_null($receiveNewsletters)){
+    if(empty($email) || empty($username) || empty($password) || empty($recaptchaToken) || !isset($data['ReceiveNewsletters'])){
       return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "INVALID_PARAMETERS",
@@ -406,7 +406,7 @@ class AuthController{
     $referralCode = $data['ReferralCode'] ?? null;    
     $receiveNewsletters = $data['ReceiveNewsletters'] ?? null;
 
-    if(empty($token) || empty($username) || empty($recaptchaToken) || is_null($receiveNewsletters)){
+    if(empty($token) || empty($username) || empty($recaptchaToken) || !isset($data['ReceiveNewsletters'])){
       return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "INVALID_PARAMETERS",
@@ -452,7 +452,7 @@ class AuthController{
     $referralCode = $data['ReferralCode'] ?? null;
     $receiveNewsletters = $data['ReceiveNewsletters'] ?? null;
 
-    if(empty($user_id) || empty($token) || empty($username) || empty($recaptchaToken) || is_null($receiveNewsletters)){
+    if(empty($user_id) || empty($token) || empty($username) || empty($recaptchaToken) || !isset($data['ReceiveNewsletters'])){
       return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "INVALID_PARAMETERS",
