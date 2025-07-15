@@ -344,7 +344,7 @@ class Subscription
     }
   }
 
-  public function createConfirmedSubscription($userID, $planID, $stripeSubscriptionID)
+  public function createConfirmedSubscription($userID, $planID, $stripeSubscriptionID, $subDomain = '')
   {
     try {
       $remainingDays = 30;
@@ -374,6 +374,14 @@ class Subscription
       $stmt->execute(['userID' => $userID]);
 
       $suscription = $this->getSubscriptionByUser($userID);
+
+      $userResult = $this->user->getUserById($userID);
+      if ($userResult->http_code === 200) {
+        $username = $userResult->data['UserName'];
+        $email = $userResult->data['Email'];
+        $this->sendSubscriptionEmail($username, $email, $planID, $subDomain);
+      }
+
       return [
         'Suscription' => $suscription
       ];
@@ -408,17 +416,10 @@ class Subscription
     }
   }
 
-  public function subscriptionByEmail($username, $email, $subscriptionID, $subDomain)
+  private function sendSubscriptionEmail($username, $email, $subscriptionID, $subDomain)
   {
     $subscriptionInfo = $this->getSubscriptionPlanByID($subscriptionID);
-    if (!$subscriptionInfo) {
-      return [
-        "error" => [
-          "code" => "PLAN_NOT_FOUND",
-          "desc" => "Subscription plan not found"
-        ]
-      ];
-    }
+    if (!$subscriptionInfo) return;
 
     // Construir el contenido dinámico del email
     $planName = $subscriptionInfo['Name'];

@@ -36,7 +36,8 @@ class StripeService
         'cancel_url' => $origin ."/cancel",
         'metadata' => [
           'user_id' => $userID,
-          'plan_id' => $planID
+          'plan_id' => $planID,
+          'subdomain' => $subDomain
         ]
       ]);
 

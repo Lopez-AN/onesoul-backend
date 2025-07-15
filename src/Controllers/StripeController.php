@@ -136,6 +136,7 @@ class StripeController{
 
           $userID = $session->metadata->user_id;
           $planID = $session->metadata->plan_id;
+          $subDomain = $session->metadata->subdomain ?? '';
           $stripeSubscriptionID = $session->subscription ?? null;
 
           if (!$stripeSubscriptionID) {
@@ -144,9 +145,9 @@ class StripeController{
           }
 
           // Crear suscripción directamente en la base de datos
-          $subscription = $this->subscription->createConfirmedSubscription($userID, $planID, $stripeSubscriptionID);
+          $subscription = $this->subscription->createConfirmedSubscription($userID, $planID, $stripeSubscriptionID, $subDomain);
 
-          error_log("✅ Subscription created for UserID: $userID | PlanID: $planID | StripeID: $stripeSubscriptionID");
+          error_log("✅ Subscription created for UserID: $userID | PlanID: $planID | StripeID: $stripeSubscriptionID | SubDomain: $subDomain");
           break;
 
         case 'invoice.paid':
