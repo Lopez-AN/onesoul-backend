@@ -21,6 +21,7 @@ return function (App $app) {
 
   // Bookings protegidos
   $app->get('/bookings/{bookingID}', [$bookingController, 'getBookingByID'])->add($jwtMiddleware);
+  $app->get('/bookings/id/{publicID}', [$bookingController, 'getBookingByPublicID'])->add($jwtMiddleware);
   $app->get('/bookings/guide/{userID}', [$bookingController, 'getBookingsByGuide'])->add($jwtMiddleware);
   $app->get('/bookings/seeker/{userID}', [$bookingController, 'getBookingsBySeeker'])->add($jwtMiddleware);
   $app->post('/bookings', [$bookingController, 'createBooking'])->add($jwtMiddleware);

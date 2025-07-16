@@ -344,7 +344,7 @@ class Subscription
     }
   }
 
-  public function createConfirmedSubscription($userID, $planID, $stripeSubscriptionID, $subDomain = '')
+  public function createConfirmedSubscription($userID, $planID, $stripeSubscriptionID, $subDomain = '', $userData = [])
   {
     try {
       $remainingDays = 30;
@@ -364,7 +364,7 @@ class Subscription
         'planID' => $planID,
         'remainingDays' => $remainingDays,
         'nextBillingDate' => $nextBillingDate,
-        'stripeID' => $stripeSubscriptionID
+        'stripeSubscriptionID' => $stripeSubscriptionID
       ]);
 
       // Marcar referido como exitoso si corresponde
@@ -375,10 +375,9 @@ class Subscription
 
       $suscription = $this->getSubscriptionByUser($userID);
 
-      $userResult = $this->user->getUserById($userID);
-      if ($userResult->http_code === 200) {
-        $username = $userResult->data['UserName'];
-        $email = $userResult->data['Email'];
+      if (!empty($userData['UserName']) && !empty($userData['Email'])) {
+        $username = $userData['UserName'];
+        $email = $userData['Email'];
         $this->sendSubscriptionEmail($username, $email, $planID, $subDomain);
       }
 
@@ -394,9 +393,9 @@ class Subscription
   {
     try {
       $stmt = $this->db->prepare("SELECT * FROM Subscriptions 
-                                  WHERE StripeID = :stripeID AND Status = 'ACTIVE'
+                                  WHERE StripeID = :stripeSubscriptionID AND Status = 'ACTIVE'
                                   ORDER BY StartDate DESC LIMIT 1");
-      $stmt->execute(['stripeID' => $stripeSubscriptionID]);
+      $stmt->execute(['stripeSubscriptionID' => $stripeSubscriptionID]);
       $subscription = $stmt->fetch(PDO::FETCH_ASSOC);
 
       if (!$subscription) {
@@ -407,8 +406,8 @@ class Subscription
 
       $stmt = $this->db->prepare("UPDATE Subscriptions 
                                   SET Status = 'CANCELED', EndDate = CURDATE()
-                                  WHERE SubscriptionID = :id");
-      $stmt->execute(['id' => $subscriptionID]);
+                                  WHERE SubscriptionID = :subscriptionID");
+      $stmt->execute(['subscriptionID' => $subscriptionID]);
 
       return true;
     } catch (\PDOException $e) {
@@ -427,17 +426,8 @@ class Subscription
     $planDuration = $subscriptionInfo['Duration'];
     $planCurrency = $subscriptionInfo['CurrencyCode'];
 
-    // Construir lista de features
-    $featuresHTML = '';
-    foreach ($subscriptionInfo['Features'] as $feature) {
-      $desc = $feature['Description'];
-      $value = $feature['Value'];
-      $item = $feature['ItemDescription'];
-      $featuresHTML .= "<li><strong>{$desc}</strong>: {$value} <em>({$item})</em></li>";
-    }
-
     // Cargar plantilla HTML
-    $origin = $subDomain ? "https://{$subDomain}.onesoul.app" : "https://onesoul.app";
+    $origin = $subDomain ? "https://{$subDomain}.onesoul.app/home" : "https://onesoul.app/home";
     $template = file_get_contents(ROOT . "/src/templates/email_subscription.html");
 
     // Reemplazos
@@ -445,8 +435,7 @@ class Subscription
     $template = str_replace("{PLAN_NAME}", htmlspecialchars($planName), $template);
     $template = str_replace("{PLAN_PRICE}", "$planPrice $planCurrency", $template);
     $template = str_replace("{PLAN_DURATION}", $planDuration . " mes", $template);
-    $template = str_replace("{FEATURES}", $featuresHTML, $template);
-    $template = str_replace("{DASHBOARD_URL}", $origin, $template); // por si querés insertar botón
+    $template = str_replace("{DASHBOARD_URL}", $origin, $template); 
 
     // Envío del email
     $smtpAccount = $GLOBALS['config']['mailer']['account'];
@@ -466,7 +455,7 @@ class Subscription
       $mail->addAddress($email, $username);
 
       $mail->isHTML(true);
-      $mail->Subject = "🎉 Te has suscripto a un nuevo plan en OneSoul!";
+      $mail->Subject = "Te has suscripto a un nuevo plan en OneSoul";
       $mail->Body = $template;
       $mail->addEmbeddedImage(ROOT . "/src/templates/logo2.png", 'logo');
 

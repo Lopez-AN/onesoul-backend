@@ -32,7 +32,7 @@ class StripeService
           'quantity' => 1
         ]],
         'customer_email' => $userEmail,
-        'success_url' => $origin ."/success?session_id={CHECKOUT_SESSION_ID}",
+        'success_url' => $origin ."/home",
         'cancel_url' => $origin ."/cancel",
         'metadata' => [
           'user_id' => $userID,

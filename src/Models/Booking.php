@@ -57,6 +57,43 @@ class Booking
     }
   }
 
+  public function getBookingByPublicID($publicID)
+  {
+    try {
+      $stmt = $this->db->prepare("SELECT b.*, o.Title AS TitleOffering, o.UserID AS Guide
+                                  FROM Bookings AS b 
+                                  INNER JOIN Offerings AS o ON b.OfferingID = o.OfferingID 
+                                  WHERE b.PublicID = :publicID");
+      $stmt->bindParam(':publicID', $publicID, PDO::PARAM_INT);
+      $stmt->execute();
+      $booking = $stmt->fetch(PDO::FETCH_ASSOC);
+      
+      if (!$booking) {
+        return null; // No se encontró booking
+      }
+
+      $bookingID = $booking['BookingID'];
+
+      // Obtener los eventos de la reserva (BookingStatus)
+      $stmt2 = $this->db->prepare("SELECT BookingEventDate, BookingEvent, ScheduledDate, Message
+                                  FROM BookingStatus 
+                                  WHERE BookingID = :bookingID
+                                  ORDER BY BookingEventDate ASC");
+      $stmt2->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);
+      $stmt2->execute();
+
+      $events = $stmt2->fetchAll(PDO::FETCH_ASSOC);
+
+      // Añadir los eventos al booking
+      $booking['Events'] = $events;
+
+      return $booking;
+
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
   public function getBookingsByGuide($userID)
   {
     try {
@@ -139,7 +176,7 @@ class Booking
     }
   }
 
-  public function createBooking($data)
+  public function createBooking($data, $subDomain)
   {
     try {
       $stmt = $this->db->prepare("INSERT INTO Bookings (OfferingID, PublicID, UserID, Mode, LocationID, CreationDate, ScheduledDate) 
@@ -164,6 +201,58 @@ class Booking
       return $this->getBookingByID($bookingID);
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
+    }
+  }
+  
+  public function sendBookingEmail($username, $email, $bookingData, $subDomain)
+  {
+    if (!$bookingData) return;
+
+    // Datos dinámicos
+    $publicID = $bookingData['PublicID'];
+    $scheduled = date('d/m/Y H:i', strtotime($bookingData['ScheduledDate']));
+    $mode = $bookingData['Mode'] === 'in-person' ? 'Presencial' : 'Virtual';
+    $offering = $bookingData['TitleOffering'];
+
+    // URL
+    $origin = $subDomain ? "https://{$subDomain}.onesoul.app" : "https://onesoul.app";
+
+    // Cargar plantilla
+    $template = file_get_contents(ROOT . "/src/templates/email_booking.html");
+
+    // Reemplazar variables
+    $template = str_replace("{USERNAME}", htmlspecialchars($username), $template);
+    $template = str_replace("{BOOKING_ID}", htmlspecialchars($publicID), $template);
+    $template = str_replace("{OFFERING}", $offering, $template);
+    $template = str_replace("{SCHEDULED}", $scheduled, $template);
+    $template = str_replace("{MODE}", $mode, $template);
+    $template = str_replace("{DASHBOARD_URL}", $origin, $template);
+
+    // Configuración SMTP
+    $smtpAccount = $GLOBALS['config']['mailer']['account'];
+    $smtpPassword = $GLOBALS['config']['mailer']['password'];
+
+    $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
+    try {
+      $mail->isSMTP();
+      $mail->Host = 'smtp.gmail.com';
+      $mail->SMTPAuth = true;
+      $mail->Username = $smtpAccount;
+      $mail->Password = $smtpPassword;
+      $mail->SMTPSecure = \PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS;
+      $mail->Port = 587;
+
+      $mail->setFrom($smtpAccount, 'Contacto OneSoul');
+      $mail->addAddress($email, $username);
+
+      $mail->isHTML(true);
+      $mail->Subject = "Reserva confirmada en OneSoul";
+      $mail->Body = $template;
+      $mail->addEmbeddedImage(ROOT . "/src/templates/logo2.png", 'logo');
+
+      $mail->send();
+    } catch (\PHPMailer\PHPMailer\Exception $e) {
+      error_log("Error al enviar correo de reserva: " . $mail->ErrorInfo);
     }
   }
 

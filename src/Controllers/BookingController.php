@@ -75,6 +75,55 @@ class BookingController
     }
   }
 
+  public function getBookingByPublicID(Request $request, Response $response, $args)
+  {
+    $publicID = $args['publicID'];
+    
+    $jwt = $request->getAttribute('jwt');
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
+      return $response->withStatus(401)->withJson([
+        "error" => [
+          "code" => "INVALID_TOKEN", 
+          "desc" => "Invalid JWT token"
+        ]
+      ]);
+    }
+
+    $userID = $jwt['data']->UserID;
+
+    try {
+      $booking = $this->booking->getBookingByPublicID($publicID);
+      
+      if (!$booking) {
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "BOOKING_NOT_FOUND",
+            "desc" => "Booking not found"
+          ]
+        ]);
+      }
+      
+      // Validar si el user es el cliente o el guía
+      if ($booking['UserID'] != $userID && $booking['Guide'] != $userID) {
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "FORBIDDEN",
+            "desc" => "You are not authorized to view this booking."
+          ]
+        ]);
+      }
+
+      return $response->withStatus(200)->withJson($booking);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR", 
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
   public function getBookingsByGuide(Request $request, Response $response, $args)
   {
     $userID = $args['userID'];
@@ -189,6 +238,19 @@ class BookingController
     $userID = $jwt['data']->UserID;
     $data = $request->getParsedBody();
     $message = $data['Message'] ?? null;
+    $subDomain = $data['SubDomain'] ?? '';
+    
+    // Validar formato de subdominio (solo letras A-Z, a-z)
+    if (!empty($subDomain)) {
+      if (!preg_match('/^[a-zA-Z]+$/', $subDomain)) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "INVALID_SUBDOMAIN",
+            "desc" => "Subdomain must contain only letters A-Z"
+          ]
+        ]);
+      }
+    }
 
     try {
       // VALIDAR: Offering si existe 
@@ -324,7 +386,7 @@ class BookingController
       }
 
       $countryCode = $result->data['CountryCode'];
-      $type = 'C';
+      $type = 'B';
       $publicID = $this->booking->generatePublicId($countryCode, $type);
 
       // PREPARAR datos para el modelo
@@ -338,7 +400,14 @@ class BookingController
         'Message' => $message
       ];
 
-      $booking = $this->booking->createBooking($data);
+      $booking = $this->booking->createBooking($data, $subDomain);
+
+      $bookingData = $this->booking->getBookingByPublicID($publicID);
+
+      // Enviar email al usuario
+      $username = $result->data['UserName'];
+      $email = $result->data['Email'];
+      $this->booking->sendBookingEmail($username, $email, $bookingData, $subDomain);
 
       return $response->withStatus(200)->withJson($booking);
 
