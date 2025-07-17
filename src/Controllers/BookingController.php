@@ -10,6 +10,8 @@ use App\Models\User;
 use \DateTime;
 use Firebase\JWT\JWT;
 
+require_once(ROOT . '/src/Utils/PerspectiveText.php');
+
 #Definir zona horaria
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 
@@ -44,16 +46,7 @@ class BookingController
 
     try {
       $booking = $this->booking->getBookingByID($bookingID);
-      
-      if (!$booking) {
-        return $response->withStatus(404)->withJson([
-          "error" => [
-            "code" => "BOOKING_NOT_FOUND",
-            "desc" => "Booking not found"
-          ]
-        ]);
-      }
-      
+
       // Validar si el user es el cliente o el guía
       if ($booking['UserID'] != $userID && $booking['Guide'] != $userID) {
         return $response->withStatus(401)->withJson([
@@ -63,7 +56,16 @@ class BookingController
           ]
         ]);
       }
-
+      
+      if (!$booking) {
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "BOOKING_NOT_FOUND",
+            "desc" => "Booking not found"
+          ]
+        ]);
+      }
+    
       return $response->withStatus(200)->withJson($booking);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
@@ -94,21 +96,21 @@ class BookingController
     try {
       $booking = $this->booking->getBookingByPublicID($publicID);
       
-      if (!$booking) {
-        return $response->withStatus(404)->withJson([
-          "error" => [
-            "code" => "BOOKING_NOT_FOUND",
-            "desc" => "Booking not found"
-          ]
-        ]);
-      }
-      
       // Validar si el user es el cliente o el guía
       if ($booking['UserID'] != $userID && $booking['Guide'] != $userID) {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "FORBIDDEN",
             "desc" => "You are not authorized to view this booking."
+          ]
+        ]);
+      }
+
+      if (!$booking) {
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "BOOKING_NOT_FOUND",
+            "desc" => "Booking not found"
           ]
         ]);
       }
@@ -142,6 +144,16 @@ class BookingController
     $userType = $jwt['data']->UserType;
 
     try {
+      // Validar si el user es el cliente o el guía
+      if ($userJWT != $userID && $userType != 'Admin') {
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "FORBIDDEN",
+            "desc" => "You are not authorized to view this booking."
+          ]
+        ]);
+      }
+      
       $bookings = $this->booking->getBookingsByGuide($userID);
 
       if ($bookings === null) {
@@ -149,16 +161,6 @@ class BookingController
           "error" => [
             "code" => "BOOKING_NOT_FOUND",
             "desc" => "No Bookings found for this specific user."
-          ]
-        ]);
-      }
-
-      // Validar si el user es el cliente o el guía
-      if ($userJWT != $userID && $userType != 'Admin') {
-        return $response->withStatus(401)->withJson([
-          "error" => [
-            "code" => "FORBIDDEN",
-            "desc" => "You are not authorized to view this booking."
           ]
         ]);
       }
@@ -190,7 +192,18 @@ class BookingController
 
     $userJWT = $jwt['data']->UserID;
     $userType = $jwt['data']->UserType;
+
     try {
+      // Validar si el user es el cliente o el guía
+      if ($userJWT != $userID && $userType != 'Admin') {
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "FORBIDDEN",
+            "desc" => "You are not authorized to view this booking."
+          ]
+        ]);
+      }
+
       $bookings = $this->booking->getBookingsBySeeker($userID);
 
       if ($bookings === null) {
@@ -198,16 +211,6 @@ class BookingController
           "error" => [
             "code" => "BOOKING_NOT_FOUND", 
             "desc" => "No Bookings found for this specific user."
-          ]
-        ]);
-      }
-
-      // Validar si el user es el cliente o el guía
-      if ($userJWT != $userID && $userType != 'Admin') {
-        return $response->withStatus(401)->withJson([
-          "error" => [
-            "code" => "FORBIDDEN",
-            "desc" => "You are not authorized to view this booking."
           ]
         ]);
       }
@@ -248,6 +251,16 @@ class BookingController
             "code" => "INVALID_SUBDOMAIN",
             "desc" => "Subdomain must contain only letters A-Z"
           ]
+        ]);
+      }
+    }
+
+    // Valida contenido con Perspective API
+    if(!empty($data['Message'])){
+      if ($this->containsInappropriateContent($data['Message'])) {
+        return $response->withStatus(400)->withJson([
+          "code" => "INAPPROPRIATE_CONTENT",
+          "desc" => "Please remove inappropriate content and try again."
         ]);
       }
     }
@@ -450,6 +463,16 @@ class BookingController
     $message = $data['Message'] ?? null;
     $locationID = $data['LocationID'] ?? null;
 
+    // Valida contenido con Perspective API
+    if(!empty($data['Message'])){
+      if ($this->containsInappropriateContent($data['Message'])) {
+        return $response->withStatus(400)->withJson([
+          "code" => "INAPPROPRIATE_CONTENT",
+          "desc" => "Please remove inappropriate content and try again."
+        ]);
+      }
+    }
+
     try {
       // Validar si booking existe
       $booking = $this->booking->getBookingByID($bookingID);
@@ -465,11 +488,11 @@ class BookingController
       // Verificar si el booking está cancelado (buscar eventos de tipo "cancellation")
       if (!empty($booking['Events'])) {
         foreach ($booking['Events'] as $event) {
-          if ($event['BookingEvent'] === 'cancellation') {
+          if ($event['BookingEvent'] === 'Canceled') {
             return $response->withStatus(400)->withJson([
               "error" => [
                 "code" => "BOOKING_ALREADY_CANCELLED",
-                "desc" => "Cannot update a cancelled booking."
+                "desc" => "Cannot update a canceled booking."
               ]
             ]);
           }
@@ -629,6 +652,16 @@ class BookingController
       ]);
     }    
 
+    // Valida contenido con Perspective API
+    if(!empty($data['Message'])){
+      if ($this->containsInappropriateContent($data['Message'])) {
+        return $response->withStatus(400)->withJson([
+          "code" => "INAPPROPRIATE_CONTENT",
+          "desc" => "Please remove inappropriate content and try again."
+        ]);
+      }
+    }
+
     try {
       $booking = $this->booking->getBookingByID($bookingID);
 
@@ -654,11 +687,11 @@ class BookingController
       // Verificar si el booking está cancelado (buscar eventos de tipo "cancellation")
       if (!empty($booking['Events'])) {
         foreach ($booking['Events'] as $event) {
-          if ($event['BookingEvent'] === 'Cancellation') {
+          if ($event['BookingEvent'] === 'Canceled') {
             return $response->withStatus(400)->withJson([
               "error" => [
                 "code" => "BOOKING_ALREADY_CANCELLED",
-                "desc" => "Cannot update a cancelled booking."
+                "desc" => "Cannot update a canceled booking."
               ]
             ]);
           }
@@ -693,75 +726,9 @@ class BookingController
     }
   }
 
-  public function createReview(Request $request, Response $response, $args)
-  {
-    $jwt = $request->getAttribute('jwt');
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN", 
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
-
-    $seekerID = $jwt['data']->UserID;
-    $data = $request->getParsedBody();
-
-    if (!isset($data['Rating']) || !isset($data['ReviewText']) || !isset($data['OfferingID'])) {
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "INVALID_PARAMETERS", 
-          "desc" => "Missing required fields"
-        ]
-      ]);
-    }
-
-    if (!in_array($data['Rating'], [1, 2, 3, 4, 5])) {
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "INVALID_RATING", 
-          "desc" => "Rating must be between 1 and 5"
-        ]
-      ]);
-    }
-
-    try {
-      $id = $data['OfferingID'];
-
-      $result = $this->offering->getOfferingById($id);
-      if ($result->http_code != 200) {
-        return $response->withStatus(404)->WithJson([
-          "error" => [
-            "code" => "OFFERING_NOT_FOUND",
-            "desc"=> "No Offering found for this specific ID."
-          ]
-        ]);
-      }
-
-      $offering = $result->data;
-      $guide = $offering['Author']['UserID'];
-
-      $data = [
-        'OfferingID' => $id,
-        'SUserID' => $seekerID,
-        'GUserID' => $guide,
-        'Rating' => $data['Rating'],
-        'ReviewText' => $data['ReviewText']
-      ];
-
-      $review = $this->booking->createReview($data);
-
-      return $response->withStatus(200)->withJson($review);
-    } catch (\Throwable $e) {
-      return $response->withStatus(500)->withJson([
-        "error" => [
-          "code" => "INTERNAL_SERVER_ERROR", 
-          "desc" => $e->getMessage()
-        ]
-      ]);
-    }
-  }
+/*
+REVIEWS
+*/
 
   public function getReviews(Request $request, Response $response, $args)
   {
@@ -1064,5 +1031,125 @@ class BookingController
         ]
       ]);
     }
+  }
+
+  public function createReview(Request $request, Response $response, $args)
+  {
+    $jwt = $request->getAttribute('jwt');
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
+      return $response->withStatus(401)->withJson([
+        "error" => [
+          "code" => "INVALID_TOKEN", 
+          "desc" => "Invalid JWT token"
+        ]
+      ]);
+    }
+
+    $seekerID = $jwt['data']->UserID;
+    $data = $request->getParsedBody();
+
+    if (!isset($data['Rating']) || !isset($data['ReviewText']) || !isset($data['BookingID'])) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_PARAMETERS", 
+          "desc" => "Missing required fields"
+        ]
+      ]);
+    }
+
+    // Valida contenido con Perspective API
+    if(!empty($data['ReviewText'])){
+      if ($this->containsInappropriateContent($data['ReviewText'])) {
+        return $response->withStatus(400)->withJson([
+          "code" => "INAPPROPRIATE_CONTENT",
+          "desc" => "Please remove inappropriate content and try again."
+        ]);
+      }
+    }
+
+    if (!in_array($data['Rating'], [1, 2, 3, 4, 5])) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_RATING", 
+          "desc" => "Rating must be between 1 and 5"
+        ]
+      ]);
+    }
+
+    $booking = $this->booking->getBookingByID($bookingID);
+    if (!$booking) {
+      return $response->withStatus(404)->withJson([
+        "error" => [
+          "code" => "BOOKING_NOT_FOUND",
+          "desc" => "Booking not found"
+        ]
+      ]);
+    }
+
+    // Validar si el user es el cliente o el guía o un administrador
+    if ($booking['UserID'] != $userID && $userType != 'Admin'){
+      return $response->withStatus(401)->withJson([
+        "error" => [
+          "code" => "FORBIDDEN",
+          "desc" => "You are not authorized to review this booking."
+        ]
+      ]);
+    }
+
+    // Verificar si el booking está cancelado (buscar eventos de tipo "cancellation")
+    if (!empty($booking['Events'])) {
+      foreach ($booking['Events'] as $event) {
+        if ($event['BookingEvent'] === 'Canceled') {
+          return $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "BOOKING_ALREADY_CANCELLED",
+              "desc" => "Cannot update a canceled booking."
+            ]
+          ]);
+        }
+      }
+    }
+
+    try {
+      $id = $booking['OfferingID'];
+
+      $result = $this->offering->getOfferingById($id);
+      if ($result->http_code != 200) {
+        return $response->withStatus(404)->WithJson([
+          "error" => [
+            "code" => "OFFERING_NOT_FOUND",
+            "desc"=> "No Offering found for this specific ID."
+          ]
+        ]);
+      }
+
+      $offering = $result->data;
+      $guide = $offering['Author']['UserID'];
+
+      $data = [
+        'BookingID' => $bookingID,
+        'OfferingID' => $id,
+        'SUserID' => $seekerID,
+        'GUserID' => $guide,
+        'Rating' => $data['Rating'],
+        'ReviewText' => $data['ReviewText']
+      ];
+
+      $review = $this->booking->createReview($data);
+
+      return $response->withStatus(200)->withJson($review);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR", 
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  private function containsInappropriateContent($text) 
+  {
+    return validateContentWithPerspective($text);
   }
 }

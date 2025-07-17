@@ -272,9 +272,9 @@ class Booking
 
         // Insertar en BookingStatus
         $stmt = $this->db->prepare("INSERT INTO BookingStatus (BookingID, BookingEvent, ScheduledDate, Message) 
-                                    VALUES (:bookingID, 'Change Mode/Loc', :scheduledDate, :message)");
+                                    VALUES (:bookingID, 'Modified', :scheduledDate, :message)");
         $stmt->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);
-        $stmt->bindParam(':scheduledDate', $data['ScheduledDate'], $data['ScheduledDate'] === null ? PDO::PARAM_NULL : PDO::PARAM_STR);  
+        $stmt->bindParam(':scheduledDate', $scheduledDate, $scheduledDate === null ? PDO::PARAM_NULL : PDO::PARAM_STR);  
         $stmt->bindParam(':message', $message, $message === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
         $stmt->execute();
       } 
@@ -300,7 +300,7 @@ class Booking
         $stmt = $this->db->prepare("UPDATE Bookings 
                                     SET ScheduledDate = :scheduledDate, ModificationDate = NOW()
                                     WHERE BookingID = :bookingID");
-        $stmt->bindParam(':scheduledDate', $data['ScheduledDate'], $data['ScheduledDate'] === null ? PDO::PARAM_NULL : PDO::PARAM_STR);  
+        $stmt->bindParam(':scheduledDate', $scheduledDate, $scheduledDate === null ? PDO::PARAM_NULL : PDO::PARAM_STR);  
         $stmt->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);
         $stmt->execute();
   
@@ -308,9 +308,9 @@ class Booking
   
         // Insertar en BookingStatus
         $stmt = $this->db->prepare("INSERT INTO BookingStatus (BookingID, BookingEvent, ScheduledDate, Message) 
-                                    VALUES (:bookingID, 'Rescheduling', :scheduledDate, :message)");
+                                    VALUES (:bookingID, 'Rescheduled', :scheduledDate, :message)");
         $stmt->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);
-        $stmt->bindParam(':scheduledDate', $data['ScheduledDate'], $data['ScheduledDate'] === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
+        $stmt->bindParam(':scheduledDate', $scheduledDate, $scheduledDate === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
         $stmt->bindParam(':message', $message, $message === null ? PDO::PARAM_NULL : PDO::PARAM_STR);        
         $stmt->execute();
       }
@@ -335,7 +335,7 @@ class Booking
       $stmt->execute();
 
       $stmt = $this->db->prepare("INSERT INTO BookingStatus (BookingID, BookingEvent, Message) 
-                                  VALUES (:bookingID, 'Cancellation', :message)");
+                                  VALUES (:bookingID, 'Canceled', :message)");
       $stmt->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);
       $stmt->bindParam(':message', $message, PDO::PARAM_STR);     
       $stmt->execute();
@@ -347,38 +347,9 @@ class Booking
     }
   }
 
-  public function createReview($data)
-  {
-    try {
-      $stmt = $this->db->prepare("INSERT INTO Reviews (OfferingID, SUserID, GUserID, Rating, ReviewText, ReviewType, CreationDate) 
-                                  VALUES (:offeringID, :seekerID, :guideID, :rating, :reviewText, 'service', NOW())");
-      $stmt->bindParam(':offeringID', $data['OfferingID'], PDO::PARAM_INT);
-      $stmt->bindParam(':seekerID', $data['SUserID'], PDO::PARAM_INT);
-      $stmt->bindParam(':guideID', $data['GUserID'], PDO::PARAM_INT);
-      $stmt->bindParam(':rating', $data['Rating'], PDO::PARAM_INT);
-      $stmt->bindParam(':reviewText', $data['ReviewText'], PDO::PARAM_STR);
-      $stmt->execute();
-
-      $reviewID = $this->db->lastInsertId();
-
-      if (!$reviewID) {
-        return null; // No se encontraron reviews
-      }
-
-      $update = $this->db->prepare("UPDATE Bookings 
-                                    SET ReviewID = :reviewID 
-                                    WHERE OfferingID = :offeringID AND UserID = :seekerID");
-      $update->bindParam(':reviewID', $reviewID, PDO::PARAM_INT);
-      $update->bindParam(':offeringID', $data['OfferingID'], PDO::PARAM_INT);
-      $update->bindParam(':seekerID', $data['SUserID'], PDO::PARAM_INT);
-      $update->execute();
-
-      return $this->getReviewsByID($reviewID);
-
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
-  }
+  /*
+  REVIEWS
+  */
 
   public function getReviews($limit, $from = null, $to = null, $rating = null)
   {
@@ -769,4 +740,38 @@ class Booking
       throw new DatabaseException($e->getMessage());
     }
   }
+
+  public function createReview($data)
+  {
+    try {
+      $stmt = $this->db->prepare("INSERT INTO Reviews (OfferingID, SUserID, GUserID, Rating, ReviewText, ReviewType, CreationDate) 
+                                  VALUES (:offeringID, :seekerID, :guideID, :rating, :reviewText, 'service', NOW())");
+      $stmt->bindParam(':offeringID', $data['OfferingID'], PDO::PARAM_INT);
+      $stmt->bindParam(':seekerID', $data['SUserID'], PDO::PARAM_INT);
+      $stmt->bindParam(':guideID', $data['GUserID'], PDO::PARAM_INT);
+      $stmt->bindParam(':rating', $data['Rating'], PDO::PARAM_INT);
+      $stmt->bindParam(':reviewText', $data['ReviewText'], PDO::PARAM_STR);
+      $stmt->execute();
+
+      $reviewID = $this->db->lastInsertId();
+
+      if (!$reviewID) {
+        return null; // No se encontraron reviews
+      }
+
+      $update = $this->db->prepare("UPDATE Bookings 
+                                    SET ReviewID = :reviewID 
+                                    WHERE OfferingID = :offeringID AND UserID = :seekerID");
+      $update->bindParam(':reviewID', $reviewID, PDO::PARAM_INT);
+      $update->bindParam(':offeringID', $data['OfferingID'], PDO::PARAM_INT);
+      $update->bindParam(':seekerID', $data['SUserID'], PDO::PARAM_INT);
+      $update->execute();
+
+      return $this->getReviewsByID($reviewID);
+
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
 }
