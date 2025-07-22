@@ -12,6 +12,7 @@ use \DateTime;
 use Firebase\JWT\JWT;
 
 require_once(ROOT . '/src/Utils/PerspectiveText.php');
+require_once(ROOT . '/src/Utils/Paginator.php');
 
 #Definir zona horaria
 date_default_timezone_set('America/Argentina/Buenos_Aires');
@@ -130,8 +131,9 @@ class BookingController
   public function getBookingsByGuide(Request $request, Response $response, $args)
   {
     $userID = $args['userID'];
-
+    $paginator = paginator($request);
     $jwt = $request->getAttribute('jwt');
+
     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
       return $response->withStatus(401)->withJson([
         "error" => [
@@ -155,7 +157,7 @@ class BookingController
         ]);
       }
       
-      $bookings = $this->booking->getBookingsByGuide($userID);
+      $bookings = $this->booking->getBookingsByGuide($userID, $paginator);
 
       if ($bookings === null) {
         return $response->withStatus(404)->withJson([
@@ -180,8 +182,9 @@ class BookingController
   public function getBookingsBySeeker(Request $request, Response $response, $args)
   {
     $userID = $args['userID'];
-
+    $paginator = paginator($request);
     $jwt = $request->getAttribute('jwt');
+
     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
       return $response->withStatus(401)->withJson([
         "error" => [
@@ -205,7 +208,7 @@ class BookingController
         ]);
       }
 
-      $bookings = $this->booking->getBookingsBySeeker($userID);
+      $bookings = $this->booking->getBookingsBySeeker($userID, $paginator);
 
       if ($bookings === null) {
         return $response->withStatus(404)->withJson([
