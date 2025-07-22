@@ -6,6 +6,7 @@ use PDO;
 use App\Exceptions\DatabaseException;
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
+use App\Utils\EmailHelper;
 
 class Subscription
 {
@@ -375,10 +376,33 @@ class Subscription
 
       $suscription = $this->getSubscriptionByUser($userID);
 
+      // Enviar email si hay datos del usuario
       if (!empty($userData['UserName']) && !empty($userData['Email'])) {
         $username = $userData['UserName'];
         $email = $userData['Email'];
-        $this->sendSubscriptionEmail($username, $email, $planID, $subDomain);
+
+        $planInfo = $this->getSubscriptionPlanByID($planID);
+        if (!$planInfo) return;
+
+        $origin = $subDomain ? "https://{$subDomain}.onesoul.app" : "https://onesoul.app";
+        $dashboardURL = $origin . "/profile";
+
+        // Enviar email
+        if ($email) {
+          EmailHelper::send(
+          $username,
+          $email,
+          "¡Suscripción activada en OneSoul! 🎉",
+          ROOT . "/src/templates/email_subscription.html",
+            [
+              '{USERNAME}' => $username,
+              '{PLAN_NAME}' => $planInfo['Name'],
+              '{PLAN_PRICE}' => number_format($planInfo['Price'], 2) . ' ' . $planInfo['CurrencyCode'],
+              '{PLAN_DURATION}' => $planInfo['Duration'] . " mes",
+              '{DASHBOARD_URL}' => $dashboardURL
+            ]
+          );
+        }
       }
 
       return [
@@ -389,7 +413,7 @@ class Subscription
     }
   }
 
-  public function cancelSubscription($stripeSubscriptionID)
+  public function cancelSubscription($stripeSubscriptionID, $subDomain)
   {
     try {
       $stmt = $this->db->prepare("SELECT * FROM Subscriptions 
@@ -412,56 +436,6 @@ class Subscription
       return true;
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
-    }
-  }
-
-  private function sendSubscriptionEmail($username, $email, $subscriptionID, $subDomain)
-  {
-    $subscriptionInfo = $this->getSubscriptionPlanByID($subscriptionID);
-    if (!$subscriptionInfo) return;
-
-    // Construir el contenido dinámico del email
-    $planName = $subscriptionInfo['Name'];
-    $planPrice = number_format($subscriptionInfo['Price'], 2);
-    $planDuration = $subscriptionInfo['Duration'];
-    $planCurrency = $subscriptionInfo['CurrencyCode'];
-
-    // Cargar plantilla HTML
-    $origin = $subDomain ? "https://{$subDomain}.onesoul.app/home" : "https://onesoul.app/home";
-    $template = file_get_contents(ROOT . "/src/templates/email_subscription.html");
-
-    // Reemplazos
-    $template = str_replace("{USERNAME}", htmlspecialchars($username), $template);
-    $template = str_replace("{PLAN_NAME}", htmlspecialchars($planName), $template);
-    $template = str_replace("{PLAN_PRICE}", "$planPrice $planCurrency", $template);
-    $template = str_replace("{PLAN_DURATION}", $planDuration . " mes", $template);
-    $template = str_replace("{DASHBOARD_URL}", $origin, $template); 
-
-    // Envío del email
-    $smtpAccount = $GLOBALS['config']['mailer']['account'];
-    $smtpPassword = $GLOBALS['config']['mailer']['password'];
-
-    $mail = new PHPMailer(true);
-    try {
-      $mail->isSMTP();
-      $mail->Host = 'smtp.gmail.com';
-      $mail->SMTPAuth = true;
-      $mail->Username = $smtpAccount;
-      $mail->Password = $smtpPassword;
-      $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-      $mail->Port = 587;
-
-      $mail->setFrom($smtpAccount, 'Contacto OneSoul');
-      $mail->addAddress($email, $username);
-
-      $mail->isHTML(true);
-      $mail->Subject = "Te has suscripto a un nuevo plan en OneSoul";
-      $mail->Body = $template;
-      $mail->addEmbeddedImage(ROOT . "/src/templates/logo2.png", 'logo');
-
-      $mail->send();
-    } catch (Exception $e) {
-      error_log("Error al enviar correo de suscripción: " . $mail->ErrorInfo);
     }
   }
 

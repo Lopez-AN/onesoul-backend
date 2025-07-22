@@ -192,7 +192,7 @@ class Booking
       $bookingID = $this->db->lastInsertId();
 
       $stmt = $this->db->prepare("INSERT INTO BookingStatus (BookingID, BookingEvent, ScheduledDate, Message) 
-                                  VALUES (:bookingID, 'Created', :scheduledDate, :message)");
+                                  VALUES (:bookingID, 'Pending', :scheduledDate, :message)");
       $stmt->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);           
       $stmt->bindParam(':scheduledDate', $data['ScheduledDate'], $data['ScheduledDate'] === null ? PDO::PARAM_NULL : PDO::PARAM_STR);   
       $stmt->bindParam(':message', $data['Message'], $data['Message'] === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
@@ -204,59 +204,7 @@ class Booking
     }
   }
   
-  public function sendBookingEmail($username, $email, $bookingData, $subDomain)
-  {
-    if (!$bookingData) return;
-
-    // Datos dinámicos
-    $publicID = $bookingData['PublicID'];
-    $scheduled = date('d/m/Y H:i', strtotime($bookingData['ScheduledDate']));
-    $mode = $bookingData['Mode'] === 'in-person' ? 'Presencial' : 'Virtual';
-    $offering = $bookingData['TitleOffering'];
-
-    // URL
-    $origin = $subDomain ? "https://{$subDomain}.onesoul.app" : "https://onesoul.app";
-
-    // Cargar plantilla
-    $template = file_get_contents(ROOT . "/src/templates/email_booking.html");
-
-    // Reemplazar variables
-    $template = str_replace("{USERNAME}", htmlspecialchars($username), $template);
-    $template = str_replace("{BOOKING_ID}", htmlspecialchars($publicID), $template);
-    $template = str_replace("{OFFERING}", $offering, $template);
-    $template = str_replace("{SCHEDULED}", $scheduled, $template);
-    $template = str_replace("{MODE}", $mode, $template);
-    $template = str_replace("{DASHBOARD_URL}", $origin, $template);
-
-    // Configuración SMTP
-    $smtpAccount = $GLOBALS['config']['mailer']['account'];
-    $smtpPassword = $GLOBALS['config']['mailer']['password'];
-
-    $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
-    try {
-      $mail->isSMTP();
-      $mail->Host = 'smtp.gmail.com';
-      $mail->SMTPAuth = true;
-      $mail->Username = $smtpAccount;
-      $mail->Password = $smtpPassword;
-      $mail->SMTPSecure = \PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS;
-      $mail->Port = 587;
-
-      $mail->setFrom($smtpAccount, 'Contacto OneSoul');
-      $mail->addAddress($email, $username);
-
-      $mail->isHTML(true);
-      $mail->Subject = "Reserva confirmada en OneSoul";
-      $mail->Body = $template;
-      $mail->addEmbeddedImage(ROOT . "/src/templates/logo2.png", 'logo');
-
-      $mail->send();
-    } catch (\PHPMailer\PHPMailer\Exception $e) {
-      error_log("Error al enviar correo de reserva: " . $mail->ErrorInfo);
-    }
-  }
-
-  public function updateBooking($bookingID, $mode, $scheduledDate, $message, $locationID)
+  public function updateBooking($bookingID, $mode, $scheduledDate, $message, $locationID, $subDomain)
   {
     try {
       $fields = [];
@@ -325,7 +273,7 @@ class Booking
     }
   }
 
-  public function cancelBooking($bookingID, $message)
+  public function cancelBooking($bookingID, $message, $subDomain)
   {
     try {
       $stmt = $this->db->prepare("UPDATE Bookings 

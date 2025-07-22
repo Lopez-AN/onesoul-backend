@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Solicitud de reserva creada</title>
+  <title>Nueva solicitud de reserva</title>
 </head>
 <body style="margin: 0; padding: 0; background-color: #f4f4f4; font-family: Helvetica, Arial, sans-serif;">
 
@@ -15,11 +15,8 @@
           <tr>
             <td align="center" style="padding: 30px 20px 10px;">
               <img src="cid:logo" alt="OneSoul Logo" style="max-width: 180px; margin-bottom: 20px;">
-              <h1 style="font-size: 24px; color: #333333; margin: 0;">¡Hola {USERNAME}!</h1>
-              <p style="font-size: 16px; color: #555555; margin: 10px 0 0;">
-                Tu solicitud de reserva fue creada con éxito<br>
-                En breve, el guía se pondrá en contacto para coordinar y confirmar la reserva.
-              </p>
+              <h1 style="font-size: 24px; color: #333333; margin: 0;">¡Hola {GUIDE_NAME}!</h1>
+              <p style="font-size: 16px; color: #555555; margin: 10px 0 0;">Recibiste una <strong>solicitud de reserva</strong> en <strong>OneSoul</strong> ✨</p>
             </td>
           </tr>
 
@@ -28,28 +25,38 @@
             <td style="padding: 30px 40px;">
               <table width="100%" cellpadding="0" cellspacing="0">
                 <tr>
-                  <td style="font-size: 16px; color: #333333; padding-bottom: 12px;">
-                    <strong>Servicio:</strong><br>{OFFERING}
+                  <td style="font-size: 16px; color: #333333; padding-bottom: 15px;">
+                    <strong>Servicio solicitado:</strong><br>{SERVICE_NAME}
                   </td>
                 </tr>
                 <tr>
-                  <td style="font-size: 16px; color: #333333; padding-bottom: 12px;">
-                    <strong>Fecha y hora:</strong><br>{SCHEDULED}
-                  </td>
-                </tr>
-                <tr>
-                  <td style="font-size: 16px; color: #333333; padding-bottom: 12px;">
-                    <strong>Modalidad:</strong> {MODE}
-                  </td>
-                </tr>
-                <tr>
-                  <td style="font-size: 16px; color: #333333; padding-bottom: 12px;">
+                  <td style="font-size: 16px; color: #333333; padding-bottom: 10px;">
                     <strong>ID de la reserva:</strong> {BOOKING_ID}
                   </td>
                 </tr>
                 <tr>
-                  <td style="font-size: 16px; color: #333333; padding-bottom: 12px;">
+                  <td style="font-size: 16px; color: #333333; padding-bottom: 10px;">
+                    <strong>Nombre del buscador:</strong> {SEARCHER_NAME}
+                  </td>
+                </tr>
+                <tr>
+                  <td style="font-size: 16px; color: #333333; padding-bottom: 10px;">
+                    <strong>Email:</strong> {SEARCHER_EMAIL}
+                  </td>
+                </tr>
+                <tr>
+                  <td style="font-size: 16px; color: #333333; padding-bottom: 10px;">
+                    <strong>Teléfono:</strong> {SEARCHER_PHONE}
+                  </td>
+                </tr>
+                <tr>
+                  <td style="font-size: 16px; color: #333333; padding-bottom: 10px;">
                     <strong>Mensaje:</strong><br>{MESSAGE}
+                  </td>
+                </tr>
+                <tr>
+                  <td style="font-size: 16px; color: #333333; padding-bottom: 10px;">
+                    <strong>Fecha y hora solicitada:</strong><br>{SCHEDULED}
                   </td>
                 </tr>
               </table>
@@ -61,7 +68,7 @@
               </div>
 
               <p style="font-size: 14px; color: #777777; text-align: center; margin-top: 20px;">
-                ¡Gracias por confiar en <strong>OneSoul</strong>! ✨
+                Ingresá a tu panel para <strong>confirmar o rechazar</strong> esta reserva. 
               </p>
             </td>
           </tr>
@@ -69,7 +76,7 @@
           <!-- FOOTER -->
           <tr>
             <td style="padding: 20px; text-align: center; font-size: 12px; color: #999999; background-color: #fafafa;">
-            © {YEAR} OneSoul.app - Todos los derechos reservados
+             © {YEAR} OneSoul.app - Todos los derechos reservados
             </td>
           </tr>
         </table>

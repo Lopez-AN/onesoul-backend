@@ -7,6 +7,7 @@ use Psr\Http\Message\ServerRequestInterface as Request;
 use App\Models\Booking;
 use App\Models\Offering;
 use App\Models\User;
+use App\Utils\EmailHelper;
 use \DateTime;
 use Firebase\JWT\JWT;
 
@@ -387,9 +388,9 @@ class BookingController
       }
 
       // OBTENER CountryCode del usuario
-      $result = $this->user->getUserById($userID);
+      $userInfo = $this->user->getUserById($userID);
 
-      if ($result->http_code !== 200 || empty($result->data['CountryCode'])) {
+      if ($userInfo->http_code !== 200 || empty($userInfo->data['CountryCode'])) {
         return [
           "error" => [
             "code" => "USER_NOT_FOUND",
@@ -398,7 +399,7 @@ class BookingController
         ];
       }
 
-      $countryCode = $result->data['CountryCode'];
+      $countryCode = $userInfo->data['CountryCode'];
       $type = 'B';
       $publicID = $this->booking->generatePublicId($countryCode, $type);
 
@@ -415,12 +416,67 @@ class BookingController
 
       $booking = $this->booking->createBooking($data, $subDomain);
 
-      $bookingData = $this->booking->getBookingByPublicID($publicID);
+      $origin = $subDomain ? "https://{$subDomain}.onesoul.app" : "https://onesoul.app";
 
-      // Enviar email al usuario
-      $username = $result->data['UserName'];
-      $email = $result->data['Email'];
-      $this->booking->sendBookingEmail($username, $email, $bookingData, $subDomain);
+      // Obtener info del usuario (quien reserva)
+      if ($userInfo->http_code === 200) {
+        $username = $userInfo->data['UserName'] ?? 'Usuario';
+        $userEmail = $userInfo->data['Email'] ?? null;
+
+        // Enviar email al buscador
+        EmailHelper::send(
+          $username,
+          $userEmail,
+          "Solicitud de reserva creada en OneSoul",
+          ROOT . "/src/templates/email_booking.html",
+          [
+            '{YEAR}' => date('Y'),
+            '{USERNAME}' => $username,
+            '{OFFERING}' => $offering['Title'],
+            '{BOOKING_ID}' => $booking['PublicID'],
+            '{MESSAGE}' => $message,
+            '{SCHEDULED}' => date('d/m/Y H:i', strtotime($booking['ScheduledDate'])),
+            '{MODE}' => $booking['Mode'] === 'in-person' ? 'Presencial' : 'Virtual',
+            '{BOOKING_URL}' => "{$origin}/bookings",
+          ]
+        );
+      }
+
+      // Enviar email al guía
+      if ($result->http_code === 200) {
+        $guideID = $offering['UserID'] ?? null;
+        $offeringName = $offering['Title'] ?? 'Servicio';
+        $searcherName = $userInfo->data['FirstName'] . ' ' . $userInfo->data['LastName'];
+
+        if ($guideID) {
+          $guideInfo = $this->user->getUserById($guideID);
+          if ($guideInfo->http_code === 200) {
+            $guideName = $guideInfo->data['UserName'] ?? 'Guía';
+            $guideEmail = $guideInfo->data['Email'] ?? null;
+
+            if ($guideEmail) {
+              EmailHelper::send(
+                $guideName,
+                $guideEmail,
+                "Recibiste una solicitud de reserva de {$username}",
+                ROOT . "/src/templates/email_booking_guide.html",
+                [
+                  '{YEAR}' => date('Y'),
+                  '{GUIDE_NAME}' => $guideName,
+                  '{BOOKING_ID}' => $booking['PublicID'],
+                  '{SERVICE_NAME}' => $offeringName,
+                  '{SEARCHER_NAME}' => $searcherName,
+                  '{SEARCHER_EMAIL}' => $userEmail,
+                  '{MESSAGE}' => $message,
+                  '{SEARCHER_PHONE}' => $userInfo->data['Phone'] ?? '-',
+                  '{SCHEDULED}' => date('d/m/Y H:i', strtotime($booking['ScheduledDate'])),
+                  '{BOOKING_URL}' => "{$origin}/bookings"
+                ]
+              );
+            }
+          }
+        }
+      }
 
       return $response->withStatus(200)->withJson($booking);
 
@@ -462,6 +518,19 @@ class BookingController
     $mode = strtolower($data['Mode'] ?? '');
     $message = $data['Message'] ?? null;
     $locationID = $data['LocationID'] ?? null;
+    $subDomain = $data['SubDomain'] ?? '';
+    
+    // Validar formato de subdominio (solo letras A-Z, a-z)
+    if (!empty($subDomain)) {
+      if (!preg_match('/^[a-zA-Z]+$/', $subDomain)) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "INVALID_SUBDOMAIN",
+            "desc" => "Subdomain must contain only letters A-Z"
+          ]
+        ]);
+      }
+    }
 
     // Valida contenido con Perspective API
     if(!empty($data['Message'])){
@@ -485,14 +554,15 @@ class BookingController
         ]);
       }
 
-      // Verificar si el booking está cancelado (buscar eventos de tipo "cancellation")
+      // Verificar si el booking está cancelado, confirmado, completado o calificado
       if (!empty($booking['Events'])) {
         foreach ($booking['Events'] as $event) {
-          if ($event['BookingEvent'] === 'Canceled') {
+          if ($event['BookingEvent'] === 'Canceled' || $event['BookingEvent'] === 'Confirmed' 
+          || $event['BookingEvent'] === 'Completed' ||$event['BookingEvent'] === 'Rated') {
             return $response->withStatus(400)->withJson([
               "error" => [
-                "code" => "BOOKING_ALREADY_CANCELLED",
-                "desc" => "Cannot update a canceled booking."
+                "code" => "BOOKING_ALREADY_CANCELED_OR_CONFIRMED",
+                "desc" => "Cannot update this booking."
               ]
             ]);
           }
@@ -520,6 +590,7 @@ class BookingController
             ]
           ]);
         }
+
         if ($scheduledDateTime < new DateTime()) {
           return $response->withStatus(400)->withJson([
             "error" => [
@@ -611,7 +682,76 @@ class BookingController
         }
       }
 
-      $booking = $this->booking->updateBooking($bookingID, $mode, $scheduledDate, $message, $locationID);
+      $booking = $this->booking->updateBooking($bookingID, $mode, $scheduledDate, $message, $locationID, $subDomain);
+
+      $origin = $subDomain ? "https://{$subDomain}.onesoul.app" : "https://onesoul.app";
+
+      // Obtener datos del usuario que hizo la reserva
+      $userInfo = $this->user->getUserById($booking['UserID']);
+      if ($userInfo->http_code === 200) {
+        $user = $userInfo->data;
+        $username = $user['UserName'] ?? $user['DisplayName'] ?? 'Usuario';
+        $userEmail = $user['Email'] ?? null;
+
+        // Obtener título del servicio
+        $offeringName = $offering['Title'] ?? 'Servicio';
+
+        // Enviar email al buscador
+        if ($userEmail) {
+          EmailHelper::send(
+            $username,
+            $userEmail,
+            "Reserva modificada en OneSoul",
+            ROOT . "/src/templates/email_booking_updated.html",
+            [
+              '{YEAR}' => date('Y'),
+              '{USERNAME}' => $username,
+              '{OFFERING}' => $offeringName,
+              '{BOOKING_ID}' => $booking['PublicID'],
+              '{MESSAGE}' => $message,
+              '{SCHEDULED}' => date('d/m/Y H:i', strtotime($booking['ScheduledDate'])),
+              '{MODE}' => $booking['Mode'] === 'in-person' ? 'Presencial' : 'Virtual',
+              '{BOOKING_URL}' => "{$origin}/bookings",
+            ]
+          );
+        }
+
+        // Enviar email al guía
+        if ($result->http_code === 200) {
+          $guideID = $offering['UserID'] ?? null;
+          $offeringName = $offering['Title'] ?? 'Servicio';
+          $searcherName = $userInfo->data['FirstName'] . ' ' . $userInfo->data['LastName'];
+
+          if ($guideID) {
+            $guideInfo = $this->user->getUserById($guideID);
+            if ($guideInfo->http_code === 200) {
+              $guideName = $guideInfo->data['UserName'] ?? 'Guía';
+              $guideEmail = $guideInfo->data['Email'] ?? null;
+
+              if ($guideEmail) {
+                EmailHelper::send(
+                  $guideName,
+                  $guideEmail,
+                  "Reserva modificada en OneSoul",
+                  ROOT . "/src/templates/email_booking_updated_guide.html",
+                  [
+                    '{YEAR}' => date('Y'),
+                    '{GUIDE_NAME}' => $guideName,
+                    '{SERVICE_NAME}' => $offeringName,
+                    '{SEARCHER_NAME}' => $searcherName,
+                    '{SEARCHER_EMAIL}' => $userEmail,
+                    '{BOOKING_ID}' => $booking['PublicID'],
+                    '{MESSAGE}' => $message,
+                    '{SEARCHER_PHONE}' => $userInfo->data['Phone'] ?? '-',
+                    '{SCHEDULED}' => date('d/m/Y H:i', strtotime($booking['ScheduledDate'])),
+                    '{BOOKING_URL}' => "{$origin}/bookings"
+                  ]
+                );
+              }
+            }
+          }
+        }
+      }
 
       return $response->withStatus(200)->withJson($booking);
     } catch (\Throwable $e) {
@@ -641,7 +781,7 @@ class BookingController
     $userType = $jwt['data']->UserType;
     $bookingID = $args['bookingID'];
     $message = $data['Message'] ?? null;
-
+    
     // Validar que defina el motivo de la anulación (se guarda en campo Message)
     if (!$message) {
       return $response->withStatus(400)->withJson([
@@ -658,6 +798,20 @@ class BookingController
         return $response->withStatus(400)->withJson([
           "code" => "INAPPROPRIATE_CONTENT",
           "desc" => "Please remove inappropriate content and try again."
+        ]);
+      }
+    }
+
+    $subDomain = $data['SubDomain'] ?? '';
+    
+    // Validar formato de subdominio (solo letras A-Z, a-z)
+    if (!empty($subDomain)) {
+      if (!preg_match('/^[a-zA-Z]+$/', $subDomain)) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "INVALID_SUBDOMAIN",
+            "desc" => "Subdomain must contain only letters A-Z"
+          ]
         ]);
       }
     }
@@ -684,14 +838,15 @@ class BookingController
         ]);
       }
 
-      // Verificar si el booking está cancelado (buscar eventos de tipo "cancellation")
+      // Verificar si el booking está cancelado, confirmado, completado o calificado
       if (!empty($booking['Events'])) {
         foreach ($booking['Events'] as $event) {
-          if ($event['BookingEvent'] === 'Canceled') {
+          if ($event['BookingEvent'] === 'Canceled' || $event['BookingEvent'] === 'Confirmed' 
+          || $event['BookingEvent'] === 'Completed' ||$event['BookingEvent'] === 'Rated') {
             return $response->withStatus(400)->withJson([
               "error" => [
-                "code" => "BOOKING_ALREADY_CANCELLED",
-                "desc" => "Cannot update a canceled booking."
+                "code" => "BOOKING_ALREADY_CANCELED_OR_CONFIRMED",
+                "desc" => "Cannot update this booking."
               ]
             ]);
           }
@@ -712,7 +867,75 @@ class BookingController
         ]);
       }
 
-      $booking = $this->booking->cancelBooking($bookingID, $message);
+      $booking = $this->booking->cancelBooking($bookingID, $message, $subDomain);
+
+      $origin = $subDomain ? "https://{$subDomain}.onesoul.app" : "https://onesoul.app";
+
+      // Obtener datos del usuario que hizo la reserva
+      $userInfo = $this->user->getUserById($booking['UserID']);
+      if ($userInfo->http_code === 200) {
+        $user = $userInfo->data;
+        $username = $user['UserName'] ?? $user['DisplayName'] ?? 'Usuario';
+        $userEmail = $user['Email'] ?? null;
+
+        // Obtener info del servicio
+        $result = $this->offering->getOfferingById($booking['OfferingID']);
+        $offering = $result->data ?? [];
+        $offeringName = $offering['Title'] ?? 'Servicio';
+
+        // Enviar email al buscador
+        if ($userEmail) {
+          EmailHelper::send(
+            $username,
+            $userEmail,
+            "La reserva {$booking['PublicID']} fue cancelada",
+            ROOT . "/src/templates/email_booking_canceled.html",
+            [
+              '{YEAR}' => date('Y'),            
+              '{USERNAME}' => $username,
+              '{OFFERING}' => $offeringName,
+              '{BOOKING_ID}' => $booking['PublicID'],
+              '{MESSAGE}' => $message,
+              '{BOOKING_URL}' => "{$origin}/bookings",
+            ]
+          );
+        }
+
+        // Enviar email al guía
+        if ($result->http_code === 200) {
+          $guideID = $offering['UserID'] ?? null;
+          $offeringName = $offering['Title'] ?? 'Servicio';
+          $searcherName = $userInfo->data['FirstName'] . ' ' . $userInfo->data['LastName'];
+
+          if ($guideID) {
+            $guideInfo = $this->user->getUserById($guideID);
+            if ($guideInfo->http_code === 200) {
+              $guideName = $guideInfo->data['UserName'] ?? 'Guía';
+              $guideEmail = $guideInfo->data['Email'] ?? null;
+
+              if ($guideEmail) {
+                EmailHelper::send(
+                  $guideName,
+                  $guideEmail,
+                  "La reserva {$booking['PublicID']} fue cancelada",
+                  ROOT . "/src/templates/email_booking_canceled_guide.html",
+                  [
+                    '{YEAR}' => date('Y'),            
+                    '{GUIDE_NAME}' => $guideName,
+                    '{SERVICE_NAME}' => $offeringName,
+                    '{BOOKING_ID}' => $booking['PublicID'],                    
+                    '{SEARCHER_NAME}' => $searcherName,
+                    '{SEARCHER_EMAIL}' => $userEmail,
+                    '{SEARCHER_PHONE}' => $userInfo->data['Phone'] ?? '-',
+                    '{MESSAGE}' => $message,                    
+                    '{BOOKING_URL}' => "{$origin}/bookings"
+                  ]
+                );
+              }
+            }
+          }
+        }
+      }
 
       return $response->withStatus(200)->withJson($booking);
 

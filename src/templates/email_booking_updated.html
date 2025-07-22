@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Suscripción confirmada</title>
+  <title>Reserva actualizada</title>
 </head>
 <body style="margin: 0; padding: 0; background-color: #f9f9f9; font-family: Helvetica, Arial, sans-serif;">
 
@@ -15,9 +15,10 @@
           <tr>
             <td align="center" style="padding: 30px 20px 10px;">
               <img src="cid:logo" alt="OneSoul Logo" style="max-width: 180px; margin-bottom: 20px;">
-              <h2 style="font-size: 24px; color: #333333; margin: 0;">¡Gracias por tu suscripción, {USERNAME}! ✨</h2>
+              <h2 style="font-size: 24px; color: #333333; margin: 0;">¡Hola, {USERNAME}! ✨</h2>
               <p style="font-size: 16px; color: #555555; margin: 10px 0 0;">
-                Tu plan ha sido activado correctamente.
+                Se realizaron cambios en tu reserva <strong>{BOOKING_ID}</strong><br>
+                Aquí te dejamos los detalles actualizados:
               </p>
             </td>
           </tr>
@@ -28,33 +29,34 @@
               <table width="100%" cellpadding="0" cellspacing="0">
                 <tr>
                   <td style="font-size: 16px; color: #333333; padding-bottom: 12px;">
-                    <strong>Plan seleccionado:</strong><br>{PLAN_NAME}
+                    <strong>Servicio:</strong><br>{OFFERING}
                   </td>
                 </tr>
                 <tr>
                   <td style="font-size: 16px; color: #333333; padding-bottom: 12px;">
-                    <strong>Precio:</strong><br>{PLAN_PRICE}
+                    <strong>Fecha y hora:</strong><br>{SCHEDULED}
                   </td>
                 </tr>
                 <tr>
                   <td style="font-size: 16px; color: #333333; padding-bottom: 12px;">
-                    <strong>Duración:</strong><br>{PLAN_DURATION}
+                    <strong>Modalidad:</strong> {MODE}
                   </td>
                 </tr>
                 <tr>
-
-              <p style="font-size: 16px; color: #555555; margin: 20px 0 30px;">
-                💳 <strong>Recordá:</strong> el monto <strong>{PLAN_PRICE}</strong> se cobrará automáticamente todos los meses desde el mismo medio de pago que utilizaste.
-              </p>
+                  <td style="font-size: 16px; color: #333333; padding-bottom: 12px;">
+                    <strong>Mensaje:</strong><br>{MESSAGE}
+                  </td>
+                </tr>
+              </table>
 
               <div style="text-align: center; margin: 30px 0;">
-                <a href="{DASHBOARD_URL}" style="background-color: #00b894; color: #ffffff; padding: 14px 24px; text-decoration: none; font-weight: bold; border-radius: 6px; display: inline-block; font-size: 16px;">
-                  Acceder a mi panel
+                <a href="{BOOKING_URL}" style="background-color: #00b894; color: #ffffff; padding: 14px 24px; text-decoration: none; font-weight: bold; border-radius: 6px; display: inline-block; font-size: 16px;">
+                  Ver detalles de la reserva
                 </a>
               </div>
 
-              <p style="font-size: 14px; color: #777777; text-align: center; margin-top: 10px;">
-                ¡Gracias por ser parte de <strong>OneSoul</strong>! 💜
+              <p style="font-size: 14px; color: #777777; text-align: center; margin-top: 20px;">
+                Podés gestionar todas tus reservas desde tu panel personal
               </p>
             </td>
           </tr>
@@ -72,3 +74,4 @@
 
 </body>
 </html>
+

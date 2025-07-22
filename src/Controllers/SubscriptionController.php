@@ -8,6 +8,7 @@ use App\Models\Subscription;
 use App\Models\User;
 use App\Models\Auth;
 use App\Models\StripeService;
+use App\Utils\EmailHelper;
 use Firebase\JWT\JWT;
 
 class SubscriptionController {
@@ -245,6 +246,7 @@ class SubscriptionController {
   public function cancelSubscription(Request $request, Response $response, array $args)
   {
     $jwt = $request->getAttribute('jwt');
+    $subDomain = $data['SubDomain'] ?? '';
 
     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
       return $response->withStatus(401)->withJson([
@@ -253,6 +255,18 @@ class SubscriptionController {
           "desc" => "Invalid JWT token"
         ]
       ]);
+    }
+
+    // Validar formato de subdominio (solo letras A-Z, a-z)
+    if (!empty($subDomain)) {
+      if (!preg_match('/^[a-zA-Z]+$/', $subDomain)) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "INVALID_SUBDOMAIN",
+            "desc" => "Subdomain must contain only letters A-Z"
+          ]
+        ]);
+      }
     }
 
     try {
@@ -275,7 +289,7 @@ class SubscriptionController {
         return $response->withStatus(400)->withJson(["error" => $stripeResult['error']]);
       }
 
-      $this->subscription->cancelSubscription($stripeSubscriptionID);
+      $this->subscription->cancelSubscription($stripeSubscriptionID, $subDomain);
 
       return $response->withStatus(200)->withJson([
         "success" => true,
