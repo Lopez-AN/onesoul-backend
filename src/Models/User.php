@@ -32,9 +32,9 @@ clASs User
       s.PlanID, s.StartDate, sp.Name, sp.Description,
       -- Subconsulta para reviews
       (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-        FROM Reviews AS r WHERE r.GUserID = u.UserID) AS Rating,
+        FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
       (SELECT COUNT(DISTINCT r.ReviewID)
-        FROM Reviews AS r WHERE r.GUserID = u.UserID) AS TotalReviews
+        FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
       FROM Users AS u
       LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
       LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
@@ -126,9 +126,9 @@ clASs User
       s.PlanID, s.StartDate, sp.Name, sp.Description,
       -- Subconsulta para reviews
       (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-        FROM Reviews AS r WHERE r.GUserID = u.UserID) AS Rating,
+        FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
       (SELECT COUNT(DISTINCT r.ReviewID)
-        FROM Reviews AS r WHERE r.GUserID = u.UserID) AS TotalReviews
+        FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
       FROM Users AS u
       LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
       LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
@@ -231,9 +231,9 @@ clASs User
       s.PlanID, s.StartDate, sp.Name, sp.Description,      
       -- Subconsulta para reviews
       (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-        FROM Reviews AS r WHERE r.GUserID = u.UserID) AS Rating,
+        FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
       (SELECT COUNT(DISTINCT r.ReviewID)
-        FROM Reviews AS r WHERE r.GUserID = u.UserID) AS TotalReviews
+        FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
       FROM Users AS u
       LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
       LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
@@ -336,9 +336,9 @@ clASs User
       s.PlanID, s.StartDate, sp.Name, sp.Description,      
       -- Subconsulta para reviews
       (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-        FROM Reviews AS r WHERE r.GUserID = u.UserID) AS Rating,
+        FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
       (SELECT COUNT(DISTINCT r.ReviewID)
-        FROM Reviews AS r WHERE r.GUserID = u.UserID) AS TotalReviews
+        FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
       FROM Users AS u
       LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
       LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
@@ -441,9 +441,9 @@ clASs User
       s.PlanID, s.StartDate, sp.Name, sp.Description,      
       -- Subconsulta para reviews
       (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-        FROM Reviews AS r WHERE r.GUserID = u.UserID) AS Rating,
+        FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
       (SELECT COUNT(DISTINCT r.ReviewID)
-        FROM Reviews AS r WHERE r.GUserID = u.UserID) AS TotalReviews
+        FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
       FROM Users AS u
       LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
       LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
@@ -547,9 +547,9 @@ clASs User
         s.PlanID, s.StartDate, sp.Name, sp.Description,        
         -- Subconsulta para reviews
         (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-          FROM Reviews AS r WHERE r.GUserID = u.UserID) AS Rating,
+          FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
         (SELECT COUNT(DISTINCT r.ReviewID)
-          FROM Reviews AS r WHERE r.GUserID = u.UserID) AS TotalReviews
+          FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
         FROM Users AS u
         LEFT JOIN UsersCategories AS uc ON uc.UserID = u.UserID
         LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
@@ -579,9 +579,9 @@ clASs User
         s.PlanID, s.StartDate, sp.Name, sp.Description,      
         -- Subconsulta para reviews
         (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-          FROM Reviews AS r WHERE r.GUserID = u.UserID) AS Rating,
+          FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
         (SELECT COUNT(DISTINCT r.ReviewID)
-          FROM Reviews AS r WHERE r.GUserID = u.UserID) AS TotalReviews
+          FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
         FROM Users AS u
         LEFT JOIN UsersCategories AS uc ON uc.UserID = u.UserID
         LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
@@ -676,14 +676,14 @@ clASs User
       s.PlanID, s.StartDate, sp.Name, sp.Description,      
       -- Subconsulta para reviews
       (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-        FROM Reviews AS r WHERE r.GUserID = u.UserID) AS Rating,
+        FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
       (SELECT COUNT(DISTINCT r.ReviewID)
-        FROM Reviews AS r WHERE r.GUserID = u.UserID) AS TotalReviews
+        FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
       FROM Users AS u
       LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
       LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
       LEFT JOIN Media AS m ON u.UserID = m.UserID
-      LEFT JOIN Reviews AS r ON u.UserID = r.GUserID OR u.UserID = r.SUserID
+      LEFT JOIN Reviews AS r ON u.UserID = r.GuideID OR u.UserID = r.SeekerID
       LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
       LEFT JOIN SubscriptionPlans AS sp ON s.PlanID = sp.PlanID
       LEFT JOIN (
@@ -776,9 +776,9 @@ clASs User
       s.PlanID, s.StartDate, sp.Name, sp.Description,      
       -- Subconsulta para reviews
       (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-        FROM Reviews AS r WHERE r.GUserID = u.UserID) AS Rating,
+        FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
       (SELECT COUNT(DISTINCT r.ReviewID)
-        FROM Reviews AS r WHERE r.GUserID = u.UserID) AS TotalReviews
+        FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
       FROM Users AS u
       LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
       LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID

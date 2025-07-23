@@ -79,7 +79,7 @@ class Offering
         FROM Offerings AS o
         INNER JOIN Users AS u ON u.UserID = o.UserID
         LEFT JOIN Reviews AS r ON o.OfferingID = r.OfferingID
-        LEFT JOIN Reviews AS ru ON u.UserID = ru.SUserID
+        LEFT JOIN Reviews AS ru ON u.UserID = ru.SeekerID
         LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
         LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode
         GROUP BY o.OfferingID
@@ -236,7 +236,7 @@ class Offering
         FROM Offerings AS o
         INNER JOIN Users AS u ON u.UserID = o.UserID
         LEFT JOIN Reviews AS r ON o.OfferingID = r.OfferingID
-        LEFT JOIN Reviews AS ru ON u.UserID = ru.SUserID
+        LEFT JOIN Reviews AS ru ON u.UserID = ru.SeekerID
         LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
         LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode
         WHERE o.OfferingID = :id
@@ -389,7 +389,7 @@ class Offering
         FROM Offerings AS o
         INNER JOIN Users AS u ON u.UserID = o.UserID
         LEFT JOIN Reviews AS r ON o.OfferingID = r.OfferingID
-        LEFT JOIN Reviews AS ru ON u.UserID = ru.SUserID
+        LEFT JOIN Reviews AS ru ON u.UserID = ru.SeekerID
         LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
         LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode
         WHERE o.CategoryID = :categoryId
@@ -548,7 +548,7 @@ class Offering
         FROM Offerings AS o
         INNER JOIN Users AS u ON u.UserID = o.UserID
         LEFT JOIN Reviews AS r ON o.OfferingID = r.OfferingID
-        LEFT JOIN Reviews AS ru ON u.UserID = ru.SUserID
+        LEFT JOIN Reviews AS ru ON u.UserID = ru.SeekerID
         LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
         LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode
         WHERE o.UserID = :userId

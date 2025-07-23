@@ -112,7 +112,7 @@ class Search
         FROM Offerings AS o
         INNER JOIN Users AS u ON u.UserID = o.UserID
         LEFT JOIN Reviews as r ON o.OfferingID = r.OfferingID
-        LEFT JOIN Reviews as ru ON u.UserID = ru.SUserID
+        LEFT JOIN Reviews as ru ON u.UserID = ru.SeekerID
         LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
         LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode
         WHERE (o.Title LIKE :search1 OR o.Description LIKE :search2
@@ -232,9 +232,9 @@ class Search
         s.PlanID, s.StartDate, sp.Name, sp.Description,        
         -- Subconsulta para reviews
         (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-          FROM Reviews AS r WHERE r.GUserID = u.UserID) AS Rating,
+          FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
         (SELECT COUNT(DISTINCT r.ReviewID)
-          FROM Reviews AS r WHERE r.GUserID = u.UserID) AS TotalReviews
+          FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
         FROM Users AS u
         LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
         LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
@@ -277,9 +277,9 @@ class Search
         s.PlanID, s.StartDate, sp.Name, sp.Description,      
         -- Subconsulta para reviews
         (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-          FROM Reviews AS r WHERE r.GUserID = u.UserID) AS Rating,
+          FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
         (SELECT COUNT(DISTINCT r.ReviewID)
-          FROM Reviews AS r WHERE r.GUserID = u.UserID) AS TotalReviews
+          FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
         FROM Users AS u
         LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
         LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID

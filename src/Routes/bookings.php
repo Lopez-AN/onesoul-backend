@@ -27,9 +27,11 @@ return function (App $app) {
   $app->post('/bookings', [$bookingController, 'createBooking'])->add($jwtMiddleware);
   $app->patch('/bookings/{bookingID}', [$bookingController, 'updateBooking'])->add($jwtMiddleware);
   $app->post('/bookings/{bookingID}/cancel', [$bookingController, 'cancelBooking'])->add($jwtMiddleware);
+  $app->post('/bookings/{bookingID}/confirm', [$bookingController, 'confirmBooking'])->add($jwtMiddleware);  
 
   // Reviews: solo POST protegido
   $app->post('/reviews', [$bookingController, 'createReview'])->add($jwtMiddleware);
+  $app->post('/reviews/seeker', [$bookingController, 'createSeekerReview'])->add($jwtMiddleware);
   $app->get('/reviews', [$bookingController, 'getReviews']);
   $app->get('/reviews/{reviewID}', [$bookingController, 'getReviewsByID']);
   $app->get('/reviews/guide/{userID}', [$bookingController, 'getReviewsByGuide']);
