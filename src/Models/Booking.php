@@ -107,7 +107,7 @@ class Booking
                       FROM BookingStatus
                       WHERE BookingEvent IN ('Canceled', 'Completed', 'Rated')
                   )
-                  AND b.ScheduledDate >= CURDATE()";
+                  AND b.ScheduledDate >= NOW()";
       }
 
       // Si se requiere solo el conteo
