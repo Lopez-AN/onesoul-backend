@@ -157,7 +157,20 @@ class BookingController
         ]);
       }
       
-      $bookings = $this->booking->getBookingsByGuide($userID, $paginator);
+      // Leer filtros desde query string
+      $params = $request->getQueryParams();
+      $filters = [];
+
+      if (isset($params['status']) && $params['status'] === 'open') {
+        $filters['status'] = 'open';
+      }
+
+      if (isset($params['count']) && $params['count'] == 'true') {
+        $filters['count'] = true;
+      }
+
+      // Llamar al modelo
+      $bookings = $this->booking->getBookingsByGuide($userID, $paginator, $filters);
 
       if ($bookings === null) {
         return $response->withStatus(404)->withJson([

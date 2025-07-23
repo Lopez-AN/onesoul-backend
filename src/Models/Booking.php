@@ -94,10 +94,34 @@ class Booking
     }
   }
 
-  public function getBookingsByGuide($userID, $paginator)
+  public function getBookingsByGuide($userID, $paginator, $filters = [])
   {
     try {
-      // Obtener todos los bookings del guía
+      $where = "o.UserID = :userID";
+      $params = ['userID' => $userID];
+
+      // Agregar filtro por estado
+      if (!empty($filters['status']) && $filters['status'] === 'open') {
+        $where .= " AND b.BookingID NOT IN (
+                      SELECT BookingID
+                      FROM BookingStatus
+                      WHERE BookingEvent IN ('Canceled', 'Completed', 'Rated')
+                  )
+                  AND b.ScheduledDate >= CURDATE()";
+      }
+
+      // Si se requiere solo el conteo
+      if (!empty($filters['count'])) {
+        $stmt = $this->db->prepare("SELECT COUNT(*) AS found
+                                    FROM Bookings AS b
+                                    INNER JOIN Offerings AS o ON b.OfferingID = o.OfferingID
+                                    WHERE {$where}");
+        $stmt->execute($params);
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        return ['found' => (int)($result['found'] ?? 0)];
+      }
+
+      // Consulta completa paginada
       $stmt = $this->db->prepare("SELECT b.BookingID, b.PublicID, b.UserID, u.DisplayName AS Seeker, b.ReviewID, b.PaymentID,
                                         b.Mode, b.LocationID, b.CreationDate, b.ScheduledDate, b.ModificationDate,
                                         o.UserID AS Guide, u2.DisplayName, b.OfferingID, o.Title AS TitleOffering
@@ -105,8 +129,10 @@ class Booking
                                   INNER JOIN Offerings AS o ON b.OfferingID = o.OfferingID 
                                   INNER JOIN Users AS u ON b.UserID = u.UserID
                                   INNER JOIN Users AS u2 ON o.UserID = u2.UserID
-                                  WHERE o.UserID = :userID
+                                  WHERE {$where}
+                                  ORDER BY b.CreationDate DESC
                                   LIMIT :_limit OFFSET :_offset");
+      
       $stmt->bindParam(':userID', $userID, PDO::PARAM_INT);
       $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
       $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
@@ -117,16 +143,15 @@ class Booking
         return null;
       }
 
-      // Consulta total real
-      $stmtTotal = $this->db->prepare("SELECT COUNT(*) as total
-                                      FROM Bookings AS b 
-                                      INNER JOIN Offerings AS o ON b.OfferingID = o.OfferingID 
-                                      WHERE o.UserID = :userID");
-      $stmtTotal->bindParam(':userID', $userID, PDO::PARAM_INT);
-      $stmtTotal->execute();
+      // Consulta total para paginador
+      $stmtTotal = $this->db->prepare("SELECT COUNT(*) AS total
+                                      FROM Bookings AS b
+                                      INNER JOIN Offerings AS o ON b.OfferingID = o.OfferingID
+                                      WHERE {$where}");
+      $stmtTotal->execute($params);
       $total = $stmtTotal->fetch(PDO::FETCH_ASSOC);
 
-      // Agregar eventos
+      // Agregar eventos a cada booking
       foreach ($bookings as &$booking) {
         $stmt2 = $this->db->prepare("SELECT BookingEventDate, BookingEvent, ScheduledDate, Message
                                     FROM BookingStatus 
@@ -140,12 +165,12 @@ class Booking
       return [
         "data" => $bookings,
         "rows" => [
-          "total" => $total['total'],
+          "total" => (int)($total['total'] ?? 0),
           "fetched" => count($bookings)
         ]
       ];
 
-    } catch (\PDOException $e) {
+  } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
   }
