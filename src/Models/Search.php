@@ -213,10 +213,8 @@ class Search
     $filterSeeker = in_array($type,['seeker','seekers']) ? " u.UserType = 'Seeker' AND " : "";
 
     try {
-      $query = explode(" ", $query);
-      $query = array_map(function ($e) {
-        return trim($e);
-      }, $query);
+      $query = is_string($query) ? explode(" ", $query) : [];
+      $query = array_map('trim', $query);
       $query = implode(" ", $query);
       $searchQuery = "%$query%";
 
@@ -236,7 +234,7 @@ class Search
         (SELECT COUNT(DISTINCT r.ReviewID)
           FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
         FROM Users AS u
-        LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
+        LEFT JOIN UsersCategories AS uc ON uc.UserID = u.UserID
         LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
         LEFT JOIN Media AS m ON u.UserID = m.UserID
         LEFT JOIN Offerings AS o ON u.UserID = o.UserID
@@ -254,17 +252,19 @@ class Search
         WHERE (
           u.FirstName LIKE :search1 OR
           u.LastName LIKE :search2 OR
-          u.Biography LIKE :search3 OR
-          CONCAT(u.FirstName,' ',u.LastName) LIKE :search4
-          OR (o.Status = 'Active' AND (o.Title LIKE :search5 OR o.ShortDescription LIKE :search6))
+          u.UserName LIKE :search3 OR
+          u.DisplayName LIKE :search4 OR
+          u.Biography LIKE :search5 OR
+          CONCAT(u.FirstName,' ',u.LastName) LIKE :search6
+          OR (o.Status = 'Active' AND (o.Title LIKE :search7 OR o.ShortDescription LIKE :search8))
         )
         AND u.DeactivationDate IS NULL
         GROUP BY u.UserID
         ORDER BY u.UserID
         LIMIT :_limit OFFSET :_offset");
 
-        $stmt->bindParam(':search5', $searchQuery, PDO::PARAM_STR);
-        $stmt->bindParam(':search6', $searchQuery, PDO::PARAM_STR);
+        $stmt->bindParam(':search7', $searchQuery, PDO::PARAM_STR);
+        $stmt->bindParam(':search8', $searchQuery, PDO::PARAM_STR);
       }else{
         $stmt = $this->pdo->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName,
         u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
@@ -281,7 +281,7 @@ class Search
         (SELECT COUNT(DISTINCT r.ReviewID)
           FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
         FROM Users AS u
-        LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
+        LEFT JOIN UsersCategories AS uc ON uc.UserID = u.UserID
         LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
         LEFT JOIN Media AS m ON u.UserID = m.UserID
         LEFT JOIN Offerings AS o ON u.UserID = o.UserID
@@ -300,8 +300,10 @@ class Search
         AND (
           u.FirstName LIKE :search1 OR
           u.LastName LIKE :search2 OR
-          u.Biography LIKE :search3 OR
-          CONCAT(u.FirstName,' ',u.LastName) LIKE :search4
+          u.UserName LIKE :search3 OR
+          u.DisplayName LIKE :search4 OR
+          u.Biography LIKE :search5 OR
+          CONCAT(u.FirstName,' ',u.LastName) LIKE :search6
         ) AND u.DeactivationDate IS NULL
         GROUP BY u.UserID
         ORDER BY u.UserID
@@ -312,6 +314,8 @@ class Search
       $stmt->bindParam(':search2', $searchQuery, PDO::PARAM_STR);
       $stmt->bindParam(':search3', $searchQuery, PDO::PARAM_STR);
       $stmt->bindParam(':search4', $searchQuery, PDO::PARAM_STR);
+      $stmt->bindParam(':search5', $searchQuery, PDO::PARAM_STR);
+      $stmt->bindParam(':search6', $searchQuery, PDO::PARAM_STR);
       $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
       $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
       $stmt->execute();

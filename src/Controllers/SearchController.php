@@ -23,7 +23,7 @@ class SearchController
   {
     $paginator = paginator($request);
     $queryParams = $request->getQueryParams();
-    $query = $queryParams['query'];
+    $query = $queryParams['query'] ?? '';
     try {
       $results = $this->search->searchCategories($paginator, $query);
       $response->getBody()->write(json_encode($results));
@@ -37,7 +37,7 @@ class SearchController
   {
     $paginator = paginator($request);
     $queryParams = $request->getQueryParams();
-    $query = $queryParams['query'];
+    $query = $queryParams['query'] ?? '';
     try {
       $results = $this->search->searchOfferings($paginator, $query);
       $response->getBody()->write(json_encode($results));
@@ -52,7 +52,7 @@ class SearchController
     $type = empty($args) || empty(['type']) ? "" : strtolower($args['type']);
     $paginator = paginator($request);
     $queryParams = $request->getQueryParams();
-    $query = $queryParams['query'];
+    $query = $queryParams['query'] ?? '';
     try {
       $results = $this->search->searchUsers($paginator, $query, $type);
       $response->getBody()->write(json_encode($results));
