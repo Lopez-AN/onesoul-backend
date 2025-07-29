@@ -299,7 +299,18 @@ class BookingController
         return $response->withStatus(404)->WithJson([
           "error" => [
             "code" => "OFFERING_NOT_FOUND",
-            "desc"=> "No Offering found for this specific ID."
+            "desc" => "No Offering found for this specific ID."
+          ]
+        ]);
+      }
+
+      $offering = $result->data;
+
+      if ($offering['UserID'] === $userID) {
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "SELF_BOOKING_NOT_ALLOWED",
+            "desc" => "Guides cannot book their own offerings."
           ]
         ]);
       }
@@ -324,11 +335,12 @@ class BookingController
           ]
         ]);
       }
+
       if ($scheduledDateTime < new DateTime()) {
         return $response->withStatus(400)->withJson([
           "error" => [
             "code" => "INVALID_BOOKING_DATE",
-            "desc" => "Cannot cancel a booking that is already in the past."
+            "desc" => "Cannot create a booking that is already in the past."
           ]
         ]);
       }
@@ -379,8 +391,6 @@ class BookingController
         'in-person' => ['in-person', 'both'],
         'virtual' => ['virtual', 'both']
       ];
-
-      $offering = $result->data;
 
       $validTypes = $sessionTypes[$mode];
       $hasValidPackage = false;
@@ -453,7 +463,7 @@ class BookingController
             '{MESSAGE}' => $message,
             '{SCHEDULED}' => date('d/m/Y H:i', strtotime($booking['ScheduledDate'])),
             '{MODE}' => $booking['Mode'] === 'in-person' ? 'Presencial' : 'Virtual',
-            '{BOOKING_URL}' => "{$origin}/bookings",
+            '{BOOKING_URL}' => "{$origin}/bookings/seeker",
           ]
         );
       }
@@ -486,7 +496,7 @@ class BookingController
                   '{MESSAGE}' => $message,
                   '{SEARCHER_PHONE}' => $userInfo->data['Phone'] ?? '-',
                   '{SCHEDULED}' => date('d/m/Y H:i', strtotime($booking['ScheduledDate'])),
-                  '{BOOKING_URL}' => "{$origin}/bookings"
+                  '{BOOKING_URL}' => "{$origin}/bookings/guide"
                 ]
               );
             }
@@ -518,16 +528,8 @@ class BookingController
       ]);
     }
 
-    # Verificar si el usuario autenticado es un Guia o un administrador
-    if ($jwt['data']->UserType != 'Guide' && $jwt['data']->UserType != 'Admin') {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "UNAUTHORIZED",
-          "desc" => "You don't have permission to update Bookings."
-        ]
-      ]);
-    }
-
+    $userID = $jwt['data']->UserID;
+    $userType = $jwt['data']->UserType;
     $bookingID = $args['bookingID'];
     $data = $request->getParsedBody();
     $scheduledDate = $data['ScheduledDate'] ?? null;
@@ -570,18 +572,27 @@ class BookingController
         ]);
       }
 
-      // Verificar si el booking está cancelado, confirmado, completado o calificado
+      // Validar si el user es el cliente o el guía o un administrador
+      if ($booking['UserID'] != $userID && $booking['Guide'] != $userID && $userType != 'Admin'){
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "FORBIDDEN",
+            "desc" => "You are not authorized to cancel this booking."
+          ]
+        ]);
+      }
+
+      // Verificar si el booking está cancelado, confirmado, completado o calificado (último evento solamente)
       if (!empty($booking['Events'])) {
-        foreach ($booking['Events'] as $event) {
-          if ($event['BookingEvent'] === 'Canceled' || $event['BookingEvent'] === 'Confirmed' 
-          || $event['BookingEvent'] === 'Completed' ||$event['BookingEvent'] === 'Rated') {
-            return $response->withStatus(400)->withJson([
-              "error" => [
-                "code" => "BOOKING_ALREADY_CANCELED_OR_CONFIRMED",
-                "desc" => "Cannot update this booking."
-              ]
-            ]);
-          }
+        $latestEvent = $booking['Events'][0]; 
+
+        if (in_array($latestEvent['BookingEvent'], ['Canceled', 'Confirmed', 'Completed', 'Rated'])) {
+          return $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "BOOKING_ALREADY_CANCELED_OR_CONFIRMED",
+              "desc" => "Cannot update this booking."
+            ]
+          ]);
         }
       }
 
@@ -854,33 +865,18 @@ class BookingController
         ]);
       }
 
-      // Verificar si el booking está cancelado, completado o calificado
+      // Verificar si el booking está cancelado, completado o calificado (último evento solamente)
       if (!empty($booking['Events'])) {
-        foreach ($booking['Events'] as $event) {
-          if ($event['BookingEvent'] === 'Canceled' || $event['BookingEvent'] === 'Completed' 
-          || $event['BookingEvent'] === 'Rated') {
-            return $response->withStatus(400)->withJson([
-              "error" => [
-                "code" => "BOOKING_ALREADY_CANCELED_OR_CONFIRMED",
-                "desc" => "Cannot update this booking."
-              ]
-            ]);
-          }
+        $latestEvent = $booking['Events'][0]; 
+
+        if (in_array($latestEvent['BookingEvent'], ['Canceled', 'Completed', 'Rated'])) {
+          return $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "BOOKING_ALREADY_CANCELED_OR_CONFIRMED",
+              "desc" => "Cannot update this booking."
+            ]
+          ]);
         }
-      }
-
-      // Verificar que la reserva NO haya sucedido
-      $scheduledDate = $booking['ScheduledDate'];
-      $today = new \DateTime();
-      $scheduled = new \DateTime($scheduledDate);
-
-      if ($scheduled < $today) {
-        return $response->withStatus(400)->withJson([
-          "error" => [
-            "code" => "INVALID_BOOKING_DATE",
-            "desc" => "Cannot cancel a booking that is already in the past."
-          ]
-        ]);
       }
 
       $booking = $this->booking->cancelBooking($bookingID, $message, $subDomain);
@@ -1029,18 +1025,17 @@ class BookingController
         ]);
       }
 
-      // Verificar si el booking está cancelado, confirmado, completado o calificado
+      // Verificar si el booking está cancelado, completado o calificado (último evento solamente)
       if (!empty($booking['Events'])) {
-        foreach ($booking['Events'] as $event) {
-          if ($event['BookingEvent'] === 'Canceled' || $event['BookingEvent'] === 'Confirmed' 
-          || $event['BookingEvent'] === 'Completed' ||$event['BookingEvent'] === 'Rated') {
-            return $response->withStatus(400)->withJson([
-              "error" => [
-                "code" => "BOOKING_ALREADY_CANCELED_OR_CONFIRMED",
-                "desc" => "Cannot confirm this booking."
-              ]
-            ]);
-          }
+        $latestEvent = $booking['Events'][0]; 
+
+        if (in_array($latestEvent['BookingEvent'], ['Canceled', 'Confirmed', 'Completed', 'Rated'])) {
+          return $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "BOOKING_ALREADY_CANCELED_OR_CONFIRMED",
+              "desc" => "Cannot update this booking."
+            ]
+          ]);
         }
       }
 
@@ -1379,7 +1374,8 @@ class BookingController
     }
   }
 
-  public function getReviewsByOffering(Request $request, Response $response, $args)  {
+  public function getReviewsByOffering(Request $request, Response $response, $args)  
+  {
     $offeringID = $args['offeringID'];
     $queryParams = $request->getQueryParams();
 
@@ -1427,6 +1423,121 @@ class BookingController
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  public function createReview(Request $request, Response $response, $args)
+  {
+    $jwt = $request->getAttribute('jwt');
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
+      return $response->withStatus(401)->withJson([
+        "error" => [
+          "code" => "INVALID_TOKEN", 
+          "desc" => "Invalid JWT token"
+        ]
+      ]);
+    }
+
+    $seekerID = $jwt['data']->UserID;
+    $data = $request->getParsedBody();
+
+    if (!isset($data['Rating']) || !isset($data['ReviewText']) || !isset($data['BookingID'])) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_PARAMETERS", 
+          "desc" => "Missing required fields"
+        ]
+      ]);
+    }
+
+    // Valida contenido con Perspective API
+    if(!empty($data['ReviewText'])){
+      if ($this->containsInappropriateContent($data['ReviewText'])) {
+        return $response->withStatus(400)->withJson([
+          "code" => "INAPPROPRIATE_CONTENT",
+          "desc" => "Please remove inappropriate content and try again."
+        ]);
+      }
+    }
+
+    if (!in_array($data['Rating'], [1, 2, 3, 4, 5])) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_RATING", 
+          "desc" => "Rating must be between 1 and 5"
+        ]
+      ]);
+    }
+
+    $booking = $this->booking->getBookingByID($bookingID);
+    if (!$booking) {
+      return $response->withStatus(404)->withJson([
+        "error" => [
+          "code" => "BOOKING_NOT_FOUND",
+          "desc" => "Booking not found"
+        ]
+      ]);
+    }
+
+    // Validar si el user es el cliente o el guía o un administrador
+    if ($booking['UserID'] != $userID && $userType != 'Admin'){
+      return $response->withStatus(401)->withJson([
+        "error" => [
+          "code" => "FORBIDDEN",
+          "desc" => "You are not authorized to review this booking."
+        ]
+      ]);
+    }
+
+    // Verificar si el booking está cancelado (buscar eventos de tipo "cancellation")
+    if (!empty($booking['Events'])) {
+      foreach ($booking['Events'] as $event) {
+        if ($event['BookingEvent'] === 'Canceled') {
+          return $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "BOOKING_ALREADY_CANCELLED",
+              "desc" => "Cannot update a canceled booking."
+            ]
+          ]);
+        }
+      }
+    }
+
+    try {
+      $id = $booking['OfferingID'];
+
+      $result = $this->offering->getOfferingById($id);
+      if ($result->http_code != 200) {
+        return $response->withStatus(404)->WithJson([
+          "error" => [
+            "code" => "OFFERING_NOT_FOUND",
+            "desc"=> "No Offering found for this specific ID."
+          ]
+        ]);
+      }
+
+      $offering = $result->data;
+      $guide = $offering['Author']['UserID'];
+
+      $data = [
+        'BookingID' => $bookingID,
+        'OfferingID' => $id,
+        'SUserID' => $seekerID,
+        'GUserID' => $guide,
+        'Rating' => $data['Rating'],
+        'ReviewText' => $data['ReviewText']
+      ];
+
+      $review = $this->booking->createReview($data);
+
+      return $response->withStatus(200)->withJson($review);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR", 
           "desc" => $e->getMessage()
         ]
       ]);

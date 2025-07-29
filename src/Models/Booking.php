@@ -41,7 +41,7 @@ class Booking
       $stmt2 = $this->db->prepare("SELECT BookingEventDate, BookingEvent, ScheduledDate, Message
                                   FROM BookingStatus 
                                   WHERE BookingID = :bookingID
-                                  ORDER BY BookingEventDate ASC");
+                                  ORDER BY BookingEventDate DESC");
       $stmt2->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);
       $stmt2->execute();
 
@@ -78,7 +78,7 @@ class Booking
       $stmt2 = $this->db->prepare("SELECT BookingEventDate, BookingEvent, ScheduledDate, Message
                                   FROM BookingStatus 
                                   WHERE BookingID = :bookingID
-                                  ORDER BY BookingEventDate ASC");
+                                  ORDER BY BookingEventDate DESC");
       $stmt2->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);
       $stmt2->execute();
 
@@ -156,7 +156,7 @@ class Booking
         $stmt2 = $this->db->prepare("SELECT BookingEventDate, BookingEvent, ScheduledDate, Message
                                     FROM BookingStatus 
                                     WHERE BookingID = :bookingID
-                                    ORDER BY BookingEventDate ASC");
+                                    ORDER BY BookingEventDate DESC");
         $stmt2->bindParam(':bookingID', $booking['BookingID'], PDO::PARAM_INT);
         $stmt2->execute();
         $booking['Events'] = $stmt2->fetchAll(PDO::FETCH_ASSOC);
@@ -170,7 +170,7 @@ class Booking
         ]
       ];
 
-  } catch (\PDOException $e) {
+    } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
   }
@@ -211,7 +211,7 @@ class Booking
         $stmt2 = $this->db->prepare("SELECT BookingEventDate, BookingEvent, ScheduledDate, Message
                                     FROM BookingStatus 
                                     WHERE BookingID = :bookingID
-                                    ORDER BY BookingEventDate ASC");
+                                    ORDER BY BookingEventDate DESC");
         $stmt2->bindParam(':bookingID', $booking['BookingID'], PDO::PARAM_INT);
         $stmt2->execute();
         $booking['Events'] = $stmt2->fetchAll(PDO::FETCH_ASSOC);
@@ -261,65 +261,72 @@ class Booking
   public function updateBooking($bookingID, $mode, $scheduledDate, $message, $locationID, $subDomain)
   {
     try {
-      $fields = [];
+      $original = $this->getBookingByID($bookingID);
+      $hasChanges = false;
+      $changedFields = [];
 
-      if (!empty($mode)) {
+      $changedScheduledDate = false;
+      $changedOther = false;
+
+      // Compara y actualiza Mode
+      if (!empty($mode) && strtolower($original['Mode']) !== strtolower($mode)) {
         $stmt = $this->db->prepare("UPDATE Bookings 
                                     SET Mode = :mode, ModificationDate = NOW()
                                     WHERE BookingID = :bookingID");
         $stmt->bindParam(':mode', $mode, PDO::PARAM_STR);
         $stmt->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);
         $stmt->execute();
-        $fields[] = 'Mode';
+        $changedOther = true;
+        $changedFields[] = 'Mode';
+        $hasChanges = true;
+      }
 
-        // Insertar en BookingStatus
-        $stmt = $this->db->prepare("INSERT INTO BookingStatus (BookingID, BookingEvent, ScheduledDate, Message) 
-                                    VALUES (:bookingID, 'Modified', :scheduledDate, :message)");
-        $stmt->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);
-        $stmt->bindParam(':scheduledDate', $scheduledDate, $scheduledDate === null ? PDO::PARAM_NULL : PDO::PARAM_STR);  
-        $stmt->bindParam(':message', $message, $message === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
-        $stmt->execute();
-      } 
-
-      if (!empty($locationID)) {
+      // Compara y actualiza LocationID
+      if (!empty($locationID) && $original['LocationID'] != $locationID) {
         $stmt = $this->db->prepare("UPDATE Bookings 
                                     SET LocationID = :locationID, ModificationDate = NOW()
                                     WHERE BookingID = :bookingID");
         $stmt->bindParam(':locationID', $locationID, PDO::PARAM_STR);
         $stmt->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);
         $stmt->execute();
-        $fields[] = 'LocationID';
-      } 
-  
-      if (!empty($scheduledDate)) {
-        // Validar que la fecha no sea pasada
+        $changedOther = true;
+        $changedFields[] = 'LocationID';
+        $hasChanges = true;
+      }
+
+      // Compara y actualiza ScheduledDate
+      if (!empty($scheduledDate) && $original['ScheduledDate'] != $scheduledDate) {
         $currentDate = new \DateTime();
         $newScheduledDate = new \DateTime($scheduledDate);
         if ($newScheduledDate < $currentDate) {
           throw new \Exception("Scheduled date cannot be in the past.");
         }
-  
+
         $stmt = $this->db->prepare("UPDATE Bookings 
                                     SET ScheduledDate = :scheduledDate, ModificationDate = NOW()
                                     WHERE BookingID = :bookingID");
-        $stmt->bindParam(':scheduledDate', $scheduledDate, $scheduledDate === null ? PDO::PARAM_NULL : PDO::PARAM_STR);  
-        $stmt->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);
-        $stmt->execute();
-  
-        $fields[] = 'ScheduledDate';
-  
-        // Insertar en BookingStatus
-        $stmt = $this->db->prepare("INSERT INTO BookingStatus (BookingID, BookingEvent, ScheduledDate, Message) 
-                                    VALUES (:bookingID, 'Rescheduled', :scheduledDate, :message)");
-        $stmt->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);
         $stmt->bindParam(':scheduledDate', $scheduledDate, $scheduledDate === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
-        $stmt->bindParam(':message', $message, $message === null ? PDO::PARAM_NULL : PDO::PARAM_STR);        
+        $stmt->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);
         $stmt->execute();
+        $changedScheduledDate = true;
+        $changedFields[] = 'ScheduledDate';
+        $hasChanges = true;
       }
 
-      if (empty($fields)) {
-        throw new \Exception("No fields to update");
+      if (!$hasChanges) {
+        throw new \Exception("No changes detected");
       }
+
+      // Insertar evento correspondiente en BookingStatus
+      $bookingEvent = ($changedScheduledDate && !$changedOther) ? 'Rescheduled' : 'Modified';
+
+      $stmt = $this->db->prepare("INSERT INTO BookingStatus (BookingID, BookingEvent, ScheduledDate, Message) 
+                                  VALUES (:bookingID, :event, :scheduledDate, :message)");
+      $stmt->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);
+      $stmt->bindParam(':event', $bookingEvent, PDO::PARAM_STR);
+      $stmt->bindParam(':scheduledDate', $scheduledDate, $scheduledDate === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
+      $stmt->bindParam(':message', $message, $message === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
+      $stmt->execute();
   
       return $this->getBookingByID($bookingID);
     } catch (\PDOException $e) {
