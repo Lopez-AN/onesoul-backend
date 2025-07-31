@@ -401,9 +401,9 @@ class Auth{
 
     // Insertar recibir novedades si existe
     $stmt = $this->db->prepare("INSERT INTO UserSettings (UserID, ReceiveNewsletters) 
-                                VALUES (:userId , :receiveNewsletters)");
+                                VALUES (:userID , :receiveNewsletters)");
     $stmt->execute([
-      ':userId' => $userId, 
+      ':userID' => $userID, 
       ':receiveNewsletters' => (int) filter_var($receiveNewsletters, FILTER_VALIDATE_BOOLEAN)
     ]);
 
@@ -556,9 +556,9 @@ class Auth{
 
     // Insertar recibir novedades si existe
     $stmt = $this->db->prepare("INSERT INTO UserSettings (UserID, ReceiveNewsletters) 
-                                VALUES (:userId , :receiveNewsletters)");
+                                VALUES (:userID , :receiveNewsletters)");
     $stmt->execute([
-      ':userId' => $userId, 
+      ':userID' => $userID, 
       ':receiveNewsletters' => (int) filter_var($receiveNewsletters, FILTER_VALIDATE_BOOLEAN)
     ]);
 
