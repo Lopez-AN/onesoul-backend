@@ -505,6 +505,7 @@ class BookingController
                   '{MESSAGE}' => $message,
                   '{SEARCHER_PHONE}' => $userInfo->data['Phone'] ?? '-',
                   '{SCHEDULED}' => date('d/m/Y H:i', strtotime($booking['ScheduledDate'])),
+                  '{MODE}' => $booking['Mode'] === 'in-person' ? 'Presencial' : 'Virtual',
                   '{BOOKING_URL}' => "{$origin}/bookings/guide"
                 ]
               );
@@ -756,7 +757,7 @@ class BookingController
               '{MESSAGE}' => $message,
               '{SCHEDULED}' => date('d/m/Y H:i', strtotime($booking['ScheduledDate'])),
               '{MODE}' => $booking['Mode'] === 'in-person' ? 'Presencial' : 'Virtual',
-              '{BOOKING_URL}' => "{$origin}/bookings",
+              '{BOOKING_URL}' => "{$origin}/bookings/seeker",
             ]
           );
         }
@@ -789,7 +790,8 @@ class BookingController
                     '{MESSAGE}' => $message,
                     '{SEARCHER_PHONE}' => $userInfo->data['Phone'] ?? '-',
                     '{SCHEDULED}' => date('d/m/Y H:i', strtotime($booking['ScheduledDate'])),
-                    '{BOOKING_URL}' => "{$origin}/bookings"
+                    '{MODE}' => $booking['Mode'] === 'in-person' ? 'Presencial' : 'Virtual',
+                    '{BOOKING_URL}' => "{$origin}/bookings/guide"
                   ]
                 );
               }
@@ -935,7 +937,7 @@ class BookingController
               '{OFFERING}' => $offeringName,
               '{BOOKING_ID}' => $booking['PublicID'],
               '{MESSAGE}' => $message,
-              '{BOOKING_URL}' => "{$origin}/bookings",
+              '{BOOKING_URL}' => "{$origin}/bookings/seeker",
             ]
           );
         }
@@ -967,7 +969,7 @@ class BookingController
                     '{SEARCHER_EMAIL}' => $userEmail,
                     '{SEARCHER_PHONE}' => $userInfo->data['Phone'] ?? '-',
                     '{MESSAGE}' => $message,                    
-                    '{BOOKING_URL}' => "{$origin}/bookings"
+                    '{BOOKING_URL}' => "{$origin}/bookings/guide"
                   ]
                 );
               }
@@ -1103,8 +1105,10 @@ class BookingController
               '{USERNAME}' => $username,
               '{OFFERING}' => $offeringName,
               '{BOOKING_ID}' => $booking['PublicID'],
+              '{SCHEDULED}' => $booking['ScheduledDate'],
+              '{MODE}' => $booking['Mode'],
               '{MESSAGE}' => $message,
-              '{BOOKING_URL}' => "{$origin}/bookings",
+              '{BOOKING_URL}' => "{$origin}/bookings/seeker",
             ]
           );
         }
@@ -1131,12 +1135,14 @@ class BookingController
                     '{YEAR}' => date('Y'),            
                     '{GUIDE_NAME}' => $guideName,
                     '{SERVICE_NAME}' => $offeringName,
-                    '{BOOKING_ID}' => $booking['PublicID'],                    
+                    '{BOOKING_ID}' => $booking['PublicID'],
+                    '{SCHEDULED}' => $booking['ScheduledDate'],
+                    '{MODE}' => $booking['Mode'],                    
                     '{SEARCHER_NAME}' => $searcherName,
                     '{SEARCHER_EMAIL}' => $userEmail,
                     '{SEARCHER_PHONE}' => $userInfo->data['Phone'] ?? '-',
                     '{MESSAGE}' => $message,                    
-                    '{BOOKING_URL}' => "{$origin}/bookings"
+                    '{BOOKING_URL}' => "{$origin}/bookings/guide"
                   ]
                 );
               }
