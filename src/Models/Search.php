@@ -227,7 +227,10 @@ class Search
         u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
           ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
         u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-        s.PlanID, s.StartDate, sp.Name, sp.Description,        
+        s.PlanID, s.StartDate, sp.Name, sp.Description,
+        -- Subconsulta para Redes Sociales
+        GROUP_CONCAT(DISTINCT CONCAT(TRIM(smt.Name), ':', TRIM(sma.AccountName))
+        ORDER BY smt.Name ASC SEPARATOR ', ') AS SocialMediaAccounts,      
         -- Subconsulta para reviews
         (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
           FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
@@ -240,6 +243,8 @@ class Search
         LEFT JOIN Offerings AS o ON u.UserID = o.UserID
         LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
         LEFT JOIN SubscriptionPlans AS sp ON s.PlanID = sp.PlanID
+        LEFT JOIN SocialMediaAccounts AS sma ON sma.UserID = u.UserID AND sma.IsActive = 1
+        LEFT JOIN SocialMediaTypes AS smt ON sma.SocialMediaTypeID = smt.SocialMediaTypeID            
         LEFT JOIN (
           SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
           MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
@@ -274,7 +279,10 @@ class Search
         u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
           ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
         u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-        s.PlanID, s.StartDate, sp.Name, sp.Description,      
+        s.PlanID, s.StartDate, sp.Name, sp.Description,
+        -- Subconsulta para Redes Sociales
+        GROUP_CONCAT(DISTINCT CONCAT(TRIM(smt.Name), ':', TRIM(sma.AccountName))
+        ORDER BY smt.Name ASC SEPARATOR ', ') AS SocialMediaAccounts,
         -- Subconsulta para reviews
         (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
           FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
@@ -287,6 +295,8 @@ class Search
         LEFT JOIN Offerings AS o ON u.UserID = o.UserID
         LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
         LEFT JOIN SubscriptionPlans AS sp ON s.PlanID = sp.PlanID
+        LEFT JOIN SocialMediaAccounts AS sma ON sma.UserID = u.UserID AND sma.IsActive = 1
+        LEFT JOIN SocialMediaTypes AS smt ON sma.SocialMediaTypeID = smt.SocialMediaTypeID      
         LEFT JOIN (
           SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
           MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
@@ -337,6 +347,16 @@ class Search
           explode(",", $e['Categories'])
         );
 
+        $e['SocialMediaAccounts'] = is_null($e['SocialMediaAccounts']) ? [] : array_map(
+          function ($s) {
+            $s = explode(":", $s, 2);
+            return [
+              "Type" => ucfirst(strtolower($s[0])),
+              "AccountName" => $s[1]
+            ];
+          },
+          explode(",", $e['SocialMediaAccounts'])
+        );
         // Agregar sessionType con valores booleanos
         $e['SessionType'] = [
         "Virtual" => $e['hasVirtual'] == 1,

@@ -33,4 +33,5 @@ return function (App $app) {
   $app->patch('/users/{id}', [$userController, 'updateUser'])->add($jwtMiddleware);
   $app->delete('/users/{id}', [$userController, 'deleteUser'])->add($jwtMiddleware);
   $app->post('/users/categories/{id}', [$userController, 'updateUserCategories'])->add($jwtMiddleware);
+  $app->post('/users/social/{id}', [$userController, 'updateUserSocialAccounts'])->add($jwtMiddleware);
 };

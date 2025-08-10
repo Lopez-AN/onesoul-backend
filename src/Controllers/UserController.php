@@ -640,6 +640,112 @@ class UserController
     }
   }
 
+  public function updateUserSocialAccounts(Request $request, Response $response, $args)
+  {
+    $userID = $args['id'];
+    $jwt = $request->getAttribute('jwt');
+    
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+      return $response->withStatus(401)->withJson([
+        "error" => [
+          "code" => "INVALID_TOKEN",
+          "desc" => "Invalid JWT token"
+        ]
+      ]);
+    }
+
+    if ($jwt['data']->UserID != $userID && $jwt['data']->UserType != 'Admin') {
+      return $response->withStatus(401)->withJson([
+        "error" => [
+          "code" => "UNAUTHORIZED",
+          "desc" => "You don't have permission to modify this user's social accounts"
+        ]
+      ]);
+    }
+
+    $data = $request->getParsedBody();
+    if (!is_array($data)) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_DATA",
+          "desc" => "SocialAccounts should be an array"
+        ]
+      ]);
+    }
+
+    $currentAccounts = $this->user->getUserSocialAccounts($userID);
+    $validTypes = $this->user->getActiveSocialMediaTypes();
+
+    $currentMap = [];
+    foreach ($currentAccounts as $acc) {
+        $currentMap[strtolower($acc['Name'])] = [
+            'accountID' => $acc['SocialMediaAccountID'],
+            'typeID'    => $acc['SocialMediaTypeID'],
+            'url'       => $acc['AccountName']
+        ];
+    }
+
+    $newMap = [];
+    foreach ($data as $item) {
+      if (!isset($item['Nombre']) || !isset($item['URL'])) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "INVALID_DATA",
+            "desc" => "Each account must include 'Nombre' and 'URL'"
+          ]
+        ]);
+      }
+
+      $name = strtolower(trim($item['Nombre']));
+      $url = trim($item['URL']);
+
+      if (!array_key_exists($name, $validTypes)) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "INVALID_SOCIAL_MEDIA",
+            "desc" => "Social media '$name' is not allowed or not active"
+          ]
+        ]);
+      }
+
+      // Normalizar URL
+      $formattedUrl = $this->user->formatSocialUrl($name, $url);
+
+      $newMap[$name] = [
+        'typeID' => $validTypes[$name]['SocialMediaTypeID'],
+        'url' => $formattedUrl
+      ];
+    }
+
+    // Detectar cambios
+    $toAdd = array_diff_key($newMap, $currentMap);
+    $toRemove = array_diff_key($currentMap, $newMap);
+    $toUpdate = [];
+
+    foreach ($newMap as $name => $item) {
+      if (isset($currentMap[$name]) && $currentMap[$name]['url'] !== $item['url']) {
+        $toUpdate[$name] = $item;
+      }
+    }
+
+    foreach ($toRemove as $name => $item) {
+      $this->user->deleteUserSocialAccount($userID, $item['typeID']);
+    }
+
+    foreach ($toAdd as $name => $item) {
+      $this->user->addUserSocialAccount($userID, $item['typeID'], $item['url']);
+    }
+
+    foreach ($toUpdate as $name => $item) {
+      $this->user->updateUserSocialAccount($userID, $item['typeID'], $item['url']);
+    }
+
+    return $response->withJson([
+      'code' => 200,
+      'description' => 'Redes sociales actualizadas correctamente'
+    ]);
+  }
+
   private function containsInappropriateContent($text) 
   {
     return validateContentWithPerspective($text);
