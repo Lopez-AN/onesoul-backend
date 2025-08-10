@@ -23,7 +23,7 @@ clASs User
       $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName,
       u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
       u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
-      u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType,
+      u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth, u.UserType,
       u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
       u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
         ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
@@ -70,6 +70,7 @@ clASs User
         $e['Floor'] = is_null($e['Floor']) ? null : (int)$e['Floor'];
         $e['UserLevel'] = !$e['UserLevel'] ? 1 : (int)$e['UserLevel'];
         $e['ValidatedEmail'] = (bool)$e['ValidatedEmail'];
+        $e['ValidatedPhone'] = (bool)$e['ValidatedPhone'];
         $e['TwoFactorAuth'] = (bool)$e['TwoFactorAuth'];
         $e['Categories'] = is_null($e['Categories']) ? [] : array_map(
           function ($a) {
@@ -132,7 +133,7 @@ clASs User
       $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
       u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
       u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
-      u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType,
+      u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth, u.UserType,
       u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
       u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
         ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
@@ -184,6 +185,7 @@ clASs User
       $user['Floor'] = is_null($user['Floor']) ? null : (int)$user['Floor'];
       $user['UserLevel'] = !$user['UserLevel'] ? 1 : (int)$user['UserLevel'];
       $user['ValidatedEmail'] = (bool)$user['ValidatedEmail'];
+      $user['ValidatedPhone'] = (bool)$user['ValidatedPhone'];     
       $user['TwoFactorAuth'] = (bool)$user['TwoFactorAuth'];
       $user['Categories'] = is_null($user['Categories']) ? [] : array_map(
         function ($a) {
@@ -252,7 +254,7 @@ clASs User
       $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
       u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
       u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
-      u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType,
+      u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth, u.UserType,
       u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
       u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
         ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
@@ -304,6 +306,7 @@ clASs User
     $user['Floor'] = is_null($user['Floor']) ? null : (int)$user['Floor'];
     $user['UserLevel'] = !$user['UserLevel'] ? 1 : (int)$user['UserLevel'];
     $user['ValidatedEmail'] = (bool)$user['ValidatedEmail'];
+    $user['ValidatedPhone'] = (bool)$user['ValidatedPhone'];
     $user['TwoFactorAuth'] = (bool)$user['TwoFactorAuth'];
     $user['Categories'] = is_null($user['Categories']) ? [] : array_map(
       function ($a) {
@@ -372,7 +375,7 @@ clASs User
       $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
       u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
       u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
-      u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType,
+      u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth, u.UserType,
       u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
       u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
         ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
@@ -424,6 +427,7 @@ clASs User
       $user['Floor'] = is_null($user['Floor']) ? null : (int)$user['Floor'];
       $user['UserLevel'] = !$user['UserLevel'] ? 1 : (int)$user['UserLevel'];
       $user['ValidatedEmail'] = (bool)$user['ValidatedEmail'];
+      $user['ValidatedPhone'] = (bool)$user['ValidatedPhone'];
       $user['TwoFactorAuth'] = (bool)$user['TwoFactorAuth'];
       $user['Categories'] = is_null($user['Categories']) ? [] : array_map(
         function ($a) {
@@ -492,7 +496,7 @@ clASs User
       $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
       u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
       u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
-      u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType,
+      u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth, u.UserType,
       u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
       u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
         ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
@@ -545,6 +549,7 @@ clASs User
       $user['Floor'] = is_null($user['Floor']) ? null : (int)$user['Floor'];
       $user['UserLevel'] = !$user['UserLevel'] ? 1 : (int)$user['UserLevel'];
       $user['ValidatedEmail'] = (bool)$user['ValidatedEmail'];
+      $user['ValidatedPhone'] = (bool)$user['ValidatedPhone'];
       $user['TwoFactorAuth'] = (bool)$user['TwoFactorAuth'];
       $user['Categories'] = is_null($user['Categories']) ? [] : array_map(
         function ($a) {
@@ -613,7 +618,7 @@ clASs User
         $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName,
         u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
         u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
-        u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType,
+        u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth, u.UserType,
         u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
         u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
           ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
@@ -650,7 +655,7 @@ clASs User
         $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName,
         u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
         u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
-        u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType,
+        u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth, u.UserType,
         u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
         u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
           ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
@@ -700,6 +705,7 @@ clASs User
         $e['Floor'] = is_null($e['Floor']) ? null : (int)$e['Floor'];
         $e['UserLevel'] = !$e['UserLevel'] ? 1 : (int)$e['UserLevel'];
         $e['ValidatedEmail'] = (bool)$e['ValidatedEmail'];
+        $e['ValidatedPhone'] = (bool)$e['ValidatedPhone'];      
         $e['TwoFactorAuth'] = (bool)$e['TwoFactorAuth'];
         $e['Categories'] = is_null($e['Categories']) ? [] : array_map(
           function ($a) {
@@ -762,7 +768,7 @@ clASs User
       $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
       u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
       u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
-      u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType,
+      u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth, u.UserType,
       u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
       u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
         ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
@@ -807,6 +813,7 @@ clASs User
         $e['Floor'] = is_null($e['Floor']) ? null : (int)$e['Floor'];
         $e['UserLevel'] = !$e['UserLevel'] ? 1 : (int)$e['UserLevel'];
         $e['ValidatedEmail'] = (bool)$e['ValidatedEmail'];
+        $e['ValidatedPhone'] = (bool)$e['ValidatedPhone'];       
         $e['TwoFactorAuth'] = (bool)$e['TwoFactorAuth'];
         $e['Categories'] = is_null($e['Categories']) ? [] : array_map(
           function ($a) {
@@ -877,7 +884,7 @@ clASs User
       $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
       u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
       u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
-      u.Gender, u.Biography, u.ValidatedEmail, u.TwoFactorAuth, u.UserType,
+      u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth, u.UserType,
       u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
       u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
         ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
@@ -929,6 +936,7 @@ clASs User
       $user['Floor'] = is_null($user['Floor']) ? null : (int)$user['Floor'];
       $user['UserLevel'] = !$user['UserLevel'] ? 1 : (int)$user['UserLevel'];
       $user['ValidatedEmail'] = (bool)$user['ValidatedEmail'];
+      $user['ValidatedPhone'] = (bool)$user['ValidatedPhone'];         
       $user['TwoFactorAuth'] = (bool)$user['TwoFactorAuth'];
       $user['Categories'] = is_null($user['Categories']) ? [] : array_map(
         function ($a) {

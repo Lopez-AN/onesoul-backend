@@ -259,7 +259,20 @@ class BookingController
     $data = $request->getParsedBody();
     $message = $data['Message'] ?? null;
     $subDomain = $data['SubDomain'] ?? '';
-    
+    $userInfo = $this->user->getUserById($userID);
+
+    $emailValidated = filter_var($userInfo->data['ValidatedEmail'], FILTER_VALIDATE_BOOLEAN);
+    $phoneValidated = filter_var($userInfo->data['ValidatedPhone'], FILTER_VALIDATE_BOOLEAN);
+
+    if ($userInfo->http_code !== 200 || !$emailValidated || !$phoneValidated) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "USER_NOT_VALIDATE_EMAIL_PHONE",
+          "desc" => "You must validate your email and phone to booking services."
+        ]
+      ]);
+    }
+
     // Validar formato de subdominio (solo letras A-Z, a-z)
     if (!empty($subDomain)) {
       if (!preg_match('/^[a-zA-Z]+$/', $subDomain)) {
@@ -423,15 +436,13 @@ class BookingController
       }
 
       // OBTENER CountryCode del usuario
-      $userInfo = $this->user->getUserById($userID);
-
       if ($userInfo->http_code !== 200 || empty($userInfo->data['CountryCode'])) {
-        return [
+        return $response->withStatus(404)->withJson([
           "error" => [
             "code" => "USER_NOT_FOUND",
             "desc" => "Could not retrieve a CountryCode for the user."
           ]
-        ];
+        ]);
       }
 
       $countryCode = $userInfo->data['CountryCode'];
