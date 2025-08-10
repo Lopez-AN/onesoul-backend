@@ -416,10 +416,14 @@ class BookingController
 
       $validTypes = $sessionTypes[$mode];
       $hasValidPackage = false;
+      $price = null;
+      $conditions = null;
       
       if (!empty($offering['Packages'])) {
         foreach ($offering['Packages'] as $package) {
           if (in_array(strtolower($package['SessionType']), $validTypes)) {
+            $price = $package['Price'] ?? null;
+            $conditions = $package['Conditions'] ?? null;
             $hasValidPackage = true;
             break;
           }
@@ -464,6 +468,12 @@ class BookingController
 
       $origin = $subDomain ? "https://{$subDomain}.onesoul.app" : "https://onesoul.app";
 
+      $guideID = $offering['UserID'] ?? null;
+      $guideInfo = $this->user->getUserById($guideID);
+      $guide = $guideInfo->data['FirstName'] . ' ' . $guideInfo->data['LastName'];
+      $guideEmail = $guideInfo->data['Email'] ?? null;
+      $guidePhone = $guideInfo->data['Phone'] ?? null;
+
       // Obtener info del usuario (quien reserva)
       if ($userInfo->http_code === 200) {
         $username = $userInfo->data['UserName'] ?? 'Usuario';
@@ -479,10 +489,15 @@ class BookingController
             '{YEAR}' => date('Y'),
             '{USERNAME}' => $username,
             '{OFFERING}' => $offering['Title'],
+            '{GUIDE_NAME}' => $guide,
+            '{GUIDE_EMAIL}' => $guideEmail,
+            '{GUIDE_PHONE}' => $guidePhone,
             '{BOOKING_ID}' => $booking['PublicID'],
             '{MESSAGE}' => $message,
             '{SCHEDULED}' => date('d/m/Y H:i', strtotime($booking['ScheduledDate'])),
             '{MODE}' => $booking['Mode'] === 'in-person' ? 'Presencial' : 'Virtual',
+            '{PRICE}' => $offering['Currency'] . ' ' . $price,
+            '{CONDITIONS}' => $conditions,
             '{BOOKING_URL}' => "{$origin}/bookings/seeker",
           ]
         );
@@ -490,16 +505,12 @@ class BookingController
 
       // Enviar email al guía
       if ($result->http_code === 200) {
-        $guideID = $offering['UserID'] ?? null;
         $offeringName = $offering['Title'] ?? 'Servicio';
         $searcherName = $userInfo->data['FirstName'] . ' ' . $userInfo->data['LastName'];
 
         if ($guideID) {
-          $guideInfo = $this->user->getUserById($guideID);
           if ($guideInfo->http_code === 200) {
             $guideName = $guideInfo->data['UserName'] ?? 'Guía';
-            $guideEmail = $guideInfo->data['Email'] ?? null;
-
             if ($guideEmail) {
               EmailHelper::send(
                 $guideName,
@@ -517,6 +528,7 @@ class BookingController
                   '{SEARCHER_PHONE}' => $userInfo->data['Phone'] ?? '-',
                   '{SCHEDULED}' => date('d/m/Y H:i', strtotime($booking['ScheduledDate'])),
                   '{MODE}' => $booking['Mode'] === 'in-person' ? 'Presencial' : 'Virtual',
+                  '{PRICE}' => $offering['Currency'] . ' ' . $price,
                   '{BOOKING_URL}' => "{$origin}/bookings/guide"
                 ]
               );
