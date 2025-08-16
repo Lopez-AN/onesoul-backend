@@ -1261,7 +1261,7 @@ clASs User
 
     $types = [];
     foreach ($result as $row) {
-      $types[strtolower($row['Name'])] = [
+      $types[strtolower(trim($row['Name']))] = [
         'SocialAccountTypeID' => $row['SocialAccountTypeID'],
         'Name' => $row['Name']
       ];
@@ -1271,11 +1271,10 @@ clASs User
   }
 
   public function getUserSocialAccounts($userID) {
-    $query = "SELECT sma.SocialAccountID, sma.SocialAccountTypeID, LOWER(smt.Name) as Name, sma.AccountName
-      FROM SocialAccounts AS sma
-      INNER JOIN SocialAccountsTypes AS smt ON sma.SocialAccountTypeID = smt.SocialAccountTypeID
-      WHERE sma.UserID = :userID AND sma.IsActive = 1
-    ";
+    $query = "SELECT sma.SocialAccountID, sma.SocialAccountTypeID, LOWER(TRIM(smt.Name)) as Name, sma.AccountName
+              FROM SocialAccounts AS sma
+              INNER JOIN SocialAccountsTypes AS smt ON sma.SocialAccountTypeID = smt.SocialAccountTypeID
+              WHERE sma.UserID = :userID AND sma.IsActive = 1";
     $stmt = $this->db->prepare($query);
     $stmt->bindParam(':userID', $userID, PDO::PARAM_INT);
     $stmt->execute();
@@ -1283,10 +1282,8 @@ clASs User
   }
 
   public function addUserSocialAccount($userID, $typeID, $accountName) {
-    $query = "
-      INSERT INTO SocialAccounts (UserID, SocialAccountTypeID, AccountName)
-      VALUES (:userID, :typeID, :accountName)
-    ";
+  $query = "INSERT INTO SocialAccounts (UserID, SocialAccountTypeID, AccountName, IsActive)
+            VALUES (:userID, :typeID, :accountName, 1)";
     $stmt = $this->db->prepare($query);
     $stmt->bindParam(':userID', $userID, PDO::PARAM_INT);
     $stmt->bindParam(':typeID', $typeID, PDO::PARAM_INT);
@@ -1294,13 +1291,14 @@ clASs User
     $stmt->execute();
   }
 
-  public function updateUserSocialAccount($userID, $typeID, $accountName) {
-    $query = "UPDATE SocialAccounts SET AccountName = :accountName WHERE UserID = :userID AND SocialAccountTypeID = :typeID";
-    $stmt = $this->db->prepare($query);
-    $stmt->bindParam(':userID', $userID, PDO::PARAM_INT);
-    $stmt->bindParam(':typeID', $typeID, PDO::PARAM_INT);
-    $stmt->bindParam(':accountName', $accountName, PDO::PARAM_STR);
-    $stmt->execute();
+  public function updateUserSocialAccount($userID, $typeID, $accountName) { 
+    $query = "UPDATE SocialAccounts SET AccountName = :accountName 
+              WHERE UserID = :userID AND SocialAccountTypeID = :typeID";
+    $stmt = $this->db->prepare($query); 
+    $stmt->bindParam(':userID', $userID, PDO::PARAM_INT); 
+    $stmt->bindParam(':typeID', $typeID, PDO::PARAM_INT); 
+    $stmt->bindParam(':accountName', $accountName, PDO::PARAM_STR); 
+    $stmt->execute(); 
   }
 
   public function deleteUserSocialAccount($userID, $typeID) {

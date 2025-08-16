@@ -723,22 +723,26 @@ class UserController
       $toRemove = array_diff_key($currentMap, $newMap);
       $toUpdate = [];
 
-      foreach ($newMap as $name => $item) {
-        if (isset($currentMap[$name]) && $currentMap[$name]['url'] !== $item['url']) {
-          $toUpdate[$name] = $item;
+      foreach ($newMap as $name => $item) { 
+        if (isset($currentMap[$name]) && $currentMap[$name]['url'] !== $item['url']) { 
+          $toUpdate[$name] = $item; 
+        } 
+      }
+
+      if (!empty($toRemove)) {
+        foreach ($toRemove as $name => $item) {
+          $this->user->deleteUserSocialAccount($userID, $item['typeID']);
         }
       }
 
-      foreach ($toRemove as $name => $item) {
-        $this->user->deleteUserSocialAccount($userID, $item['typeID']);
+      if (!empty($toAdd)) {
+        foreach ($toAdd as $name => $item) {
+          $this->user->addUserSocialAccount($userID, $item['typeID'], $item['url']);
+        }
       }
 
-      foreach ($toAdd as $name => $item) {
-        $this->user->addUserSocialAccount($userID, $item['typeID'], $item['url']);
-      }
-
-      foreach ($toUpdate as $name => $item) {
-        $this->user->updateUserSocialAccount($userID, $item['typeID'], $item['url']);
+      foreach ($toUpdate as $name => $item) { 
+        $this->user->updateUserSocialAccount($userID, $item['typeID'], $item['url']); 
       }
 
       $result = $this->user->getUserSocialAccounts($userID);
@@ -788,16 +792,7 @@ class UserController
         ]);
       }
 
-      // Simplificar salida
-      $accounts = [];
-      foreach ($result as $acc) {
-        $accounts[] = [
-          "Nombre" => strtolower($acc['Name']),
-          "URL"    => $acc['AccountName']
-        ];
-      }
-
-      return $response->withStatus(200)->withJson($accounts);
+      return $response->withStatus(200)->withJson($result);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
