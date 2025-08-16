@@ -29,9 +29,6 @@ clASs User
         ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
       u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
       s.PlanID, s.StartDate, sp.Name, sp.Description,
-      -- Subconsulta para Redes Sociales
-      GROUP_CONCAT(DISTINCT CONCAT(TRIM(smt.Name), ':', TRIM(sma.AccountName))
-      ORDER BY smt.Name ASC SEPARATOR ', ') AS SocialMediaAccounts,
       -- Subconsulta para reviews
       (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
         FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
@@ -42,9 +39,7 @@ clASs User
       LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
       LEFT JOIN Media AS m ON u.UserID = m.UserID
       LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
-      LEFT JOIN SubscriptionPlans AS sp ON s.PlanID = sp.PlanID
-      LEFT JOIN SocialMediaAccounts AS sma ON sma.UserID = u.UserID AND sma.IsActive = 1
-      LEFT JOIN SocialMediaTypes AS smt ON sma.SocialMediaTypeID = smt.SocialMediaTypeID      
+      LEFT JOIN SubscriptionPlans AS sp ON s.PlanID = sp.PlanID    
       LEFT JOIN (
         SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
         MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
@@ -78,17 +73,6 @@ clASs User
             return ["Id" => intval($a[0]), "Name" => $a[1]];
           },
           explode(",", $e['Categories'])
-        );
-
-        $user['SocialMediaAccounts'] = is_null($user['SocialMediaAccounts']) ? [] : array_map(
-          function ($s) {
-            $s = explode(":", $s, 2);
-            return [
-              "Type" => ucfirst(strtolower($s[0])),
-              "AccountName" => $s[1]
-            ];
-          },
-          explode(",", $user['SocialMediaAccounts'])
         );
 
         // Agregar sessionType con valores booleanos
@@ -139,9 +123,6 @@ clASs User
         ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
       u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
       s.PlanID, s.StartDate, sp.Name, sp.Description,
-      -- Subconsulta para Redes Sociales
-      GROUP_CONCAT(DISTINCT CONCAT(TRIM(smt.Name), ':', TRIM(sma.AccountName))
-      ORDER BY smt.Name ASC SEPARATOR ', ') AS SocialMediaAccounts,
       -- Subconsulta para reviews
       (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
         FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
@@ -153,8 +134,6 @@ clASs User
       LEFT JOIN Media AS m ON u.UserID = m.UserID
       LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
       LEFT JOIN SubscriptionPlans AS sp ON s.PlanID = sp.PlanID
-      LEFT JOIN SocialMediaAccounts AS sma ON sma.UserID = u.UserID AND sma.IsActive = 1
-      LEFT JOIN SocialMediaTypes AS smt ON sma.SocialMediaTypeID = smt.SocialMediaTypeID
       LEFT JOIN (
         SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
         MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
@@ -193,17 +172,6 @@ clASs User
           return ["Id" => intval($a[0]), "Name" => $a[1]];
         },
         explode(",", $user['Categories'])
-      );
-
-      $user['SocialMediaAccounts'] = is_null($user['SocialMediaAccounts']) ? [] : array_map(
-        function ($s) {
-          $s = explode(":", $s, 2);
-          return [
-            "Type" => ucfirst(strtolower($s[0])),
-            "AccountName" => $s[1]
-          ];
-        },
-        explode(",", $user['SocialMediaAccounts'])
       );
 
       // Agregar sessionType con valores booleanos
@@ -259,10 +227,7 @@ clASs User
       u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
         ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
       u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-      s.PlanID, s.StartDate, sp.Name, sp.Description,
-      -- Subconsulta para Redes Sociales
-      GROUP_CONCAT(DISTINCT CONCAT(TRIM(smt.Name), ':', TRIM(sma.AccountName))
-      ORDER BY smt.Name ASC SEPARATOR ', ') AS SocialMediaAccounts,      
+      s.PlanID, s.StartDate, sp.Name, sp.Description,    
       -- Subconsulta para reviews
       (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
         FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
@@ -273,9 +238,7 @@ clASs User
       LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
       LEFT JOIN Media AS m ON u.UserID = m.UserID
       LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
-      LEFT JOIN SubscriptionPlans AS sp ON s.PlanID = sp.PlanID
-      LEFT JOIN SocialMediaAccounts AS sma ON sma.UserID = u.UserID AND sma.IsActive = 1
-      LEFT JOIN SocialMediaTypes AS smt ON sma.SocialMediaTypeID = smt.SocialMediaTypeID      
+      LEFT JOIN SubscriptionPlans AS sp ON s.PlanID = sp.PlanID  
       LEFT JOIN (
         SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
         MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
@@ -314,17 +277,6 @@ clASs User
         return ["Id" => intval($a[0]), "Name" => $a[1]];
       },
       explode(",", $user['Categories'])
-    );
-
-    $user['SocialMediaAccounts'] = is_null($user['SocialMediaAccounts']) ? [] : array_map(
-      function ($s) {
-        $s = explode(":", $s, 2);
-        return [
-          "Type" => ucfirst(strtolower($s[0])),
-          "AccountName" => $s[1]
-        ];
-      },
-      explode(",", $user['SocialMediaAccounts'])
     );
 
     // Agregar sessionType con valores booleanos
@@ -380,10 +332,7 @@ clASs User
       u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
         ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
       u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-      s.PlanID, s.StartDate, sp.Name, sp.Description,
-      -- Subconsulta para Redes Sociales
-      GROUP_CONCAT(DISTINCT CONCAT(TRIM(smt.Name), ':', TRIM(sma.AccountName))
-      ORDER BY smt.Name ASC SEPARATOR ', ') AS SocialMediaAccounts,    
+      s.PlanID, s.StartDate, sp.Name, sp.Description,  
       -- Subconsulta para reviews
       (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
         FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
@@ -395,8 +344,6 @@ clASs User
       LEFT JOIN Media AS m ON u.UserID = m.UserID
       LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
       LEFT JOIN SubscriptionPlans AS sp ON s.PlanID = sp.PlanID
-      LEFT JOIN SocialMediaAccounts AS sma ON sma.UserID = u.UserID AND sma.IsActive = 1
-      LEFT JOIN SocialMediaTypes AS smt ON sma.SocialMediaTypeID = smt.SocialMediaTypeID
       LEFT JOIN (
         SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
         MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
@@ -435,18 +382,7 @@ clASs User
           return ["Id" => intval($a[0]), "Name" => $a[1]];
         },
         explode(",", $user['Categories'])
-      );
-
-      $user['SocialMediaAccounts'] = is_null($user['SocialMediaAccounts']) ? [] : array_map(
-        function ($s) {
-          $s = explode(":", $s, 2);
-          return [
-            "Type" => ucfirst(strtolower($s[0])),
-            "AccountName" => $s[1]
-          ];
-        },
-        explode(",", $user['SocialMediaAccounts'])
-      );      
+      ); 
 
       // Agregar sessionType con valores booleanos
       $user['SessionType'] = [
@@ -501,10 +437,7 @@ clASs User
       u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
         ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
       u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-      s.PlanID, s.StartDate, sp.Name, sp.Description,
-      -- Subconsulta para Redes Sociales
-      GROUP_CONCAT(DISTINCT CONCAT(TRIM(smt.Name), ':', TRIM(sma.AccountName))
-      ORDER BY smt.Name ASC SEPARATOR ', ') AS SocialMediaAccounts,   
+      s.PlanID, s.StartDate, sp.Name, sp.Description,  
       -- Subconsulta para reviews
       (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
         FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
@@ -516,8 +449,6 @@ clASs User
       LEFT JOIN Media AS m ON u.UserID = m.UserID
       LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
       LEFT JOIN SubscriptionPlans AS sp ON s.PlanID = sp.PlanID
-      LEFT JOIN SocialMediaAccounts AS sma ON sma.UserID = u.UserID AND sma.IsActive = 1
-      LEFT JOIN SocialMediaTypes AS smt ON sma.SocialMediaTypeID = smt.SocialMediaTypeID
       LEFT JOIN (
         SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
         MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
@@ -557,17 +488,6 @@ clASs User
           return ["Id" => intval($a[0]), "Name" => $a[1]];
         },
         explode(",", $user['Categories'])
-      );
-
-      $user['SocialMediaAccounts'] = is_null($user['SocialMediaAccounts']) ? [] : array_map(
-        function ($s) {
-          $s = explode(":", $s, 2);
-          return [
-            "Type" => ucfirst(strtolower($s[0])),
-            "AccountName" => $s[1]
-          ];
-        },
-        explode(",", $user['SocialMediaAccounts'])
       );
 
       // Agregar sessionType con valores booleanos
@@ -624,9 +544,6 @@ clASs User
           ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
         u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
         s.PlanID, s.StartDate, sp.Name, sp.Description,
-        -- Subconsulta para Redes Sociales
-        GROUP_CONCAT(DISTINCT CONCAT(TRIM(smt.Name), ':', TRIM(sma.AccountName))
-        ORDER BY smt.Name ASC SEPARATOR ', ') AS SocialMediaAccounts,
         -- Subconsulta para reviews
         (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
           FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
@@ -637,9 +554,7 @@ clASs User
         LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
         LEFT JOIN Media AS m ON u.UserID = m.UserID
         LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
-        LEFT JOIN SubscriptionPlans AS sp ON s.PlanID = sp.PlanID
-        LEFT JOIN SocialMediaAccounts AS sma ON sma.UserID = u.UserID AND sma.IsActive = 1
-        LEFT JOIN SocialMediaTypes AS smt ON sma.SocialMediaTypeID = smt.SocialMediaTypeID      
+        LEFT JOIN SubscriptionPlans AS sp ON s.PlanID = sp.PlanID    
         LEFT JOIN (
           SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
           MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
@@ -661,9 +576,6 @@ clASs User
           ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
         u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
         s.PlanID, s.StartDate, sp.Name, sp.Description,
-        -- Subconsulta para Redes Sociales
-        GROUP_CONCAT(DISTINCT CONCAT(TRIM(smt.Name), ':', TRIM(sma.AccountName))
-        ORDER BY smt.Name ASC SEPARATOR ', ') AS SocialMediaAccounts,  
         -- Subconsulta para reviews
         (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
           FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
@@ -674,9 +586,7 @@ clASs User
         LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
         LEFT JOIN Media AS m ON u.UserID = m.UserID
         LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
-        LEFT JOIN SubscriptionPlans AS sp ON s.PlanID = sp.PlanID
-        LEFT JOIN SocialMediaAccounts AS sma ON sma.UserID = u.UserID AND sma.IsActive = 1
-        LEFT JOIN SocialMediaTypes AS smt ON sma.SocialMediaTypeID = smt.SocialMediaTypeID      
+        LEFT JOIN SubscriptionPlans AS sp ON s.PlanID = sp.PlanID 
         LEFT JOIN (
           SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
           MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
@@ -713,17 +623,6 @@ clASs User
             return ["Id" => intval($a[0]), "Name" => $a[1]];
           },
           explode(",", $e['Categories'])
-        );
-
-        $e['SocialMediaAccounts'] = is_null($e['SocialMediaAccounts']) ? [] : array_map(
-          function ($s) {
-            $s = explode(":", $s, 2);
-            return [
-              "Type" => ucfirst(strtolower($s[0])),
-              "AccountName" => $s[1]
-            ];
-          },
-          explode(",", $e['SocialMediaAccounts'])
         );
 
         // Agregar sessionType con valores booleanos
@@ -774,9 +673,6 @@ clASs User
         ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
       u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
       s.PlanID, s.StartDate, sp.Name, sp.Description,
-      -- Subconsulta para Redes Sociales
-      GROUP_CONCAT(DISTINCT CONCAT(TRIM(smt.Name), ':', TRIM(sma.AccountName))
-      ORDER BY smt.Name ASC SEPARATOR ', ') AS SocialMediaAccounts,
       -- Subconsulta para reviews
       (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
         FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
@@ -789,8 +685,6 @@ clASs User
       LEFT JOIN Reviews AS r ON u.UserID = r.GuideID OR u.UserID = r.SeekerID
       LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
       LEFT JOIN SubscriptionPlans AS sp ON s.PlanID = sp.PlanID
-      LEFT JOIN SocialMediaAccounts AS sma ON sma.UserID = u.UserID AND sma.IsActive = 1
-      LEFT JOIN SocialMediaTypes AS smt ON sma.SocialMediaTypeID = smt.SocialMediaTypeID      
       LEFT JOIN (
         SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
         MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
@@ -821,17 +715,6 @@ clASs User
             return ["Id" => intval($a[0]), "Name" => $a[1]];
           },
           explode(",", $e['Categories'])
-        );
-
-        $e['SocialMediaAccounts'] = is_null($e['SocialMediaAccounts']) ? [] : array_map(
-          function ($s) {
-            $s = explode(":", $s, 2);
-            return [
-              "Type" => ucfirst(strtolower($s[0])),
-              "AccountName" => $s[1]
-            ];
-          },
-          explode(",", $e['SocialMediaAccounts'])
         );
 
         // Agregar sessionType con valores booleanos
@@ -890,9 +773,6 @@ clASs User
         ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
       u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
       s.PlanID, s.StartDate, sp.Name, sp.Description,
-      -- Subconsulta para Redes Sociales
-      GROUP_CONCAT(DISTINCT CONCAT(TRIM(smt.Name), ':', TRIM(sma.AccountName))
-      ORDER BY smt.Name ASC SEPARATOR ', ') AS SocialMediaAccounts,
       -- Subconsulta para reviews
       (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
         FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
@@ -903,9 +783,7 @@ clASs User
       LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
       LEFT JOIN Media AS m ON u.UserID = m.UserID
       LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
-      LEFT JOIN SubscriptionPlans AS sp ON s.PlanID = sp.PlanID
-      LEFT JOIN SocialMediaAccounts AS sma ON sma.UserID = u.UserID AND sma.IsActive = 1
-      LEFT JOIN SocialMediaTypes AS smt ON sma.SocialMediaTypeID = smt.SocialMediaTypeID      
+      LEFT JOIN SubscriptionPlans AS sp ON s.PlanID = sp.PlanID  
       LEFT JOIN (
         SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
         MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
@@ -944,18 +822,7 @@ clASs User
           return ["Id" => intval($a[0]), "Name" => $a[1]];
         },
         explode(",", $user['Categories'])
-      );
-
-      $user['SocialMediaAccounts'] = is_null($user['SocialMediaAccounts']) ? [] : array_map(
-        function ($s) {
-          $s = explode(":", $s, 2);
-          return [
-            "Type" => ucfirst(strtolower($s[0])),
-            "AccountName" => $s[1]
-          ];
-        },
-        explode(",", $user['SocialMediaAccounts'])
-      );      
+      );    
 
       // Agregar sessionType con valores booleanos
       $user['SessionType'] = [
@@ -1387,15 +1254,15 @@ clASs User
     $stmt->execute();
   }
 
-  public function getActiveSocialMediaTypes() {
-    $stmt = $this->db->prepare("SELECT SocialMediaTypeID, Name FROM SocialMediaTypes WHERE IsActive = 1");
+  public function getActiveSocialAccountsTypes() {
+    $stmt = $this->db->prepare("SELECT SocialAccountTypeID, Name FROM SocialAccountsTypes WHERE IsActive = 1");
     $stmt->execute();
     $result = $stmt->fetchAll(\PDO::FETCH_ASSOC); 
 
     $types = [];
     foreach ($result as $row) {
       $types[strtolower($row['Name'])] = [
-        'SocialMediaTypeID' => $row['SocialMediaTypeID'],
+        'SocialAccountTypeID' => $row['SocialAccountTypeID'],
         'Name' => $row['Name']
       ];
     }
@@ -1404,9 +1271,9 @@ clASs User
   }
 
   public function getUserSocialAccounts($userID) {
-    $query = "SELECT sma.SocialMediaAccountID, sma.SocialMediaTypeID, LOWER(smt.Name) as Name, sma.AccountName
-      FROM SocialMediaAccounts AS sma
-      INNER JOIN SocialMediaTypes AS smt ON sma.SocialMediaTypeID = smt.SocialMediaTypeID
+    $query = "SELECT sma.SocialAccountID, sma.SocialAccountTypeID, LOWER(smt.Name) as Name, sma.AccountName
+      FROM SocialAccounts AS sma
+      INNER JOIN SocialAccountsTypes AS smt ON sma.SocialAccountTypeID = smt.SocialAccountTypeID
       WHERE sma.UserID = :userID AND sma.IsActive = 1
     ";
     $stmt = $this->db->prepare($query);
@@ -1417,7 +1284,7 @@ clASs User
 
   public function addUserSocialAccount($userID, $typeID, $accountName) {
     $query = "
-      INSERT INTO SocialMediaAccounts (UserID, SocialMediaTypeID, AccountName)
+      INSERT INTO SocialAccounts (UserID, SocialAccountTypeID, AccountName)
       VALUES (:userID, :typeID, :accountName)
     ";
     $stmt = $this->db->prepare($query);
@@ -1428,7 +1295,7 @@ clASs User
   }
 
   public function updateUserSocialAccount($userID, $typeID, $accountName) {
-    $query = "UPDATE SocialMediaAccounts SET AccountName = :accountName WHERE UserID = :userID AND SocialMediaTypeID = :typeID";
+    $query = "UPDATE SocialAccounts SET AccountName = :accountName WHERE UserID = :userID AND SocialAccountTypeID = :typeID";
     $stmt = $this->db->prepare($query);
     $stmt->bindParam(':userID', $userID, PDO::PARAM_INT);
     $stmt->bindParam(':typeID', $typeID, PDO::PARAM_INT);
@@ -1437,7 +1304,7 @@ clASs User
   }
 
   public function deleteUserSocialAccount($userID, $typeID) {
-    $query = "DELETE FROM SocialMediaAccounts WHERE UserID = :userID AND SocialMediaTypeID = :typeID";
+    $query = "DELETE FROM SocialAccounts WHERE UserID = :userID AND SocialAccountTypeID = :typeID";
     $stmt = $this->db->prepare($query);
     $stmt->bindParam(':userID', $userID, PDO::PARAM_INT);
     $stmt->bindParam(':typeID', $typeID, PDO::PARAM_INT);
@@ -1464,6 +1331,9 @@ clASs User
                 case 'tiktok':
                     $url = 'https://www.tiktok.com/' . ltrim($url, '/');
                     break;
+                case 'calendly':
+                    $url = 'https://www.calendly.com/' . ltrim($url, '/');
+                    break;    
                 default:
                     $url = 'https://www.' . $name . '.com/' . ltrim($url, '/');
                     break;

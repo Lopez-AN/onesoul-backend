@@ -674,13 +674,13 @@ class UserController
     }
 
     $currentAccounts = $this->user->getUserSocialAccounts($userID);
-    $validTypes = $this->user->getActiveSocialMediaTypes();
+    $validTypes = $this->user->getActiveSocialAccountsTypes();
 
     $currentMap = [];
     foreach ($currentAccounts as $acc) {
         $currentMap[strtolower($acc['Name'])] = [
-            'accountID' => $acc['SocialMediaAccountID'],
-            'typeID'    => $acc['SocialMediaTypeID'],
+            'accountID' => $acc['SocialAccountID'],
+            'typeID'    => $acc['SocialAccountTypeID'],
             'url'       => $acc['AccountName']
         ];
     }
@@ -702,8 +702,8 @@ class UserController
       if (!array_key_exists($name, $validTypes)) {
         return $response->withStatus(400)->withJson([
           "error" => [
-            "code" => "INVALID_SOCIAL_MEDIA",
-            "desc" => "Social media '$name' is not allowed or not active"
+            "code" => "INVALID_SOCIAL_ACCOUNT",
+            "desc" => "Social account '$name' is not allowed or not active"
           ]
         ]);
       }
@@ -712,38 +712,100 @@ class UserController
       $formattedUrl = $this->user->formatSocialUrl($name, $url);
 
       $newMap[$name] = [
-        'typeID' => $validTypes[$name]['SocialMediaTypeID'],
+        'typeID' => $validTypes[$name]['SocialAccountTypeID'],
         'url' => $formattedUrl
       ];
     }
 
-    // Detectar cambios
-    $toAdd = array_diff_key($newMap, $currentMap);
-    $toRemove = array_diff_key($currentMap, $newMap);
-    $toUpdate = [];
+    try {
+      // Detectar cambios
+      $toAdd = array_diff_key($newMap, $currentMap);
+      $toRemove = array_diff_key($currentMap, $newMap);
+      $toUpdate = [];
 
-    foreach ($newMap as $name => $item) {
-      if (isset($currentMap[$name]) && $currentMap[$name]['url'] !== $item['url']) {
-        $toUpdate[$name] = $item;
+      foreach ($newMap as $name => $item) {
+        if (isset($currentMap[$name]) && $currentMap[$name]['url'] !== $item['url']) {
+          $toUpdate[$name] = $item;
+        }
       }
+
+      foreach ($toRemove as $name => $item) {
+        $this->user->deleteUserSocialAccount($userID, $item['typeID']);
+      }
+
+      foreach ($toAdd as $name => $item) {
+        $this->user->addUserSocialAccount($userID, $item['typeID'], $item['url']);
+      }
+
+      foreach ($toUpdate as $name => $item) {
+        $this->user->updateUserSocialAccount($userID, $item['typeID'], $item['url']);
+      }
+
+      $result = $this->user->getUserSocialAccounts($userID);
+      $accounts = [];
+      foreach ($result as $acc) {
+        $accounts[] = [
+          'Nombre' => strtolower($acc['Name']),
+          'URL'    => $acc['AccountName']
+        ];
+      }
+
+      return $response->withStatus(200)->withJson($accounts);
+
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  public function getUserSocialAccounts(Request $request, Response $response, $args)
+  {
+    $id = $args['id'];
+    $jwt = $request->getAttribute('jwt');
+    
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+      return $response->withStatus(401)->withJson([
+        "error" => [
+          "code" => "INVALID_TOKEN",
+          "desc" => "Invalid JWT token"
+        ]
+      ]);
     }
 
-    foreach ($toRemove as $name => $item) {
-      $this->user->deleteUserSocialAccount($userID, $item['typeID']);
-    }
+    try {
+      $result = $this->user->getUserSocialAccounts($id);
 
-    foreach ($toAdd as $name => $item) {
-      $this->user->addUserSocialAccount($userID, $item['typeID'], $item['url']);
-    }
+      if (empty($result)) {
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "SOCIAL_ACCOUNTS_NOT_FOUND",
+            "desc" => "No Social Accounts found for this specific user."
+          ]
+        ]);
+      }
 
-    foreach ($toUpdate as $name => $item) {
-      $this->user->updateUserSocialAccount($userID, $item['typeID'], $item['url']);
-    }
+      // Simplificar salida
+      $accounts = [];
+      foreach ($result as $acc) {
+        $accounts[] = [
+          "Nombre" => strtolower($acc['Name']),
+          "URL"    => $acc['AccountName']
+        ];
+      }
 
-    return $response->withJson([
-      'code' => 200,
-      'description' => 'Redes sociales actualizadas correctamente'
-    ]);
+      return $response->withStatus(200)->withJson($accounts);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
   }
 
   private function containsInappropriateContent($text) 

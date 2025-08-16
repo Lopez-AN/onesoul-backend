@@ -34,4 +34,5 @@ return function (App $app) {
   $app->delete('/users/{id}', [$userController, 'deleteUser'])->add($jwtMiddleware);
   $app->post('/users/categories/{id}', [$userController, 'updateUserCategories'])->add($jwtMiddleware);
   $app->post('/users/social/{id}', [$userController, 'updateUserSocialAccounts'])->add($jwtMiddleware);
+  $app->get('/users/social/{id}', [$userController, 'getUserSocialAccounts'])->add($jwtMiddleware);
 };
