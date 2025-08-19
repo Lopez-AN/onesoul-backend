@@ -292,8 +292,8 @@ class SubscriptionController {
       $this->subscription->cancelSubscription($stripeSubscriptionID, $subDomain);
 
       return $response->withStatus(200)->withJson([
-        "success" => true,
-        "message" => "Subscription cancelled successfully."
+        "Success" => true,
+        "Message" => "Subscription cancelled successfully."
       ]);
 
     } catch (\Throwable $e) {

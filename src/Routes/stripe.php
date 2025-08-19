@@ -21,4 +21,5 @@ return function (App $app) {
 
   $app->post('/stripe/subscribe', [$stripeController, 'createCheckoutSession'])->add($jwtMiddleware);
   $app->post('/stripe/webhook', [$stripeController, 'handleWebhook']);
+  $app->get('/stripe/session/{sessionID}', [$stripeController, 'getStripeSession'])->add($jwtMiddleware); 
 };
