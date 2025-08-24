@@ -15,16 +15,15 @@ class StripeController{
   protected $user;
   protected $subscription;
 
-  public function __construct(StripeService $stripe, User $user, Subscription $subscription){
+  public function __construct(StripeService $stripe, User $user, Subscription $subscription) {
     $this->stripe = $stripe;
     $this->user = $user;
     $this->subscription = $subscription;
   }
 
-  public function createCheckoutSession(Request $request, Response $response, $args)
-  {
+  public function createCheckoutSession(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
-    $priceId = $data['priceId'] ?? null;
+    $priceId = $data['PriceId'] ?? null;
     $subDomain = $data['SubDomain'] ?? '';
     $jwt = $request->getAttribute('jwt');
 
@@ -114,6 +113,188 @@ class StripeController{
     }
   }
 
+  public function upgradeInfo(Request $request, Response $response, array $args) {
+    $subId = $args['subId'];
+    $body = $request->getParsedBody();
+    $newPriceId = $body['NewPriceId'] ?? null;
+
+    if (!$newPriceId) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_PARAMETERS",
+          "desc" => "Missing or invalid parameters"
+        ]
+      ]);
+    }
+
+    \Stripe\Stripe::setApiKey($GLOBALS['config']['stripe']['STRIPE_SECRET_KEY']);
+
+    // Traer sub e item actual
+    $sub = \Stripe\Subscription::retrieve($subId);
+    if (!$sub || $sub->status === 'canceled') {
+      return $response->withStatus(404)->withJson([
+        "error" => [
+          "code" => "PLAN_NOT_FOUND",
+          "desc" => "No matching plan found for the given Stripe Price ID."
+        ]
+      ]);
+    }
+
+    $item = $sub->items->data[0]; 
+    $prorationDate = time();
+
+    // Preview del próximo invoice simulando el cambio
+    $preview = \Stripe\Invoice::createPreview([
+      'customer' => $sub->customer,
+      'subscription' => $sub->id,
+      'subscription_details' => [
+        'items' => [[ 'id' => $item->id, 'price' => $newPriceId ]],
+        'proration_date' => $prorationDate,
+        'proration_behavior'  => 'always_invoice',
+      ],
+    ]);
+
+    // Armar respuesta amigable
+    $lines = array_map(function($l) {
+      return [
+        'Description' => $l->description,
+        'Amount'      => $l->amount / 100,
+        'Proration'   => $l->proration === true,
+      ];
+    }, $preview->lines->data);
+
+    return $response->withJson([
+      'Currency'    => strtoupper($preview->currency),
+      'AmountDue'  => $preview->amount_due / 100,           // Diferencia a cobrar ahora
+      'ProrationDate' => $prorationDate,                     // Guárdalo para aplicar el mismo cálculo
+      'Lines'       => $lines,
+      'CurrentPeriodEnd' => $sub->current_period_end
+    ]);
+  }
+
+  public function upgradeApply(Request $request, Response $response, array $args) {
+    $subId = $args['subId'];
+    $body = $request->getParsedBody();
+    $newPriceId = $body['NewPriceId'] ?? null;
+    $prorationDate = $body['ProrationDate'] ?? null;
+
+    if (!$newPriceId || !$prorationDate) {
+      return $response->withStatus(400)->withJson(['error' => 'MISSING_PARAMS']);
+    }
+
+    \Stripe\Stripe::setApiKey($GLOBALS['config']['stripe']['STRIPE_SECRET_KEY']);
+
+    $sub = \Stripe\Subscription::retrieve($subId);
+    $itemId = $sub->items->data[0]->id;
+
+    $updated = \Stripe\Subscription::update($subId, [
+      'items' => [[ 'id' => $itemId, 'price' => $newPriceId ]],
+      'proration_behavior' => 'always_invoice',   // factura la diferencia ahora
+      'proration_date'     => $prorationDate,     // MISMO que el preview
+      'payment_behavior'   => 'pending_if_incomplete', // si requiere SCA, queda pendiente
+      'expand' => ['latest_invoice.payment_intent', 'latest_invoice.charge'],
+    ]);
+
+    $invoice = $updated->latest_invoice ?? null;
+    $pi = $invoice ? $invoice->payment_intent : null;
+
+    // Respuestas típicas:
+    if ($invoice && $invoice->status === 'paid') {
+      return $response->withJson(['Status' => 'paid', 'SubscriptionId' => $updated->id]);
+    }
+
+    if ($pi && $pi->status === 'requires_action') {
+      // Devolvés client_secret para confirmar 3DS en el front
+      return $response->withJson([
+        'Status' => 'requires_action',
+        'ClientSecret' => $pi->client_secret,
+        'SubscriptionId' => $updated->id
+      ]);
+    }
+
+    if ($pi && $pi->status === 'requires_payment_method') {
+      // No hay método de pago válido. Mostrá UI para actualizar tarjeta (Billing Portal o Payment Element)
+      return $response->withJson(['Status' => 'requires_payment_method']);
+    }
+
+    // Fallback: pendiente (Stripe intentará cobrar)
+    return $response->withJson(['Status' => 'pending', 'SubscriptionId' => $updated->id]);
+  }
+
+  public function downgradeApply(Request $request, Response $response, array $args) {
+    $subId = $args['subId'];
+    $body = $request->getParsedBody();
+    $newPriceId = $body['NewPriceId'] ?? null;
+
+    if (!$newPriceId) {
+      return $response->withStatus(400)->withJson(['error' => 'MISSING_PRICE']);
+    }
+
+    \Stripe\Stripe::setApiKey($GLOBALS['config']['stripe']['STRIPE_SECRET_KEY']);
+
+    // 1) Traer la suscripción actual
+    $sub = \Stripe\Subscription::retrieve($subId);
+    if (!$sub || $sub->status === 'canceled') {
+      return $response->withStatus(404)->withJson(['error' => 'SUB_NOT_FOUND_OR_CANCELED']);
+    }
+
+    // Tomamos el item/price actual (ajustar si hay múltiples)
+    $currentItem   = $sub->items->data[0];
+    $currentPriceId = is_string($currentItem->price) ? $currentItem->price : $currentItem->price->id;
+    $quantity       = $currentItem->quantity ?? 1;
+    $effectiveAt    = $sub->current_period_end; // timestamp (segundos)
+
+    // 2) Si ya tiene un schedule, lo actualizamos; si no, lo creamos desde la sub
+    if ($sub->schedule) {
+      // Actualizar fases de un schedule existente
+      $schedule = \Stripe\SubscriptionSchedule::retrieve($sub->schedule);
+      $schedule = \Stripe\SubscriptionSchedule::update($schedule->id, [
+        'phases' => [
+          [
+            'items' => [[ 'price' => $currentPriceId, 'quantity' => $quantity ]],
+            'end_date' => $effectiveAt,
+            'proration_behavior' => 'none',
+          ],
+          [
+            'items' => [[ 'price' => $newPriceId, 'quantity' => $quantity ]],
+            'proration_behavior' => 'none',
+          ],
+        ],
+      ]);
+    } else {
+      // Crear un schedule nuevo que “tome” la sub actual y agregue la fase futura
+      $schedule = \Stripe\SubscriptionSchedule::create([
+        'from_subscription' => $sub->id,
+        'phases' => [
+          [
+            'items' => [[ 'price' => $currentPriceId, 'quantity' => $quantity ]],
+            'end_date' => $effectiveAt,
+            'proration_behavior' => 'none',
+          ],
+          [
+            'items' => [[ 'price' => $newPriceId, 'quantity' => $quantity ]],
+            'proration_behavior' => 'none',
+          ],
+        ],
+      ]);
+    }
+
+    // 3) (Opcional pero recomendado) Persistí en tu BD:
+    // - status_local = 'downgrade_pending'
+    // - next_plan_price_id = $newPriceId
+    // - effective_at = $effectiveAt (fecha del cambio)
+    // Concedé beneficios del plan actual hasta esa fecha.
+
+    return $response->withJson([
+      'status'         => 'scheduled',
+      'schedule_id'    => $schedule->id,
+      'effective_at'   => $effectiveAt,             
+      'current_price'  => $currentPriceId,
+      'next_price'     => $newPriceId,
+      'subscription_id'=> $sub->id,
+    ]);
+  }
+
   public function handleWebhook(Request $request, Response $response, $args)
   {
     $payload = $request->getBody()->getContents();
@@ -128,17 +309,18 @@ class StripeController{
         case 'checkout.session.completed':
           $session = $event->data->object;
 
-          if (!isset($session->metadata->userID) || !isset($session->metadata->planID)) {
+          if (!isset($session->metadata->UserID) || !isset($session->metadata->PlanID)) {
             error_log("❌ Metadata faltante en session.");
             return $response->withStatus(400);
           }
 
-          $userID = (int) $session->metadata->userID;
-          $planID = (int) $session->metadata->planID;
-          $subDomain = $session->metadata->subdomain ?? '';
-          $stripeSubscriptionID = $session->subscription ?? null;
+          $userID = (int) $session->metadata->UserID;
+          $planID = (int) $session->metadata->PlanID;
+          $subDomain = $session->metadata->SubDomain ?? '';
+          $platformSubscriptionID = $session->subscription;
+          $platformCustomerID = $session->customer;
 
-          if (!$stripeSubscriptionID) {
+          if (!$platformSubscriptionID) {
             error_log("❌ Falta subscription ID de Stripe.");
             return $response->withStatus(400);
           }
@@ -157,7 +339,7 @@ class StripeController{
           }
 
           try {
-            $this->subscription->createConfirmedSubscription($userID, $planID, $stripeSubscriptionID, $subDomain, $userData);
+            $this->subscription->createConfirmedSubscription($userID, $planID, $platformSubscriptionID, $platformCustomerID, $subDomain, $userData);
             error_log("✅ Subscription creada para UserID: $userID | PlanID: $planID | StripeID: $stripeSubscriptionID | SubDomain: $subDomain");
           } catch (\Throwable $e) {
             error_log("❌ Error al crear la suscripción: " . $e->getMessage());
@@ -167,7 +349,37 @@ class StripeController{
 
         case 'invoice.paid':
           $invoice = $event->data->object;
+          $line = !empty($invoice->lines->data) ? $invoice->lines->data[0] : null;
+
+          $invoiceData = [
+            'InvoiceID'       => $invoice->id,
+            'SubscriptionID'  => $invoice->parent->subscription_details->subscription ?? null,
+            'CustomerID'      => $invoice->customer,
+            'Currency'        => $invoice->currency,
+            'AmountDue'       => $invoice->amount_due,
+            'AmountPaid'      => $invoice->amount_paid,
+            'AmountRemaining' => $invoice->amount_remaining,
+            'Status'          => $invoice->status,
+            'PriceID'         => $line?->pricing->price_details->price,
+            'ProductID'       => $line?->pricing->price_details->product,
+            'Quantity'        => $line?->quantity ?? 1,
+            'PeriodStart'     => $line ? date("Y-m-d", $line->period->start) : null,
+            'PeriodEnd'       => $line ? date("Y-m-d", $line->period->end) : null,
+            'InvoicePDF'      => $invoice->invoice_pdf ?? null,
+            'HostedInvoiceURL'=> $invoice->hosted_invoice_url ?? null,
+            'CreatedAt'       => date("Y-m-d", $invoice->created),
+            'PaidAt'          => $invoice->status_transitions->paid_at ? date("Y-m-d", $invoice->status_transitions->paid_at) : null,
+          ];
+
           error_log("ℹ️ Invoice paid para subscription: " . $invoice->subscription);
+
+          try {
+            $this->subscription->createSubscriptionPayment($invoiceData);
+            error_log("✅ Pago aprobado para UserID (InvoiceID: " . $invoice->id . ")");
+          } catch (\Throwable $e) {
+            error_log("❌ Error al registrar el pago: " . $e->getMessage());
+            return $response->withStatus(500);
+          }
           break;
 
         case 'customer.subscription.deleted':

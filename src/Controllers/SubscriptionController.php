@@ -48,7 +48,7 @@ class SubscriptionController {
     }
   }
 
-  public function getSubscriptionPlanByID(Request $request, Response $response, array $args) {
+  public function getSubscriptionPlanByID(Request $request, Response $response, $args) {
     $id = $args['id'];
 
     try {
@@ -72,7 +72,7 @@ class SubscriptionController {
     }
   }
 
-  public function getSubscriptionByUser(Request $request, Response $response, array $args) {
+  public function getSubscriptionByUser(Request $request, Response $response, $args) {
     $userID = $args['userID'];
     $jwt = $request->getAttribute('jwt');
 
@@ -117,7 +117,7 @@ class SubscriptionController {
     }
   }
 
-  public function getSubscriptionPlanByStripeID(Request $request, Response $response, array $args) {
+  public function getSubscriptionPlanByStripeID(Request $request, Response $response, $args) {
     $priceID = $args['priceID'];
 
     try {
@@ -141,7 +141,7 @@ class SubscriptionController {
     }
   }
 
-  public function updateSubscriptionByUser(Request $request, Response $response, array $args)
+  public function updateSubscriptionByUser(Request $request, Response $response,$args)
   {
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
@@ -243,7 +243,7 @@ class SubscriptionController {
     }
   }
 
-  public function cancelSubscription(Request $request, Response $response, array $args)
+  public function cancelSubscription(Request $request, Response $response, $args)
   {
     $jwt = $request->getAttribute('jwt');
     $subDomain = $data['SubDomain'] ?? '';
@@ -306,7 +306,7 @@ class SubscriptionController {
     }
   }  
 
-  public function updateSubscriptionPlan(Request $request, Response $response, array $args) {
+  public function updateSubscriptionPlan(Request $request, Response $response, $args) {
     $id = $args['id'];
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
@@ -345,7 +345,7 @@ class SubscriptionController {
     }
   }
 
-  public function updateFeatureStatus(Request $request, Response $response, array $args)
+  public function updateFeatureStatus(Request $request, Response $response, $args)
   {
     $featureCode = $args['featureCode'];
     $data = $request->getParsedBody();
@@ -396,7 +396,7 @@ class SubscriptionController {
     }
   }
 
-  public function getPriceInfo(Request $request, Response $response, array $args)
+  public function getPriceInfo(Request $request, Response $response, $args)
   {
     $jwt = $request->getAttribute('jwt');
     $targetPlanID = $args['planID'];

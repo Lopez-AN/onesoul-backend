@@ -345,7 +345,7 @@ class Subscription
     }
   }
 
-  public function createConfirmedSubscription($userID, $planID, $stripeSubscriptionID, $subDomain = '', $userData = [])
+  public function createConfirmedSubscription($userID, $planID, $platformSubscriptionID, $platformCustomerID, $subDomain = '', $userData = [])
   {
     try {
       $remainingDays = 30;
@@ -358,14 +358,17 @@ class Subscription
       $stmt->execute(['userID' => $userID]);
 
       // Insertar nueva suscripción
-      $stmt = $this->db->prepare("INSERT INTO Subscriptions (UserID, PlanID, StartDate, Status, RemainingDays, NextBillingDate, StripeID)
-                                VALUES (:userID, :planID, CURDATE(), 'ACTIVE', :remainingDays, :nextBillingDate, :stripeSubscriptionID)");
+      $stmt = $this->db->prepare("INSERT INTO Subscriptions (UserID, PlanID, StartDate, Status, RemainingDays, 
+                                NextBillingDate, PlatformSubscriptionID, PlatformCustomerID, PaymentPlatform)
+                                VALUES (:userID, :planID, CURDATE(), 'ACTIVE', :remainingDays, :nextBillingDate, 
+                                :platformSubscriptionID, :platformCustomerID, 'Stripe')");
       $stmt->execute([
         'userID' => $userID,
         'planID' => $planID,
         'remainingDays' => $remainingDays,
         'nextBillingDate' => $nextBillingDate,
-        'stripeSubscriptionID' => $stripeSubscriptionID
+        'platformSubscriptionID' => $platformSubscriptionID,
+        'platformCustomerID' => $platformCustomerID
       ]);
 
       // Marcar referido como exitoso si corresponde
@@ -413,11 +416,28 @@ class Subscription
     }
   }
 
+  public function createSubscriptionPayment(array $data) {
+    try {
+      $stmt = $this->db->prepare("INSERT INTO SubscriptionsPayments (InvoiceID, SubscriptionID, CustomerID,
+              Currency, AmountDue, AmountPaid, AmountRemaining, Status, PriceID, ProductID, Quantity,
+              PeriodStart, PeriodEnd, InvoicePDF, HostedInvoiceURL, CreatedAt, PaidAt) 
+              VALUES (:InvoiceID, :SubscriptionID, :CustomerID, :Currency,
+              :AmountDue, :AmountPaid, :AmountRemaining, :Status,
+              :PriceID, :ProductID, :Quantity, :PeriodStart, :PeriodEnd,
+              :InvoicePDF, :HostedInvoiceURL, :CreatedAt, :PaidAt)");
+
+        $stmt->execute($data);
+    } catch (\PDOException $e) {
+        error_log("❌ Error guardando invoice Stripe: " . $e->getMessage());
+        throw $e;
+    }
+  }
+
   public function cancelSubscription($stripeSubscriptionID, $subDomain)
   {
     try {
       $stmt = $this->db->prepare("SELECT * FROM Subscriptions 
-                                  WHERE StripeID = :stripeSubscriptionID AND Status = 'ACTIVE'
+                                  WHERE PlatformSubscriptiontID = :stripeSubscriptionID AND Status = 'ACTIVE'
                                   ORDER BY StartDate DESC LIMIT 1");
       $stmt->execute(['stripeSubscriptionID' => $stripeSubscriptionID]);
       $subscription = $stmt->fetch(PDO::FETCH_ASSOC);

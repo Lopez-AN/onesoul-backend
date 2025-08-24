@@ -16,8 +16,7 @@ class StripeService
     $this->db = $db;
   }
 
-  public function createCheckoutSession($priceId, $userEmail, $userID, $planID, $subDomain) 
-  {
+  public function createCheckoutSession($priceId, $userEmail, $userID, $planID, $subDomain) {
     try {
       // Configurar la clave secreta de Stripe
       \Stripe\Stripe::setApiKey($GLOBALS['config']['stripe']['STRIPE_SECRET_KEY']);
@@ -32,12 +31,12 @@ class StripeService
           'quantity' => 1
         ]],
         'customer_email' => $userEmail,
-        'success_url' =>  $origin . "/profile?subscription_success&session_id={CHECKOUT_SESSION_ID}",
-        'cancel_url' => $origin . "/profile?subscription_cancel&session_id={CHECKOUT_SESSION_ID}",
+        'success_url' => $origin . "/profile/subscription/success?session_id={CHECKOUT_SESSION_ID}",
+        'cancel_url' => $origin . "/profile/subscription/cancel?session_id={CHECKOUT_SESSION_ID}",
         'metadata' => [
-          'userID' => $userID,
-          'planID' => $planID,
-          'subDomain' => $subDomain
+          'UserID' => $userID,
+          'PlanID' => $planID,
+          'SubDomain' => $subDomain
         ]
       ]);
 
@@ -55,8 +54,7 @@ class StripeService
     }
   }
 
-  public function getStripeSession($sessionID)
-  {
+  public function getStripeSession($sessionID) {
     try {
       // Configurar la clave secreta de Stripe
       \Stripe\Stripe::setApiKey($GLOBALS['config']['stripe']['STRIPE_SECRET_KEY']);
@@ -79,14 +77,12 @@ class StripeService
       return $data;
 
     } catch (\Exception $e) {
-      // Log de error opcional
       error_log("Stripe session retrieval error: " . $e->getMessage());
       return null;
     }
   }
 
-  public function cancelStripeSubscription($stripeSubscriptionID)
-  {
+  public function cancelStripeSubscription($stripeSubscriptionID) {
     try {
       \Stripe\Stripe::setApiKey($GLOBALS['config']['stripe']['STRIPE_SECRET_KEY']);
 
