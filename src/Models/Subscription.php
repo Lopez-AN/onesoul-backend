@@ -416,7 +416,7 @@ class Subscription
     }
   }
 
-  public function createSubscriptionPayment(array $data) {
+  public function createSubscriptionPayment($data) {
     try {
       $stmt = $this->db->prepare("INSERT INTO SubscriptionsPayments (InvoiceID, SubscriptionID, CustomerID,
               Currency, AmountDue, AmountPaid, AmountRemaining, Status, PriceID, ProductID, Quantity,
@@ -426,10 +426,24 @@ class Subscription
               :PriceID, :ProductID, :Quantity, :PeriodStart, :PeriodEnd,
               :InvoicePDF, :HostedInvoiceURL, :CreatedAt, :PaidAt)");
 
-        $stmt->execute($data);
+      $stmt->execute($data);
+
+      return $this->getPaymentByInvoiceID($data['InvoiceID']);
     } catch (\PDOException $e) {
-        error_log("❌ Error guardando invoice Stripe: " . $e->getMessage());
-        throw $e;
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  public function getPaymentByInvoiceID($invoiceID) {
+    try {
+      $stmt = $this->db->prepare("SELECT * FROM SubscriptionsPayments
+      WHERE InvoiceID = :invoiceID");
+      $invoiceID = $stmt->execute(['invoiceID' => $invoiceID]);
+
+      return $invoiceID;
+
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
     }
   }
 

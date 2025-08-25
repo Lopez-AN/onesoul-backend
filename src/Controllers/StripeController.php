@@ -345,7 +345,7 @@ class StripeController{
             error_log("❌ Error al crear la suscripción: " . $e->getMessage());
             return $response->withStatus(500);
           }
-          break;
+        break;
 
         case 'invoice.paid':
           $invoice = $event->data->object;
@@ -380,7 +380,30 @@ class StripeController{
             error_log("❌ Error al registrar el pago: " . $e->getMessage());
             return $response->withStatus(500);
           }
-          break;
+        break;
+
+        case 'customer.subscription.updated':
+          $sub = $event->data->object;
+
+          $stripeSubscriptionID = $sub->id;
+          $newPriceId = $sub->items->data[0]->price->id ?? null;
+
+          error_log("ℹ️ Subscription actualizada en Stripe: $stripeSubscriptionID con nuevo PriceID: $newPriceId");
+
+          try {
+            // Mapear PriceID -> PlanID (según tu tabla de planes)
+            $planInfo = $this->subscription->getPlanByStripePrice($newPriceId);
+            if ($planInfo) {
+              $this->subscription->updateUserSubscriptionPlan($stripeSubscriptionID, $planInfo['PlanID']);
+              error_log("✅ Plan actualizado en BD a PlanID: " . $planInfo['PlanID']);
+            } else {
+              error_log("⚠️ No se encontró plan para PriceID: $newPriceId");
+            }
+          } catch (\Throwable $e) {
+            error_log("❌ Error al actualizar suscripción: " . $e->getMessage());
+            return $response->withStatus(500);
+          }
+        break;
 
         case 'customer.subscription.deleted':
           $subscription = $event->data->object;
@@ -395,7 +418,7 @@ class StripeController{
             error_log("❌ Error al cancelar suscripción: " . $e->getMessage());
             return $response->withStatus(500);
           }
-          break;
+        break;
 
         default:
           error_log("⚠️ Evento no manejado: " . $event->type);
