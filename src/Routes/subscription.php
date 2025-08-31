@@ -23,10 +23,12 @@ return function (App $app) {
 
   $app->get('/subscription/plans', [$subscriptionController, 'getSubscriptionPlans']);
   $app->get('/subscription/plans/{id}', [$subscriptionController, 'getSubscriptionPlanByID']);
+  $app->get('/subscription/plans/stripe/{stripeID}', [$subscriptionController, 'getSubscriptionPlanByStripeID']);
   $app->get('/subscription/{userID}', [$subscriptionController, 'getSubscriptionByUser'])->add($jwtMiddleware);
-  $app->get('/subscription/priceInfo/{planID}', [$subscriptionController, 'getPriceInfo'])->add($jwtMiddleware);
-  $app->post('/subscription/plans/{id}', [$subscriptionController, 'updateSubscriptionPlan'])->add($jwtMiddleware);
+  $app->get('/subscription/user/{subId}', [$subscriptionController, 'getUserSubscriptionByPlatformSubID'])->add($jwtMiddleware);
   $app->patch('/subscription', [$subscriptionController, 'updateSubscriptionByUser'])->add($jwtMiddleware);
   $app->post('/subscription/cancel', [$subscriptionController, 'cancelSubscription'])->add($jwtMiddleware);
   $app->put('/subscription/features/{featureCode}/status', [$subscriptionController, 'updateFeatureStatus'])->add($jwtMiddleware);
+  $app->get('/subscription/priceInfo/{planID}', [$subscriptionController, 'getPriceInfo'])->add($jwtMiddleware);
+  $app->post('/subscription/plans/{id}', [$subscriptionController, 'updateSubscriptionPlan'])->add($jwtMiddleware);
 };

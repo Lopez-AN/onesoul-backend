@@ -72,6 +72,30 @@ class SubscriptionController {
     }
   }
 
+  public function getSubscriptionPlanByStripeID(Request $request, Response $response, $args) {
+    $stripeID = $args['stripeID'];
+
+    try {
+      $subscription = $this->subscription->getSubscriptionPlanByStripeID($stripeID);
+
+      if (!$subscription) {
+        return $response->withStatus(404)->withJson((object)["error" => [
+          "code" => "SUBSCRIPTION_NOT_FOUND",
+          "desc" => "Plan not found with the ID {$id}."
+        ]]);
+      }
+
+      return $response->withStatus(200)->withJson($subscription);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
   public function getSubscriptionByUser(Request $request, Response $response, $args) {
     $userID = $args['userID'];
     $jwt = $request->getAttribute('jwt');
@@ -86,8 +110,8 @@ class SubscriptionController {
     }
 
     try {
-      # Verificar si el usuario autenticado es un administrador
-      if ($jwt['data']->UserType != 'Admin') {
+      # Verificar si el usuario autenticado es el mismo o un administrador
+      if ($jwt['data']->UserID != $userID && $jwt['data']->UserType != 'Admin') {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
@@ -117,20 +141,45 @@ class SubscriptionController {
     }
   }
 
-  public function getSubscriptionPlanByStripeID(Request $request, Response $response, $args) {
-    $priceID = $args['priceID'];
+  public function getUserSubscriptionByPlatformSubID(Request $request, Response $response, $args) {
+    $platformSubscriptionID = $args['subId'];
+    $jwt = $request->getAttribute('jwt');
+
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+      return $response->withStatus(401)->withJson([
+        "error" => [
+          "code" => "INVALID_TOKEN",
+          "desc" => "Invalid JWT token"
+        ]
+      ]);
+    }
 
     try {
-      $subscription = $this->subscription->getSubscriptionPlanByStripeID($priceID);
+      $subscription = $this->subscription->getUserSubscriptionByPlatformSubID($platformSubscriptionID);
 
       if (!$subscription) {
-        return $response->withStatus(404)->withJson((object)["error" => [
-          "code" => "SUBSCRIPTION_NOT_FOUND",
-          "desc" => "Plan not found with the ID {$id}."
-        ]]);
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "SUBSCRIPTION_NOT_FOUND",
+            "desc" => "No active subscription found for this ID: {$platformSubscriptionID}."
+          ]
+        ]);
+      }
+
+      $userID = $subscription['UserID'];
+
+      # Verificar si el usuario autenticado es un administrador
+      if ($jwt['data']->UserID != $userID && $jwt['data']->UserType != 'Admin') {
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "UNAUTHORIZED",
+            "desc" => "You do not have permission to modify this user"
+          ]
+        ]);
       }
 
       return $response->withStatus(200)->withJson($subscription);
+
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -141,8 +190,7 @@ class SubscriptionController {
     }
   }
 
-  public function updateSubscriptionByUser(Request $request, Response $response,$args)
-  {
+  public function updateSubscriptionByUser(Request $request, Response $response,$args) {
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
     $userID = $jwt['data'] -> UserID;
@@ -181,11 +229,11 @@ class SubscriptionController {
   
       $newPlanID = $data['PlanID'] ?? null;
 
-      // Actualizar suscripción
-      $result = $this->subscription->updateSubscriptionByUser($userID, $subDomain, $newPlanID);
+      // // Actualizar suscripción
+      // $result = $this->subscription->updateSubscriptionByUser($platformSubscriptionID, $newPlanID, $nextBillingDate);
   
-      // Si es un alta (no hay prorrateo ni upgrade/downgrade)
-      if ($result['ProportionalCharge'] === 0 && $newPlanID !== null) {
+      // // Si es un alta (no hay prorrateo ni upgrade/downgrade)
+      // if ($result['ProportionalCharge'] === 0 && $newPlanID !== null) {
         // Obtener el email del usuario
         $userResult = $this->user->getUserById($userID);
         if ($userResult->http_code !== 200 || empty($userResult->data['Email'])) {
@@ -225,13 +273,13 @@ class SubscriptionController {
           "checkout_url" => $checkout['url'],
           "session_id" => $checkout['sessionId']
         ]);
-      }
+      // }
 
-      // Si no es nueva suscripción pura, devolver normalmente
-      return $response->withStatus(200)->withJson([
-        "Subscription" => $result['Suscription'],
-        "ProportionalCharge" => $result['ProportionalCharge']
-      ]);
+      // // Si no es nueva suscripción pura, devolver normalmente
+      // return $response->withStatus(200)->withJson([
+      //   "Subscription" => $result['Suscription'],
+      //   "ProportionalCharge" => $result['ProportionalCharge']
+      // ]);
   
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
@@ -243,8 +291,8 @@ class SubscriptionController {
     }
   }
 
-  public function cancelSubscription(Request $request, Response $response, $args)
-  {
+  public function cancelSubscription(Request $request, Response $response, $args) {
+    $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
     $subDomain = $data['SubDomain'] ?? '';
 
@@ -345,8 +393,7 @@ class SubscriptionController {
     }
   }
 
-  public function updateFeatureStatus(Request $request, Response $response, $args)
-  {
+  public function updateFeatureStatus(Request $request, Response $response, $args) {
     $featureCode = $args['featureCode'];
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
@@ -396,8 +443,7 @@ class SubscriptionController {
     }
   }
 
-  public function getPriceInfo(Request $request, Response $response, $args)
-  {
+  public function getPriceInfo(Request $request, Response $response, $args) {
     $jwt = $request->getAttribute('jwt');
     $targetPlanID = $args['planID'];
   
