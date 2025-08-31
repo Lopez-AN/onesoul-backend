@@ -22,4 +22,7 @@ return function (App $app) {
   $app->post('/stripe/subscribe', [$stripeController, 'createCheckoutSession'])->add($jwtMiddleware);
   $app->post('/stripe/webhook', [$stripeController, 'handleWebhook']);
   $app->get('/stripe/session/{sessionID}', [$stripeController, 'getStripeSession'])->add($jwtMiddleware); 
+  $app->post('/subscription/stripe/upgrade/info/{subId}', [$stripeController, 'upgradeInfo'])->add($jwtMiddleware);
+  $app->post('/subscription/stripe/upgrade/apply/{subId}', [$stripeController, 'upgradeApply'])->add($jwtMiddleware);
+  $app->post('/subscription/stripe/downgrade/apply/{subId}', [$stripeController, 'downgradeApply'])->add($jwtMiddleware);
 };

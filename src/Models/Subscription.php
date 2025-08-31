@@ -162,33 +162,6 @@ class Subscription
     }
   }
 
-  public function getSubscriptionByUser($userID) {
-    try {
-      $stmt = $this->db->prepare("SELECT * FROM Subscriptions 
-                                  WHERE UserID = :userID
-                                  AND (Status = 'ACTIVE' OR (Status = 'CANCELED' AND RemainingDays > 0))
-                                  ORDER BY StartDate DESC
-                                  LIMIT 1");
-
-      $stmt->bindParam(':userID', $userID, PDO::PARAM_INT);
-      $stmt->execute();
-
-      $subscription = $stmt->fetch(PDO::FETCH_ASSOC);
-      if (!$subscription) {
-        return null;
-      }
-
-      // Se obtiene los detalles del Plan del usuario
-      $id = $subscription['PlanID'];
-      $planDetails = $this->getSubscriptionPlanByID($id);
-      $subscription['PlanDetails'] = $planDetails;
-
-      return $subscription;
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
-  }
-
   public function getSubscriptionPlanByStripeID($priceID) {
     try {
       $stmt = $this->db->prepare("SELECT sp.PlanID, sp.StripeID, sp.Name, sp.Description, sp.Beneficts, sp.Price, sp.CurrencyCode, sp.Duration,
@@ -262,93 +235,62 @@ class Subscription
     }
   }
 
-  // SUSCRIPCION DE UN USUARIO A UN PLAN 
-  public function updateSubscriptionByUser($userID, $subDomain, $newPlanID = null)
-  {
+  public function getSubscriptionByUser($userID) {
     try {
-      // Buscar la suscripción activa
-      $stmt = $this->db->prepare("SELECT SubscriptionID, PlanID, RemainingDays
-                                FROM Subscriptions
-                                WHERE UserID = :userID
-                                AND Status = 'ACTIVE'
-                                ORDER BY StartDate DESC
-                                LIMIT 1");
-      $stmt->execute(['userID' => $userID]);
-      $currentSubscription = $stmt->fetch(PDO::FETCH_ASSOC);
+      $stmt = $this->db->prepare("SELECT * FROM Subscriptions 
+                                  WHERE UserID = :userID
+                                  AND (Status = 'ACTIVE' OR (Status = 'CANCELED'))
+                                  ORDER BY StartDate DESC
+                                  LIMIT 1");
 
-      $currentPlanID = null;
-      $remainingDaysNew = 30; // Default para nueva suscripción sin historial
-      $nextBillingDateNew = date('Y-m-d', strtotime("+30 days"));
-      $proportionalAmount = 0;
-      $isUpgrade = false;
+      $stmt->bindParam(':userID', $userID, PDO::PARAM_INT);
+      $stmt->execute();
 
-      if ($currentSubscription) {
-        $currentPlanID = (int)$currentSubscription['PlanID'];
-        $remainingDaysActual = (int)$currentSubscription['RemainingDays'];
-        $subscriptionID  = (int)$currentSubscription['SubscriptionID'];
-
-
-        // Obtener precios de los planes actual y nuevo
-        $stmt = $this->db->prepare("SELECT PlanID, Price
-                                  FROM SubscriptionPlans
-                                  WHERE PlanID IN (:currentPlanID, :newPlanID)");
-        $stmt->execute([
-          'currentPlanID' => $currentPlanID,
-          'newPlanID'     => $newPlanID
-        ]);
-
-        $prices = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
-
-        $oldPrice = (float)($prices[$currentPlanID] ?? 0);
-        $newPrice = (float)($prices[$newPlanID] ?? 0);
-
-        // Si cambia de plan
-        if ($newPlanID !== null && $newPlanID !== $currentPlanID) {
-          if($newPrice > $oldPrice) {
-            // Upgrade: cobrar proporcional y reiniciar
-            $proportionalAmount = round((($newPrice - $oldPrice) / 30) * $remainingDaysActual, 2);
-            $isUpgrade = true;
-
-            $stmt = $this->db->prepare("UPDATE Subscriptions
-                                        SET EndDate = CURDATE(),
-                                        Status = 'CANCELED',
-                                        RemainingDays = 0,
-                                        NextBillingDate = CURDATE()
-                                        WHERE SubscriptionID = :subscriptionID");
-            $stmt->execute(['subscriptionID' => $subscriptionID]);
-
-            // Nueva suscripción normal por 30 días
-            $remainingDaysNew = 30;
-            $nextBillingDateNew = date('Y-m-d', strtotime("+30 days"));
-
-          } else {
-            // Downgrade: extender días
-            $remainingDaysNew = $remainingDaysActual + 30;
-            $nextBillingDateNew = date('Y-m-d', strtotime("+$remainingDaysNew days"));
-
-            // Cancelar anterior
-            $stmt = $this->db->prepare("UPDATE Subscriptions
-                                      SET EndDate = CURDATE(), Status = 'CANCELED'
-                                      WHERE SubscriptionID = :subscriptionID");
-            $stmt->execute(['subscriptionID' => $subscriptionID]);
-          }
-        }
+      $subscription = $stmt->fetch(PDO::FETCH_ASSOC);
+      if (!$subscription) {
+        return null;
       }
 
-      $suscription = $this->getSubscriptionByUser($userID);
-      return [
-        'Suscription' => $suscription,
-        'ProportionalCharge' => $proportionalAmount
-      ];
+      // Se obtiene los detalles del Plan del usuario
+      $id = $subscription['PlanID'];
+      $planDetails = $this->getSubscriptionPlanByID($id);
+      $subscription['PlanDetails'] = $planDetails;
+
+      return $subscription;
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
   }
-
-  public function createConfirmedSubscription($userID, $planID, $platformSubscriptionID, $platformCustomerID, $subDomain = '', $userData = [])
-  {
+  
+  public function getUserSubscriptionByPlatformSubID($platformSubscriptionID) {
     try {
-      $remainingDays = 30;
+      $stmt = $this->db->prepare("SELECT * FROM Subscriptions 
+                                  WHERE PlatformSubscriptionID = :platformSubscriptionID
+                                  AND (Status = 'ACTIVE' OR (Status = 'CANCELED'))
+                                  ORDER BY StartDate DESC
+                                  LIMIT 1");
+
+      $stmt->bindParam(':platformSubscriptionID', $platformSubscriptionID, PDO::PARAM_STR);
+      $stmt->execute();
+
+      $subscription = $stmt->fetch(PDO::FETCH_ASSOC);
+      if (!$subscription) {
+        return null;
+      }
+
+      // Se obtiene los detalles del Plan del usuario
+      $id = $subscription['PlanID'];
+      $planDetails = $this->getSubscriptionPlanByID($id);
+      $subscription['PlanDetails'] = $planDetails;
+
+      return $subscription;
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+ 
+  public function createConfirmedSubscription($userID, $planID, $platformSubscriptionID, $platformCustomerID, $subDomain = '', $userData = []) {
+    try {
       $nextBillingDate = date('Y-m-d', strtotime("+30 days"));
 
       // Cancelar suscripción anterior si existe
@@ -358,17 +300,17 @@ class Subscription
       $stmt->execute(['userID' => $userID]);
 
       // Insertar nueva suscripción
-      $stmt = $this->db->prepare("INSERT INTO Subscriptions (UserID, PlanID, StartDate, Status, RemainingDays, 
-                                NextBillingDate, PlatformSubscriptionID, PlatformCustomerID, PaymentPlatform)
-                                VALUES (:userID, :planID, CURDATE(), 'ACTIVE', :remainingDays, :nextBillingDate, 
-                                :platformSubscriptionID, :platformCustomerID, 'Stripe')");
+      $stmt = $this->db->prepare("INSERT INTO Subscriptions (PlanID, UserID, TrialStart, TrialEnd, TrialSource, 
+              StartDate, Status, NextBillingDate, PaymentPlatform, PlatformSubscriptionID, PlatformCustomerID)
+              VALUES (:planID, :userID, CURDATE(), DATE_ADD(CURDATE(), INTERVAL 90 DAY), 
+              'INTERNAL', CURDATE(), 'ACTIVE', :nextBillingDate,'Stripe', :platformSubscriptionID, :platformCustomerID)");
+
       $stmt->execute([
-        'userID' => $userID,
-        'planID' => $planID,
-        'remainingDays' => $remainingDays,
-        'nextBillingDate' => $nextBillingDate,
-        'platformSubscriptionID' => $platformSubscriptionID,
-        'platformCustomerID' => $platformCustomerID
+        ':planID' => $planID,
+        ':userID' => $userID,
+        ':nextBillingDate' => $nextBillingDate,
+        ':platformSubscriptionID' => $platformSubscriptionID,
+        ':platformCustomerID' => $platformCustomerID
       ]);
 
       // Marcar referido como exitoso si corresponde
@@ -377,7 +319,7 @@ class Subscription
                                 WHERE ReferredUserID = :userID AND ReferralStatus = 'Pending'");
       $stmt->execute(['userID' => $userID]);
 
-      $suscription = $this->getSubscriptionByUser($userID);
+      $subscription = $this->getSubscriptionByUser($userID);
 
       // Enviar email si hay datos del usuario
       if (!empty($userData['UserName']) && !empty($userData['Email'])) {
@@ -409,7 +351,31 @@ class Subscription
       }
 
       return [
-        'Suscription' => $suscription
+        'Subscription' => $subscription
+      ];
+
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  public function updateSubscriptionByUser($platformSubscriptionID, $newPlanID, $nextBillingDate = null) {
+    try {
+      // Actualizar la suscripción activa
+      $stmt = $this->db->prepare("UPDATE Subscriptions 
+                                  SET PlanID = :planID, NextBillingDate = :nextBillingDate
+                                  WHERE PlatformSubscriptionID = :platformSubscriptionID
+                                  AND Status = 'ACTIVE'");
+      $stmt->execute([
+        'planID'                 => $newPlanID,
+        'nextBillingDate'        => $nextBillingDate,
+        'platformSubscriptionID' => $platformSubscriptionID
+      ]);
+
+      $subscription = $this->getUserSubscriptionByPlatformSubID($platformSubscriptionID);
+
+      return [
+        'Subscription' => $subscription
       ];
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
@@ -418,20 +384,50 @@ class Subscription
 
   public function createSubscriptionPayment($data) {
     try {
-      $stmt = $this->db->prepare("INSERT INTO SubscriptionsPayments (InvoiceID, SubscriptionID, CustomerID,
-              Currency, AmountDue, AmountPaid, AmountRemaining, Status, PriceID, ProductID, Quantity,
+      $stmt = $this->db->prepare("INSERT INTO SubscriptionsPayments (InvoiceID, Motive, PlatformSubscriptionID, PlatformCustomerID,
+              Currency, AmountDue, AmountPaid, AmountRemaining, Status, PlatformPriceID, PlatformProductID, Quantity,
               PeriodStart, PeriodEnd, InvoicePDF, HostedInvoiceURL, CreatedAt, PaidAt) 
-              VALUES (:InvoiceID, :SubscriptionID, :CustomerID, :Currency,
+              VALUES (:InvoiceID, :BillingReason, :SubscriptionID, :CustomerID, :Currency,
               :AmountDue, :AmountPaid, :AmountRemaining, :Status,
               :PriceID, :ProductID, :Quantity, :PeriodStart, :PeriodEnd,
               :InvoicePDF, :HostedInvoiceURL, :CreatedAt, :PaidAt)");
 
       $stmt->execute($data);
 
+      // Update Subscriptions con el último invoice
+      if (!empty($data['SubscriptionID'])) {
+        $stmt = $this->db->prepare("UPDATE Subscriptions 
+                                    SET LatestInvoiceID = :InvoiceID 
+                                    WHERE PlatformSubscriptionID = :SubscriptionID");
+        $stmt->execute([
+            ':InvoiceID'      => $data['InvoiceID'],
+            ':SubscriptionID' => $data['SubscriptionID']
+        ]);
+      }
+      // Devolver el registro recién creado
       return $this->getPaymentByInvoiceID($data['InvoiceID']);
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
+  }
+
+  public function createSubscriptionPaymentFailed($data) {
+    try {
+      $stmt = $this->db->prepare("INSERT INTO SubscriptionsPayments (InvoiceID, Motive, PlatformSubscriptionID, PlatformCustomerID,
+              Currency, AmountDue, AmountPaid, AmountRemaining, Status, PlatformPriceID, PlatformProductID, Quantity,
+              PeriodStart, PeriodEnd, InvoicePDF, HostedInvoiceURL, CreatedAt, PaidAt) 
+              VALUES (:InvoiceID, :BillingReason, :SubscriptionID, :CustomerID, :Currency,
+              :AmountDue, :AmountPaid, :AmountRemaining, :Status,
+              :PriceID, :ProductID, :Quantity, :PeriodStart, :PeriodEnd,
+              :InvoicePDF, :HostedInvoiceURL, :CreatedAt, :PaidAt)");
+      $stmt->execute($data);
+
+      // Devolver el registro recién creado
+      return $this->getPaymentByInvoiceID($data['InvoiceID']);
+      
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }  
   }
 
   public function getPaymentByInvoiceID($invoiceID) {
@@ -447,13 +443,12 @@ class Subscription
     }
   }
 
-  public function cancelSubscription($stripeSubscriptionID, $subDomain)
-  {
+  public function cancelSubscription($platformSubscriptionID, $subDomain) {
     try {
       $stmt = $this->db->prepare("SELECT * FROM Subscriptions 
-                                  WHERE PlatformSubscriptiontID = :stripeSubscriptionID AND Status = 'ACTIVE'
+                                  WHERE PlatformSubscriptionID = :platformSubscriptionID AND Status = 'ACTIVE'
                                   ORDER BY StartDate DESC LIMIT 1");
-      $stmt->execute(['stripeSubscriptionID' => $stripeSubscriptionID]);
+      $stmt->execute(['platformSubscriptionID' => $platformSubscriptionID]);
       $subscription = $stmt->fetch(PDO::FETCH_ASSOC);
 
       if (!$subscription) {
@@ -473,8 +468,7 @@ class Subscription
     }
   }
 
-  public function updateSubscriptionPlan($planID, $data)
-  {
+  public function updateSubscriptionPlan($planID, $data) {
     try{
       $stmt = $this->db->prepare("SELECT COUNT(*) FROM SubscriptionPlans WHERE PlanID = :planID");
       $stmt->execute(['planID' => $planID]);
@@ -560,8 +554,7 @@ class Subscription
     }
   }
 
-  public function updateFeatureStatus($featureCode, $isActive)
-  {
+  public function updateFeatureStatus($featureCode, $isActive) {
     try {
       $stmt = $this->db->prepare("UPDATE SubscriptionFeatures
                                   SET IsActive = :isActive
@@ -576,63 +569,6 @@ class Subscription
       }
 
       return "Feature {$featureCode} updated successfully.";
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
-  }
-
-  public function getPriceInfo($userID, $targetPlanID)
-  {
-    try {
-      // Buscar suscripción actual activa o cancelada con días restantes
-        $stmt = $this->db->prepare("SELECT s.PlanID, s.RemainingDays, sp.Name AS PlanName
-                                    FROM Subscriptions s
-                                    JOIN SubscriptionPlans sp ON sp.PlanID = s.PlanID
-                                    WHERE s.UserID = :userID
-                                    AND s.Status = 'ACTIVE'
-                                    ORDER BY s.StartDate DESC
-                                    LIMIT 1");
-      $stmt->execute(['userID' => $userID]);
-      $current = $stmt->fetch(PDO::FETCH_ASSOC);
-  
-      $actualPlanID = $current['PlanID'] ?? null;
-      $actualPlanName = $current['PlanName'] ?? null;
-      $remainingDays = (int)($current['RemainingDays'] ?? 0);
-  
-      // Obtener info del nuevo plan
-      $stmt = $this->db->prepare("SELECT Name, Price FROM SubscriptionPlans WHERE PlanID = :planID");
-      $stmt->execute(['planID' => $targetPlanID]);
-      $targetPlan = $stmt->fetch(PDO::FETCH_ASSOC);
-  
-      if (!$targetPlan) {
-        throw new DatabaseException("Target plan not found.");
-      }
-  
-      $targetName = $targetPlan['Name'];
-      $targetPrice = (float)$targetPlan['Price'];
-      $proratedDiscount = 0;
-  
-      if ($actualPlanID && $actualPlanID != $targetPlanID) {
-        // Obtener precio del plan actual
-        $stmt = $this->db->prepare("SELECT Price FROM SubscriptionPlans WHERE PlanID = :planID");
-        $stmt->execute(['planID' => $actualPlanID]);
-        $actualPrice = (float)($stmt->fetchColumn() ?? 0);
-  
-        // Solo aplicar descuento si es upgrade (precio mayor)
-        if ($targetPrice > $actualPrice) {
-          $proratedDiscount = round((($targetPrice - $actualPrice) / 30) * $remainingDays, 2);
-        }
-      }
-  
-      return [
-        'ActualPlan'        => $actualPlanName,
-        'TargetPlan'        => $targetName,
-        'FullPrice'         => $targetPrice,
-        'ProratedDiscount'  => $proratedDiscount,
-        'Total'             => round($targetPrice - $proratedDiscount, 2),
-        'NextBillingDate'   => date('Y-m-d', strtotime('+30 days'))
-      ];
-  
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }

@@ -82,11 +82,11 @@ class StripeService
     }
   }
 
-  public function cancelStripeSubscription($stripeSubscriptionID) {
+  public function cancelStripeSubscription($platformSubscriptiontID) {
     try {
       \Stripe\Stripe::setApiKey($GLOBALS['config']['stripe']['STRIPE_SECRET_KEY']);
 
-      $subscription = \Stripe\Subscription::retrieve($stripeSubscriptionID);
+      $subscription = \Stripe\Subscription::retrieve($platformSubscriptiontID);
       $subscription->cancel();
 
       return true;
@@ -98,5 +98,67 @@ class StripeService
         ]
       ];
     }
+  }
+
+  public function logEvent($platform, $event, $rawJson) {
+    try {
+      $stmt = $this->db->prepare("INSERT INTO PaymentPlatformEvents (PaymentPlatform, EventType, 
+                                  PlatformEventID, RelatedObjectID, RawJSON) 
+                                  VALUES (:platform, :eventType, :platformEventID, 
+                                  :relatedObjectID, :rawJson)
+                                  ON DUPLICATE KEY UPDATE RawJSON = VALUES(RawJSON)");
+
+      $stmt->execute([
+        ':platform'        => $platform,
+        ':eventType'       => $event->type,
+        ':platformEventID' => $event->id,
+        ':relatedObjectID' => $event->data->object->id ?? null,
+        ':rawJson'         => $rawJson
+      ]);
+      
+      $platformEventID = $this->db->lastInsertId();
+
+      return $this->getEventByPlatformID($platformEventID, $platform);
+
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  public function markProcessed($platformEventID, $platform) {
+    try {
+      $stmt = $this->db->prepare("UPDATE PaymentPlatformEvents
+                                  SET Processed = 1
+                                  WHERE PlatformEventID = :platformEventID
+                                  AND PaymentPlatform = :platform");
+
+      $stmt->execute([
+        ':platformEventID' => $platformEventID,
+        ':platform'        => $platform
+      ]);
+
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    } 
+  }
+
+  public function getEventByPlatformID($platformEventID, $platform) {
+    try {
+      $stmt = $this->db->prepare("SELECT * FROM PaymentPlatformEvents
+                                  WHERE PlatformEventID = :platformEventID
+                                  AND PaymentPlatform = :platform
+                                  LIMIT 1");
+      
+      $stmt->execute([
+        ':platformEventID' => $platformEventID,
+        ':platform'        => $platform
+      ]);
+
+      $result = $stmt->fetch(PDO::FETCH_ASSOC);
+      return $result ?: null;
+
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    } 
   }
 }
