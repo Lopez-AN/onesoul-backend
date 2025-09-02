@@ -25,4 +25,5 @@ return function (App $app) {
   $app->post('/subscription/stripe/upgrade/info/{subId}', [$stripeController, 'upgradeInfo'])->add($jwtMiddleware);
   $app->post('/subscription/stripe/upgrade/apply/{subId}', [$stripeController, 'upgradeApply'])->add($jwtMiddleware);
   $app->post('/subscription/stripe/downgrade/apply/{subId}', [$stripeController, 'downgradeApply'])->add($jwtMiddleware);
+  $app->post('/subscription/stripe/cancel', [$stripeController, 'cancelSubscription'])->add($jwtMiddleware);
 };
