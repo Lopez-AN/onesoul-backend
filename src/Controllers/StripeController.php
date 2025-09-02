@@ -392,6 +392,81 @@ class StripeController{
     ]);
   }
 
+  public function cancelSubscription(Request $request, Response $response, array $args) {
+    $data = $request->getParsedBody();
+    $jwt = $request->getAttribute('jwt');
+
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
+      return $response->withStatus(401)->withJson([
+        "error" => [
+          "code" => "INVALID_TOKEN",
+          "desc" => "Invalid JWT token"
+        ]
+      ]);
+    }
+
+    try {
+      $userID = $jwt['data']->UserID;
+      $subscription = $this->subscription->getSubscriptionByUser($userID);
+
+      if (!$subscription || empty($subscription['PlatformSubscriptionID'])) {
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "NO_ACTIVE_SUBSCRIPTION",
+            "desc" => "No active subscription to cancel."
+          ]
+        ]);
+      }
+
+      $platformSubscriptionID = $subscription['PlatformSubscriptionID'];
+
+      \Stripe\Stripe::setApiKey($GLOBALS['config']['stripe']['STRIPE_SECRET_KEY']);
+
+      // Traer la suscripción actual
+      $sub = \Stripe\Subscription::retrieve($platformSubscriptionID);
+
+      if (!empty($sub->schedule)) {
+        // La suscripción está controlada por un Schedule
+        \Stripe\SubscriptionSchedule::update(
+          $sub->schedule,
+          ['end_behavior' => 'cancel']
+        );
+
+        // Refrescar la suscripción para obtener los datos actualizados
+        $sub = \Stripe\Subscription::retrieve($platformSubscriptionID);
+        $canceled = $sub;
+
+        $canceled = (object)[
+          'id' => $sub->id,
+          'status' => $sub->status,
+          'cancel_at_period_end' => true, // lo forzamos a true ya que el schedule definió la cancelación
+          'cancel_at' => $sub->cancel_at, // se cancela al final del ciclo
+        ];
+
+      } else {
+        // Cancelación directa sobre la suscripción
+        $canceled = \Stripe\Subscription::update($platformSubscriptionID, [
+          'cancel_at_period_end' => true,
+        ]);
+      }
+
+      return $response->withJson([
+        'Status' => $canceled->status,
+        'SubscriptionId' => $canceled->id,
+        'CancelAtPeriodEnd' => $canceled->cancel_at_period_end,
+        'CancelAt' => $canceled->cancel_at ? date("Y-m-d H:i:s", $canceled->cancel_at) : null,
+      ]);
+
+    } catch (\Throwable $e) {
+        return $response->withStatus(500)->withJson([
+            "error" => [
+                "code" => "INTERNAL_ERROR",
+                "desc" => $e->getMessage()
+            ]
+        ]);
+    }
+  }
+
   public function handleWebhook(Request $request, Response $response, $args)
   {
     $payload = $request->getBody()->getContents();
@@ -602,6 +677,14 @@ class StripeController{
 
           error_log("Subscription actualizada en Stripe: $platformSubscriptionID con nuevo PriceID: $newPriceId");
 
+          if ($sub->canceled_at) {
+            $this->subscription->markCancelAtPeriodEnd(
+              $platformSubscriptionID,
+              date("Y-m-d H:i:s", $sub->canceled_at),
+              $nextBillingDate,
+            );
+          }
+
           try {
             // Mapear PriceID -> PlanID (según tu tabla de planes)
             $planInfo = $this->subscription->getSubscriptionPlanByStripeID($newPriceId);
@@ -626,11 +709,12 @@ class StripeController{
 
           $subscription = $event->data->object;
           $platformSubscriptionID = $subscription->id;
+          $cancelAt = $subscription->cancel_at;
 
           error_log("Subscription eliminada en Stripe: " . $platformSubscriptionID);
 
           try {
-            $this->subscription->cancelSubscription($platformSubscriptionID);
+            $this->subscription->cancelSubscription($platformSubscriptionID, $cancelAt);
             error_log("Subscription cancelada en base de datos.");
           } catch (\Throwable $e) {
             error_log("Error al cancelar suscripción: " . $e->getMessage());

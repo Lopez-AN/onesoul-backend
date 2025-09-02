@@ -443,7 +443,26 @@ class Subscription
     }
   }
 
-  public function cancelSubscription($platformSubscriptionID, $subDomain) {
+  public function markCancelAtPeriodEnd($platformSubscriptionID, $canceledAt, $nextBillingDate) {
+    try {
+        $stmt = $this->db->prepare("UPDATE Subscriptions 
+                                    SET CancelAtPeriodEnd = 1,
+                                        CancelAt = :canceledAt,
+                                        NextBillingDate = :nextBillingDate
+                                    WHERE PlatformSubscriptionID = :platformSubscriptionID
+                                    AND Status = 'ACTIVE'");
+        $stmt->execute([
+            'canceledAt' => $canceledAt,
+            'nextBillingDate' => $nextBillingDate,
+            'platformSubscriptionID' => $platformSubscriptionID
+        ]);
+        return true;
+    } catch (\PDOException $e) {
+        throw new DatabaseException($e->getMessage());
+    }
+}
+
+  public function cancelSubscription($platformSubscriptionID, $cancelAt) {
     try {
       $stmt = $this->db->prepare("SELECT * FROM Subscriptions 
                                   WHERE PlatformSubscriptionID = :platformSubscriptionID AND Status = 'ACTIVE'
@@ -455,12 +474,11 @@ class Subscription
         throw new DatabaseException("Subscription not found with that StripeID.");
       }
 
-      $subscriptionID = $subscription['SubscriptionID'];
-
       $stmt = $this->db->prepare("UPDATE Subscriptions 
-                                  SET Status = 'CANCELED', EndDate = CURDATE()
-                                  WHERE SubscriptionID = :subscriptionID");
-      $stmt->execute(['subscriptionID' => $subscriptionID]);
+                                  SET Status = 'CANCELED', EndDate = :cancelAt
+                                  WHERE PlatformSubscriptionID = :platformSubscriptionID");
+      $stmt->execute(['platformSubscriptionID' => $platformSubscriptionID]);
+      $stmt->execute(['cancelAt' => $cancelAt]);
 
       return true;
     } catch (\PDOException $e) {

@@ -229,58 +229,45 @@ class SubscriptionController {
   
       $newPlanID = $data['PlanID'] ?? null;
 
-      // // Actualizar suscripción
-      // $result = $this->subscription->updateSubscriptionByUser($platformSubscriptionID, $newPlanID, $nextBillingDate);
-  
-      // // Si es un alta (no hay prorrateo ni upgrade/downgrade)
-      // if ($result['ProportionalCharge'] === 0 && $newPlanID !== null) {
-        // Obtener el email del usuario
-        $userResult = $this->user->getUserById($userID);
-        if ($userResult->http_code !== 200 || empty($userResult->data['Email'])) {
-          return $response->withStatus(400)->withJson([
-            "error" => [
-              "code" => "USER_NOT_FOUND",
-              "desc" => "Could not retrieve user email"
-            ]
-          ]);
-        }
-
-        // Obtener el ID de Stripe desde el plan
-        $plan = $this->subscription->getSubscriptionPlanByID($newPlanID);
-        if (!$plan || empty($plan['StripeID'])) {
-          return $response->withStatus(400)->withJson([
-            "error" => [
-              "code" => "STRIPE_PLAN_MISSING",
-              "desc" => "Stripe ID not configured for this plan"
-            ]
-          ]);
-        }
-
-        // Crear sesión de checkout
-        $stripePriceId = $plan['StripeID'];
-        $userEmail = $userResult->data['Email'];
-
-        $checkout = $this->stripe->createCheckoutSession($stripePriceId, $userEmail, $userID, $newPlanID, $subDomain);
-
-        if (isset($checkout['error'])) {
-          return $response->withStatus(400)->withJson([
-            "error" => $checkout['error']
-          ]);
-        }
-
-        return $response->withStatus(200)->withJson([
-          "payment_required" => true,
-          "checkout_url" => $checkout['url'],
-          "session_id" => $checkout['sessionId']
+      // Obtener el email del usuario
+      $userResult = $this->user->getUserById($userID);
+      if ($userResult->http_code !== 200 || empty($userResult->data['Email'])) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "USER_NOT_FOUND",
+            "desc" => "Could not retrieve user email"
+          ]
         ]);
-      // }
+      }
 
-      // // Si no es nueva suscripción pura, devolver normalmente
-      // return $response->withStatus(200)->withJson([
-      //   "Subscription" => $result['Suscription'],
-      //   "ProportionalCharge" => $result['ProportionalCharge']
-      // ]);
-  
+      // Obtener el ID de Stripe desde el plan
+      $plan = $this->subscription->getSubscriptionPlanByID($newPlanID);
+      if (!$plan || empty($plan['StripeID'])) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "STRIPE_PLAN_MISSING",
+            "desc" => "Stripe ID not configured for this plan"
+          ]
+        ]);
+      }
+
+      // Crear sesión de checkout
+      $stripePriceId = $plan['StripeID'];
+      $userEmail = $userResult->data['Email'];
+      $checkout = $this->stripe->createCheckoutSession($stripePriceId, $userEmail, $userID, $newPlanID, $subDomain);
+
+      if (isset($checkout['error'])) {
+        return $response->withStatus(400)->withJson([
+          "error" => $checkout['error']
+        ]);
+      }
+
+      return $response->withStatus(200)->withJson([
+        "payment_required" => true,
+        "checkout_url" => $checkout['url'],
+        "session_id" => $checkout['sessionId']
+      ]);
+ 
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -290,69 +277,6 @@ class SubscriptionController {
       ]);
     }
   }
-
-  public function cancelSubscription(Request $request, Response $response, $args) {
-    $data = $request->getParsedBody();
-    $jwt = $request->getAttribute('jwt');
-    $subDomain = $data['SubDomain'] ?? '';
-
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
-
-    // Validar formato de subdominio (solo letras A-Z, a-z)
-    if (!empty($subDomain)) {
-      if (!preg_match('/^[a-zA-Z]+$/', $subDomain)) {
-        return $response->withStatus(400)->withJson([
-          "error" => [
-            "code" => "INVALID_SUBDOMAIN",
-            "desc" => "Subdomain must contain only letters A-Z"
-          ]
-        ]);
-      }
-    }
-
-    try {
-      $userID = $jwt['data']->UserID;
-
-      $subscription = $this->subscription->getSubscriptionByUser($userID);
-      if (!$subscription || empty($subscription['StripeID'])) {
-        return $response->withStatus(404)->withJson([
-          "error" => [
-            "code" => "NO_ACTIVE_SUBSCRIPTION",
-            "desc" => "No active subscription to cancel."
-          ]
-        ]);
-      }
-
-      $stripeSubscriptionID = $subscription['StripeID'];
-
-      $stripeResult = $this->stripe->cancelStripeSubscription($stripeSubscriptionID);
-      if (isset($stripeResult['error'])) {
-        return $response->withStatus(400)->withJson(["error" => $stripeResult['error']]);
-      }
-
-      $this->subscription->cancelSubscription($stripeSubscriptionID, $subDomain);
-
-      return $response->withStatus(200)->withJson([
-        "Success" => true,
-        "Message" => "Subscription cancelled successfully."
-      ]);
-
-    } catch (\Throwable $e) {
-      return $response->withStatus(500)->withJson([
-        "error" => [
-          "code" => "INTERNAL_ERROR",
-          "desc" => $e->getMessage()
-        ]
-      ]);
-    }
-  }  
 
   public function updateSubscriptionPlan(Request $request, Response $response, $args) {
     $id = $args['id'];
