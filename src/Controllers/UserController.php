@@ -687,16 +687,16 @@ class UserController
 
     $newMap = [];
     foreach ($data as $item) {
-      if (!isset($item['Nombre']) || !isset($item['URL'])) {
+      if (!isset($item['Name']) || !isset($item['URL'])) {
         return $response->withStatus(400)->withJson([
           "error" => [
             "code" => "INVALID_DATA",
-            "desc" => "Each account must include 'Nombre' and 'URL'"
+            "desc" => "Each account must include 'Name' and 'URL'"
           ]
         ]);
       }
 
-      $name = strtolower(trim($item['Nombre']));
+      $name = strtolower(trim($item['Name']));
       $url = trim($item['URL']);
 
       if (!array_key_exists($name, $validTypes)) {
@@ -749,7 +749,7 @@ class UserController
       $accounts = [];
       foreach ($result as $acc) {
         $accounts[] = [
-          'Nombre' => strtolower($acc['Name']),
+          'Name' => strtolower($acc['Name']),
           'URL'    => $acc['AccountName']
         ];
       }
@@ -792,7 +792,16 @@ class UserController
         ]);
       }
 
-      return $response->withStatus(200)->withJson($result);
+      // Simplificar salida
+      $accounts = [];
+      foreach ($result as $acc) {
+        $accounts[] = [
+          "Nombre" => strtolower($acc['Name']),
+          "URL"    => $acc['AccountName']
+        ];
+      }
+
+      return $response->withStatus(200)->withJson($accounts);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [

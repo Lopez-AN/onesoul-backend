@@ -1272,9 +1272,10 @@ clASs User
 
   public function getUserSocialAccounts($userID) {
     $query = "SELECT sma.SocialAccountID, sma.SocialAccountTypeID, LOWER(TRIM(smt.Name)) as Name, sma.AccountName
-              FROM SocialAccounts AS sma
-              INNER JOIN SocialAccountsTypes AS smt ON sma.SocialAccountTypeID = smt.SocialAccountTypeID
-              WHERE sma.UserID = :userID AND sma.IsActive = 1";
+      FROM SocialAccounts AS sma
+      INNER JOIN SocialAccountsTypes AS smt ON sma.SocialAccountTypeID = smt.SocialAccountTypeID
+      WHERE sma.UserID = :userID AND sma.IsActive = 1";
+
     $stmt = $this->db->prepare($query);
     $stmt->bindParam(':userID', $userID, PDO::PARAM_INT);
     $stmt->execute();
@@ -1291,14 +1292,14 @@ clASs User
     $stmt->execute();
   }
 
-  public function updateUserSocialAccount($userID, $typeID, $accountName) { 
+  public function updateUserSocialAccount($userID, $typeID, $accountName) {
     $query = "UPDATE SocialAccounts SET AccountName = :accountName 
               WHERE UserID = :userID AND SocialAccountTypeID = :typeID";
-    $stmt = $this->db->prepare($query); 
-    $stmt->bindParam(':userID', $userID, PDO::PARAM_INT); 
-    $stmt->bindParam(':typeID', $typeID, PDO::PARAM_INT); 
-    $stmt->bindParam(':accountName', $accountName, PDO::PARAM_STR); 
-    $stmt->execute(); 
+    $stmt = $this->db->prepare($query);
+    $stmt->bindParam(':userID', $userID, PDO::PARAM_INT);
+    $stmt->bindParam(':typeID', $typeID, PDO::PARAM_INT);
+    $stmt->bindParam(':accountName', $accountName, PDO::PARAM_STR);
+    $stmt->execute();
   }
 
   public function deleteUserSocialAccount($userID, $typeID) {
@@ -1310,50 +1311,35 @@ clASs User
   }
 
   public function formatSocialUrl($name, $url) {
-    $name = strtolower(trim($name));
+    $query = "SELECT * FROM SocialAccountsTypes
+              WHERE Name = :name";
+    $stmt = $this->db->prepare($query); 
+    $stmt->bindParam(':name', $name, PDO::PARAM_STR); 
+    $stmt->execute();
+    $socialurl = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    // Si el valor enviado no tiene protocolo, agregarlo
-    if (!preg_match('~^https?://~i', $url)) {
-        // Si solo viene el username/perfil
-        if (strpos($url, '.') === false) {
-            switch ($name) {
-                case 'facebook':
-                    $url = 'https://www.facebook.com/' . ltrim($url, '/');
-                    break;
-                case 'instagram':
-                    $url = 'https://www.instagram.com/' . ltrim($url, '/');
-                    break;
-                case 'x':
-                    $url = 'https://www.x.com/' . ltrim($url, '/');
-                    break;
-                case 'tiktok':
-                    $url = 'https://www.tiktok.com/' . ltrim($url, '/');
-                    break;
-                case 'calendly':
-                    $url = 'https://www.calendly.com/' . ltrim($url, '/');
-                    break;    
-                default:
-                    $url = 'https://www.' . $name . '.com/' . ltrim($url, '/');
-                    break;
-            }
-            return $url;
-        }
-        // Si tiene dominio pero sin protocolo
-        $url = 'https://' . ltrim($url, '/');
+    if (!$socialurl) {
+      throw new \Exception("Tipo de red social inválido: {$name}");
     }
 
-    // Parsear la URL para normalizar "www."
+    $formatName = $socialurl['FormatName'];
+
+    // Si solo envían username
+    if (!preg_match('~^https?://~i', $url) && strpos($url, '.') === false) {
+      return rtrim($formatName, '/') . '/' . ltrim($url, '/');
+    }
+
+    // Parsear lo que venga (aunque sea incorrecto)
     $parts = parse_url($url);
-    if (!empty($parts['host']) && strpos($parts['host'], 'www.') !== 0) {
-        $parts['host'] = 'www.' . $parts['host'];
-    }
+    $path  = $parts['path'] ?? '';
+    $query = isset($parts['query']) ? '?' . $parts['query'] : '';
 
-    // Reconstruir URL
-    $scheme = $parts['scheme'] ?? 'https';
-    $host   = $parts['host'] ?? '';
-    $path   = $parts['path'] ?? '';
-    $query  = isset($parts['query']) ? '?' . $parts['query'] : '';
+    // Siempre usamos el host de FormatName (no el que mandaron)
+    $baseParts = parse_url($formatName);
+    $scheme = $baseParts['scheme'] ?? 'https';
+    $host   = $baseParts['host'];
 
+    // Reconstruir con el host correcto y el path recibido
     return $scheme . '://' . $host . $path . $query;
   }
 }
