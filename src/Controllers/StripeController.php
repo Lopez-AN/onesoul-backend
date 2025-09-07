@@ -40,12 +40,12 @@ class StripeController{
     $result = $this->user->getUserById($userID);
 
     if ($result->http_code !== 200 || empty($result->data['Email'])) {
-      return [
+      return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "USER_NOT_FOUND",
           "desc" => "Could not retrieve an email for the user."
         ]
-      ];
+      ]);
     }
 
     $userEmail = $result->data['Email'];
@@ -83,7 +83,7 @@ class StripeController{
         ]);
       }
 
-      $plan = $this->subscription->getSubscriptionPlanByStripeID($priceId); // Debés tener esta función
+      $plan = $this->subscription->getSubscriptionPlanByStripeID($priceId);
       if (!$plan || empty($plan['PlanID'])) {
         return $response->withStatus(400)->withJson([
           "error" => [
@@ -94,7 +94,9 @@ class StripeController{
       }
       $planID = $plan['PlanID'];
 
-      $result = $this->stripe->createCheckoutSession($priceId, $userEmail, $userID, $planID, $subDomain);
+      $trialDays = (!empty($data['Trial']) && $data['Trial'] === true) ? 90 : 0;
+
+      $result = $this->stripe->createCheckoutSession($priceId, $userEmail, $userID, $planID, $subDomain, $trialDays);
       if (isset($result['error'])) {
         return $response->withStatus(400)->withJson(["error" => $result['error']]);
       }
@@ -469,22 +471,23 @@ class StripeController{
 
   public function handleWebhook(Request $request, Response $response, $args)
   {
-    $payload = $request->getBody()->getContents();
+    $rawJson = (string)$request->getBody();
     $sig_header = $_SERVER['HTTP_STRIPE_SIGNATURE'] ?? '';
     $webhookSecret = $GLOBALS['config']['stripe']['STRIPE_WEBHOOK_SECRET'];
 
     try {
       \Stripe\Stripe::setApiKey($GLOBALS['config']['stripe']['STRIPE_SECRET_KEY']);
-      $event = \Stripe\Webhook::constructEvent($payload, $sig_header, $webhookSecret);
+      $event = \Stripe\Webhook::constructEvent($rawJson, $sig_header, $webhookSecret);
+
+      $this->stripe->logEvent('Stripe', json_decode($rawJson), $rawJson);
 
       switch ($event->type) {
-        case 'checkout.session.completed':
-          // Guardar evento siempre
-          $payload = @file_get_contents('php://input');  // JSON crudo
-          $event   = json_decode($payload);
-          $rawJson = $payload;
-          $this->stripe->logEvent('Stripe', $event, $rawJson);
 
+        // ======================
+        // CHECKOUT
+        // ======================
+
+        case 'checkout.session.completed':
           $session = $event->data->object;
 
           if (!isset($session->metadata->UserID) || !isset($session->metadata->PlanID)) {
@@ -503,6 +506,15 @@ class StripeController{
             return $response->withStatus(400);
           }
 
+            \Stripe\Stripe::setApiKey($GLOBALS['config']['stripe']['STRIPE_SECRET_KEY']);
+            $stripeSub = \Stripe\Subscription::retrieve($platformSubscriptionID);
+
+            $trialStartTs = $stripeSub->trial_start ?? null;
+            $trialEndTs   = $stripeSub->trial_end   ?? null;
+
+            $trialStart = $trialStartTs ? date('Y-m-d H:i:s', $trialStartTs) : null;
+            $trialEnd   = $trialEndTs   ? date('Y-m-d H:i:s', $trialEndTs)   : null;
+
           // Obtener datos del usuario
           $userResult = $this->user->getUserById($userID);
           $userData = [];
@@ -510,7 +522,11 @@ class StripeController{
           if ($userResult->http_code === 200 && !empty($userResult->data['UserName']) && !empty($userResult->data['Email'])) {
             $userData = [
               'UserName' => $userResult->data['UserName'],
-              'Email' => $userResult->data['Email']
+              'Email' => $userResult->data['Email'],
+              'TrialStart' => $trialStart,
+              'TrialEnd' => $trialEnd,
+              'TrialSource' => 'PLATFORM',
+              'PaymentPlatform' => 'STRIPE',
             ];
           } else {
             error_log("No se pudo obtener usuario con ID $userID");
@@ -525,35 +541,16 @@ class StripeController{
           }
         break;
 
-        case 'payment_method.attached' :
-          // Guardar evento siempre
-          $payload = @file_get_contents('php://input');  // JSON crudo
-          $event   = json_decode($payload);
-          $rawJson = $payload;
-          $this->stripe->logEvent('Stripe', $event, $rawJson);
+        case 'checkout.session.async_payment_succeeded':
+        case 'checkout.session.async_payment_failed':
+        case 'checkout.session.expired':
+        break;
 
-          $method = $event->data->object;
-          if (empty($method)) {
-            return $response->withStatus(400)->withJson([
-              "error" => [
-                "code" => "INVALID_METHOD",
-                "desc" => "Invalid payment method"
-              ]
-            ]);
-          }
+        // ======================
+        // INVOICES (ciclo de cobro)
+        // ======================
 
-          $brand = $method->card->brand;
-          $last4 = $method->card->last4;
-
-        break;  
-
-        case 'invoice.payment_succeeded':
-          // Guardar evento siempre
-          $payload = @file_get_contents('php://input');  // JSON crudo
-          $event   = json_decode($payload);
-          $rawJson = $payload;
-          $this->stripe->logEvent('Stripe', $event, $rawJson);
-
+        case 'invoice.finalized':
           $invoice = $event->data->object;
           
           if (empty($invoice)) {
@@ -591,7 +588,44 @@ class StripeController{
           ];
 
           try {
-            $this->subscription->createSubscriptionPayment($invoiceData);
+            $this->subscription->upsertInvoice($invoiceData);
+            error_log("Factura creada para UserID (InvoiceID: " . $invoice->id . ")");
+          } catch (\Throwable $e) {
+            error_log("Error al registrar la factura: " . $e->getMessage());
+            return $response->withStatus(500);
+          }
+        break;
+
+        // case 'invoice.paid':
+        case 'invoice.payment_succeeded':
+          $invoice = $event->data->object;
+          
+          if (empty($invoice)) {
+            return $response->withStatus(400)->withJson([
+              "error" => [
+                "code" => "INVALID_INVOICE",
+                "desc" => "Invalid invoice"
+              ]
+            ]);
+          }
+
+          $line = !empty($invoice->lines->data) ? $invoice->lines->data[0] : null;
+
+          $invoiceID = $invoice->id;
+
+          $invoiceData = [
+            'SubscriptionID'   => $invoice->parent?->subscription_details?->subscription ?? null,
+            'AmountDue'        => $invoice->amount_due / 100,
+            'AmountPaid'       => $invoice->amount_paid / 100,
+            'AmountRemaining'  => $invoice->amount_remaining / 100,
+            'Status'           => $invoice->status,
+            'PaidAt'           => $invoice->status_transitions?->paid_at 
+                                  ? date("Y-m-d", $invoice->status_transitions->paid_at) 
+                                  : null
+          ];
+
+          try {
+            $this->subscription->updateSubscriptionPayment($invoiceID, $invoiceData);
             error_log("Pago aprobado para UserID (InvoiceID: " . $invoice->id . ")");
           } catch (\Throwable $e) {
             error_log("Error al registrar el pago: " . $e->getMessage());
@@ -600,13 +634,6 @@ class StripeController{
         break;
 
         case 'invoice.payment_failed':
-          // Guardar evento siempre
-          $payload = @file_get_contents('php://input');  // JSON crudo
-          $event   = json_decode($payload);
-          $rawJson = $payload;
-
-          $this->stripe->logEvent('Stripe', $event, $rawJson);
-
           $invoice = $event->data->object;
 
           if (empty($invoice)) {
@@ -618,33 +645,27 @@ class StripeController{
             ]);
           }
 
+          if (!empty($invoice->subscription)) {
+            $this->subscription->markPastDue($invoice->subscription);
+          }
+
           $line = !empty($invoice->lines->data) ? $invoice->lines->data[0] : null;
 
+          $invoiceID = $invoice->id;
+
           $invoiceData = [
-            'InvoiceID'        => $invoice->id,
-            'BillingReason'    => $invoice->billing_reason,
             'SubscriptionID'   => $invoice->parent?->subscription_details?->subscription ?? null,
-            'CustomerID'       => $invoice->customer,
-            'Currency'         => $invoice->currency,
             'AmountDue'        => $invoice->amount_due / 100,
             'AmountPaid'       => $invoice->amount_paid / 100,
             'AmountRemaining'  => $invoice->amount_remaining / 100,
             'Status'           => $invoice->status,
-            'PriceID'          => $line?->pricing?->price_details?->price,
-            'ProductID'        => $line?->pricing?->price_details?->product,
-            'Quantity'         => $line?->quantity ?? 1,
-            'PeriodStart'      => $line?->period?->start ? date("Y-m-d", $line->period->start) : null,
-            'PeriodEnd'        => $line?->period?->end ? date("Y-m-d", $line->period->end) : null,
-            'InvoicePDF'       => $invoice->invoice_pdf ?? null,
-            'HostedInvoiceURL' => $invoice->hosted_invoice_url ?? null,
-            'CreatedAt'        => date("Y-m-d", $invoice->created),
             'PaidAt'           => $invoice->status_transitions?->paid_at 
                                   ? date("Y-m-d", $invoice->status_transitions->paid_at) 
                                   : null
           ];
 
           try {
-            $this->subscription->createSubscriptionPaymentFailed($invoiceData);
+            $this->subscription->updateSubscriptionPayment($invoiceID, $invoiceData);
             error_log("Se registró el fallo por el pago del InvoiceID (InvoiceID: " . $invoice->id . ")");
           } catch (\Throwable $e) {
             error_log("Error al registrar el fallo del pago: " . $e->getMessage());
@@ -652,23 +673,21 @@ class StripeController{
           }
         break;
 
-        case 'customer.subscription.trial_will_end':
-          $subscription = $event->data->object;
-          $this->subscription->handleTrialWillEnd($subscription);
+        case 'invoice.voided':
+          $invoice = $event->data->object;
+          $this->subscription->markInvoiceVoided($invoice->id);
         break;
 
-        case 'customer.updated':
-          $customer = $event->data->object;
-          $this->subscription->handleCustomerUpdated($customer);
+        case 'invoice.marked_uncollectible':
+          $invoice = $event->data->object;
+          $this->subscription->markInvoiceUncollectible($invoice->id);
         break;
+        
+        // ======================
+        // SUBSCRIPTIONS
+        // ======================
 
         case 'customer.subscription.updated':
-          // Guardar evento siempre
-          $payload = @file_get_contents('php://input');  // JSON crudo
-          $event   = json_decode($payload);          
-          $rawJson = $payload;
-          $this->stripe->logEvent('Stripe', $event, $rawJson);
-
           $sub = $event->data->object;
 
           $platformSubscriptionID = $sub->id;
@@ -686,7 +705,6 @@ class StripeController{
           }
 
           try {
-            // Mapear PriceID -> PlanID (según tu tabla de planes)
             $planInfo = $this->subscription->getSubscriptionPlanByStripeID($newPriceId);
             if ($planInfo) {
               $this->subscription->updateSubscriptionByUser($platformSubscriptionID, $planInfo['PlanID'], $nextBillingDate);
@@ -701,12 +719,6 @@ class StripeController{
         break;
 
         case 'customer.subscription.deleted':
-          // Guardar evento siempre
-          $payload = @file_get_contents('php://input');  // JSON crudo
-          $event   = json_decode($payload);          
-          $rawJson = $payload;
-          $this->stripe->logEvent('Stripe', $event, $rawJson);
-
           $subscription = $event->data->object;
           $platformSubscriptionID = $subscription->id;
           $cancelAt = $subscription->cancel_at;
@@ -722,20 +734,104 @@ class StripeController{
           }
         break;
 
-        case 'subscription_schedule.created' :
-          // Guardar evento siempre
-          $payload = @file_get_contents('php://input');  // JSON crudo
-          $event   = json_decode($payload);          
-          $rawJson = $payload;
-          $this->stripe->logEvent('Stripe', $event, $rawJson);
+        case 'customer.subscription.trial_will_end':
+          $subscription = $event->data->object;
+          $platformSubscriptionID = $subscription->id;
+          $trialEnd = !empty($subscription->trial_end)
+                    ? date('Y-m-d H:i:s', $subscription->trial_end)
+                    : null;
+
+          $trialStart = !empty($subscription->trial_start)
+                    ? date('Y-m-d H:i:s', $subscription->trial_start)
+                    : null;
+
+          $this->subscription->handleTrialWillEnd($platformSubscriptionID, $trialEnd, $trialStart);
+        break;
+
+        case 'customer.subscription.paused':
+          // La suscripción pasó a status=paused
+          $sub = $event->data->object;
+          $this->subscription->markPaused($sub->id, $sub->pause_collection?->behavior ?? null);
+        break;
+
+        case 'customer.subscription.resumed':
+          // Se reanuda desde paused -> active (puede requerir pago de invoice de reanudación)
+          $sub = $event->data->object;
+          $nextBillingDate = $sub->current_period_end ? date("Y-m-d", $sub->current_period_end) : null;
+          $this->subscription->markResumed($sub->id, $nextBillingDate);
+        break;
+
+        case 'customer.subscription.pending_update_applied':
+          $sub = $event->data->object;
+          // Actualizar plan si cambió el Price
+          $newPriceId = $sub->items->data[0]->price->id ?? null;
+          if ($newPriceId) {
+            $planInfo = $this->subscription->getSubscriptionPlanByStripeID($newPriceId);
+            if ($planInfo) {
+              $this->subscription->updateSubscriptionByUser($sub->id, $planInfo['PlanID'],
+                $sub->current_period_end ? date("Y-m-d", $sub->current_period_end) : null);
+            }
+          }
+        break;
+
+        case 'customer.subscription.pending_update_expired':
+        break;
+
+        // ======================
+        // PAYMENT METHODS
+        // ======================
+
+        case 'payment_method.attached' :
+          $method = $event->data->object;
+          if (empty($method)) {
+            return $response->withStatus(400)->withJson([
+              "error" => [
+                "code" => "INVALID_METHOD",
+                "desc" => "Invalid payment method"
+              ]
+            ]);
+          }
+
+          $brand = $method->card->brand;
+          $last4 = $method->card->last4;
+
         break;  
 
+        case 'payment_method.updated':
+        case 'payment_method.automatically_updated':
+        case 'payment_method.detached':
+        break;
+
+        // ======================
+        // PAYMENT INTENTS (one-shot o reintentos de invoice)
+        // ======================
+        case 'payment_intent.succeeded':
+        case 'payment_intent.payment_failed':
+        break;
+
+        // ======================
+        // DISPUTAS / REEMBOLSOS
+        // ======================
+        case 'charge.dispute.created':
+        case 'charge.dispute.closed':
+        case 'charge.refunded':
+        break;
+
+        // ======================
+        // CUSTOMER (actualización de datos)
+        // ======================
+
+        case 'customer.updated':
+          $customer = $event->data->object;
+          $this->subscription->handleCustomerUpdated($customer);
+        break;
+
+        // ======================
+        // SCHEDULES (programaciones)
+        // ======================
+
+        case 'subscription_schedule.created' :
         case 'subscription_schedule.updated' :
-          // Guardar evento siempre
-          $payload = @file_get_contents('php://input');  // JSON crudo
-          $event   = json_decode($payload);          
-          $rawJson = $payload;
-          $this->stripe->logEvent('Stripe', $event, $rawJson);
         break;  
 
       default:
@@ -753,7 +849,7 @@ class StripeController{
       return $response->withStatus(400);
     } catch (\Throwable $e) {
       error_log("Error general en webhook: " . $e->getMessage());
-      return $response->withStatus(500);
+      return $response->withStatus(200);
     }
   }
 

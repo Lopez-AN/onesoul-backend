@@ -195,6 +195,10 @@ class SubscriptionController {
     $jwt = $request->getAttribute('jwt');
     $userID = $jwt['data'] -> UserID;
     $subDomain = $data['SubDomain'] ?? '';
+    $trial = $data['Trial'] ?? false;
+
+    $trialFlag = filter_var($trial, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+    $trialDays = ($trialFlag === true) ? 90 : 0;
 
     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
       return $response->withStatus(401)->withJson([
@@ -254,7 +258,7 @@ class SubscriptionController {
       // Crear sesión de checkout
       $stripePriceId = $plan['StripeID'];
       $userEmail = $userResult->data['Email'];
-      $checkout = $this->stripe->createCheckoutSession($stripePriceId, $userEmail, $userID, $newPlanID, $subDomain);
+      $checkout = $this->stripe->createCheckoutSession($stripePriceId, $userEmail, $userID, $newPlanID, $subDomain, $trialDays);
 
       if (isset($checkout['error'])) {
         return $response->withStatus(400)->withJson([

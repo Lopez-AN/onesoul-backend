@@ -16,14 +16,15 @@ class StripeService
     $this->db = $db;
   }
 
-  public function createCheckoutSession($priceId, $userEmail, $userID, $planID, $subDomain) {
+  public function createCheckoutSession($priceId, $userEmail, $userID, $planID, $subDomain, $trialDays) {
     try {
       // Configurar la clave secreta de Stripe
       \Stripe\Stripe::setApiKey($GLOBALS['config']['stripe']['STRIPE_SECRET_KEY']);
-      
+
+      $hasTrial = ($trialDays !== null && (int)$trialDays > 0);
       $origin = $subDomain ? "https://{$subDomain}.onesoul.app" : "https://onesoul.app";
 
-      $session = Session::create([
+      $params = [
         'payment_method_types' => ['card'],
         'mode' => 'subscription',
         'line_items' => [[
@@ -36,10 +37,27 @@ class StripeService
         'metadata' => [
           'UserID' => $userID,
           'PlanID' => $planID,
-          'SubDomain' => $subDomain
-        ]
-      ]);
+          'SubDomain' => $subDomain,
+          'TrialDays' => $hasTrial ? $trialDays : 0,
+          'DonationsRequired'  => $hasTrial ? '3' : '0',
+        ],
+        // 'allow_promotion_codes' => true,
+        'payment_method_collection' => 'always',
+        'subscription_data' => [
+          'metadata' => [
+            'UserID' => $userID,
+            'PlanID'  => $planID,
+            'SubDomain'  => $subDomain,
+            'TrialDays' => $hasTrial ? $trialDays : 0,
+            'DonationsRequired' => $hasTrial ? '3' : '0',
+          ],
+        ],
+      ];
 
+      if ($hasTrial) {
+        $params['subscription_data']['trial_period_days'] = (int)$trialDays;
+      }
+      $session = \Stripe\Checkout\Session::create($params);
       return [
         "sessionId" => $session->id,
         "url" => $session->url
