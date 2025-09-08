@@ -6,6 +6,7 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use App\Models\User;
 use App\Models\Auth;
+use App\Models\Subscription;
 
 require_once(ROOT . '/src/Utils/Paginator.php');
 require_once(ROOT . '/src/Utils/OptimizeImg.php');
@@ -15,11 +16,13 @@ class UserController
 {
   protected $user;
   protected $auth;
+  protected $subscription;
 
-  public function __construct(User $user, Auth $auth)
+  public function __construct(User $user, Auth $auth, Subscription $subscription)
   {
     $this->user = $user;
     $this->auth = $auth;
+    $this->subscription = $subscription;
   }
 
   public function getUsers(Request $request, Response $response, $args){
@@ -403,6 +406,53 @@ class UserController
       if($result->http_code != 200){
         return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
+
+      # --- Sincronizar con Stripe si corresponde ---
+      $subscription = $this->subscription->getSubscriptionByUser($userId);
+      if ($subscription && $subscription['PaymentPlatform'] === 'STRIPE' && in_array($subscription['Status'], ['ACTIVE', 'TRIALING'])) {
+        try {
+          \Stripe\Stripe::setApiKey($GLOBALS['config']['stripe']['STRIPE_SECRET_KEY']);
+
+          // Dirección
+          $line1 = trim(($result->data['AddressName'] ?? '') . ' ' . ($result->data['AddressNumber'] ?? ''));
+          $line2Parts = [];
+          if (!empty($result->data['Floor'])) $line2Parts[] = "Piso " . $result->data['Floor'];
+          if (!empty($result->data['Department'])) $line2Parts[] = "Depto " . $result->data['Department'];
+          $line2 = !empty($line2Parts) ? implode(' - ', $line2Parts) : null;
+
+          // Datos permitidos
+          $updateData = [
+            'name' => trim(($result->data['FirstName'] ?? '') . ' ' . ($result->data['LastName'] ?? '')),
+            'email' => $result->data['Email'] ?? null,
+            'phone' => $result->data['Phone'] ?? null,
+            'address' => [
+              'line1'       => !empty($line1) ? $line1 : null,
+              'line2'       => $line2,
+              'postal_code' => $result->data['Cp'] ?? null,
+              'city'        => $result->data['City'] ?? null,
+              'state'       => $result->data['State'] ?? null,
+              'country'     => $result->data['CountryCode'] ?? null,
+            ]
+          ];
+
+          // Limpiar nulls para no borrar datos en Stripe
+          $updateData = array_filter($updateData, fn($v) => $v !== null && $v !== '');
+          if (isset($updateData['address'])) {
+            $updateData['address'] = array_filter($updateData['address'], fn($v) => $v !== null && $v !== '');
+          }
+
+          if (!empty($updateData)) {
+            \Stripe\Customer::update(
+              $subscription['PlatformCustomerID'],
+              $updateData
+            );
+          }
+        } catch (\Throwable $e) {
+          // Loguear pero no romper la actualización del usuario en DB
+          error_log("Error actualizando usuario en Stripe: " . $e->getMessage());
+        }
+      }
+
       # Retornar el usuario actualizado
       return $response->withStatus(200)->withJson($result->data);
     } catch (\Throwable $e) {
@@ -769,16 +819,6 @@ class UserController
   public function getUserSocialAccounts(Request $request, Response $response, $args)
   {
     $id = $args['id'];
-    $jwt = $request->getAttribute('jwt');
-    
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
 
     try {
       $result = $this->user->getUserSocialAccounts($id);

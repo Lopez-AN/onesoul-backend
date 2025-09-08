@@ -16,13 +16,37 @@ class StripeService
     $this->db = $db;
   }
 
-  public function createCheckoutSession($priceId, $userEmail, $userID, $planID, $subDomain, $trialDays) {
+  public function createCheckoutSession($priceId, $userEmail, $userID, $planID, $subDomain, $trialDays, $userInfo) {
     try {
       // Configurar la clave secreta de Stripe
       \Stripe\Stripe::setApiKey($GLOBALS['config']['stripe']['STRIPE_SECRET_KEY']);
 
       $hasTrial = ($trialDays !== null && (int)$trialDays > 0);
       $origin = $subDomain ? "https://{$subDomain}.onesoul.app" : "https://onesoul.app";
+
+      // Crear un Customer con nombre y domicilio (prefil)
+      $customerParams = [
+        'email' => $userEmail,
+      ];
+
+      if (!empty($userInfo['name'])) {
+        $customerParams['name'] = $userInfo['name'];
+      }
+
+      // Address (billing)
+      $address = [];
+      if (!empty($userInfo['line1']))       $address['line1']        = $userInfo['line1'];
+      if (!empty($userInfo['line2']))       $address['line2']        = $userInfo['line2'];
+      if (!empty($userInfo['city']))        $address['city']         = $userInfo['city'];
+      if (!empty($userInfo['state']))       $address['state']        = $userInfo['state'];
+      if (!empty($userInfo['cp']))          $address['postal_code']  = $userInfo['cp'];
+      if (!empty($userInfo['country']))     $address['country']      = $userInfo['country'];
+
+      if (!empty($address)) {
+        $customerParams['address'] = $address;
+      }
+
+      $customer = \Stripe\Customer::create($customerParams);
 
       $params = [
         'payment_method_types' => ['card'],
@@ -31,9 +55,12 @@ class StripeService
           'price' => $priceId,
           'quantity' => 1
         ]],
-        'customer_email' => $userEmail,
-        'success_url' => $origin . "/profile/subscription/success?session_id={CHECKOUT_SESSION_ID}",
-        'cancel_url' => $origin . "/profile/subscription/cancel?session_id={CHECKOUT_SESSION_ID}",
+        // 'customer_email' => $userEmail,
+        'customer' => $customer->id,
+        'customer_update' => [
+          'address' => 'auto',
+          'name'    => 'auto',
+        ],
         'metadata' => [
           'UserID' => $userID,
           'PlanID' => $planID,
@@ -43,6 +70,17 @@ class StripeService
         ],
         // 'allow_promotion_codes' => true,
         'payment_method_collection' => 'always',
+        'billing_address_collection' => 'required',
+        'tax_id_collection' => [
+          'enabled' => true,
+        ],
+        'custom_fields' => [[
+          'key'   => 'dni',
+          'label' => ['type' => 'custom', 'custom' => 'DNI'],
+          'type'  => 'text',
+          'optional' => false,
+          'text'  => ['maximum_length' => 8, 'minimum_length' => 5],
+        ]],
         'subscription_data' => [
           'metadata' => [
             'UserID' => $userID,
@@ -52,12 +90,16 @@ class StripeService
             'DonationsRequired' => $hasTrial ? '3' : '0',
           ],
         ],
+        'success_url' => $origin . "/profile/subscription/success?session_id={CHECKOUT_SESSION_ID}",
+        'cancel_url' => $origin . "/profile/subscription/cancel?session_id={CHECKOUT_SESSION_ID}",
       ];
 
       if ($hasTrial) {
         $params['subscription_data']['trial_period_days'] = (int)$trialDays;
       }
+
       $session = \Stripe\Checkout\Session::create($params);
+
       return [
         "sessionId" => $session->id,
         "url" => $session->url
@@ -100,23 +142,6 @@ class StripeService
     }
   }
 
-  public function cancelStripeSubscription($platformSubscriptiontID) {
-    try {
-      \Stripe\Stripe::setApiKey($GLOBALS['config']['stripe']['STRIPE_SECRET_KEY']);
-
-      $subscription = \Stripe\Subscription::retrieve($platformSubscriptiontID);
-      $subscription->cancel();
-
-      return true;
-    } catch (\Exception $e) {
-      return [
-        "error" => [
-          "code" => "STRIPE_CANCEL_ERROR",
-          "desc" => $e->getMessage()
-        ]
-      ];
-    }
-  }
 
   public function logEvent($platform, $event, $rawJson) {
     try {

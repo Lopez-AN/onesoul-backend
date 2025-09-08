@@ -258,7 +258,15 @@ class SubscriptionController {
       // Crear sesión de checkout
       $stripePriceId = $plan['StripeID'];
       $userEmail = $userResult->data['Email'];
-      $checkout = $this->stripe->createCheckoutSession($stripePriceId, $userEmail, $userID, $newPlanID, $subDomain, $trialDays);
+
+      $firstName = $userResult->data['FirstName'] ?? '';
+      $lastName  = $userResult->data['LastName'] ?? '';
+
+      $userInfo = [
+        'name' => trim(($userResult->data['FirstName'] ?? '') . ' ' . ($userResult->data['LastName'] ?? '')),
+      ];
+
+      $checkout = $this->stripe->createCheckoutSession($stripePriceId, $userEmail, $userID, $newPlanID, $subDomain, $trialDays, $userInfo);
 
       if (isset($checkout['error'])) {
         return $response->withStatus(400)->withJson([
@@ -371,29 +379,61 @@ class SubscriptionController {
     }
   }
 
-  public function getPriceInfo(Request $request, Response $response, $args) {
+  public function getPaymentsByUser(Request $request, Response $response, $args) {
+    $userID = $args['userID'];
+    $paginator = paginator($request);
     $jwt = $request->getAttribute('jwt');
-    $targetPlanID = $args['planID'];
-  
+
     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
       return $response->withStatus(401)->withJson([
         "error" => [
-          "code" => "INVALID_TOKEN",
+          "code" => "INVALID_TOKEN", 
           "desc" => "Invalid JWT token"
         ]
       ]);
     }
-  
+
+    $userJWT = $jwt['data']->UserID;
+    $userType = $jwt['data']->UserType;
+
+    $subscription = $this->subscription->getSubscriptionByUser($userID);
+
+    if (!$subscription) {
+      return $response->withStatus(404)->withJson((object)["error" => [
+        "code" => "SUBSCRIPTION_NOT_FOUND",
+        "desc" => "No active subscription found for UserID {$userID}."
+      ]]);
+    }
+
+    $customerID = $subscription['PlatformCustomerID'];
+
     try {
-      $userID = $jwt['data']->UserID;
-      $result = $this->subscription->getPriceInfo($userID, $targetPlanID);
-  
-      return $response->withStatus(200)->withJson($result);
-  
+      $payments = $this->subscription->getPaymentsByUser($customerID, $paginator);
+
+      if ($payments === null) {
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "PAYMENTS_NOT_FOUND", 
+            "desc" => "No payments or invoices found for this specific user."
+          ]
+        ]);
+      }
+
+      // Validar si el user es el cliente o el guía
+      if ($userJWT != $userID && $userType != 'Admin') {
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "FORBIDDEN",
+            "desc" => "You are not authorized to view payments or invoices of this user."
+          ]
+        ]);
+      }
+
+      return $response->withStatus(200)->withJson($payments);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
-          "code" => "INTERNAL_SERVER_ERROR",
+          "code" => "INTERNAL_SERVER_ERROR", 
           "desc" => $e->getMessage()
         ]
       ]);

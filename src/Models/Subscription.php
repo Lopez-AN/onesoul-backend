@@ -239,7 +239,7 @@ class Subscription
     try {
       $stmt = $this->db->prepare("SELECT * FROM Subscriptions 
                                   WHERE UserID = :userID
-                                  AND (Status = 'ACTIVE' OR (Status = 'CANCELED'))
+                                  AND Status IN ('ACTIVE','TRIALING')
                                   ORDER BY StartDate DESC
                                   LIMIT 1");
 
@@ -266,7 +266,7 @@ class Subscription
     try {
       $stmt = $this->db->prepare("SELECT * FROM Subscriptions 
                                   WHERE PlatformSubscriptionID = :platformSubscriptionID
-                                  AND (Status = 'ACTIVE' OR (Status = 'CANCELED'))
+                                  AND Status IN ('ACTIVE','TRIALING')
                                   ORDER BY StartDate DESC
                                   LIMIT 1");
 
@@ -371,25 +371,141 @@ class Subscription
     }
   }
 
-  public function updateSubscriptionByUser($platformSubscriptionID, $newPlanID, $nextBillingDate = null) {
+  // Crea un cambio pendiente
+  public function scheduleSubscriptionChange($platformSubscriptionID, $newPlanID, $effectiveDate = null) {
+    $effectiveDate = $effectiveDate ? date("Y-m-d H:i:s", $effectiveDate) : null;
+    
     try {
-      // Actualizar la suscripción activa
-      $stmt = $this->db->prepare("UPDATE Subscriptions 
-                                  SET PlanID = :planID, NextBillingDate = :nextBillingDate
-                                  WHERE PlatformSubscriptionID = :platformSubscriptionID
-                                  AND Status = 'ACTIVE'");
+      $sub = $this->getUserSubscriptionByPlatformSubID($platformSubscriptionID);
+      if (!$sub) {
+        throw new DatabaseException("Subscription not found: $platformSubscriptionID");
+      }
+
+      $stmt = $this->db->prepare(
+        "INSERT INTO SubscriptionChanges
+        (PlatformSubscriptionID, UserID, OldPlanID, NewPlanID, EffectiveDate, Status, CreatedAt)
+        VALUES (:platformSubscriptionID, :userID, :oldPlanID, :newPlanID, :effectiveDate, 'PENDING', NOW())"
+      );
+
       $stmt->execute([
-        'planID'                 => $newPlanID,
-        'nextBillingDate'        => $nextBillingDate,
-        'platformSubscriptionID' => $platformSubscriptionID
+        ':platformSubscriptionID' => $platformSubscriptionID,
+        ':userID' => $sub['UserID'],
+        ':oldPlanID' => $sub['PlanID'],
+        ':newPlanID' => $newPlanID,
+        ':effectiveDate' => $effectiveDate
       ]);
 
-      $subscription = $this->getUserSubscriptionByPlatformSubID($platformSubscriptionID);
-
-      return [
-        'Subscription' => $subscription
-      ];
+      return $this->db->lastInsertId();
     } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  // Obtiene cambio pendiente
+  public function getPendingChange($platformSubscriptionID, $newPlanID = null) {
+    try {
+      $sql = "SELECT * FROM SubscriptionChanges WHERE PlatformSubscriptionID = :platformSubscriptionID AND Status = 'PENDING'";
+      if ($newPlanID !== null) {
+        $sql .= " AND NewPlanID = :newPlanID";
+      }
+      $sql .= " ORDER BY CreatedAt DESC LIMIT 1";
+
+      $stmt = $this->db->prepare($sql);
+      $stmt->bindValue(':platformSubscriptionID', $platformSubscriptionID, PDO::PARAM_STR);
+      if ($newPlanID !== null) $stmt->bindValue(':newPlanID', $newPlanID, PDO::PARAM_INT);
+      $stmt->execute();
+
+      return $stmt->fetch(PDO::FETCH_ASSOC);
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  // Marca APPLIED y actualiza la suscripción activa
+  public function applyScheduledChange($changeId, $effectiveDate = null) {
+    try {
+      $this->db->beginTransaction();
+
+      // bloquear y leer el cambio
+      $stmt = $this->db->prepare("SELECT * FROM SubscriptionChanges WHERE id = :id FOR UPDATE");
+      $stmt->execute([':id' => $changeId]);
+      $change = $stmt->fetch(PDO::FETCH_ASSOC);
+      if (!$change) throw new DatabaseException("Change not found: $changeId");
+
+      // actualizar Subscriptions
+      $stmtUp = $this->db->prepare(
+        "UPDATE Subscriptions 
+        SET PlanID = :newPlanID, NextBillingDate = :nextBillingDate
+        WHERE PlatformSubscriptionID = :platformSubscriptionID
+        AND Status IN ('ACTIVE','TRIALING')"
+      );
+
+      $stmtUp->execute([
+        ':newPlanID' => $change['NewPlanID'],
+        ':nextBillingDate' => $effectiveDate,
+        ':platformSubscriptionID' => $change['PlatformSubscriptionID']
+      ]);
+
+      // marcar change como aplicado
+      $stmt2 = $this->db->prepare("UPDATE SubscriptionChanges SET Status = 'APPLIED', AppliedAt = NOW() WHERE id = :id");
+      $stmt2->execute([':id' => $changeId]);
+
+      $this->db->commit();
+      return true;
+    } catch (\PDOException $e) {
+      $this->db->rollBack();
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  public function updateSubscriptionByUser($platformSubscriptionID, $newPlanID, $nextBillingDate = null, $applyNow = true) {
+    try {
+      if (!$applyNow) {
+        // si no aplicar ahora, creamos un schedule (pendiente)
+        return $this->scheduleSubscriptionChange($platformSubscriptionID, $newPlanID, $nextBillingDate);
+      }
+
+      // aplicar ahora (comportamiento previo) + registrar en SubscriptionChanges como APPLIED
+      $this->db->beginTransaction();
+
+      // obtener suscripción actual para oldPlanID
+      $current = $this->getUserSubscriptionByPlatformSubID($platformSubscriptionID);
+      $oldPlanID = $current ? $current['PlanID'] : null;
+
+      $stmt = $this->db->prepare(
+        "UPDATE Subscriptions 
+        SET PlanID = :planID, NextBillingDate = :nextBillingDate
+        WHERE PlatformSubscriptionID = :platformSubscriptionID
+        AND Status IN ('ACTIVE','TRIALING')"
+      );
+
+      $stmt->execute([
+        ':planID' => $newPlanID,
+        ':nextBillingDate' => $nextBillingDate,
+        ':platformSubscriptionID' => $platformSubscriptionID
+      ]);
+
+      // registrar en historico como APPLIED
+      $stmtHist = $this->db->prepare(
+        "INSERT INTO SubscriptionChanges
+        (PlatformSubscriptionID, UserID, OldPlanID, NewPlanID, EffectiveDate, Status, CreatedAt, AppliedAt)
+        VALUES (:platformSubscriptionID, :userID, :oldPlanID, :newPlanID, :effectiveDate, 'APPLIED', NOW(), NOW())"
+      );
+
+      $stmtHist->execute([
+        ':platformSubscriptionID' => $platformSubscriptionID,
+        ':userID' => $current['UserID'] ?? null,
+        ':oldPlanID' => $oldPlanID,
+        ':newPlanID' => $newPlanID,
+        ':effectiveDate' => $nextBillingDate
+      ]);
+
+      $this->db->commit();
+
+      $subscription = $this->getUserSubscriptionByPlatformSubID($platformSubscriptionID);
+      return ['Subscription' => $subscription];
+    } catch (\PDOException $e) {
+      $this->db->rollBack();
       throw new DatabaseException($e->getMessage());
     }
   }
@@ -433,13 +549,30 @@ class Subscription
     }
   }
 
-  public function getPaymentsByUser($userID) {
+  public function getPaymentsByUser($customerID, $paginator) {
     try {
       $stmt = $this->db->prepare("SELECT * FROM SubscriptionsPayments
-      WHERE userID = :userID");
-      $stmt->execute(['userID' => $userID]);
+                                  WHERE PlatformCustomerID = :customerID 
+                                  LIMIT :_limit OFFSET :_offset");
+      $stmt->bindParam(':customerID', $customerID, PDO::PARAM_STR);
+      $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
+      $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
+      $stmt->execute();
+      $payments = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-      return $stmt->fetch(PDO::FETCH_ASSOC);
+      if (empty($payments)) {
+        return null;
+      }
+
+      // Consulta total real
+      $stmtTotal = $this->db->prepare("SELECT COUNT(*) as total
+                                      FROM SubscriptionsPayments AS sp 
+                                      WHERE sp.PlatformCustomerID = :customerID");
+      $stmtTotal->bindParam(':customerID', $customerID, PDO::PARAM_STR);
+      $stmtTotal->execute();
+      $total = (int)$stmtTotal->fetchColumn();
+
+      return $payments;
 
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
@@ -450,7 +583,8 @@ class Subscription
     try {
       $stmt = $this->db->prepare("UPDATE Subscriptions 
                                   SET CancelAtPeriodEnd = 1, CancelAt = :canceledAt, NextBillingDate = :nextBillingDate
-                                  WHERE PlatformSubscriptionID = :platformSubscriptionID AND Status = 'ACTIVE'");
+                                  WHERE PlatformSubscriptionID = :platformSubscriptionID AND 
+                                  Status IN ('ACTIVE','TRIALING')");
       $stmt->execute([
         'canceledAt' => $canceledAt,
         'nextBillingDate' => $nextBillingDate,
@@ -467,7 +601,7 @@ class Subscription
       $stmt = $this->db->prepare("UPDATE Subscriptions 
                                   SET Status = 'CANCELED', EndDate = :cancelAt
                                   WHERE PlatformSubscriptionID = :platformSubscriptionID
-                                  AND Status = 'ACTIVE'
+                                  Status IN ('ACTIVE','TRIALING')
                                   ORDER BY StartDate DESC LIMIT 1");
       $stmt->execute(['platformSubscriptionID' => $platformSubscriptionID]);
       $stmt->execute(['cancelAt' => $cancelAt]);
@@ -516,8 +650,7 @@ class Subscription
                                   SET Status = 'ACTIVE', NextBillingDate = :nextBillingDate,
                                   CancelAtPeriodEnd = 0, CancelAt = NULL
                                   WHERE PlatformSubscriptionID = :PlatformSubscriptionID
-                                  AND (Status = 'PAUSED' OR Status = 'INCOMPLETE' OR 
-                                  Status = 'ACTIVE' OR Status = 'PAST_DUE')");
+                                  AND Status IN ('PAUSED','PAST_DUE','INCOMPLETE')");
       $stmt->execute([
         ':nextBillingDate' => $nextBillingDate,
         ':PlatformSubscriptionID' => $platformSubscriptionID

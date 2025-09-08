@@ -4,6 +4,7 @@ use Slim\App;
 use App\Controllers\UserController;
 use App\Models\User;
 use App\Models\Auth;
+use App\Models\Subscription;
 use Tuupola\Middleware\JwtAuthentication;
 
 return function (App $app) {
@@ -15,7 +16,8 @@ return function (App $app) {
   $pdo = require __DIR__ . './../core/database.php';
   $user = new User($pdo);
   $auth = new Auth($pdo);
-  $userController = new UserController($user, $auth);
+  $subscription = new Subscription($pdo);
+  $userController = new UserController($user, $auth, $subscription);
 
   $app->get('/users', [$userController, 'getUsers']);
   $app->get('/users/{id}', [$userController, 'getUserById']);
@@ -34,5 +36,5 @@ return function (App $app) {
   $app->delete('/users/{id}', [$userController, 'deleteUser'])->add($jwtMiddleware);
   $app->post('/users/categories/{id}', [$userController, 'updateUserCategories'])->add($jwtMiddleware);
   $app->post('/users/social/{id}', [$userController, 'updateUserSocialAccounts'])->add($jwtMiddleware);
-  $app->get('/users/social/{id}', [$userController, 'getUserSocialAccounts'])->add($jwtMiddleware);
+  $app->get('/users/social/{id}', [$userController, 'getUserSocialAccounts']);
 };

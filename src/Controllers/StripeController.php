@@ -96,7 +96,27 @@ class StripeController{
 
       $trialDays = (!empty($data['Trial']) && $data['Trial'] === true) ? 90 : 0;
 
-      $result = $this->stripe->createCheckoutSession($priceId, $userEmail, $userID, $planID, $subDomain, $trialDays);
+      $firstName = $result->data['FirstName'] ?? '';
+      $lastName  = $result->data['LastName'] ?? '';
+
+      // Dirección
+      $line1 = trim(($result->data['AddressName'] ?? '') . ' ' . ($result->data['AddressNumber'] ?? ''));
+      $line2Parts = [];
+      if (!empty($result->data['Floor'])) $line2Parts[] = "Piso " . $result->data['Floor'];
+      if (!empty($result->data['Department'])) $line2Parts[] = "Depto " . $result->data['Department'];
+      $line2 = !empty($line2Parts) ? implode(' - ', $line2Parts) : null;
+
+      $userInfo = [
+        'name' => trim(($result->data['FirstName'] ?? '') . ' ' . ($result->data['LastName'] ?? '')),
+        'line1'       => !empty($line1) ? $line1 : null,
+        'line2'       => $line2,
+        'cp'          => $result->data['Cp'] ?? null,
+        'city'        => $result->data['City'] ?? null,
+        'state'       => $result->data['State'] ?? null,
+        'country'     => $result->data['CountryCode'] ?? null,
+      ];
+
+      $result = $this->stripe->createCheckoutSession($priceId, $userEmail, $userID, $planID, $subDomain, $trialDays, $userInfo);
       if (isset($result['error'])) {
         return $response->withStatus(400)->withJson(["error" => $result['error']]);
       }
@@ -378,19 +398,33 @@ class StripeController{
     $sub = \Stripe\Subscription::retrieve($platformSubscriptionID);
     $itemId = $sub->items->data[0]->id;
 
-    // aplicar downgrade al final del ciclo (sin prorrateo)
-    $updated = \Stripe\Subscription::update($platformSubscriptionID, [
-      'items' => [[ 'id' => $itemId, 'price' => $newPriceId ]],
-      'proration_behavior' => 'none',   // no factura diferencia ahora
-      'billing_cycle_anchor' => 'unchanged', // se mantiene hasta el próximo ciclo
-      'payment_behavior' => 'pending_if_incomplete',
+    $effectiveTs = $itemId->current_period_end ?? null;
+    $effectiveDate = $effectiveTs ? date("Y-m-d H:i:s", $effectiveTs) : null;
+
+    // aplicar downgrade al final del ciclo (sin prorrateo) 
+    $updated = \Stripe\Subscription::update($platformSubscriptionID, [ 
+      'items' => [[ 
+        'id' => $itemId, 
+        'price' => $newPriceId 
+      ]], 
+      'proration_behavior' => 'none', // no factura diferencia ahora 
+      'billing_cycle_anchor' => 'unchanged', // se mantiene hasta el próximo ciclo 
+      'payment_behavior' => 'pending_if_incomplete', 
     ]);
 
-    return $response->withJson([
+    // Agregar un cambio PENDING en BD 
+    $changeId = $this->subscription->scheduleSubscriptionChange(
+      $platformSubscriptionID,
+      $newPlanID,
+      $effectiveDate
+    );
+
+    return $response->withJson([ 
       'Status' => 'scheduled',
-      'SubscriptionId' => $updated->id,
-      'CurrentPeriodEnd' => $sub->items->data[0]->current_period_end ? date("Y-m-d", $sub->current_period_end) : null,
-      'NewPrice' => $newPriceId
+      'ChangeId' => $changeId,
+      'SubscriptionId' => $updated->id, 
+      'CurrentPeriodEnd' => $effectiveDate, 
+      'NewPrice' => $newPriceId 
     ]);
   }
 
@@ -515,6 +549,7 @@ class StripeController{
             $trialStart = $trialStartTs ? date('Y-m-d H:i:s', $trialStartTs) : null;
             $trialEnd   = $trialEndTs   ? date('Y-m-d H:i:s', $trialEndTs)   : null;
 
+            
           // Obtener datos del usuario
           $userResult = $this->user->getUserById($userID);
           $userData = [];
@@ -692,10 +727,11 @@ class StripeController{
 
           $platformSubscriptionID = $sub->id;
           $newPriceId = $sub->items->data[0]->price->id ?? null;
+
           $nextBillingDate = $sub->items->data[0]->current_period_end ? date("Y-m-d", $sub->items->data[0]->current_period_end) : null;
-
+        
           error_log("Subscription actualizada en Stripe: $platformSubscriptionID con nuevo PriceID: $newPriceId");
-
+            
           if ($sub->canceled_at) {
             $this->subscription->markCancelAtPeriodEnd(
               $platformSubscriptionID,
@@ -707,10 +743,28 @@ class StripeController{
           try {
             $planInfo = $this->subscription->getSubscriptionPlanByStripeID($newPriceId);
             if ($planInfo) {
-              $this->subscription->updateSubscriptionByUser($platformSubscriptionID, $planInfo['PlanID'], $nextBillingDate);
-              error_log("Plan actualizado en BD a PlanID: " . $planInfo['PlanID']);
-            } else {
-              error_log("No se encontró plan para PriceID: $newPriceId");
+              // buscar un cambio pendiente para este plan
+              $pending = $this->subscription->getPendingChange($platformSubscriptionID, $planInfo['PlanID']);
+
+              if ($pending) {
+                // aplicar downgrade al llegar el final del ciclo
+                if ($sub->status === 'active' && $sub->cancel_at_period_end === false) {
+                  // este update es inmediato, NO deberíamos aplicarlo como downgrade
+                  error_log("Ignorado update intermedio de Stripe (cambio programado aún no aplicado)");
+                } else {
+                  $this->subscription->applyScheduledChange($pending['id'], $nextBillingDate);
+                  error_log("Cambio pendiente aplicado en BD: changeId {$pending['id']}");
+                }
+              } else {
+                // upgrade → aplicar directamente
+                $this->subscription->updateSubscriptionByUser(
+                  $platformSubscriptionID,
+                  $planInfo['PlanID'],
+                  $nextBillingDate,
+                  true // applyNow
+                );
+                error_log("Plan actualizado en BD (upgrade) a PlanID: " . $planInfo['PlanID']);
+              }
             }
           } catch (\Throwable $e) {
             error_log("Error al actualizar suscripción: " . $e->getMessage());
@@ -822,8 +876,6 @@ class StripeController{
         // ======================
 
         case 'customer.updated':
-          $customer = $event->data->object;
-          $this->subscription->handleCustomerUpdated($customer);
         break;
 
         // ======================
