@@ -892,8 +892,8 @@ class StripeController{
 
               if ($pending) {
                 // aplicar downgrade al llegar el final del ciclo
-                if ($sub->status === 'active' && $sub->cancel_at_period_end === false) {
-                  // este update es inmediato, NO deberíamos aplicarlo como downgrade
+                if (($sub->status === 'active' || $sub->status === 'trialing') 
+                    && $sub->cancel_at_period_end === false) {
                   error_log("Ignorado update intermedio de Stripe (cambio programado aún no aplicado)");
                 } else {
                   $this->subscription->applyScheduledChange($pending['id'], $nextBillingDate);

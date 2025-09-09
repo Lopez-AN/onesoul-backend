@@ -612,15 +612,14 @@ class Subscription
     }
   }
 
-  public function handleTrialWillEnd($platformSubscriptionID, $trialEnd, $trialStart) {
+  public function handleTrialWillEnd($platformSubscriptionID, $trialEnd) {
     // Refleja el fin de trial informado por Stripe.
     try {
       $stmt = $this->db->prepare("UPDATE Subscriptions
-                                  SET TrialStart = COALESCE(:trialStart, TrialStart), TrialEnd = COALESCE(:trialEnd, TrialEnd),
+                                  SET TrialEnd = COALESCE(:trialEnd, TrialEnd),
                                   TrialSource = 'STRIPE'
                                   WHERE PlatformSubscriptionID = :platformSubscriptionID");
       $stmt->execute([
-        ':trialStart' => $trialStart,
         ':trialEnd' => $trialEnd,
         ':platformSubscriptionID' => $platformSubscriptionID
       ]);
