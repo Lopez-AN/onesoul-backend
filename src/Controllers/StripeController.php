@@ -791,6 +791,7 @@ class StripeController{
           $line = !empty($invoice->lines->data) ? $invoice->lines->data[0] : null;
 
           $invoiceID = $invoice->id;
+          $platformSubscriptionID = $invoice->subscription ?? null;
 
           $invoiceData = [
             'SubscriptionID'   => $invoice->parent?->subscription_details?->subscription ?? null,
@@ -806,6 +807,13 @@ class StripeController{
           try {
             $this->subscription->updateSubscriptionPayment($invoiceID, $invoiceData);
             error_log("Pago aprobado para UserID (InvoiceID: " . $invoice->id . ")");
+
+            // Si la suscripción estaba PAST_DUE, volverla ACTIVE
+            if ($platformSubscriptionID) {
+              $this->subscription->clearPastDueOnPaid($platformSubscriptionID);
+              error_log("Suscripción activada en BD tras pago exitoso: " . $platformSubscriptionID);
+            }
+
           } catch (\Throwable $e) {
             error_log("Error al registrar el pago: " . $e->getMessage());
             return $response->withStatus(500);
