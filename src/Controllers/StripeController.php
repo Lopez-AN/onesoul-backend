@@ -503,6 +503,150 @@ class StripeController{
     }
   }
 
+  public function getUserPaymentMethod(Request $request, Response $response, array $args) {
+    $jwt = $request->getAttribute('jwt');
+
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
+      return $response->withStatus(401)->withJson([
+        "error" => [
+          "code" => "INVALID_TOKEN",
+          "desc" => "Invalid JWT token"
+        ]
+      ]);
+    }
+
+    $userID = $jwt['data']->UserID;
+
+    // buscar el customer de Stripe
+    $sub = $this->subscription->getSubscriptionByUser($userID);
+    $platformCustomerID = $sub['PlatformCustomerID'];
+
+    if (empty($platformCustomerID)) {
+      return $response->withStatus(404)->withJson([
+        "error" => [
+          "code" => "CUSTOMER_NOT_FOUND",
+          "desc" => "No Stripe customer found for this user"
+        ]
+      ]);
+    }
+
+    $paymentMethod = $this->stripe->getUserPaymentMethod($platformCustomerID);
+
+    if (!$paymentMethod) {
+      return $response->withStatus(404)->withJson([
+        "error" => [
+          "code" => "PAYMENT_METHOD_NOT_FOUND",
+          "desc" => "No payment method found for this user"
+        ]
+      ]);
+    }
+
+    return $response->withJson([
+      "PaymentMethod" => $paymentMethod
+    ]);
+  }
+
+  public function createSetupIntent(Request $request, Response $response, array $args) {
+    $jwt = $request->getAttribute('jwt');
+
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
+      return $response->withStatus(401)->withJson([
+        "error" => [
+          "code" => "INVALID_TOKEN",
+          "desc" => "Invalid JWT token"
+        ]
+      ]);
+    }
+
+    $userID = $jwt['data']->UserID;
+
+    // buscar el customer de Stripe
+    $sub = $this->subscription->getSubscriptionByUser($userID);
+    $platformCustomerID = $sub['PlatformCustomerID'] ?? null;
+
+    if (empty($platformCustomerID)) {
+      return $response->withStatus(404)->withJson([
+        "error" => [
+          "code" => "CUSTOMER_NOT_FOUND",
+          "desc" => "No Stripe customer found for this user"
+        ]
+      ]);
+    }
+
+    try {
+      $setupIntent = $this->stripe->createSetupIntent($platformCustomerID);
+
+      return $response->withJson([
+        "success" => true,
+        "SetupIntent" => $setupIntent
+      ]);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "STRIPE_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  public function createBillingPortalSession(Request $request, Response $response, array $args) {
+    $jwt = $request->getAttribute('jwt');
+    $data = $request->getParsedBody();
+    $subDomain = $data['SubDomain'] ?? '';
+
+    // Validar formato de subdominio (solo letras A-Z, a-z)
+    if (!empty($subDomain)) {
+      if (!preg_match('/^[a-zA-Z]+$/', $subDomain)) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "INVALID_SUBDOMAIN",
+            "desc" => "Subdomain must contain only letters A-Z"
+          ]
+        ]);
+      }
+    }
+
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
+      return $response->withStatus(401)->withJson([
+        "error" => [
+          "code" => "INVALID_TOKEN",
+          "desc" => "Invalid JWT token"
+        ]
+      ]);
+    }
+
+    $userID = $jwt['data']->UserID;
+
+    $sub = $this->subscription->getSubscriptionByUser($userID);
+    $platformCustomerID = $sub['PlatformCustomerID'] ?? null;
+
+    if (empty($platformCustomerID)) {
+      return $response->withStatus(404)->withJson([
+        "error" => [
+          "code" => "CUSTOMER_NOT_FOUND",
+          "desc" => "No Stripe customer found for this user"
+        ]
+      ]);
+    }
+
+    try {
+      $session = $this->stripe->createBillingPortalSession($platformCustomerID, $subDomain);
+
+      return $response->withJson([
+        "success" => true,
+        "url" => $session['URL']
+      ]);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "STRIPE_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
   public function handleWebhook(Request $request, Response $response, $args)
   {
     $rawJson = (string)$request->getBody();

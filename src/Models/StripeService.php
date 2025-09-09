@@ -204,4 +204,45 @@ class StripeService
       throw new DatabaseException($e->getMessage());
     } 
   }
+
+  public function getUserPaymentMethod($platformCustomerID) {
+    \Stripe\Stripe::setApiKey($GLOBALS['config']['stripe']['STRIPE_SECRET_KEY']);
+
+    $paymentMethods = \Stripe\PaymentMethod::all([
+      'customer' => $platformCustomerID,
+      'type' => 'card',
+    ]);
+
+    if (empty($paymentMethods->data)) {
+      return null;
+    }
+
+    $pm = $paymentMethods->data[0]; // siempre habrá una tarjeta
+    return [
+      "ID" => $pm->id,
+      "Brand" => $pm->card->brand,
+      "Last4" => $pm->card->last4,
+      "ExpMonth" => $pm->card->exp_month,
+      "ExpYear" => $pm->card->exp_year,
+    ];
+  }
+
+  public function createBillingPortalSession($platformCustomerID, $subDomain) {
+    if (empty($platformCustomerID)) {
+      throw new Exception("User has no Stripe customer ID");
+    }
+
+    $origin = $subDomain ? "https://{$subDomain}.onesoul.app" : "https://onesoul.app";
+    \Stripe\Stripe::setApiKey($GLOBALS['config']['stripe']['STRIPE_SECRET_KEY']);
+
+    $session = \Stripe\BillingPortal\Session::create([
+      'customer' => $platformCustomerID,
+      'return_url' => $origin . "/profile/subscription/payment-method/updated",
+    ]);
+
+    return [
+      "ID" => $session->id,
+      "URL" => $session->url,
+    ];
+  }
 }
