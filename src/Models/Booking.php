@@ -230,7 +230,7 @@ class Booking
     }
   }
 
-  public function createBooking($data, $subDomain)
+  public function createBooking($data, $subDomain, $assocUUID)
   {
     try {
       $stmt = $this->db->prepare("INSERT INTO Bookings (OfferingID, PublicID, UserID, Mode, LocationID, CreationDate, ScheduledDate) 
@@ -258,6 +258,40 @@ class Booking
     }
   }
   
+  public function userHasCalendly($userID)
+{
+    $stmt = $this->db->prepare("SELECT 1 FROM CalendlyConnections WHERE UserID = :userID LIMIT 1");
+    $stmt->bindParam(':userID', $userID, PDO::PARAM_INT);
+    $stmt->execute();
+    return $stmt->fetchColumn() ? true : false;
+}
+
+  public function findCalendlyWebhook($assocUUID, $userID) {
+    $stmt = $this->db->prepare("SELECT * 
+                                FROM CalendlyWebhooks 
+                                WHERE BookingID IS NULL 
+                                AND AssocUUID = :assocUUID 
+                                AND Event = 'invitee.created'
+                                AND UserID = :userID
+                                LIMIT 1");
+    $stmt->bindParam(':assocUUID', $assocUUID, PDO::PARAM_STR);
+    $stmt->bindParam(':userID', $userID, PDO::PARAM_INT);
+    $stmt->execute();
+    return $stmt->fetch(PDO::FETCH_ASSOC);
+  }
+
+  public function linkBookingWithCalendly($assocUUID, $bookingID) {
+    $stmt = $this->db->prepare("UPDATE CalendlyWebhooks 
+                                SET BookingID = :bookingID 
+                                WHERE AssocUUID = :assocUUID 
+                                AND Event = 'invitee.created' 
+                                AND BookingID IS NULL
+                                LIMIT 1");
+    $stmt->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);
+    $stmt->bindParam(':assocUUID', $assocUUID, PDO::PARAM_STR);
+    $stmt->execute();
+  }
+
   public function updateBooking($bookingID, $mode, $scheduledDate, $message, $locationID, $subDomain)
   {
     try {

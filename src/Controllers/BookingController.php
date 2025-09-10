@@ -259,6 +259,7 @@ class BookingController
     $data = $request->getParsedBody();
     $message = $data['Message'] ?? null;
     $subDomain = $data['SubDomain'] ?? '';
+    $assocUUID = $data['AssocUUID'] ?? '';
     $userInfo = $this->user->getUserById($userID);
 
     $emailValidated = filter_var($userInfo->data['ValidatedEmail'], FILTER_VALIDATE_BOOLEAN);
@@ -305,6 +306,23 @@ class BookingController
     }
 
     try {
+      // Verificar si el usuario tiene conexión con Calendly
+      $hasCalendly = $this->booking->userHasCalendly($userID);
+
+      if ($hasCalendly) {
+        // Buscar el webhook en CalendlyWebhooks
+        $webhook = $this->booking->findCalendlyWebhook($assocUUID, $userID);
+
+        if (!$webhook) {
+          return $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "CALENDLY_INVITEE_NOT_FOUND",
+              "desc" => "Calendly invitee is required for this service"
+            ]
+          ]);
+        }
+      }
+
       // VALIDAR: Offering si existe 
       $id = $data['OfferingID'] ?? null;
       if (!$id) {
@@ -464,7 +482,12 @@ class BookingController
         'Message' => $message
       ];
 
-      $booking = $this->booking->createBooking($data, $subDomain);
+      $booking = $this->booking->createBooking($data, $subDomain, $assocUUID);
+
+      // Si había Calendly y se encontró el webhook → asociar BookingID en CalendlyWebhooks
+      if ($hasCalendly && isset($booking['BookingID'])) {
+        $this->booking->linkBookingWithCalendly($assocUUID, $booking['BookingID']);
+      }
 
       $origin = $subDomain ? "https://{$subDomain}.onesoul.app" : "https://onesoul.app";
 
