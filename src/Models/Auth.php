@@ -319,22 +319,6 @@ class Auth{
       ];
     }
 
-    // Validación del referral code si fue proporcionado
-    $referrerUserID = null;
-    if (!empty($referralCode)) {
-      $referrerResult = $userModel->getUserByRefCode($referralCode);
-      if ($referrerResult->http_code !== 200 || empty($referrerResult->data['UserID'])) {
-        return (object)[
-          "http_code" => 400,
-          "error" => [
-            "code" => "INVALID_REFERRAL_CODE",
-            "desc" => "The provided referral code is not valid"
-          ]
-        ];
-      }
-      $referrerUserID = $referrerResult->data['UserID'];
-    }
-
     $body = $request->getParsedBody();
 
     $acceptedTerms = $body['AcceptedTerms'] ?? null;
@@ -392,13 +376,6 @@ class Auth{
     }
   
     $userID = $newUser->data["UserID"];
-  
-    // Insertar el referral si corresponde
-    if ($referrerUserID) {
-      $stmt = $this->db->prepare("INSERT INTO Referrals (UserID, ReferredUserID, ReferralStatus) 
-              VALUES (?, ?, 'Pending')");
-      $stmt->execute([$referrerUserID, $userID]);
-    }
 
     // Crear consentimiento legal
     $consentData = [
@@ -474,22 +451,6 @@ class Auth{
       ];
     }
 
-    // Validación del referral code si fue proporcionado
-    $referrerUserID = null;
-    if (!empty($referralCode)) {
-      $referrerResult = $userModel->getUserByRefCode($referralCode);
-      if ($referrerResult->http_code !== 200 || empty($referrerResult->data['UserID'])) {
-        return (object)[
-          "http_code" => 400,
-          "error" => [
-            "code" => "INVALID_REFERRAL_CODE",
-            "desc" => "The provided referral code is not valid"
-          ]
-        ];
-      }
-      $referrerUserID = $referrerResult->data['UserID'];
-    }
-
     $body = $request->getParsedBody();
 
     $acceptedTerms = $body['AcceptedTerms'] ?? null;
@@ -547,13 +508,6 @@ class Auth{
     }
   
     $userID = $newUser->data["UserID"];
-
-    // Insertar el referral si corresponde
-    if ($referrerUserID) {
-      $stmt = $this->db->prepare("INSERT INTO Referrals (UserID, ReferredUserID, ReferralStatus) 
-              VALUES (?, ?, 'Pending')");
-      $stmt->execute([$referrerUserID, $userID]);
-    }
 
     // Crear consentimiento legal
     $consentData = [

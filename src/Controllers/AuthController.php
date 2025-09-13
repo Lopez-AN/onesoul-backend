@@ -473,6 +473,46 @@ class AuthController{
       switch($result->http_code) {
         case 200: # Logueo correcto o usuario existente
           $jwt = $this -> JWTgen($result -> data);
+          $userID = $result->data['UserID'] ?? null;
+
+          if (!empty($referralCode)) {
+            $referrerResult = $this->user->getUserByRefCode($referralCode);
+
+            if ($referrerResult->http_code !== 200 || empty($referrerResult->data['UserID'])) {
+              return (object)[
+                "http_code" => 400,
+                "error" => [
+                  "code" => "INVALID_REFERRAL_CODE",
+                  "desc" => "The provided referral code is not valid"
+                ]
+              ];
+            }
+
+            $referrerUserID = $referrerResult->data['UserID'];
+
+            if ($referrerUserID) {
+              $referralResult = $this->auth->handleReferralReward($referrerUserID, $userID);
+
+              if ($referralResult['RewardTriggered']) {
+                $subscription = $this->subscription->getSubscriptionByUser($referrerUserID);
+                $platformSubscriptionID = $subscription['PlatformSubscriptionID'] ?? null;
+                $currentPlanID = $subscription['PlanDetails']['StripeID'] ?? null;
+
+                $planStripe = $this->subscription->getSubscriptionPlanByStripeID($currentPlanID);
+                $newPlanID = $planStripe['PlanID'];
+                if ($platformSubscriptionID && $newPlanID) {
+                  \Stripe\Stripe::setApiKey($GLOBALS['config']['stripe']['STRIPE_SECRET_KEY']);
+                  \Stripe\Subscription::update($platformSubscriptionID, [
+                    'discounts' => [
+                      ['coupon' => '1MONTHFREE']
+                    ]
+                  ]);
+                }
+              }
+              return $response->withStatus(200)->withJson($referralResult);
+            }  
+          }
+
           return $response->withStatus(200)->withJson([
             "Token" => $jwt,
             "UserData" => $result -> data
@@ -520,6 +560,47 @@ class AuthController{
         case 200: # Logueo correcto o usuario existente
           $jwt = $this -> JWTgen($result -> data);
           $userData = $this->user->getUserById($result -> data['UserID']);
+
+          $userID = $result->data['UserID'] ?? null;
+
+          if (!empty($referralCode)) {
+            $referrerResult = $this->user->getUserByRefCode($referralCode);
+
+            if ($referrerResult->http_code !== 200 || empty($referrerResult->data['UserID'])) {
+              return (object)[
+                "http_code" => 400,
+                "error" => [
+                  "code" => "INVALID_REFERRAL_CODE",
+                  "desc" => "The provided referral code is not valid"
+                ]
+              ];
+            }
+
+            $referrerUserID = $referrerResult->data['UserID'];
+
+            if ($referrerUserID) {
+              $referralResult = $this->auth->handleReferralReward($referrerUserID, $userID);
+
+              if ($referralResult['RewardTriggered']) {
+                $subscription = $this->subscription->getSubscriptionByUser($referrerUserID);
+                $platformSubscriptionID = $subscription['PlatformSubscriptionID'] ?? null;
+                $currentPlanID = $subscription['PlanDetails']['StripeID'] ?? null;
+
+                $planStripe = $this->subscription->getSubscriptionPlanByStripeID($currentPlanID);
+                $newPlanID = $planStripe['PlanID'];
+                if ($platformSubscriptionID && $newPlanID) {
+                  \Stripe\Stripe::setApiKey($GLOBALS['config']['stripe']['STRIPE_SECRET_KEY']);
+                  \Stripe\Subscription::update($platformSubscriptionID, [
+                    'discounts' => [
+                      ['coupon' => '1MONTHFREE']
+                    ]
+                  ]);
+                }
+              }
+              return $response->withStatus(200)->withJson($referralResult);
+            }  
+          }
+
           return $response->withStatus(200)->withJson([
             'Token' => $jwt,
             'UserData' => $result -> data
