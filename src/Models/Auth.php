@@ -129,22 +129,6 @@ class Auth{
       ];
     }
     
-    // Validación del referral code si fue proporcionado
-    $referrerUserID = null;
-    if (!empty($referralCode)) {
-      $referrerResult = $userModel->getUserByRefCode($referralCode);
-      if ($referrerResult->http_code !== 200 || empty($referrerResult->data['UserID'])) {
-        return (object)[
-          "http_code" => 400,
-          "error" => [
-            "code" => "INVALID_REFERRAL_CODE",
-            "desc" => "The provided referral code is not valid"
-          ]
-        ];
-      }
-      $referrerUserID = $referrerResult->data['UserID'];
-    }
-
     $body = $request->getParsedBody();
 
     $acceptedTerms = $body['AcceptedTerms'] ?? null;
@@ -203,13 +187,6 @@ class Auth{
   
     $userId = $newUser->data["UserID"];
   
-    // Insertar el referral si corresponde
-    if ($referrerUserID) {
-      $stmt = $this->db->prepare("INSERT INTO Referrals (UserID, ReferredUserID, ReferralStatus) 
-              VALUES (?, ?, 'Pending')");
-      $stmt->execute([$referrerUserID, $userId]);
-    }
-
     // Crear consentimiento legal
     $consentData = [
       "UserID" => $userId,
@@ -253,6 +230,52 @@ class Auth{
       (preg_match('/[0-9]/', $password) || preg_match('/\W/', $password));  // Debe tener un número O un símbolo
   }
   
+  public function handleReferralReward($referrerUserID, $newUserID) {
+    try {
+      // Insertar el referral como pendiente
+      $stmt = $this->db->prepare("INSERT INTO Referrals (UserID, ReferredUserID, ReferralStatus) 
+                                  VALUES (?, ?, 'Pending')");
+      $stmt->execute([$referrerUserID, $newUserID]);
+
+      // Contar la cantidad de referidos pendientes + usados
+      $countStmt = $this->db->prepare("SELECT COUNT(*) as total 
+                                      FROM Referrals 
+                                      WHERE UserID = ?");
+      $countStmt->execute([$referrerUserID]);
+      $count = (int) $countStmt->fetch(PDO::FETCH_ASSOC)['total'];
+
+      $rewardTriggered = false;
+
+      if ($count >= 5) {
+        // Marcar 5 referidos como usados
+        $updateStmt = $this->db->prepare("UPDATE Referrals 
+                                          SET UpdatedAt = NOW(), ReferralStatus = 'Redeemed'
+                                          WHERE UserID = ? AND ReferralStatus = 'Pending'
+                                          LIMIT 5");
+        $updateStmt->execute([$referrerUserID]);
+
+        // Insertar recompensa
+        $rewardStmt = $this->db->prepare("INSERT INTO ReferralRewards (UserID, RewardType, RewardAmount) 
+                                          VALUES (?, 'SubscriptionMonth', 1)");
+        $rewardStmt->execute([$referrerUserID]);
+
+        $rewardTriggered = true;
+      }
+
+      return [
+        "Message" => "Referral reward generated successfully",
+        "RewardTriggered" => $rewardTriggered
+      ];
+
+    } catch (\Exception $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+           "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
 
   public function registerGoogle($userModel, $token, $username, $clientIp, $request, $referralCode, $receiveNewsletters){
     $response = $this -> validateToken("https://oauth2.googleapis.com/tokeninfo?id_token=$token");

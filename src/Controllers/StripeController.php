@@ -280,72 +280,81 @@ class StripeController{
     $subscription = $this->subscription->getUserSubscriptionByPlatformSubID($platformSubscriptionID);
     $userID = $subscription['UserID'];
 
-    # Verificar si el usuario autenticado es el mismo o un administrador
-    if ($jwt['data']->UserID != $userID && $jwt['data']->UserType != 'Admin') {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "UNAUTHORIZED",
-          "desc" => "You are not authorized to subscribe."
-        ]
-      ]);
-    }    
+    if ($subscription['Status'] == 'ACTIVE') {
+      # Verificar si el usuario autenticado es el mismo o un administrador
+      if ($jwt['data']->UserID != $userID && $jwt['data']->UserType != 'Admin') {
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "UNAUTHORIZED",
+            "desc" => "You are not authorized to subscribe."
+          ]
+        ]);
+      }    
 
-    $newPlanID = $data['PlanID'] ?? null;
-    // Obtener el ID de Stripe desde el plan
-    $plan = $this->subscription->getSubscriptionPlanByID($newPlanID);
-    if (!$plan || empty($plan['StripeID'])) {
+      $newPlanID = $data['PlanID'] ?? null;
+      // Obtener el ID de Stripe desde el plan
+      $plan = $this->subscription->getSubscriptionPlanByID($newPlanID);
+      if (!$plan || empty($plan['StripeID'])) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "STRIPE_PLAN_MISSING",
+            "desc" => "Stripe ID not configured for this plan"
+          ]
+        ]);
+      }
+
+      $newPriceId = $plan['StripeID'];
+      $prorationDate = $data['ProrationDate'] ?? null;
+
+      if (!$prorationDate) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "INVALID_PARAMETERS",
+            "desc" => "Missing or invalid parameters"
+          ]
+        ]);
+      }
+
+      \Stripe\Stripe::setApiKey($GLOBALS['config']['stripe']['STRIPE_SECRET_KEY']);
+
+      $sub = \Stripe\Subscription::retrieve($platformSubscriptionID);
+      $itemId = $sub->items->data[0]->id;
+
+      $updated = \Stripe\Subscription::update($platformSubscriptionID, [
+        'items' => [[ 'id' => $itemId, 'price' => $newPriceId ]],
+        'proration_behavior' => 'always_invoice',   // factura la diferencia ahora
+        'proration_date'     => $prorationDate,     // MISMO que el preview
+        'payment_behavior'   => 'pending_if_incomplete', // si requiere SCA, queda pendiente
+        'expand' => ['latest_invoice.payment_intent', 'latest_invoice.charge'],
+      ]);
+
+      $invoice = $updated->latest_invoice ?? null;
+      $pi = $invoice ? $invoice->payment_intent : null;
+
+      if ($invoice && $invoice->status === 'paid') {
+        return $response->withJson(['Status' => 'paid', 'SubscriptionId' => $updated->id]);
+      }
+
+      if ($pi && $pi->status === 'requires_action') {
+        // Devolvés client_secret para confirmar 3DS en el front
+        return $response->withJson([
+          'Status' => 'requires_action',
+          'ClientSecret' => $pi->client_secret,
+          'SubscriptionId' => $updated->id
+        ]);
+      }
+
+      if ($pi && $pi->status === 'requires_payment_method') {
+        // No hay método de pago válido. Mostrá UI para actualizar tarjeta (Billing Portal o Payment Element)
+        return $response->withJson(['Status' => 'requires_payment_method']);
+      }
+    } else {
       return $response->withStatus(400)->withJson([
         "error" => [
-          "code" => "STRIPE_PLAN_MISSING",
-          "desc" => "Stripe ID not configured for this plan"
+          "code" => "SUBSCRIPTION_NOT_ACTIVE",
+          "desc" => "The subscription is not active or is in trialing."
         ]
       ]);
-    }
-
-    $newPriceId = $plan['StripeID'];
-    $prorationDate = $data['ProrationDate'] ?? null;
-
-    if (!$prorationDate) {
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "INVALID_PARAMETERS",
-          "desc" => "Missing or invalid parameters"
-        ]
-      ]);
-    }
-
-    \Stripe\Stripe::setApiKey($GLOBALS['config']['stripe']['STRIPE_SECRET_KEY']);
-
-    $sub = \Stripe\Subscription::retrieve($platformSubscriptionID);
-    $itemId = $sub->items->data[0]->id;
-
-    $updated = \Stripe\Subscription::update($platformSubscriptionID, [
-      'items' => [[ 'id' => $itemId, 'price' => $newPriceId ]],
-      'proration_behavior' => 'always_invoice',   // factura la diferencia ahora
-      'proration_date'     => $prorationDate,     // MISMO que el preview
-      'payment_behavior'   => 'pending_if_incomplete', // si requiere SCA, queda pendiente
-      'expand' => ['latest_invoice.payment_intent', 'latest_invoice.charge'],
-    ]);
-
-    $invoice = $updated->latest_invoice ?? null;
-    $pi = $invoice ? $invoice->payment_intent : null;
-
-    if ($invoice && $invoice->status === 'paid') {
-      return $response->withJson(['Status' => 'paid', 'SubscriptionId' => $updated->id]);
-    }
-
-    if ($pi && $pi->status === 'requires_action') {
-      // Devolvés client_secret para confirmar 3DS en el front
-      return $response->withJson([
-        'Status' => 'requires_action',
-        'ClientSecret' => $pi->client_secret,
-        'SubscriptionId' => $updated->id
-      ]);
-    }
-
-    if ($pi && $pi->status === 'requires_payment_method') {
-      // No hay método de pago válido. Mostrá UI para actualizar tarjeta (Billing Portal o Payment Element)
-      return $response->withJson(['Status' => 'requires_payment_method']);
     }
 
     // Fallback: pendiente (Stripe intentará cobrar)
@@ -369,63 +378,72 @@ class StripeController{
     $subscription = $this->subscription->getUserSubscriptionByPlatformSubID($platformSubscriptionID);
     $userID = $subscription['UserID'];
 
-    # Verificar si el usuario autenticado es el mismo o un administrador
-    if ($jwt['data']->UserID != $userID && $jwt['data']->UserType != 'Admin') {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "UNAUTHORIZED",
-          "desc" => "You are not authorized to subscribe."
-        ]
-      ]);
-    }    
+    if ($subscription['Status'] == 'ACTIVE') {
+      # Verificar si el usuario autenticado es el mismo o un administrador
+      if ($jwt['data']->UserID != $userID && $jwt['data']->UserType != 'Admin') {
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "UNAUTHORIZED",
+            "desc" => "You are not authorized to subscribe."
+          ]
+        ]);
+      }    
 
-    $newPlanID = $data['PlanID'] ?? null;
-    $plan = $this->subscription->getSubscriptionPlanByID($newPlanID);
-    if (!$plan || empty($plan['StripeID'])) {
+      $newPlanID = $data['PlanID'] ?? null;
+      $plan = $this->subscription->getSubscriptionPlanByID($newPlanID);
+      if (!$plan || empty($plan['StripeID'])) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "STRIPE_PLAN_MISSING",
+            "desc" => "Stripe ID not configured for this plan"
+          ]
+        ]);
+      }
+
+      $newPriceId = $plan['StripeID'];
+
+      \Stripe\Stripe::setApiKey($GLOBALS['config']['stripe']['STRIPE_SECRET_KEY']);
+
+      // Traer la suscripción actual
+      $sub = \Stripe\Subscription::retrieve($platformSubscriptionID);
+      $itemId = $sub->items->data[0]->id;
+
+      $effectiveTs = $itemId->current_period_end ?? null;
+      $effectiveDate = $effectiveTs ? date("Y-m-d H:i:s", $effectiveTs) : null;
+
+      // aplicar downgrade al final del ciclo (sin prorrateo) 
+      $updated = \Stripe\Subscription::update($platformSubscriptionID, [ 
+        'items' => [[ 
+          'id' => $itemId, 
+          'price' => $newPriceId 
+        ]], 
+        'proration_behavior' => 'none', // no factura diferencia ahora 
+        'billing_cycle_anchor' => 'unchanged', // se mantiene hasta el próximo ciclo 
+        'payment_behavior' => 'pending_if_incomplete', 
+      ]);
+
+      // Agregar un cambio PENDING en BD 
+      $changeId = $this->subscription->scheduleSubscriptionChange(
+        $platformSubscriptionID,
+        $newPlanID,
+        $effectiveDate
+      );
+
+      return $response->withJson([ 
+        'Status' => 'scheduled',
+        'ChangeId' => $changeId,
+        'SubscriptionId' => $updated->id, 
+        'CurrentPeriodEnd' => $effectiveDate, 
+        'NewPrice' => $newPriceId 
+      ]);
+    } else {
       return $response->withStatus(400)->withJson([
         "error" => [
-          "code" => "STRIPE_PLAN_MISSING",
-          "desc" => "Stripe ID not configured for this plan"
+          "code" => "SUBSCRIPTION_NOT_ACTIVE",
+          "desc" => "The subscription is not active or is in trialing."
         ]
       ]);
     }
-
-    $newPriceId = $plan['StripeID'];
-
-    \Stripe\Stripe::setApiKey($GLOBALS['config']['stripe']['STRIPE_SECRET_KEY']);
-
-    // Traer la suscripción actual
-    $sub = \Stripe\Subscription::retrieve($platformSubscriptionID);
-    $itemId = $sub->items->data[0]->id;
-
-    $effectiveTs = $itemId->current_period_end ?? null;
-    $effectiveDate = $effectiveTs ? date("Y-m-d H:i:s", $effectiveTs) : null;
-
-    // aplicar downgrade al final del ciclo (sin prorrateo) 
-    $updated = \Stripe\Subscription::update($platformSubscriptionID, [ 
-      'items' => [[ 
-        'id' => $itemId, 
-        'price' => $newPriceId 
-      ]], 
-      'proration_behavior' => 'none', // no factura diferencia ahora 
-      'billing_cycle_anchor' => 'unchanged', // se mantiene hasta el próximo ciclo 
-      'payment_behavior' => 'pending_if_incomplete', 
-    ]);
-
-    // Agregar un cambio PENDING en BD 
-    $changeId = $this->subscription->scheduleSubscriptionChange(
-      $platformSubscriptionID,
-      $newPlanID,
-      $effectiveDate
-    );
-
-    return $response->withJson([ 
-      'Status' => 'scheduled',
-      'ChangeId' => $changeId,
-      'SubscriptionId' => $updated->id, 
-      'CurrentPeriodEnd' => $effectiveDate, 
-      'NewPrice' => $newPriceId 
-    ]);
   }
 
   public function cancelSubscription(Request $request, Response $response, array $args) {
@@ -814,6 +832,14 @@ class StripeController{
               error_log("Suscripción activada en BD tras pago exitoso: " . $platformSubscriptionID);
             }
 
+            $coupon = $invoice->discount->coupon ?? null;
+            if ($coupon) {
+              $this->subscription->updateCouponStatus(
+                  $platformSubscriptionID,
+                  $coupon->id
+              );
+            }
+
           } catch (\Throwable $e) {
             error_log("Error al registrar el pago: " . $e->getMessage());
             return $response->withStatus(500);
@@ -893,29 +919,33 @@ class StripeController{
           }
 
           try {
-            $planInfo = $this->subscription->getSubscriptionPlanByStripeID($newPriceId);
-            if ($planInfo) {
-              // buscar un cambio pendiente para este plan
-              $pending = $this->subscription->getPendingChange($platformSubscriptionID, $planInfo['PlanID']);
+            $prevPriceId = $event->data->previous_attributes->items->data[0]->price->id ?? null;
 
-              if ($pending) {
-                // aplicar downgrade al llegar el final del ciclo
-                if (($sub->status === 'active' || $sub->status === 'trialing') 
-                    && $sub->cancel_at_period_end === false) {
-                  error_log("Ignorado update intermedio de Stripe (cambio programado aún no aplicado)");
+            if ($prevPriceId !== null && $prevPriceId != $newPriceId) {
+              $planInfo = $this->subscription->getSubscriptionPlanByStripeID($newPriceId);
+              if ($planInfo) {
+                // buscar un cambio pendiente para este plan
+                $pending = $this->subscription->getPendingChange($platformSubscriptionID, $planInfo['PlanID']);
+
+                if ($pending) {
+                  // aplicar downgrade al llegar el final del ciclo
+                  if (($sub->status === 'active' || $sub->status === 'trialing') 
+                      && $sub->cancel_at_period_end === false) {
+                    error_log("Ignorado update intermedio de Stripe (cambio programado aún no aplicado)");
+                  } else {
+                    $this->subscription->applyScheduledChange($pending['id'], $nextBillingDate);
+                    error_log("Cambio pendiente aplicado en BD: changeId {$pending['id']}");
+                  }
                 } else {
-                  $this->subscription->applyScheduledChange($pending['id'], $nextBillingDate);
-                  error_log("Cambio pendiente aplicado en BD: changeId {$pending['id']}");
+                  // upgrade → aplicar directamente
+                  $this->subscription->updateSubscriptionByUser(
+                    $platformSubscriptionID,
+                    $planInfo['PlanID'],
+                    $nextBillingDate,
+                    true // applyNow
+                  );
+                  error_log("Plan actualizado en BD (upgrade) a PlanID: " . $planInfo['PlanID']);
                 }
-              } else {
-                // upgrade → aplicar directamente
-                $this->subscription->updateSubscriptionByUser(
-                  $platformSubscriptionID,
-                  $planInfo['PlanID'],
-                  $nextBillingDate,
-                  true // applyNow
-                );
-                error_log("Plan actualizado en BD (upgrade) a PlanID: " . $planInfo['PlanID']);
               }
             }
           } catch (\Throwable $e) {
@@ -927,12 +957,11 @@ class StripeController{
         case 'customer.subscription.deleted':
           $subscription = $event->data->object;
           $platformSubscriptionID = $subscription->id;
-          $cancelAt = $subscription->cancel_at;
 
           error_log("Subscription eliminada en Stripe: " . $platformSubscriptionID);
 
           try {
-            $this->subscription->cancelSubscription($platformSubscriptionID, $cancelAt);
+            $this->subscription->cancelSubscription($platformSubscriptionID);
             error_log("Subscription cancelada en base de datos.");
           } catch (\Throwable $e) {
             error_log("Error al cancelar suscripción: " . $e->getMessage());
@@ -1007,6 +1036,42 @@ class StripeController{
         case 'payment_method.automatically_updated':
         case 'payment_method.detached':
         break;
+
+        // ======================
+        // CUPONES
+        // ======================        
+        case 'customer.discount.created':
+          $discount = $event->data->object;
+
+          $platformSubscriptionID = $discount->subscription ?? null;
+          $coupon = $discount->coupon ?? null;
+
+          if ($platformSubscriptionID && $coupon) {
+              $platformCouponID = $discount->id;
+              $couponCode = $coupon->id;
+              $couponName = $coupon->name ?? null;
+              $percentOff = $coupon->percent_off ?? null;
+              $amountOff = $coupon->amount_off ?? null;
+              $end = $discount->end ? date("Y-m-d H:i:s", $discount->end) : null;
+
+              // Buscar el UserID en base al customer de Stripe
+              $userID = $this->subscription->getUserSubscriptionByPlatformSubID($platformSubscriptionID);
+
+              // Guardar el cupón en BD
+              $this->subscription->createCoupon([
+                  'PlatformSubscriptionID' => $platformSubscriptionID,
+                  'PlatformCouponID' => $platformCouponID,
+                  'CouponCode' => $couponCode,
+                  'CouponName' => $couponName,
+                  'UserID' => $userID,
+                  'PercentOff' => $percentOff,
+                  'AmountOff' => $amountOff,
+                  'ExpiresAt' => $end,
+              ]);
+
+              error_log("Cupón $couponCode aplicado en la suscripción $platformSubscriptionID para UserID $userID");
+          }
+          break;
 
         // ======================
         // PAYMENT INTENTS (one-shot o reintentos de invoice)

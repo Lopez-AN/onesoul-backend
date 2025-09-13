@@ -596,15 +596,13 @@ class Subscription
     }
   }
 
-  public function cancelSubscription($platformSubscriptionID, $cancelAt) {
+  public function cancelSubscription($platformSubscriptionID) {
     try {
       $stmt = $this->db->prepare("UPDATE Subscriptions 
-                                  SET Status = 'CANCELED', EndDate = :cancelAt
+                                  SET Status = 'CANCELED', EndDate = NOW()
                                   WHERE PlatformSubscriptionID = :platformSubscriptionID
-                                  Status IN ('ACTIVE','TRIALING')
-                                  ORDER BY StartDate DESC LIMIT 1");
+                                  AND Status IN ('ACTIVE','TRIALING')");
       $stmt->execute(['platformSubscriptionID' => $platformSubscriptionID]);
-      $stmt->execute(['cancelAt' => $cancelAt]);
 
       return true;
     } catch (\PDOException $e) {
@@ -655,6 +653,55 @@ class Subscription
         ':PlatformSubscriptionID' => $platformSubscriptionID
       ]);
       return $stmt->rowCount() > 0;
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  public function createCoupon($data) {
+    try {
+      $stmt = $this->db->prepare("INSERT INTO SubscriptionsCoupons (PlatformSubscriptionID, PlatformCouponID, CouponCode, CouponName, 
+                                  UserID, PercentOff, AmountOff, Status, ExpiresAt)
+                                  VALUES (:PlatformSubscriptionID, :PlatformCouponID, :CouponCode, :CouponName, :UserID, :PercentOff, 
+                                  :AmountOff, 'PENDING', :ExpiresAt)");
+      $stmt->execute([
+          ':PlatformSubscriptionID' => $data['PlatformSubscriptionID'],
+          ':PlatformCouponID' => $data['PlatformCouponID'],
+          ':CouponCode' => $data['CouponCode'],
+          ':CouponName' => $data['CouponName'],
+          ':UserID' => $data['UserID'],
+          ':PercentOff' => $data['PercentOff'],
+          ':AmountOff' => $data['AmountOff'],
+          ':AppliedAt' => $data['AppliedAt'],
+          ':ExpiresAt' => $data['ExpiresAt'],
+      ]);
+    
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  public function updateCouponStatus($platformSubscriptionID, $platformCouponID) {
+    try {
+      $stmt = $this->db->prepare("UPDATE SubscriptionsCoupons
+                                  SET Status = 'APPLIED',
+                                  AppliedAt = NOW(),
+                                  UpdatedAt = CURRENT_TIMESTAMP
+                                  WHERE PlatformSubscriptionID = :platformSubscriptionID AND PlatformCouponID = :platformCouponID");
+      $stmt->execute([
+          ':PlatformSubscriptionID' => $platformSubscriptionID,
+          ':PlatformCouponID' => $platformCouponID
+      ]);
+
+      $stmt = $this->db->prepare("UPDATE SubscriptionsPayments
+                                  SET PlatformCouponID = :platformCouponID
+                                  WHERE PlatformSubscriptionID = :platformSubscriptionID
+                                  ORDER BY CreatedAt DESC LIMIT 1");
+      $stmt->execute([
+          ':PlatformSubscriptionID' => $platformSubscriptionID,
+          ':PlatformCouponID' => $platformCouponID
+      ]);
+        
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }

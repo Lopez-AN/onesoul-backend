@@ -6,7 +6,9 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use App\Models\Auth;
 use App\Models\User;
+use App\Models\Subscription;
 use Firebase\JWT\JWT;
+use Stripe\Stripe;
 
 #Definir zona horaria
 date_default_timezone_set('America/Argentina/Buenos_Aires');
@@ -15,10 +17,12 @@ class AuthController{
 
   protected $user;
   protected $auth;
+  protected $subscription;
 
-  public function __construct(User $user, Auth $auth){
+  public function __construct(User $user, Auth $auth, Subscription $subscription){
     $this->user = $user;
     $this->auth = $auth;
+    $this->subscription = $subscription;
   }
 
   /*
@@ -377,15 +381,59 @@ class AuthController{
 
     try {
       $result = $this->auth->register($this->user, $email, $username, $password, $clientIp, $request, $referralCode, $receiveNewsletters);
+      
       switch($result->http_code) {
         case 200: # Logueo correcto o usuario existente
           $jwt = $this -> JWTgen($result -> data);
+          $userID = $result->data['UserID'] ?? null;
+
+          if (!empty($referralCode)) {
+            $referrerResult = $this->user->getUserByRefCode($referralCode);
+
+            if ($referrerResult->http_code !== 200 || empty($referrerResult->data['UserID'])) {
+              return (object)[
+                "http_code" => 400,
+                "error" => [
+                  "code" => "INVALID_REFERRAL_CODE",
+                  "desc" => "The provided referral code is not valid"
+                ]
+              ];
+            }
+
+            $referrerUserID = $referrerResult->data['UserID'];
+
+            if ($referrerUserID) {
+              $referralResult = $this->auth->handleReferralReward($referrerUserID, $userID);
+
+              if ($referralResult['RewardTriggered']) {
+                $subscription = $this->subscription->getSubscriptionByUser($referrerUserID);
+                $platformSubscriptionID = $subscription['PlatformSubscriptionID'] ?? null;
+                $currentPlanID = $subscription['PlanDetails']['StripeID'] ?? null;
+
+                $planStripe = $this->subscription->getSubscriptionPlanByStripeID($currentPlanID);
+                $newPlanID = $planStripe['PlanID'];
+                if ($platformSubscriptionID && $newPlanID) {
+                  \Stripe\Stripe::setApiKey($GLOBALS['config']['stripe']['STRIPE_SECRET_KEY']);
+                  \Stripe\Subscription::update($platformSubscriptionID, [
+                    'discounts' => [
+                      ['coupon' => '1MONTHFREE']
+                    ]
+                  ]);
+                }
+              }
+              return $response->withStatus(200)->withJson($referralResult);
+            }  
+          }
+
           return $response->withStatus(200)->withJson([
             'Token' => $jwt,
             'UserData' => $result -> data
           ]);
+        
         default: #errores
-          return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+        
+        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+
       }
     } catch (\Exception $e) {
       return $response->withStatus(500)->withJson([

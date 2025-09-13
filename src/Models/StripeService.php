@@ -46,6 +46,10 @@ class StripeService
         $customerParams['address'] = $address;
       }
 
+      $trialMessage = $hasTrial 
+      ? "Recordá que al suscribirte en el período de prueba aceptas donar 3 sesiones para ser sorteadas." 
+      : "Tu suscripción se cobrará inmediatamente.";
+
       $customer = \Stripe\Customer::create($customerParams);
 
       $params = [
@@ -68,18 +72,21 @@ class StripeService
           'TrialDays' => $hasTrial ? $trialDays : 0,
           'DonationsRequired'  => $hasTrial ? '3' : '0',
         ],
-        // 'allow_promotion_codes' => true,
+        'allow_promotion_codes' => true,
         'payment_method_collection' => 'always',
         'billing_address_collection' => 'required',
         'tax_id_collection' => [
           'enabled' => true,
         ],
+        'custom_text' => [
+          'submit' => ['message' => $trialMessage]
+        ],
         'custom_fields' => [[
           'key'   => 'dni',
-          'label' => ['type' => 'custom', 'custom' => 'DNI'],
+          'label' => ['type' => 'custom', 'custom' => 'Tipo y Número de Documento'],
           'type'  => 'text',
           'optional' => false,
-          'text'  => ['maximum_length' => 8, 'minimum_length' => 5],
+          'text'  => ['maximum_length' => 20, 'minimum_length' => 5],
         ]],
         'subscription_data' => [
           'metadata' => [
