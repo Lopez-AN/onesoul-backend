@@ -536,24 +536,24 @@ class AuthController{
     $user_id = $data['UserID'] ?? '';
     $token = $data['Token'] ?? '';
     $username = $data['UserName'] ?? '';
-    // $recaptchaToken = $data['RecaptchaToken'] ?? '';
+    $recaptchaToken = $data['RecaptchaToken'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
     $referralCode = $data['ReferralCode'] ?? null;
     $receiveNewsletters = $data['ReceiveNewsletters'] ?? null;
 
-    // if(empty($user_id) || empty($token) || empty($username) || empty($recaptchaToken) || empty($receiveNewsletters)){
-    //   return $response->withStatus(400)->withJson([
-    //     "error" => [
-    //       "code" => "INVALID_PARAMETERS",
-    //       "desc" => "Parameters are missing or invalid"
-    //     ]
-    //   ]);
-    // }
+    if(empty($user_id) || empty($token) || empty($username) || empty($recaptchaToken) || empty($receiveNewsletters)){
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_PARAMETERS",
+          "desc" => "Parameters are missing or invalid"
+        ]
+      ]);
+    }
 
-    // $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
-    // if ($result->http_code !== 200) {
-    //   return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
-    // }
+    $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
+    if ($result->http_code !== 200) {
+      return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+    }
 
     try{
       if ($isJwt) {
