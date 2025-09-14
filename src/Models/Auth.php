@@ -536,6 +536,232 @@ class Auth{
     return $userModel -> getUserByOAuthID($userId, "facebook");
   }
 
+  public function registerFacebookNative($userModel, $jwtToken, $username, $clientIp, $request, $referralCode, $receiveNewsletters) {
+    // 1. Validar JWT contra las claves públicas de Facebook
+    $decoded = $this->validateFacebookJWT($jwtToken);
+    if ($decoded === false) {
+      return (object)[
+        "http_code" => 401,
+        "error" => [
+          "code" => "SSO_INVALID_TOKEN",
+          "desc" => "Invalid Facebook JWT token"
+        ]
+      ];
+    }
+
+    $facebookId = $decoded->sub ?? null; 
+    $email = $decoded->email ?? null;
+    $first_name = $decoded->given_name ?? null;
+    $last_name = $decoded->family_name ?? null;
+    $picture = $decoded->picture ?? null;
+
+    if (empty($facebookId)) {
+      return (object)[
+        "http_code" => 400,
+        "error" => [
+          "code" => "INVALID_JWT_PAYLOAD",
+          "desc" => "Facebook JWT does not contain a valid user ID"
+        ]
+      ];
+    }
+
+    // 2. Si ya existe, devuelvo el usuario
+    $user_data = $userModel->getUserByOAuthID($facebookId, "facebook");
+    if ($user_data->http_code == 200) {
+      return $user_data;
+    }
+
+    // 3. Validaciones de email/username duplicados
+    if (!empty($email) && $userModel->getUserByEmail($email)->http_code == 200) {
+      return (object)[
+        "http_code" => 409,
+        "error" => [
+          "code" => "DUPLICATED_EMAIL",
+          "desc" => "A user with the specified email address already exists"
+        ]
+      ];
+    }
+    if (!empty($username) && $userModel->getUserByUserName($username)->http_code == 200) {
+      return (object)[
+        "http_code" => 409,
+        "error" => [
+          "code" => "DUPLICATED_USERNAME",
+          "desc" => "A user with the specified username already exists"
+        ]
+      ];
+    }
+
+    // 4. Validación de referral code (igual a tu flujo Web)
+    $referrerUserID = null;
+    if (!empty($referralCode)) {
+      $referrerResult = $userModel->getUserByRefCode($referralCode);
+      if ($referrerResult->http_code !== 200 || empty($referrerResult->data['UserID'])) {
+        return (object)[
+          "http_code" => 400,
+          "error" => [
+            "code" => "INVALID_REFERRAL_CODE",
+            "desc" => "The provided referral code is not valid"
+          ]
+        ];
+      }
+      $referrerUserID = $referrerResult->data['UserID'];
+    }
+
+    // 5. Legal docs + consent (igual a tu flujo Web)
+    $body = $request->getParsedBody();
+    $acceptedTerms = $body['AcceptedTerms'] ?? null;
+    $acceptedPrivacy = $body['AcceptedPrivacyPolicy'] ?? null;
+    $TyCVersion = $body['TyCVersion'] ?? null;
+    $PrivacyPolicyVersion = $body['PrivacyPolicyVersion'] ?? null;
+
+    $legalCheckStmt = $this->db->prepare("SELECT COUNT(*) as total FROM LegalDocuments
+                      WHERE (DocumentType = 'TermsAndConditions' AND Version = ?) 
+                        OR (DocumentType = 'PrivacyPolicy' AND Version = ?)");
+    $legalCheckStmt->execute([$TyCVersion, $PrivacyPolicyVersion]);
+    $result = $legalCheckStmt->fetch(PDO::FETCH_ASSOC);
+
+    if ((int)$result['total'] < 2) {
+      return (object)[
+        "http_code" => 400,
+        "error" => [
+          "code" => "INVALID_LEGAL_DOCUMENT_VERSION",
+          "desc" => "One or both legal document versions are invalid."
+        ]
+      ];
+    }
+
+    if ($acceptedTerms !== 1 || $acceptedPrivacy !== 1) {
+      return (object)[
+        "http_code" => 400,
+        "error" => [
+          "code" => "CONSENT_REQUIRED",
+          "desc" => "AcceptedTerms and AcceptedPrivacyPolicy must both be accepted."
+        ]
+      ];
+    }
+
+    // 6. Crear usuario
+    $this->registerUserSSO((object)[
+      "FirstName" => $first_name,
+      "LastName" => $last_name,
+      "Email" => $email,
+      "UserName" => $username,
+      "Picture" => $picture,
+      "Oauth2ID" => $facebookId,
+      "Oauth2Service" => "facebook"
+    ]);
+
+    // Insertar referral si corresponde
+    if ($referrerUserID) {
+      $stmt = $this->db->prepare("INSERT INTO Referrals (UserID, ReferredUserID, ReferralStatus) 
+              VALUES (?, ?, 'Pending')");
+      $stmt->execute([$referrerUserID, $facebookId]);
+    }
+
+    // Consentimiento legal
+    $consentData = [
+      "UserID" => $facebookId,
+      "AcceptedTerms" => 1,
+      "AcceptedPrivacyPolicy" => 1,
+      "UserIP" => $clientIp,
+      "UserAgent" => $request->getHeader('User-Agent')[0] ?? '',
+      "TyCVersion" => $TyCVersion,
+      "PrivacyPolicyVersion" => $PrivacyPolicyVersion
+    ];
+    
+    $consentResult = $this->createConsent($consentData);
+    if (isset($consentResult['error'])) {
+      return (object)[
+        "http_code" => 400,
+        "error" => [
+          "code" => "CONSENT_ERROR",
+          "desc" => $consentResult['error']
+        ]
+      ];
+    }
+
+    // Insertar newsletters
+    if ($receiveNewsletters) {
+      $stmt = $this->db->prepare("INSERT INTO UserSettings (UserID, ReceiveNewsletters) 
+                                  VALUES (:userId, 1)");
+      $stmt->execute([':userId' => $facebookId]);
+    }
+
+    return $userModel->getUserByOAuthID($facebookId, "facebook");
+  }
+
+  private function validateFacebookJWT($jwtToken) {
+    try {
+      // Obtener JWKS de Facebook
+      $jwksUrl = "https://www.facebook.com/.well-known/oauth/openid/jwks/";
+      $jwks = json_decode(file_get_contents($jwksUrl), true);
+
+      // Decodificar encabezado para obtener el kid
+      $header = json_decode(base64_decode(str_replace(['-', '_'], ['+', '/'], explode('.', $jwtToken)[0])), true);
+      $kid = $header['kid'] ?? null;
+
+      if (!$kid) return false;
+
+      // Buscar clave pública que coincida
+      $keyData = null;
+      foreach ($jwks['keys'] as $key) {
+        if ($key['kid'] === $kid) {
+          $keyData = $key;
+          break;
+        }
+      }
+      if (!$keyData) return false;
+
+      // Convertir a clave pública
+      $publicKey = $this->convertJWKToPEM($keyData);
+
+      // Usar Firebase JWT para verificar
+      $decoded = \Firebase\JWT\JWT::decode(
+        $jwtToken, 
+        new \Firebase\JWT\Key($publicKey, $keyData['alg'])
+      );
+
+      // Validaciones adicionales
+      $expectedIssuer = 'https://www.facebook.com';
+      $expectedAudience = $GLOBALS['config']['facebook']['APP_ID'];
+
+      if (($decoded->iss ?? '') !== $expectedIssuer) {
+        throw new \Exception("Invalid issuer");
+      }
+
+      if (($decoded->aud ?? '') !== $expectedAudience) {
+        throw new \Exception("Invalid audience");
+      }
+
+      if (isset($decoded->exp) && $decoded->exp < time()) {
+        throw new \Exception("Token expired");
+      }
+
+      return $decoded;
+
+    } catch (\Exception $e) {
+      error_log("Facebook JWT validation failed: " . $e->getMessage());
+      return false;
+    }
+  }
+
+  private function convertJWKToPEM($jwk) {
+    $modulus = $this->base64UrlDecode($jwk['n']);
+    $exponent = $this->base64UrlDecode($jwk['e']);
+    $rsa = new \phpseclib3\Crypt\RSA();
+    $rsa = $rsa->loadKey(['n' => $modulus, 'e' => $exponent]);
+    return $rsa->getPublicKey();
+  }
+
+  private function base64UrlDecode($input) {
+    $remainder = strlen($input) % 4;
+    if ($remainder) {
+      $padlen = 4 - $remainder;
+      $input .= str_repeat('=', $padlen);
+    }
+    return base64_decode(strtr($input, '-_', '+/'));
+  }
+
   public function createConsent($consentData)
   {
     // Validar que el usuario exista

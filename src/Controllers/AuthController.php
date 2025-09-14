@@ -444,30 +444,60 @@ class AuthController{
 
   public function registerFacebook(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
+    $isJwt = $data['Jwt'] ?? false; // true = Native, false = Web
     $user_id = $data['UserID'] ?? '';
     $token = $data['Token'] ?? '';
     $username = $data['UserName'] ?? '';
-    $recaptchaToken = $data['RecaptchaToken'] ?? '';
+    // $recaptchaToken = $data['RecaptchaToken'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
     $referralCode = $data['ReferralCode'] ?? '';
     $receiveNewsletters = $data['ReceiveNewsletters'] ?? '';
 
-    if(empty($user_id) || empty($token) || empty($username) || empty($recaptchaToken) || empty($receiveNewsletters)){
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "INVALID_PARAMETERS",
-          "desc" => "Parameters are missing or invalid"
-        ]
-      ]);
-    }
+    // if(empty($user_id) || empty($token) || empty($username) || empty($recaptchaToken) || empty($receiveNewsletters)){
+    //   return $response->withStatus(400)->withJson([
+    //     "error" => [
+    //       "code" => "INVALID_PARAMETERS",
+    //       "desc" => "Parameters are missing or invalid"
+    //     ]
+    //   ]);
+    // }
 
-    $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
-    if ($result->http_code !== 200) {
-      return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
-    }
+    // $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
+    // if ($result->http_code !== 200) {
+    //   return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+    // }
 
     try{
-      $result = $this->auth->registerFacebook($this->user, $user_id, $token, $username, $clientIp, $request, $referralCode, $receiveNewsletters);
+      if ($isJwt) {
+        // Flujo Nativo (JWT)
+        $jwtToken = $data['JwtToken'] ?? '';
+        if (empty($jwtToken)) {
+          return $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "INVALID_PARAMETERS",
+              "desc" => "JwtToken is required when Jwt=true"
+            ]
+          ]);
+        }
+        $result = $this->auth->registerFacebookNative(
+          $this->user, $jwtToken, $username, $clientIp, $request, $referralCode, $receiveNewsletters
+        );
+      } else {
+        // Flujo Web (Graph API)
+        $user_id = $data['UserID'] ?? '';
+        $token = $data['Token'] ?? '';
+        if (empty($user_id) || empty($token)) {
+          return $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "INVALID_PARAMETERS",
+              "desc" => "UserID and Token are required when Jwt=false"
+            ]
+          ]);
+        }
+
+        $result = $this->auth->registerFacebook($this->user, $user_id, $token, $username, $clientIp, $request, $referralCode, $receiveNewsletters);
+      }
+
       switch($result->http_code) {
         case 200: # Logueo correcto o usuario existente
           $jwt = $this -> JWTgen($result -> data);
@@ -479,6 +509,7 @@ class AuthController{
         default: # errores
           return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
+
     } catch (\Exception $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
