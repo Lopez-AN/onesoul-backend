@@ -839,11 +839,17 @@ class Auth{
       }
     }
 
-    $response = $this -> validateAppleToken($id_token);
-    if($response === false){
-      return (object)["http_code" => 401,
+    // Recuperá el nonce que generaste para ese Uuid (si lo guardaste)
+    $expectedNonce = null; // null si aún no implementaste
+
+    // Validar token contra aud EXACTO del Service ID web
+    $expectedAud = $GLOBALS['config']['apple']['CLIENT_ID'];
+    $claims = $this->validateAppleToken($id_token, $expectedAud, $expectedNonce);
+    if ($claims === false) {
+      return (object) [
+        "http_code" => 401, 
         "error" => [
-          "code" => "SSO_INVALID_TOKEN",
+          "code" => "SSO_INVALID_TOKEN", 
           "desc" => "Invalid Apple token"
         ]
       ];
@@ -855,8 +861,6 @@ class Auth{
       return $user_data;
     }
 
-    $first_name = $response['given_name'] ?? null;
-    $last_name = $response['family_name'] ?? null;
     $email = $response['email'] ?? null;
 
     if(!empty($email) && $userModel->getUserByEmail($email)->http_code == 200){
@@ -910,8 +914,6 @@ class Auth{
     }
 
     $this -> registerUserSSO((object)[
-      "FirstName" => $first_name,
-      "LastName" => $last_name,
       "Email" => $email,
       "UserName" => $username,
       "Oauth2ID" => $userId,
@@ -981,7 +983,7 @@ class Auth{
     $expectedNonce = null; // null si aún no implementaste
 
     // Validar token contra aud EXACTO del Service ID web
-    $expectedAud = $GLOBALS['config']['apple']['CLIENT_ID']; // com.onesoul.app.web
+    $expectedAud = $GLOBALS['config']['apple']['CLIENT_ID'];
     $claims = $this->validateAppleToken($id_token, $expectedAud, $expectedNonce);
     if ($claims === false) {
       return (object) [
@@ -1003,7 +1005,7 @@ class Auth{
           "desc" => "No user associated with the specified Apple account was found"
         ],
         "data" => [
-          "Email"     => $response['email'] ?? null
+          "Email" => $response['email'] ?? null
         ]
       ];
     }

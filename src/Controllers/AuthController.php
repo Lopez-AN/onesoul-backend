@@ -743,7 +743,7 @@ class AuthController{
     }
 
     try {
-      $result = $this->auth->loginApple($this -> user, $code, $id_token, $uuid);
+      $result = $this->auth->loginApple($this->user, $code, $id_token, $uuid);
       if ($result->http_code !== 200) {
         return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
