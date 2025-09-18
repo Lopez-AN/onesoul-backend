@@ -134,11 +134,14 @@ class AuthController{
       }
 
       $userData = $this->user->getUserById($user['UserID']);
+      $userPlan = $this->subscription->getSubscriptionByUser($user['UserID']);
+      unset($userPlan['PlanDetails']);
 
       return $response->withStatus(200)->withJson([
         "Token" => $jwt,
         "MfaID" => $newMfaId,
-        "UserData" => $userData -> data
+        "UserData" => $userData -> data,
+        "UserPlan" => $userPlan
       ]);
     } catch (\Exception $e) {
       return $response->withStatus(500)->withJson([
@@ -179,6 +182,8 @@ class AuthController{
         return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
       $user = $result->data;
+      $userPlan = $this->subscription->getSubscriptionByUser($user['UserID']);
+      unset($userPlan['PlanDetails']);
 
       // Verificar si el usuario está bloqueado
       if (!is_null($user['LockedUntil']) && strtotime($user['LockedUntil']) > time()) {
@@ -235,7 +240,8 @@ class AuthController{
       return $response->withStatus(200)->withJson([
         'Token' => $jwt,
         'MfaID' => $newMfaId,
-        'UserData' => $user
+        'UserData' => $user,
+        'UserPlan' => $userPlan
       ]);
 
     } catch (\Exception $e) {
@@ -279,6 +285,8 @@ class AuthController{
         return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
       $user = $result->data;
+      $userPlan = $this->subscription->getSubscriptionByUser($user['UserID']);
+      unset($userPlan['PlanDetails']);
 
       // Verificar si el usuario está bloqueado
       if (!is_null($user['LockedUntil']) && strtotime($user['LockedUntil']) > time()) {
@@ -338,7 +346,8 @@ class AuthController{
       return $response->withStatus(200)->withJson([
         'Token' => $jwt,
         'MfaID' => $newMfaId,
-        'UserData' => $userData->data
+        'UserData' => $userData->data,
+        'UserPlan' => $userPlan
       ]);
 
     } catch (\Exception $e) {
@@ -381,7 +390,7 @@ class AuthController{
 
     try {
       $result = $this->auth->register($this->user, $email, $username, $password, $clientIp, $request, $referralCode, $receiveNewsletters);
-      
+
       switch($result->http_code) {
         case 200: # Logueo correcto o usuario existente
           $jwt = $this -> JWTgen($result -> data);
@@ -422,16 +431,17 @@ class AuthController{
                 }
               }
               return $response->withStatus(200)->withJson($referralResult);
-            }  
+            }
           }
 
           return $response->withStatus(200)->withJson([
             'Token' => $jwt,
-            'UserData' => $result -> data
+            'UserData' => $result -> data,
+            'UserPlan' => null
           ]);
-        
+
         default: #errores
-        
+
         return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
 
       }
@@ -451,7 +461,7 @@ class AuthController{
     $username = $data['UserName'] ?? '';
     $recaptchaToken = $data['RecaptchaToken'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
-    $referralCode = $data['ReferralCode'] ?? null;    
+    $referralCode = $data['ReferralCode'] ?? null;
     $receiveNewsletters = $data['ReceiveNewsletters'] ?? null;
 
     if(empty($token) || empty($username) || empty($recaptchaToken) || !isset($data['ReceiveNewsletters'])){
@@ -474,6 +484,8 @@ class AuthController{
         case 200: # Logueo correcto o usuario existente
           $jwt = $this -> JWTgen($result -> data);
           $userID = $result->data['UserID'] ?? null;
+          $userPlan = $this->subscription->getSubscriptionByUser($userID);
+          unset($userPlan['PlanDetails']);
 
           if (!empty($referralCode)) {
             $referrerResult = $this->user->getUserByRefCode($referralCode);
@@ -510,12 +522,13 @@ class AuthController{
                 }
               }
               return $response->withStatus(200)->withJson($referralResult);
-            }  
+            }
           }
 
           return $response->withStatus(200)->withJson([
-            "Token" => $jwt,
-            "UserData" => $result -> data
+            'Token' => $jwt,
+            'UserData' => $result -> data,
+            'UserPlan' => $userPlan
           ]);
         default: # Otros, ejemplo Token inválido
           return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
@@ -590,8 +603,9 @@ class AuthController{
         case 200: # Logueo correcto o usuario existente
           $jwt = $this -> JWTgen($result -> data);
           $userData = $this->user->getUserById($result -> data['UserID']);
-
           $userID = $result->data['UserID'] ?? null;
+          $userPlan = $this->subscription->getSubscriptionByUser($userID);
+          unset($userPlan['PlanDetails']);
 
           if (!empty($referralCode)) {
             $referrerResult = $this->user->getUserByRefCode($referralCode);
@@ -628,12 +642,13 @@ class AuthController{
                 }
               }
               return $response->withStatus(200)->withJson($referralResult);
-            }  
+            }
           }
 
           return $response->withStatus(200)->withJson([
             'Token' => $jwt,
-            'UserData' => $result -> data
+            'UserData' => $result -> data,
+            'UserPlan' => $userPlan
           ]);
         default: # errores
           return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
@@ -657,7 +672,7 @@ class AuthController{
     $username = $data['UserName'] ?? '';
     $recaptchaToken = $data['RecaptchaToken'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
-    $referralCode = $data['ReferralCode'] ?? null;    
+    $referralCode = $data['ReferralCode'] ?? null;
     $receiveNewsletters = $data['ReceiveNewsletters'] ?? null;
 
     if((empty($id_token) && empty($code)) || empty($username) || empty($recaptchaToken) || !isset($data['ReceiveNewsletters'])){
@@ -680,6 +695,8 @@ class AuthController{
         case 200: # Usuario registrado o ya existente
           $jwt = $this -> JWTgen($result -> data);
           $userID = $result->data['UserID'] ?? null;
+          $userPlan = $this->subscription->getSubscriptionByUser($userID);
+          unset($userPlan['PlanDetails']);
 
           if (!empty($referralCode)) {
             $referrerResult = $this->user->getUserByRefCode($referralCode);
@@ -698,12 +715,13 @@ class AuthController{
             if ($referrerUserID) {
               $referralResult = $this->auth->handleReferralReward($referrerUserID, $userID);
               return $response->withStatus(200)->withJson($referralResult);
-            }  
+            }
           }
 
           return $response->withStatus(200)->withJson([
             "Token" => $jwt,
-            "UserData" => $result -> data
+            "UserData" => $result -> data,
+            "UserPlan" => $userPlan
           ]);
         default: # Token inválido u otros errores
           return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
@@ -951,7 +969,8 @@ class AuthController{
     $token = $this->JWTgen($userData -> data);
     return $response->withStatus(200)->withJson([
       'Token' => $token,
-      'UserData' => $userData -> data
+      'UserData' => $userData -> data,
+      'UserPlan' => $userPlan
     ]);
   }
 
@@ -1310,7 +1329,7 @@ class AuthController{
 
     $data = $request->getParsedBody();
     $userType = $jwt['data']->UserType;
-    
+
     // Validar permisos
     if (($userType !== 'Admin')) {
       return $response->withStatus(401)->withJson([
@@ -1335,7 +1354,7 @@ class AuthController{
     $version = $data['Version'];
     $releaseDate = $data['ReleaseDate'];
     $content = is_array($data['Content']) ? json_encode($data['Content'], JSON_UNESCAPED_UNICODE) : $data['Content'];
-    
+
     try {
 
       $consent = $this->auth->uploadLegalDocuments($type, $version, $releaseDate, $content);
@@ -1349,12 +1368,12 @@ class AuthController{
            "desc" => $e->getMessage()
         ]
       ]);
-    }  
+    }
   }
   public function legalDocuments(Request $request, Response $response, $args) {
     try {
       $documents = $this->auth->legalDocuments();
-  
+
       return $response->withStatus(200)->withJson($documents);
 
     } catch (\Exception $e) {
@@ -1364,6 +1383,6 @@ class AuthController{
           "desc" => $e->getMessage()
         ]
       ]);
-    } 
-  }      
+    }
+  }
 }
