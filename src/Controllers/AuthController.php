@@ -961,6 +961,8 @@ class AuthController{
 
     $userID = $jwt['data'] -> UserID;
     $userData = $this->user->getUserById($userID);
+    $userPlan = $this->subscription->getSubscriptionByUser($userID);
+    unset($userPlan['PlanDetails']);
 
     if ($userData->http_code !== 200) {
       return $response->withStatus($userData->http_code)->withJson($userData->error);
