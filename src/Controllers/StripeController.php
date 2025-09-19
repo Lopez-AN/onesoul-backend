@@ -169,7 +169,7 @@ class StripeController{
           "desc" => "You are not authorized to subscribe."
         ]
       ]);
-    }    
+    }
 
     $newPlanID = $data['PlanID'] ?? null;
     // Obtener el ID de Stripe desde el plan
@@ -230,7 +230,7 @@ class StripeController{
       ];
     }
 
-    $item = $sub->items->data[0]; 
+    $item = $sub->items->data[0];
     $prorationDate = time();
 
     // Preview del próximo invoice simulando el cambio
@@ -289,7 +289,7 @@ class StripeController{
             "desc" => "You are not authorized to subscribe."
           ]
         ]);
-      }    
+      }
 
       $newPlanID = $data['PlanID'] ?? null;
       // Obtener el ID de Stripe desde el plan
@@ -387,7 +387,7 @@ class StripeController{
             "desc" => "You are not authorized to subscribe."
           ]
         ]);
-      }    
+      }
 
       $newPlanID = $data['PlanID'] ?? null;
       $plan = $this->subscription->getSubscriptionPlanByID($newPlanID);
@@ -411,30 +411,30 @@ class StripeController{
       $effectiveTs = $itemId->current_period_end ?? null;
       $effectiveDate = $effectiveTs ? date("Y-m-d H:i:s", $effectiveTs) : null;
 
-      // aplicar downgrade al final del ciclo (sin prorrateo) 
-      $updated = \Stripe\Subscription::update($platformSubscriptionID, [ 
-        'items' => [[ 
-          'id' => $itemId, 
-          'price' => $newPriceId 
-        ]], 
-        'proration_behavior' => 'none', // no factura diferencia ahora 
-        'billing_cycle_anchor' => 'unchanged', // se mantiene hasta el próximo ciclo 
-        'payment_behavior' => 'pending_if_incomplete', 
+      // aplicar downgrade al final del ciclo (sin prorrateo)
+      $updated = \Stripe\Subscription::update($platformSubscriptionID, [
+        'items' => [[
+          'id' => $itemId,
+          'price' => $newPriceId
+        ]],
+        'proration_behavior' => 'none', // no factura diferencia ahora
+        'billing_cycle_anchor' => 'unchanged', // se mantiene hasta el próximo ciclo
+        'payment_behavior' => 'pending_if_incomplete',
       ]);
 
-      // Agregar un cambio PENDING en BD 
+      // Agregar un cambio PENDING en BD
       $changeId = $this->subscription->scheduleSubscriptionChange(
         $platformSubscriptionID,
         $newPlanID,
         $effectiveDate
       );
 
-      return $response->withJson([ 
+      return $response->withJson([
         'Status' => 'scheduled',
         'ChangeId' => $changeId,
-        'SubscriptionId' => $updated->id, 
-        'CurrentPeriodEnd' => $effectiveDate, 
-        'NewPrice' => $newPriceId 
+        'SubscriptionId' => $updated->id,
+        'CurrentPeriodEnd' => $effectiveDate,
+        'NewPrice' => $newPriceId
       ]);
     } else {
       return $response->withStatus(400)->withJson([
@@ -447,7 +447,6 @@ class StripeController{
   }
 
   public function cancelSubscription(Request $request, Response $response, array $args) {
-    $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
 
     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
@@ -559,9 +558,7 @@ class StripeController{
       ]);
     }
 
-    return $response->withJson([
-      "PaymentMethod" => $paymentMethod
-    ]);
+    return $response->withJson($paymentMethod);
   }
 
   public function createSetupIntent(Request $request, Response $response, array $args) {
@@ -711,7 +708,7 @@ class StripeController{
             $trialStart = $trialStartTs ? date('Y-m-d H:i:s', $trialStartTs) : null;
             $trialEnd   = $trialEndTs   ? date('Y-m-d H:i:s', $trialEndTs)   : null;
 
-            
+
           // Obtener datos del usuario
           $userResult = $this->user->getUserById($userID);
           $userData = [];
@@ -749,7 +746,7 @@ class StripeController{
 
         case 'invoice.finalized':
           $invoice = $event->data->object;
-          
+
           if (empty($invoice)) {
             return $response->withStatus(400)->withJson([
               "error" => [
@@ -779,8 +776,8 @@ class StripeController{
             'InvoicePDF'       => $invoice->invoice_pdf ?? null,
             'HostedInvoiceURL' => $invoice->hosted_invoice_url ?? null,
             'CreatedAt'        => date("Y-m-d", $invoice->created),
-            'PaidAt'           => $invoice->status_transitions?->paid_at 
-                                  ? date("Y-m-d", $invoice->status_transitions->paid_at) 
+            'PaidAt'           => $invoice->status_transitions?->paid_at
+                                  ? date("Y-m-d", $invoice->status_transitions->paid_at)
                                   : null
           ];
 
@@ -796,7 +793,7 @@ class StripeController{
         // case 'invoice.paid':
         case 'invoice.payment_succeeded':
           $invoice = $event->data->object;
-          
+
           if (empty($invoice)) {
             return $response->withStatus(400)->withJson([
               "error" => [
@@ -817,8 +814,8 @@ class StripeController{
             'AmountPaid'       => $invoice->amount_paid / 100,
             'AmountRemaining'  => $invoice->amount_remaining / 100,
             'Status'           => $invoice->status,
-            'PaidAt'           => $invoice->status_transitions?->paid_at 
-                                  ? date("Y-m-d", $invoice->status_transitions->paid_at) 
+            'PaidAt'           => $invoice->status_transitions?->paid_at
+                                  ? date("Y-m-d", $invoice->status_transitions->paid_at)
                                   : null
           ];
 
@@ -872,8 +869,8 @@ class StripeController{
             'AmountPaid'       => $invoice->amount_paid / 100,
             'AmountRemaining'  => $invoice->amount_remaining / 100,
             'Status'           => $invoice->status,
-            'PaidAt'           => $invoice->status_transitions?->paid_at 
-                                  ? date("Y-m-d", $invoice->status_transitions->paid_at) 
+            'PaidAt'           => $invoice->status_transitions?->paid_at
+                                  ? date("Y-m-d", $invoice->status_transitions->paid_at)
                                   : null
           ];
 
@@ -895,7 +892,7 @@ class StripeController{
           $invoice = $event->data->object;
           $this->subscription->markInvoiceUncollectible($invoice->id);
         break;
-        
+
         // ======================
         // SUBSCRIPTIONS
         // ======================
@@ -907,9 +904,9 @@ class StripeController{
           $newPriceId = $sub->items->data[0]->price->id ?? null;
 
           $nextBillingDate = $sub->items->data[0]->current_period_end ? date("Y-m-d", $sub->items->data[0]->current_period_end) : null;
-        
+
           error_log("Subscription actualizada en Stripe: $platformSubscriptionID con nuevo PriceID: $newPriceId");
-            
+
           if ($sub->canceled_at) {
             $this->subscription->markCancelAtPeriodEnd(
               $platformSubscriptionID,
@@ -929,7 +926,7 @@ class StripeController{
 
                 if ($pending) {
                   // aplicar downgrade al llegar el final del ciclo
-                  if (($sub->status === 'active' || $sub->status === 'trialing') 
+                  if (($sub->status === 'active' || $sub->status === 'trialing')
                       && $sub->cancel_at_period_end === false) {
                     error_log("Ignorado update intermedio de Stripe (cambio programado aún no aplicado)");
                   } else {
@@ -1030,7 +1027,7 @@ class StripeController{
           $brand = $method->card->brand;
           $last4 = $method->card->last4;
 
-        break;  
+        break;
 
         case 'payment_method.updated':
         case 'payment_method.automatically_updated':
@@ -1039,7 +1036,7 @@ class StripeController{
 
         // ======================
         // CUPONES
-        // ======================        
+        // ======================
         case 'customer.discount.created':
           $discount = $event->data->object;
 
@@ -1101,7 +1098,7 @@ class StripeController{
 
         case 'subscription_schedule.created' :
         case 'subscription_schedule.updated' :
-        break;  
+        break;
 
       default:
         error_log("Evento no manejado: " . $event->type);
