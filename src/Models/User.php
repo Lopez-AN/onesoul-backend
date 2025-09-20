@@ -1165,7 +1165,7 @@ clASs User
         $stmt->execute();
 
         # Borro la imagen anterior si existe en el sistema de archivos
-        if (file_exists($rs[0]['Path'])) {
+        if (!empty($rs[0]['Path']) && file_exists($rs[0]['Path'])) {
           unlink($rs[0]['Path']);
         }
       } else {
