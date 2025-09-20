@@ -302,6 +302,8 @@ class Subscription
       $trialEnd = $userData['TrialEnd'];
       $trialSource = $userData['TrialSource'];
       $paymentPlatform = $userData['PaymentPlatform'];
+      $nextBillingDate = $userData['NextBillingDate'];
+      $latestInvoice = $userData['LatestInvoiceID'];
       $trialEndDate = $trialEnd ? substr($trialEnd, 0, 10) : null;
 
       // TRIALING si el trial no terminó aún
@@ -309,9 +311,9 @@ class Subscription
 
       // Insertar nueva suscripción
       $stmt = $this->db->prepare("INSERT INTO Subscriptions (PlanID, UserID, TrialStart, TrialEnd, TrialSource, 
-              StartDate, Status, PaymentPlatform, PlatformSubscriptionID, PlatformCustomerID)
+              StartDate, Status, PaymentPlatform, PlatformSubscriptionID, PlatformCustomerID, NextBillingDate, LatestInvoiceID)
               VALUES (:planID, :userID, :trialStart, :trialEnd, :trialSource, CURDATE(), :status, 
-              :paymentPlatform, :platformSubscriptionID, :platformCustomerID)");
+              :paymentPlatform, :platformSubscriptionID, :platformCustomerID, :nextBillingDate, :latestInvoice)");
 
       $stmt->execute([
         ':planID' => $planID,
@@ -322,7 +324,9 @@ class Subscription
         ':status' => $status,
         ':paymentPlatform' => $paymentPlatform,
         ':platformSubscriptionID' => $platformSubscriptionID,
-        ':platformCustomerID' => $platformCustomerID
+        ':platformCustomerID' => $platformCustomerID,
+        ':nextBillingDate' => $nextBillingDate,
+        ':latestInvoice' => $latestInvoice
       ]);
 
       // Marcar referido como exitoso si corresponde
@@ -407,12 +411,16 @@ class Subscription
       $sql = "SELECT * FROM SubscriptionChanges WHERE PlatformSubscriptionID = :platformSubscriptionID AND Status = 'PENDING'";
       if ($newPlanID !== null) {
         $sql .= " AND NewPlanID = :newPlanID";
+      } else {
+        $sql .= " AND NewPlanID IS NULL";
       }
       $sql .= " ORDER BY CreatedAt DESC LIMIT 1";
 
       $stmt = $this->db->prepare($sql);
       $stmt->bindValue(':platformSubscriptionID', $platformSubscriptionID, PDO::PARAM_STR);
-      if ($newPlanID !== null) $stmt->bindValue(':newPlanID', $newPlanID, PDO::PARAM_INT);
+      if ($newPlanID !== null) {
+        $stmt->bindValue(':newPlanID', $newPlanID, PDO::PARAM_INT);
+      }
       $stmt->execute();
 
       return $stmt->fetch(PDO::FETCH_ASSOC);
@@ -489,7 +497,7 @@ class Subscription
       $stmtHist = $this->db->prepare(
         "INSERT INTO SubscriptionChanges
         (PlatformSubscriptionID, UserID, OldPlanID, NewPlanID, EffectiveDate, Status, CreatedAt, AppliedAt)
-        VALUES (:platformSubscriptionID, :userID, :oldPlanID, :newPlanID, :effectiveDate, 'APPLIED', NOW(), NOW())"
+        VALUES (:platformSubscriptionID, :userID, :oldPlanID, :newPlanID, :effectivDate, 'APPLIED', NOW(), NOW())"
       );
 
       $stmtHist->execute([

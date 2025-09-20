@@ -280,7 +280,7 @@ class StripeController{
     $subscription = $this->subscription->getUserSubscriptionByPlatformSubID($platformSubscriptionID);
     $userID = $subscription['UserID'];
 
-    if ($subscription['Status'] == 'ACTIVE') {
+    if ($subscription['Status'] == 'ACTIVE' || $subscription['Status'] == 'TRIALING') {
       # Verificar si el usuario autenticado es el mismo o un administrador
       if ($jwt['data']->UserID != $userID && $jwt['data']->UserType != 'Admin') {
         return $response->withStatus(401)->withJson([
@@ -378,7 +378,7 @@ class StripeController{
     $subscription = $this->subscription->getUserSubscriptionByPlatformSubID($platformSubscriptionID);
     $userID = $subscription['UserID'];
 
-    if ($subscription['Status'] == 'ACTIVE') {
+    if ($subscription['Status'] == 'ACTIVE' || $subscription['Status'] == 'TRIALING') {
       # Verificar si el usuario autenticado es el mismo o un administrador
       if ($jwt['data']->UserID != $userID && $jwt['data']->UserType != 'Admin') {
         return $response->withStatus(401)->withJson([
@@ -408,32 +408,57 @@ class StripeController{
       $sub = \Stripe\Subscription::retrieve($platformSubscriptionID);
       $itemId = $sub->items->data[0]->id;
 
-      $effectiveTs = $itemId->current_period_end ?? null;
-      $effectiveDate = $effectiveTs ? date("Y-m-d H:i:s", $effectiveTs) : null;
+      $effectiveTs = $sub->items->data[0]->current_period_end ?? null;
 
-      // aplicar downgrade al final del ciclo (sin prorrateo)
-      $updated = \Stripe\Subscription::update($platformSubscriptionID, [
-        'items' => [[
-          'id' => $itemId,
-          'price' => $newPriceId
-        ]],
-        'proration_behavior' => 'none', // no factura diferencia ahora
-        'billing_cycle_anchor' => 'unchanged', // se mantiene hasta el próximo ciclo
-        'payment_behavior' => 'pending_if_incomplete',
+      $currentPlanID = $subscription['PlanID'];
+
+      // Crear el scheduled
+      if (empty($sub->schedule)) {
+        $schedule = \Stripe\SubscriptionSchedule::create([
+          'from_subscription' => $platformSubscriptionID,
+        ]);
+      }
+
+      // Luego actualizar para agregar las fases que querés
+      $schedule = \Stripe\SubscriptionSchedule::update($schedule->id, [
+        'phases' => [
+          [
+            'start_date' => 'now',
+            'end_date' => $effectiveTs,
+            'items' => [[ 'price' => $currentPlanID, 'quantity' => 1 ]],
+            'proration_behavior' => 'none'
+          ],
+          [
+            'start_date' => $effectiveTs,
+            'items' => [[ 'price' => $newPriceId, 'quantity' => 1 ]],
+            'proration_behavior' => 'none'
+          ],
+        ],
       ]);
+
+      // // aplicar downgrade al final del ciclo (sin prorrateo)
+      // $updated = \Stripe\Subscription::update($platformSubscriptionID, [
+      //   'items' => [[
+      //     'id' => $itemId,
+      //     'price' => $newPriceId
+      //   ]],
+      //   'proration_behavior' => 'none', // no factura diferencia ahora
+      //   'billing_cycle_anchor' => 'unchanged', // se mantiene hasta el próximo ciclo
+      //   'payment_behavior' => 'pending_if_incomplete',
+      // ]);
 
       // Agregar un cambio PENDING en BD
       $changeId = $this->subscription->scheduleSubscriptionChange(
         $platformSubscriptionID,
         $newPlanID,
-        $effectiveDate
+        $effectiveTs
       );
 
       return $response->withJson([
         'Status' => 'scheduled',
         'ChangeId' => $changeId,
         'SubscriptionId' => $updated->id,
-        'CurrentPeriodEnd' => $effectiveDate,
+        'CurrentPeriodEnd' => date("Y-m-d H:i:s", $effectiveTs),
         'NewPrice' => $newPriceId
       ]);
     } else {
@@ -487,13 +512,26 @@ class StripeController{
 
         // Refrescar la suscripción para obtener los datos actualizados
         $sub = \Stripe\Subscription::retrieve($platformSubscriptionID);
-        $canceled = $sub;
+        $cancelAt = $sub->cancel_at;
+
+        // Chequear si ya existe un pending de cancelación
+        $pending = $this->subscription->getPendingChange($platformSubscriptionID, null);
+        if (!$pending && $cancelAt) {
+          $changeId = $this->subscription->scheduleSubscriptionChange(
+            $platformSubscriptionID,
+            null,
+            $cancelAt
+          );
+          error_log("Cambio pendiente de cancelación creado en BD con ID: $changeId");
+        } else {
+          error_log("Ya existía un cambio pendiente de cancelación o cancel_at vacío");
+        }
 
         $canceled = (object)[
           'id' => $sub->id,
           'status' => $sub->status,
           'cancel_at_period_end' => true, // lo forzamos a true ya que el schedule definió la cancelación
-          'cancel_at' => $sub->cancel_at, // se cancela al final del ciclo
+          'cancel_at' => $cancelAt, // se cancela al final del ciclo
         ];
 
       } else {
@@ -704,6 +742,8 @@ class StripeController{
 
             $trialStartTs = $stripeSub->trial_start ?? null;
             $trialEndTs   = $stripeSub->trial_end   ?? null;
+            $nextBillingDate = $stripeSub->items->data[0]->current_period_end ? date("Y-m-d", $stripeSub->items->data[0]->current_period_end) : null;
+            $latestInvoice = $stripeSub->latest_invoice ?? null;
 
             $trialStart = $trialStartTs ? date('Y-m-d H:i:s', $trialStartTs) : null;
             $trialEnd   = $trialEndTs   ? date('Y-m-d H:i:s', $trialEndTs)   : null;
@@ -721,6 +761,8 @@ class StripeController{
               'TrialEnd' => $trialEnd,
               'TrialSource' => 'PLATFORM',
               'PaymentPlatform' => 'STRIPE',
+              'NextBillingDate' => $nextBillingDate,
+              'LatestInvoiceID' => $latestInvoice
             ];
           } else {
             error_log("No se pudo obtener usuario con ID $userID");
