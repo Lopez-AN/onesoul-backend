@@ -532,6 +532,7 @@ class AuthController{
 
   public function registerFacebook(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
+    $isJwt = $data['Jwt'] ?? false; // true = Native, false = Web
     $user_id = $data['UserID'] ?? '';
     $token = $data['Token'] ?? '';
     $username = $data['UserName'] ?? '';
@@ -540,7 +541,7 @@ class AuthController{
     $referralCode = $data['ReferralCode'] ?? null;
     $receiveNewsletters = $data['ReceiveNewsletters'] ?? null;
 
-    if(empty($user_id) || empty($token) || empty($username) || empty($recaptchaToken) || !isset($data['ReceiveNewsletters'])){
+    if(empty($user_id) || empty($token) || empty($username) || empty($recaptchaToken) || empty($receiveNewsletters)){
       return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "INVALID_PARAMETERS",
@@ -555,7 +556,36 @@ class AuthController{
     }
 
     try{
-      $result = $this->auth->registerFacebook($this->user, $user_id, $token, $username, $clientIp, $request, $referralCode, $receiveNewsletters);
+      if ($isJwt) {
+        // Flujo Nativo (JWT)
+        $jwtToken = $data['JwtToken'] ?? '';
+        if (empty($jwtToken)) {
+          return $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "INVALID_PARAMETERS",
+              "desc" => "JwtToken is required when Jwt=true"
+            ]
+          ]);
+        }
+        $result = $this->auth->registerFacebookNative(
+          $this->user, $jwtToken, $username, $clientIp, $request, $referralCode, $receiveNewsletters
+        );
+      } else {
+        // Flujo Web (Graph API)
+        $user_id = $data['UserID'] ?? '';
+        $token = $data['Token'] ?? '';
+        if (empty($user_id) || empty($token)) {
+          return $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "INVALID_PARAMETERS",
+              "desc" => "UserID and Token are required when Jwt=false"
+            ]
+          ]);
+        }
+
+        $result = $this->auth->registerFacebook($this->user, $user_id, $token, $username, $clientIp, $request, $referralCode, $receiveNewsletters);
+      }
+
       switch($result->http_code) {
         case 200: # Logueo correcto o usuario existente
           $jwt = $this -> JWTgen($result -> data);
@@ -608,6 +638,7 @@ class AuthController{
         default: # errores
           return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
+
     } catch (\Exception $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -616,6 +647,198 @@ class AuthController{
         ]
       ]);
     }
+  }
+
+  public function registerApple(Request $request, Response $response, $args) {
+    $data = $request->getParsedBody();
+    $code = $data['Code'] ?? '';
+    $id_token = $data['IdToken'] ?? '';
+    $uuid = $data['Uuid'] ?? '';
+    $username = $data['UserName'] ?? '';
+    $recaptchaToken = $data['RecaptchaToken'] ?? '';
+    $clientIp = $request->getServerParams()['REMOTE_ADDR'];
+    $referralCode = $data['ReferralCode'] ?? null;    
+    $receiveNewsletters = $data['ReceiveNewsletters'] ?? null;
+
+    if((empty($id_token) && empty($code)) || empty($username) || empty($recaptchaToken) || !isset($data['ReceiveNewsletters'])){
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_PARAMETERS",
+          "desc" => "Parameters are missing or invalid"
+        ]
+      ]);
+    }
+
+    $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
+    if ($result->http_code !== 200) {
+      return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+    }
+
+    try {
+      $result = $this->auth->registerApple($this->user, $code, $id_token, $username, $uuid, $clientIp, $request, $referralCode, $receiveNewsletters);
+      switch($result->http_code) {
+        case 200: # Usuario registrado o ya existente
+          $jwt = $this -> JWTgen($result -> data);
+          $userID = $result->data['UserID'] ?? null;
+
+          if (!empty($referralCode)) {
+            $referrerResult = $this->user->getUserByRefCode($referralCode);
+
+            if ($referrerResult->http_code !== 200 || empty($referrerResult->data['UserID'])) {
+              return $response->withStatus(400)->withJson([
+                "error" => [
+                  "code" => "INVALID_REFERRAL_CODE",
+                  "desc" => "The provided referral code is not valid"
+                ]
+              ]);
+            }
+
+            $referrerUserID = $referrerResult->data['UserID'];
+
+            if ($referrerUserID) {
+              $referralResult = $this->auth->handleReferralReward($referrerUserID, $userID);
+              return $response->withStatus(200)->withJson($referralResult);
+            }  
+          }
+
+          return $response->withStatus(200)->withJson([
+            "Token" => $jwt,
+            "UserData" => $result -> data
+          ]);
+        default: # Token inválido u otros errores
+          return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+      }
+    } catch (\Exception $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+           "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  public function loginApple(Request $request, Response $response, $args) {
+    $data = $request->getParsedBody();
+    $code = $data['Code'] ?? '';
+    $id_token = $data['IdToken'] ?? '';
+    $uuid = $data['Uuid'] ?? '';
+    $mfa_id = $data['MfaID'] ?? '';
+    $mfa_code = $data['MfaCode'] ?? '';
+    $recaptchaToken = $data['RecaptchaToken'] ?? '';
+    $clientIp = $request->getServerParams()['REMOTE_ADDR'];
+
+    if ((empty($id_token) && empty($code)) || empty($recaptchaToken) || empty($uuid)) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_PARAMETERS",
+          "desc" => "Parameters are missing or invalid"
+        ]
+      ]);
+    }
+
+    $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
+    if ($result->http_code !== 200) {
+      return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+    }
+
+    try {
+      $result = $this->auth->loginApple($this->user, $code, $id_token, $uuid);
+      if ($result->http_code !== 200) {
+        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+      }
+      $user = $result->data;
+
+      // Verificar bloqueo
+      if (!is_null($user['LockedUntil']) && strtotime($user['LockedUntil']) > time()) {
+        return $response->withStatus(403)->withJson([
+          "error" => [
+            "code" => "USER_LOCKED",
+            "desc" => "Account is temporarily locked until " . $user['LockedUntil']
+          ]
+        ]);
+      }
+
+      // MFA
+      $newMfaId = null;
+      if ($user['TwoFactorAuth'] == 1) {
+        if (!empty($mfa_id)) {
+          if (!$this->auth->validateMfaId($user['UserID'], $mfa_id)) {
+            return $response->withStatus(403)->withJson([
+              "error" => [
+                "code" => "INVALID_MFA_ID",
+                "desc" => "MFA ID is not valid"
+              ]
+            ]);
+          }
+        } elseif (!empty($mfa_code)) {
+          $result = $this->auth->mfaCheck($user['UserID'], $mfa_code);
+          if ($result->http_code != 200) {
+            return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+          }
+        } else {
+          return $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "MFA_REQUIRED",
+              "desc" => "MFA validation is required"
+            ]
+          ]);
+        }
+
+        if (empty($mfa_id)) {
+          $newMfaId = uniqid();
+        }
+      }
+
+      // Resetear intentos fallidos
+      $this->auth->updateFailedLogin($user['UserID'], 0, null);
+
+      // JWT
+      $jwt = $this->JWTgen($user);
+
+      if ($newMfaId !== null) {
+        $this->auth->storeBrowserData($user['UserID'], $request, $newMfaId, $clientIp);
+      }
+
+      return $response->withStatus(200)->withJson([
+        'Token' => $jwt,
+        'MfaID' => $newMfaId,
+        'UserData' => $user
+      ]);
+
+    } catch (\Exception $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  public function callback(Request $request, Response $response, array $args) {
+    $parsed   = $request->getParsedBody() ?? [];
+    $code     = $parsed['code']     ?? null;
+    $id_token = $parsed['id_token'] ?? null;
+    $state    = isset($parsed['state']) ? @json_decode($parsed['state']) : null;
+    $error    = $parsed['error']    ?? null;
+
+    if (!$state) {
+      $html = '<!doctype html><html><body><script>(function(){window.close()})();</script></body></html>';
+    } else {
+      $html = '<!doctype html><html><body><script>(function(){var p=' .
+      json_encode([
+        'provider' => 'apple',
+        'code'     => $code,
+        'id_token' => $id_token,
+        'uuid'     => $state->uuid,
+        'error'    => $error,
+      ]) .
+      ';try{window.opener&&window.opener.postMessage(p,"https://' . $state->origin . '")}catch(e){}window.close()})();</script></body></html>';
+    }
+
+    $response->getBody()->write($html);
+    return $response->withHeader('Content-Type', 'text/html; charset=UTF-8');
   }
 
   public function sendOtpMail(Request $request, Response $response, $args) {

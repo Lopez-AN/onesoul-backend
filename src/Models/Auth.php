@@ -7,6 +7,8 @@ use App\Exceptions\DatabaseException;
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 use \DateTime;
+use Firebase\JWT\JWT;
+use Firebase\JWT\JWK;
 
 class Auth{
   protected $db;
@@ -542,6 +544,232 @@ class Auth{
     return $userModel -> getUserByOAuthID($userId, "facebook");
   }
 
+  public function registerFacebookNative($userModel, $jwtToken, $username, $clientIp, $request, $referralCode, $receiveNewsletters) {
+    // 1. Validar JWT contra las claves públicas de Facebook
+    $decoded = $this->validateFacebookJWT($jwtToken);
+    if ($decoded === false) {
+      return (object)[
+        "http_code" => 401,
+        "error" => [
+          "code" => "SSO_INVALID_TOKEN",
+          "desc" => "Invalid Facebook JWT token"
+        ]
+      ];
+    }
+
+    $facebookId = $decoded->sub ?? null; 
+    $email = $decoded->email ?? null;
+    $first_name = $decoded->given_name ?? null;
+    $last_name = $decoded->family_name ?? null;
+    $picture = $decoded->picture ?? null;
+
+    if (empty($facebookId)) {
+      return (object)[
+        "http_code" => 400,
+        "error" => [
+          "code" => "INVALID_JWT_PAYLOAD",
+          "desc" => "Facebook JWT does not contain a valid user ID"
+        ]
+      ];
+    }
+
+    // 2. Si ya existe, devuelvo el usuario
+    $user_data = $userModel->getUserByOAuthID($facebookId, "facebook");
+    if ($user_data->http_code == 200) {
+      return $user_data;
+    }
+
+    // 3. Validaciones de email/username duplicados
+    if (!empty($email) && $userModel->getUserByEmail($email)->http_code == 200) {
+      return (object)[
+        "http_code" => 409,
+        "error" => [
+          "code" => "DUPLICATED_EMAIL",
+          "desc" => "A user with the specified email address already exists"
+        ]
+      ];
+    }
+    if (!empty($username) && $userModel->getUserByUserName($username)->http_code == 200) {
+      return (object)[
+        "http_code" => 409,
+        "error" => [
+          "code" => "DUPLICATED_USERNAME",
+          "desc" => "A user with the specified username already exists"
+        ]
+      ];
+    }
+
+    // 4. Validación de referral code (igual a tu flujo Web)
+    $referrerUserID = null;
+    if (!empty($referralCode)) {
+      $referrerResult = $userModel->getUserByRefCode($referralCode);
+      if ($referrerResult->http_code !== 200 || empty($referrerResult->data['UserID'])) {
+        return (object)[
+          "http_code" => 400,
+          "error" => [
+            "code" => "INVALID_REFERRAL_CODE",
+            "desc" => "The provided referral code is not valid"
+          ]
+        ];
+      }
+      $referrerUserID = $referrerResult->data['UserID'];
+    }
+
+    // 5. Legal docs + consent (igual a tu flujo Web)
+    $body = $request->getParsedBody();
+    $acceptedTerms = $body['AcceptedTerms'] ?? null;
+    $acceptedPrivacy = $body['AcceptedPrivacyPolicy'] ?? null;
+    $TyCVersion = $body['TyCVersion'] ?? null;
+    $PrivacyPolicyVersion = $body['PrivacyPolicyVersion'] ?? null;
+
+    $legalCheckStmt = $this->db->prepare("SELECT COUNT(*) as total FROM LegalDocuments
+                      WHERE (DocumentType = 'TermsAndConditions' AND Version = ?) 
+                        OR (DocumentType = 'PrivacyPolicy' AND Version = ?)");
+    $legalCheckStmt->execute([$TyCVersion, $PrivacyPolicyVersion]);
+    $result = $legalCheckStmt->fetch(PDO::FETCH_ASSOC);
+
+    if ((int)$result['total'] < 2) {
+      return (object)[
+        "http_code" => 400,
+        "error" => [
+          "code" => "INVALID_LEGAL_DOCUMENT_VERSION",
+          "desc" => "One or both legal document versions are invalid."
+        ]
+      ];
+    }
+
+    if ($acceptedTerms !== 1 || $acceptedPrivacy !== 1) {
+      return (object)[
+        "http_code" => 400,
+        "error" => [
+          "code" => "CONSENT_REQUIRED",
+          "desc" => "AcceptedTerms and AcceptedPrivacyPolicy must both be accepted."
+        ]
+      ];
+    }
+
+    // 6. Crear usuario
+    $this->registerUserSSO((object)[
+      "FirstName" => $first_name,
+      "LastName" => $last_name,
+      "Email" => $email,
+      "UserName" => $username,
+      "Picture" => $picture,
+      "Oauth2ID" => $facebookId,
+      "Oauth2Service" => "facebook"
+    ]);
+
+    // Insertar referral si corresponde
+    if ($referrerUserID) {
+      $stmt = $this->db->prepare("INSERT INTO Referrals (UserID, ReferredUserID, ReferralStatus) 
+              VALUES (?, ?, 'Pending')");
+      $stmt->execute([$referrerUserID, $facebookId]);
+    }
+
+    // Consentimiento legal
+    $consentData = [
+      "UserID" => $facebookId,
+      "AcceptedTerms" => 1,
+      "AcceptedPrivacyPolicy" => 1,
+      "UserIP" => $clientIp,
+      "UserAgent" => $request->getHeader('User-Agent')[0] ?? '',
+      "TyCVersion" => $TyCVersion,
+      "PrivacyPolicyVersion" => $PrivacyPolicyVersion
+    ];
+    
+    $consentResult = $this->createConsent($consentData);
+    if (isset($consentResult['error'])) {
+      return (object)[
+        "http_code" => 400,
+        "error" => [
+          "code" => "CONSENT_ERROR",
+          "desc" => $consentResult['error']
+        ]
+      ];
+    }
+
+    // Insertar newsletters
+    if ($receiveNewsletters) {
+      $stmt = $this->db->prepare("INSERT INTO UserSettings (UserID, ReceiveNewsletters) 
+                                  VALUES (:userId, 1)");
+      $stmt->execute([':userId' => $facebookId]);
+    }
+
+    return $userModel->getUserByOAuthID($facebookId, "facebook");
+  }
+
+  private function validateFacebookJWT($jwtToken) {
+    try {
+      // Obtener JWKS de Facebook
+      $jwksUrl = "https://www.facebook.com/.well-known/oauth/openid/jwks/";
+      $jwks = json_decode(file_get_contents($jwksUrl), true);
+
+      // Decodificar encabezado para obtener el kid
+      $header = json_decode(base64_decode(str_replace(['-', '_'], ['+', '/'], explode('.', $jwtToken)[0])), true);
+      $kid = $header['kid'] ?? null;
+
+      if (!$kid) return false;
+
+      // Buscar clave pública que coincida
+      $keyData = null;
+      foreach ($jwks['keys'] as $key) {
+        if ($key['kid'] === $kid) {
+          $keyData = $key;
+          break;
+        }
+      }
+      if (!$keyData) return false;
+
+      // Convertir a clave pública
+      $publicKey = $this->convertJWKToPEM($keyData);
+
+      // Usar Firebase JWT para verificar
+      $decoded = \Firebase\JWT\JWT::decode(
+        $jwtToken, 
+        new \Firebase\JWT\Key($publicKey, $keyData['alg'])
+      );
+
+      // Validaciones adicionales
+      $expectedIssuer = 'https://www.facebook.com';
+      $expectedAudience = $GLOBALS['config']['facebook']['APP_ID'];
+
+      if (($decoded->iss ?? '') !== $expectedIssuer) {
+        throw new \Exception("Invalid issuer");
+      }
+
+      if (($decoded->aud ?? '') !== $expectedAudience) {
+        throw new \Exception("Invalid audience");
+      }
+
+      if (isset($decoded->exp) && $decoded->exp < time()) {
+        throw new \Exception("Token expired");
+      }
+
+      return $decoded;
+
+    } catch (\Exception $e) {
+      error_log("Facebook JWT validation failed: " . $e->getMessage());
+      return false;
+    }
+  }
+
+  private function convertJWKToPEM($jwk) {
+    $modulus = $this->base64UrlDecode($jwk['n']);
+    $exponent = $this->base64UrlDecode($jwk['e']);
+    $rsa = new \phpseclib3\Crypt\RSA();
+    $rsa = $rsa->loadKey(['n' => $modulus, 'e' => $exponent]);
+    return $rsa->getPublicKey();
+  }
+
+  private function base64UrlDecode($input) {
+    $remainder = strlen($input) % 4;
+    if ($remainder) {
+      $padlen = 4 - $remainder;
+      $input .= str_repeat('=', $padlen);
+    }
+    return base64_decode(strtr($input, '-_', '+/'));
+  }
+
   public function createConsent($consentData)
   {
     // Validar que el usuario exista
@@ -594,6 +822,309 @@ class Auth{
     }
 
     return ['success' => true];
+  }
+
+  public function registerApple($userModel, $code, $id_token, $username, $uuid, $clientIp, $request, $referralCode, $receiveNewsletters) {
+    // Si no vino id_token, hacemos exchange con code
+    if (empty($id_token) && !empty($code)) {
+      $id_token = $this->exchangeCodeForIdToken($code);
+      if (!$id_token) {
+        return (object)[
+          "http_code" => 401,
+          "error" => [
+            "code" => "SSO_INVALID_CODE",
+            "desc" => "Invalid Apple authorization code"
+          ]
+        ];
+      }
+    }
+
+    // Recuperá el nonce que generaste para ese Uuid (si lo guardaste)
+    $expectedNonce = null; // null si aún no implementaste
+
+    // Validar token contra aud EXACTO del Service ID web
+    $expectedAud = $GLOBALS['config']['apple']['CLIENT_ID'];
+    $claims = $this->validateAppleToken($id_token, $expectedAud, $expectedNonce);
+    if ($claims === false) {
+      return (object) [
+        "http_code" => 401, 
+        "error" => [
+          "code" => "SSO_INVALID_TOKEN", 
+          "desc" => "Invalid Apple token"
+        ]
+      ];
+    }
+
+    $userId = $response['sub'];
+    $user_data = $userModel -> getUserByOAuthID($userId, "apple");
+    if($user_data->http_code == 200){
+      return $user_data;
+    }
+
+    $email = $response['email'] ?? null;
+
+    if(!empty($email) && $userModel->getUserByEmail($email)->http_code == 200){
+      return (object)["http_code" => 409,
+        "error" => [
+          "code" => "DUPLICATED_EMAIL",
+          "desc" => "A user with the specified email address already exists"
+        ]
+      ];
+    }
+
+    if(!empty($username) && $userModel->getUserByUserName($username)->http_code == 200){
+      return (object)["http_code" => 409,
+        "error" => [
+          "code" => "DUPLICATED_USERNAME",
+          "desc" => "A user with the specified username already exists"
+        ]
+      ];
+    }
+
+    $body = $request->getParsedBody();
+    $acceptedTerms = $body['AcceptedTerms'] ?? null;
+    $acceptedPrivacy = $body['AcceptedPrivacyPolicy'] ?? null;
+    $TyCVersion = $body['TyCVersion'] ?? null;
+    $PrivacyPolicyVersion = $body['PrivacyPolicyVersion'] ?? null;
+
+    $legalCheckStmt = $this->db->prepare("SELECT COUNT(*) as total FROM LegalDocuments
+                      WHERE (DocumentType = 'TermsAndConditions' AND Version = ?) 
+                        OR (DocumentType = 'PrivacyPolicy' AND Version = ?)");
+    $legalCheckStmt->execute([$TyCVersion, $PrivacyPolicyVersion]);
+    $result = $legalCheckStmt->fetch(PDO::FETCH_ASSOC);
+
+    if ((int)$result['total'] < 2) {
+      return (object)[
+        "http_code" => 400,
+        "error" => [
+          "code" => "INVALID_LEGAL_DOCUMENT_VERSION",
+          "desc" => "One or both legal document versions are invalid."
+        ]
+      ];
+    }
+
+    if ($acceptedTerms !== 1 || $acceptedPrivacy !== 1) {
+      return (object)[
+        "http_code" => 400,
+        "error" => [
+          "code" => "CONSENT_REQUIRED",
+          "desc" => "AcceptedTerms and AcceptedPrivacyPolicy must both be accepted."
+        ]
+      ];
+    }
+
+    $this -> registerUserSSO((object)[
+      "Email" => $email,
+      "UserName" => $username,
+      "Oauth2ID" => $userId,
+      "Oauth2Service" => "apple"
+    ]);
+
+    $newUser = $userModel->getUserByUserName($username);
+    if ($newUser->http_code !== 200 || !isset($newUser->data["UserID"])) {
+      return (object)[
+        "http_code" => 500,
+        "error" => [
+          "code" => "USER_CREATION_FAILED",
+          "desc" => "User created but could not be retrieved"
+        ]
+      ];
+    }
+  
+    $userID = $newUser->data["UserID"];
+
+    $consentData = [
+      "UserID" => $userID,
+      "AcceptedTerms" => $acceptedTerms,
+      "AcceptedPrivacyPolicy" => $acceptedPrivacy,
+      "UserIP" => $clientIp,
+      "UserAgent" => $request->getHeader('User-Agent')[0] ?? '',
+      "TyCVersion" => $TyCVersion,
+      "PrivacyPolicyVersion" => $PrivacyPolicyVersion
+    ];
+    
+    $consentResult = $this->createConsent($consentData);
+    if (isset($consentResult['error'])) {
+      return (object)[
+        "http_code" => 400,
+        "error" => [
+          "code" => "CONSENT_ERROR",
+          "desc" => $consentResult['error']
+        ]
+      ];
+    }
+
+    $stmt = $this->db->prepare("INSERT INTO UserSettings (UserID, ReceiveNewsletters) 
+                                VALUES (:userID , :receiveNewsletters)");
+    $stmt->execute([
+      ':userID' => $userID, 
+      ':receiveNewsletters' => (int) filter_var($receiveNewsletters, FILTER_VALIDATE_BOOLEAN)
+    ]);
+
+    return $userModel -> getUserByOAuthID($userId, "apple");
+  }
+
+  public function loginApple($userModel, $code, $id_token, $uuid){
+    // Si no vino id_token, hacer exchange con code
+    if (empty($id_token) && !empty($code)) {
+      $id_token = $this->exchangeCodeForIdToken($code);
+      if (!$id_token) {
+        return (object)[
+          "http_code" => 401,
+          "error" => [
+            "code" => "SSO_INVALID_CODE",
+            "desc" => "Invalid Apple authorization code"
+          ]
+        ];
+      }
+    }
+
+    // Recuperá el nonce que generaste para ese Uuid (si lo guardaste)
+    $expectedNonce = null; // null si aún no implementaste
+
+    // Validar token contra aud EXACTO del Service ID web
+    $expectedAud = $GLOBALS['config']['apple']['CLIENT_ID'];
+    $claims = $this->validateAppleToken($id_token, $expectedAud, $expectedNonce);
+    if ($claims === false) {
+      return (object) [
+        "http_code" => 401, 
+        "error" => [
+          "code" => "SSO_INVALID_TOKEN", 
+          "desc" => "Invalid Apple token"
+        ]
+      ];
+    }
+
+    $userId = $claims['sub'];
+    $user_data = $userModel -> getUserByOAuthID($userId, "apple");
+    if ($user_data->http_code !== 200){
+      return (object)[
+        "http_code" => 404,
+        "error" => [
+          "code" => "USER_NOT_FOUND",
+          "desc" => "No user associated with the specified Apple account was found"
+        ],
+        "data" => [
+          "Email" => $response['email'] ?? null
+        ]
+      ];
+    }
+    return $user_data;
+  }
+
+  private function exchangeCodeForIdToken(string $code): ?string {
+    $client_id = $GLOBALS['config']['apple']['CLIENT_ID'];
+    $team_id = $GLOBALS['config']['apple']['TEAM_ID'];
+    $key_id = $GLOBALS['config']['apple']['KEY_ID'];
+    $private_key = file_get_contents($GLOBALS['config']['apple']['PRIVATE_KEY_PATH']);
+    $redirect_uri = $GLOBALS['config']['apple']['REDIRECT_URI'];
+
+    // Generar client_secret como JWT
+    $header = ['alg' => 'ES256', 'kid' => $key_id];
+    $claims = [
+      'iss' => $team_id,
+      'iat' => time(),
+      'exp' => time() + 3600,
+      'aud' => 'https://appleid.apple.com',
+      'sub' => $client_id
+    ];
+
+    $client_secret = \Firebase\JWT\JWT::encode($claims, $private_key, 'ES256', $key_id, $header);
+
+    $params = [
+      'client_id' => $client_id,
+      'client_secret' => $client_secret,
+      'code' => $code,
+      'grant_type' => 'authorization_code'
+    ];
+
+    $ch = curl_init('https://appleid.apple.com/auth/token');
+    curl_setopt_array($ch, [
+      CURLOPT_POST           => true,
+      CURLOPT_POSTFIELDS     => http_build_query($params),
+      CURLOPT_HTTPHEADER     => ['Content-Type: application/x-www-form-urlencoded'],
+      CURLOPT_RETURNTRANSFER => true,
+      CURLOPT_TIMEOUT        => 15,
+    ]);
+    $result = curl_exec($ch);
+    if ($result === false) {
+      error_log('[Apple] exchangeCode curl error: ' . curl_error($ch));
+    }
+    curl_close($ch);
+
+    $json = json_decode($result, true);
+    error_log('[Apple] token exchange resp: ' . $result);
+    return $json['id_token'] ?? null;
+  }
+
+    /**
+   * Valida firma y claims del id_token de Apple y devuelve claims normalizados.
+   *
+   * @param string      $idToken
+   * @param string      $expectedAud  p.ej. 'com.onesoul.app.web'
+   * @param string|null $expectedNonce si guardaste nonce por Uuid, pasalo acá para validar
+   * @return array|false
+   */
+
+  private function validateAppleToken(string $idToken, string $expectedAud, ?string $expectedNonce = null) {
+    try {
+      // Tolerancia por drift de reloj
+      JWT::$leeway = 120;
+
+      // Descargar JWKS (cacheá 1h en prod)
+      $jwksJson = @file_get_contents('https://appleid.apple.com/auth/keys');
+      if ($jwksJson === false) {
+        error_log('[Apple] No pude descargar JWKS');
+        return false;
+      }
+      $jwks = json_decode($jwksJson, true);
+      if (!isset($jwks['keys'])) {
+        error_log('[Apple] JWKS inválido');
+        return false;
+      }
+
+      // Decodifica y valida firma/tiempos; php-jwt 6.x autodetecta RS256
+      $keys    = JWK::parseKeySet($jwks);
+      $decoded = JWT::decode($idToken, $keys);
+
+      // Validaciones de claims
+      $iss = $decoded->iss ?? null;
+      if ($iss !== 'https://appleid.apple.com') {
+        error_log("[Apple] iss inválido: {$iss}");
+        return false;
+      }
+
+      $aud = $decoded->aud ?? null;
+      $audOk = is_array($aud) ? in_array($expectedAud, $aud, true) : ($aud === $expectedAud);
+      if (!$audOk) {
+        error_log('[Apple] aud inválido: ' . (is_array($aud) ? json_encode($aud) : $aud));
+        return false;
+      }
+
+      if ($expectedNonce !== null) {
+        $tokNonce = $decoded->nonce ?? null;
+        if ($tokNonce !== $expectedNonce) {
+          error_log("[Apple] nonce inválido. token={$tokNonce} expected={$expectedNonce}");
+          return false;
+        }
+      }
+
+      // Normalizar salida
+      $emailVerifiedRaw = $decoded->email_verified ?? null;
+      $emailVerified = ($emailVerifiedRaw === true || $emailVerifiedRaw === 'true');
+
+      return [
+        'sub'            => $decoded->sub ?? null,
+        'email'          => $decoded->email ?? null,
+        'email_verified' => $emailVerified,
+        'nonce'          => $decoded->nonce ?? null,
+        'auth_time'      => $decoded->auth_time ?? null,
+        'iat'            => $decoded->iat ?? null,
+        'exp'            => $decoded->exp ?? null
+      ];
+    } catch (\Exception $e) {
+      return false;
+    }
   }
 
   /* Validacion OTP, el parametro resetOTP se envia en false para el metodo de resetear
