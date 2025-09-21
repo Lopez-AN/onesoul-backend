@@ -149,118 +149,133 @@ class StripeController{
       ]);
     }
 
-    $subscription = $this->subscription->getUserSubscriptionByPlatformSubID($platformSubscriptionID);
-    if (!$subscription) {
-      return $response->withStatus(404)->withJson([
-        "error" => [
-          "code" => "SUBSCRIPTION_NOT_FOUND",
-          "desc" => "No active subscription found for this ID: {$platformSubscriptionID}."
-        ]
-      ]);
-    }
-
-    $userID = $subscription['UserID'];
-
-    # Verificar si el usuario autenticado es el mismo o un administrador
-    if ($jwt['data']->UserID != $userID && $jwt['data']->UserType != 'Admin') {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "UNAUTHORIZED",
-          "desc" => "You are not authorized to subscribe."
-        ]
-      ]);
-    }
-
-    $newPlanID = $data['PlanID'] ?? null;
-    // Obtener el ID de Stripe desde el plan
-    $plan = $this->subscription->getSubscriptionPlanByID($newPlanID);
-    if (!$plan || empty($plan['StripeID'])) {
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "STRIPE_PLAN_MISSING",
-          "desc" => "Stripe ID not configured for this plan"
-        ]
-      ]);
-    }
-
-    $newPriceId = $plan['StripeID'];
-
-    if (!$newPriceId) {
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "INVALID_PARAMETERS",
-          "desc" => "Missing or invalid parameters"
-        ]
-      ]);
-    }
-
-    \Stripe\Stripe::setApiKey($GLOBALS['config']['stripe']['STRIPE_SECRET_KEY']);
-
-    // Traer sub e item actual
-    $sub = \Stripe\Subscription::retrieve($platformSubscriptionID, [
-      'expand' => ['items.data.price.product', 'default_payment_method']
-    ]);
-
-    if (!$sub || $sub->status === 'canceled') {
-      return $response->withStatus(404)->withJson([
-        "error" => [
-          "code" => "PLAN_NOT_FOUND",
-          "desc" => "No matching plan found for the given Stripe Price ID."
-        ]
-      ]);
-    }
-
-    $paymentMethod = null;
-
-    if (!empty($sub->default_payment_method)) {
-      $paymentMethod = \Stripe\PaymentMethod::retrieve($sub->default_payment_method);
-    } elseif (!empty($sub->latest_invoice) && !empty($sub->latest_invoice->payment_intent->payment_method)) {
-      $paymentMethod = $sub->latest_invoice->payment_intent->payment_method;
-      if (is_string($paymentMethod)) {
-        $paymentMethod = \Stripe\PaymentMethod::retrieve($paymentMethod);
+    try{
+      $subscription = $this->subscription->getUserSubscriptionByPlatformSubID($platformSubscriptionID);
+      if (!$subscription) {
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "SUBSCRIPTION_NOT_FOUND",
+            "desc" => "No active subscription found for this ID: {$platformSubscriptionID}."
+          ]
+        ]);
       }
+
+      $userID = $subscription['UserID'];
+      # Verificar si el usuario autenticado es el mismo o un administrador
+      if ($jwt['data']->UserID != $userID && $jwt['data']->UserType != 'Admin') {
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "UNAUTHORIZED",
+            "desc" => "You are not authorized to edit this subscription."
+          ]
+        ]);
+      }
+
+      $newPlanID = $data['PlanID'] ?? null;
+      // Obtener el ID de Stripe desde el plan
+      $plan = $this->subscription->getSubscriptionPlanByID($newPlanID);
+      if (!$plan || empty($plan['StripeID'])) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "STRIPE_PLAN_MISSING",
+            "desc" => "Stripe ID not configured for this plan"
+          ]
+        ]);
+      }
+
+      $newPriceId = $plan['StripeID'];
+
+      if (!$newPriceId) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "INVALID_PARAMETERS",
+            "desc" => "Missing or invalid parameters"
+          ]
+        ]);
+      }
+
+      \Stripe\Stripe::setApiKey($GLOBALS['config']['stripe']['STRIPE_SECRET_KEY']);
+
+      // Traer sub e item actual
+      $sub = \Stripe\Subscription::retrieve($platformSubscriptionID, [
+        'expand' => ['items.data.price.product', 'default_payment_method']
+      ]);
+
+      if (!$sub || $sub->status === 'canceled') {
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "PLAN_NOT_FOUND",
+            "desc" => "No matching plan found for the given Stripe Price ID."
+          ]
+        ]);
+      }
+
+      $paymentMethod = null;
+
+      if (!empty($sub->default_payment_method)) {
+        $paymentMethod = \Stripe\PaymentMethod::retrieve($sub->default_payment_method);
+      } elseif (!empty($sub->latest_invoice) && !empty($sub->latest_invoice->payment_intent->payment_method)) {
+        $paymentMethod = $sub->latest_invoice->payment_intent->payment_method;
+        if (is_string($paymentMethod)) {
+          $paymentMethod = \Stripe\PaymentMethod::retrieve($paymentMethod);
+        }
+      }
+
+      $pmInfo = null;
+      if ($paymentMethod && $paymentMethod->type === 'card') {
+        $pmInfo = [
+          'Brand'  => $paymentMethod->card->brand,
+          'Last4'  => $paymentMethod->card->last4,
+          'Exp'    => $paymentMethod->card->exp_month . '/' . $paymentMethod->card->exp_year,
+        ];
+      }
+
+      $item = $sub->items->data[0];
+      $prorationDate = time();
+
+      // Preview del próximo invoice simulando el cambio
+      $preview = \Stripe\Invoice::createPreview([
+        'customer' => $sub->customer,
+        'subscription' => $sub->id,
+        'subscription_details' => [
+          'items' => [[ 'id' => $item->id, 'price' => $newPriceId ]],
+          'proration_date' => $prorationDate,
+          'proration_behavior'  => 'always_invoice',
+        ],
+      ]);
+
+      // Armar respuesta amigable
+      $lines = array_map(function($l) {
+        return [
+          'Description' => $l->description,
+          'Amount'      => $l->amount / 100,
+          'Proration'   => $l->proration === true,
+        ];
+      }, $preview->lines->data);
+
+      return $response->withJson([
+        'Currency'    => strtoupper($preview->currency),
+        'AmountDue'  => $preview->amount_due / 100,
+        'ProrationDate' =>  $prorationDate,
+        'Lines'       => $lines,
+        'CurrentPeriodEnd' => $sub->items->data[0]->current_period_end ? date("Y-m-d", $sub->current_period_end) : null,
+        'PaymentMethod' => $pmInfo,
+      ]);
+    } catch (\Stripe\Exception\ApiErrorException $e) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "STRIPE_ERROR",
+          "desc" => "Error processing upgrade info: " . $e->getMessage()
+        ]
+      ]);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
     }
-
-    $pmInfo = null;
-    if ($paymentMethod && $paymentMethod->type === 'card') {
-      $pmInfo = [
-        'Brand'  => $paymentMethod->card->brand,
-        'Last4'  => $paymentMethod->card->last4,
-        'Exp'    => $paymentMethod->card->exp_month . '/' . $paymentMethod->card->exp_year,
-      ];
-    }
-
-    $item = $sub->items->data[0];
-    $prorationDate = time();
-
-    // Preview del próximo invoice simulando el cambio
-    $preview = \Stripe\Invoice::createPreview([
-      'customer' => $sub->customer,
-      'subscription' => $sub->id,
-      'subscription_details' => [
-        'items' => [[ 'id' => $item->id, 'price' => $newPriceId ]],
-        'proration_date' => $prorationDate,
-        'proration_behavior'  => 'always_invoice',
-      ],
-    ]);
-
-    // Armar respuesta amigable
-    $lines = array_map(function($l) {
-      return [
-        'Description' => $l->description,
-        'Amount'      => $l->amount / 100,
-        'Proration'   => $l->proration === true,
-      ];
-    }, $preview->lines->data);
-
-    return $response->withJson([
-      'Currency'    => strtoupper($preview->currency),
-      'AmountDue'  => $preview->amount_due / 100,
-      'ProrationDate' =>  $prorationDate,
-      'Lines'       => $lines,
-      'CurrentPeriodEnd' => $sub->items->data[0]->current_period_end ? date("Y-m-d", $sub->current_period_end) : null,
-      'PaymentMethod' => $pmInfo,
-    ]);
   }
 
   public function upgradeApply(Request $request, Response $response, array $args) {
@@ -277,16 +292,34 @@ class StripeController{
       ]);
     }
 
-    $subscription = $this->subscription->getUserSubscriptionByPlatformSubID($platformSubscriptionID);
-    $userID = $subscription['UserID'];
+    try{
+      $subscription = $this->subscription->getUserSubscriptionByPlatformSubID($platformSubscriptionID);
+      if (!$subscription) {
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "SUBSCRIPTION_NOT_FOUND",
+            "desc" => "No active subscription found for this ID: {$platformSubscriptionID}."
+          ]
+        ]);
+      }
 
-    if ($subscription['Status'] == 'ACTIVE' || $subscription['Status'] == 'TRIALING') {
+      $userID = $subscription['UserID'];
       # Verificar si el usuario autenticado es el mismo o un administrador
       if ($jwt['data']->UserID != $userID && $jwt['data']->UserType != 'Admin') {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
-            "desc" => "You are not authorized to subscribe."
+            "desc" => "You are not authorized to edit this subscription."
+          ]
+        ]);
+      }
+
+      // Suscripciones no activas no se pueden downgradear
+      if ($subscription['Status'] != 'ACTIVE' && $subscription['Status'] != 'TRIALING') {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "SUBSCRIPTION_NOT_ACTIVE",
+            "desc" => "The subscription is not active or trialing."
           ]
         ]);
       }
@@ -348,17 +381,24 @@ class StripeController{
         // No hay método de pago válido. Mostrá UI para actualizar tarjeta (Billing Portal o Payment Element)
         return $response->withJson(['Status' => 'requires_payment_method']);
       }
-    } else {
+
+      // Fallback: pendiente (Stripe intentará cobrar)
+      return $response->withJson(['Status' => 'pending', 'SubscriptionId' => $updated->id]);
+    } catch (\Stripe\Exception\ApiErrorException $e) {
       return $response->withStatus(400)->withJson([
         "error" => [
-          "code" => "SUBSCRIPTION_NOT_ACTIVE",
-          "desc" => "The subscription is not active or is in trialing."
+          "code" => "STRIPE_ERROR",
+          "desc" => "Error processing upgrade: " . $e->getMessage()
+        ]
+      ]);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
         ]
       ]);
     }
-
-    // Fallback: pendiente (Stripe intentará cobrar)
-    return $response->withJson(['Status' => 'pending', 'SubscriptionId' => $updated->id]);
   }
 
   public function downgradeApply(Request $request, Response $response, array $args) {
@@ -375,97 +415,240 @@ class StripeController{
       ]);
     }
 
-    $subscription = $this->subscription->getUserSubscriptionByPlatformSubID($platformSubscriptionID);
-    $userID = $subscription['UserID'];
+    try {
+      $subscription = $this->subscription->getUserSubscriptionByPlatformSubID($platformSubscriptionID);
+      if (!$subscription) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "STRIPE_SUBSCRIPTION_NOT_FOUND",
+            "desc" => "No subscription found with the provided id"
+          ]
+        ]);
+      }
 
-    if ($subscription['Status'] == 'ACTIVE' || $subscription['Status'] == 'TRIALING') {
+      $userID = $subscription['UserID'];
       # Verificar si el usuario autenticado es el mismo o un administrador
       if ($jwt['data']->UserID != $userID && $jwt['data']->UserType != 'Admin') {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
-            "desc" => "You are not authorized to subscribe."
+            "desc" => "You are not authorized to edit this subscription."
           ]
         ]);
       }
 
-      $newPlanID = $data['PlanID'] ?? null;
-      $plan = $this->subscription->getSubscriptionPlanByID($newPlanID);
-      if (!$plan || empty($plan['StripeID'])) {
+      // Suscripciones no activas no se pueden downgradear
+      if ($subscription['Status'] != 'ACTIVE' && $subscription['Status'] != 'TRIALING') {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "SUBSCRIPTION_NOT_ACTIVE",
+            "desc" => "The subscription is not active or trialing."
+          ]
+        ]);
+      }
+
+      // Si ya tiene pendiente un downgrade no seguir
+      $pendingChange = $this->subscription->getPendingChange($platformSubscriptionID);
+      if(!empty($pendingChange)){
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "DOWNGRADE_ALREADY_SCHEDULED",
+            "desc" => "A pending downgrade is scheduled for this subscription."
+          ]
+        ]);
+      }
+
+      $currentPlanId = $subscription['PlanID'] ?? null;
+      $currentPlan = $this->subscription->getSubscriptionPlanByID($currentPlanId);
+      if (!$currentPlan || empty($currentPlan['StripeID'])) {
         return $response->withStatus(400)->withJson([
           "error" => [
             "code" => "STRIPE_PLAN_MISSING",
-            "desc" => "Stripe ID not configured for this plan"
+            "desc" => "Stripe ID not configured for the current plan"
           ]
         ]);
       }
 
-      $newPriceId = $plan['StripeID'];
+      $newPlanId = $data['PlanID'] ?? null;
+      $newPlan = $this->subscription->getSubscriptionPlanByID($newPlanId);
+      if (!$newPlan || empty($newPlan['StripeID'])) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "STRIPE_PLAN_MISSING",
+            "desc" => "Stripe ID not configured for the new plan"
+          ]
+        ]);
+      }
+      $newPriceId = $newPlan['StripeID'];
+      $currentPriceId = $currentPlan['StripeID'];
 
       \Stripe\Stripe::setApiKey($GLOBALS['config']['stripe']['STRIPE_SECRET_KEY']);
 
       // Traer la suscripción actual
       $sub = \Stripe\Subscription::retrieve($platformSubscriptionID);
-      $itemId = $sub->items->data[0]->id;
-
-      $effectiveTs = $sub->items->data[0]->current_period_end ?? null;
-
-      $currentPlanID = $subscription['PlanID'];
-
-      // Crear el scheduled
-      if (empty($sub->schedule)) {
+      $currentPeriodEnd = $sub->items->data[0]->current_period_end;
+      if(!$sub->schedule){
+        // Creo el schedule si no existe
         $schedule = \Stripe\SubscriptionSchedule::create([
-          'from_subscription' => $platformSubscriptionID,
-        ]);
+          'from_subscription' => $platformSubscriptionID]);
+      }else{
+        $schedule = \Stripe\SubscriptionSchedule::retrieve($sub->schedule);
       }
 
-      // Luego actualizar para agregar las fases que querés
+      // Programo el downgrade
       $schedule = \Stripe\SubscriptionSchedule::update($schedule->id, [
         'phases' => [
           [
-            'start_date' => 'now',
-            'end_date' => $effectiveTs,
-            'items' => [[ 'price' => $currentPlanID, 'quantity' => 1 ]],
+            // Fase actual: mantener el plan actual hasta el final del período
+            'start_date' => $schedule->current_phase->start_date, // Fecha actual como ancla
+            'end_date' => $currentPeriodEnd,
+            'items' => [[
+              'price' => $currentPriceId,
+              'quantity' => 1
+            ]],
             'proration_behavior' => 'none'
           ],
           [
-            'start_date' => $effectiveTs,
-            'items' => [[ 'price' => $newPriceId, 'quantity' => 1 ]],
+            // Fase nueva: cambiar al plan inferior desde la siguiente renovación
+            'start_date' => $currentPeriodEnd,
+            'items' => [[
+              'price' => $newPriceId,
+              'quantity' => 1
+            ]],
             'proration_behavior' => 'none'
-          ],
-        ],
-      ]);
-
-      // // aplicar downgrade al final del ciclo (sin prorrateo)
-      // $updated = \Stripe\Subscription::update($platformSubscriptionID, [
-      //   'items' => [[
-      //     'id' => $itemId,
-      //     'price' => $newPriceId
-      //   ]],
-      //   'proration_behavior' => 'none', // no factura diferencia ahora
-      //   'billing_cycle_anchor' => 'unchanged', // se mantiene hasta el próximo ciclo
-      //   'payment_behavior' => 'pending_if_incomplete',
-      // ]);
+          ]
+        ]]);
 
       // Agregar un cambio PENDING en BD
       $changeId = $this->subscription->scheduleSubscriptionChange(
         $platformSubscriptionID,
-        $newPlanID,
-        $effectiveTs
+        $newPlanId,
+        $currentPeriodEnd
       );
 
       return $response->withJson([
         'Status' => 'scheduled',
         'ChangeId' => $changeId,
-        'SubscriptionId' => $updated->id,
-        'CurrentPeriodEnd' => date("Y-m-d H:i:s", $effectiveTs),
-        'NewPrice' => $newPriceId
+        'SubscriptionId' => $schedule->subscription,
+        'CurrentPeriodEnd' => date("Y-m-d H:i:s", $currentPeriodEnd),
+        'NewPrice' => $newPriceId,
+        'ScheduleId' => $schedule->id
       ]);
-    } else {
+
+    } catch (\Stripe\Exception\ApiErrorException $e) {
       return $response->withStatus(400)->withJson([
         "error" => [
-          "code" => "SUBSCRIPTION_NOT_ACTIVE",
-          "desc" => "The subscription is not active or is in trialing."
+          "code" => "STRIPE_ERROR",
+          "desc" => "Error processing upgrade: " . $e->getMessage()
+        ]
+      ]);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  public function downgradeCancel(Request $request, Response $response, array $args) {
+    $platformSubscriptionID = $args['subId'];
+    $data = $request->getParsedBody();
+    $jwt = $request->getAttribute('jwt');
+
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+      return $response->withStatus(401)->withJson([
+        "error" => [
+          "code" => "INVALID_TOKEN",
+          "desc" => "Invalid JWT token"
+        ]
+      ]);
+    }
+
+    try {
+      $subscription = $this->subscription->getUserSubscriptionByPlatformSubID($platformSubscriptionID);
+      if (!$subscription) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "STRIPE_SUBSCRIPTION_NOT_FOUND",
+            "desc" => "No subscription found with the provided id"
+          ]
+        ]);
+      }
+
+      $userID = $subscription['UserID'];
+      # Verificar si el usuario autenticado es el mismo o un administrador
+      if ($jwt['data']->UserID != $userID && $jwt['data']->UserType != 'Admin') {
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "UNAUTHORIZED",
+            "desc" => "You are not authorized to edit this subscription."
+          ]
+        ]);
+      }
+
+      // No se puede cancelar el downgrade de una suscripcion no activa
+      if ($subscription['Status'] != 'ACTIVE' && $subscription['Status'] != 'TRIALING') {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "SUBSCRIPTION_NOT_ACTIVE",
+            "desc" => "The subscription is not active or trialing."
+          ]
+        ]);
+      }
+
+      // Si NO tiene pendiente un downgrade no seguir
+      $pendingChange = $this->subscription->getPendingChange($platformSubscriptionID);
+      if(empty($pendingChange)){
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "DOWNGRADE_NOT_SCHEDULED",
+            "desc" => "No pending downgrade exists for this subscription."
+          ]
+        ]);
+      }
+
+      $currentPlanId = $subscription['PlanID'] ?? null;
+      $currentPlan = $this->subscription->getSubscriptionPlanByID($currentPlanId);
+      if (!$currentPlan || empty($currentPlan['StripeID'])) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "STRIPE_PLAN_MISSING",
+            "desc" => "Stripe ID not configured for the current plan"
+          ]
+        ]);
+      }
+      $currentPriceId = $currentPlan['StripeID'];
+
+      \Stripe\Stripe::setApiKey($GLOBALS['config']['stripe']['STRIPE_SECRET_KEY']);
+
+      // Traer la suscripción actual
+      $sub = \Stripe\Subscription::retrieve($platformSubscriptionID);
+      if($sub->schedule){
+        $schedule = \Stripe\SubscriptionSchedule::retrieve($sub->schedule);
+        $schedule->release();
+      }
+
+      // Quitar el pending el la base
+      $this->subscription->cancelSubscriptionChange($platformSubscriptionID);
+
+      return $response->withJson([
+        'Status' => 'downgrade_cancelled'
+      ]);
+
+    } catch (\Stripe\Exception\ApiErrorException $e) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "STRIPE_ERROR",
+          "desc" => "Error processing downgrade: " . $e->getMessage()
+        ]
+      ]);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
         ]
       ]);
     }
@@ -498,6 +681,17 @@ class StripeController{
 
       $platformSubscriptionID = $subscription['PlatformSubscriptionID'];
 
+      // Chequear si ya existe un pending de cancelación
+      $pendingCancel = $this->subscription->getPendingCancel($platformSubscriptionID);
+      if($pendingCancel){
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "SUBSCRIPTION_ALREADY_CANCELLED",
+            "desc" => "This subscription is already cancelled."
+          ]
+        ]);
+      }
+
       \Stripe\Stripe::setApiKey($GLOBALS['config']['stripe']['STRIPE_SECRET_KEY']);
 
       // Traer la suscripción actual
@@ -509,31 +703,6 @@ class StripeController{
           $sub->schedule,
           ['end_behavior' => 'cancel']
         );
-
-        // Refrescar la suscripción para obtener los datos actualizados
-        $sub = \Stripe\Subscription::retrieve($platformSubscriptionID);
-        $cancelAt = $sub->cancel_at;
-
-        // Chequear si ya existe un pending de cancelación
-        $pending = $this->subscription->getPendingChange($platformSubscriptionID, null);
-        if (!$pending && $cancelAt) {
-          $changeId = $this->subscription->scheduleSubscriptionChange(
-            $platformSubscriptionID,
-            null,
-            $cancelAt
-          );
-          error_log("Cambio pendiente de cancelación creado en BD con ID: $changeId");
-        } else {
-          error_log("Ya existía un cambio pendiente de cancelación o cancel_at vacío");
-        }
-
-        $canceled = (object)[
-          'id' => $sub->id,
-          'status' => $sub->status,
-          'cancel_at_period_end' => true, // lo forzamos a true ya que el schedule definió la cancelación
-          'cancel_at' => $cancelAt, // se cancela al final del ciclo
-        ];
-
       } else {
         // Cancelación directa sobre la suscripción
         $canceled = \Stripe\Subscription::update($platformSubscriptionID, [
@@ -541,20 +710,124 @@ class StripeController{
         ]);
       }
 
+      // Refrescar la suscripción para obtener los datos actualizados
+      $sub = \Stripe\Subscription::retrieve($platformSubscriptionID);
+      $changeId = $this->subscription->scheduleCancelSubscription($platformSubscriptionID, $sub->cancel_at);
+      error_log("Cambio pendiente de cancelación creado en BD con ID: $changeId");
+
       return $response->withJson([
-        'Status' => $canceled->status,
-        'SubscriptionId' => $canceled->id,
-        'CancelAtPeriodEnd' => $canceled->cancel_at_period_end,
-        'CancelAt' => $canceled->cancel_at ? date("Y-m-d H:i:s", $canceled->cancel_at) : null,
+        'Status' => $sub->status,
+        'SubscriptionId' => $sub->id,
+        'CancelAtPeriodEnd' => $sub->cancel_at_period_end,
+        'CancelAt' => $sub->cancel_at
       ]);
 
+    } catch (\Stripe\Exception\ApiErrorException $e) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "STRIPE_ERROR",
+          "desc" => "Error cancelling downgrade: " . $e->getMessage()
+        ]
+      ]);
     } catch (\Throwable $e) {
-        return $response->withStatus(500)->withJson([
-            "error" => [
-                "code" => "INTERNAL_ERROR",
-                "desc" => $e->getMessage()
-            ]
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  public function resumeSubscription(Request $request, Response $response, array $args) {
+    $jwt = $request->getAttribute('jwt');
+
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
+      return $response->withStatus(401)->withJson([
+        "error" => [
+          "code" => "INVALID_TOKEN",
+          "desc" => "Invalid JWT token"
+        ]
+      ]);
+    }
+
+    try {
+      $userID = $jwt['data']->UserID;
+      $subscription = $this->subscription->getSubscriptionByUser($userID);
+
+      if (!$subscription || empty($subscription['PlatformSubscriptionID'])) {
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "NO_ACTIVE_SUBSCRIPTION",
+            "desc" => "No active subscription to resume."
+          ]
         ]);
+      }
+
+      $platformSubscriptionID = $subscription['PlatformSubscriptionID'];
+
+      // Chequear si ya existe un pending de cancelación
+      $pendingCancel = $this->subscription->getPendingCancel($platformSubscriptionID);
+      if(!$pendingCancel){
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "CANCEL_NOT_SCHEDULED",
+            "desc" => "This subscription is not scheduled for cancel."
+          ]
+        ]);
+      }
+      if($pendingCancel['CancelAt'] < date("Y-m-d H:i:s")){
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "SUBSCRIPTION_EXPIRED",
+            "desc" => "This subscription has already ended and cannot be resumed."
+          ]
+        ]);
+      }
+
+      \Stripe\Stripe::setApiKey($GLOBALS['config']['stripe']['STRIPE_SECRET_KEY']);
+
+      // Traer la suscripción actual
+      $sub = \Stripe\Subscription::retrieve($platformSubscriptionID);
+      if (!empty($sub->schedule)) {
+        // La suscripción está controlada por un Schedule
+        \Stripe\SubscriptionSchedule::update(
+          $sub->schedule,
+          ['end_behavior' => 'release'],
+        );
+      } else {
+        // Cancelación directa sobre la suscripción
+        $canceled = \Stripe\Subscription::update($platformSubscriptionID, [
+          'cancel_at_period_end' => false,
+        ]);
+      }
+
+      // Refrescar la suscripción para obtener los datos actualizados
+      $sub = \Stripe\Subscription::retrieve($platformSubscriptionID);
+      $changeId = $this->subscription->scheduleCancelSubscription($platformSubscriptionID);
+      error_log("Se volvió a activar la sub con ID: $changeId");
+
+      return $response->withJson([
+        'Status' => $sub->status,
+        'SubscriptionId' => $sub->id,
+        'CancelAtPeriodEnd' => 0,
+        'CancelAt' => null,
+      ]);
+
+    } catch (\Stripe\Exception\ApiErrorException $e) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "STRIPE_ERROR",
+          "desc" => "Error cancelling downgrade: " . $e->getMessage()
+        ]
+      ]);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
     }
   }
 

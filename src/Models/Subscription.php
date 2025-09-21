@@ -406,24 +406,66 @@ class Subscription
   }
 
   // Obtiene cambio pendiente
-  public function getPendingChange($platformSubscriptionID, $newPlanID = null) {
+  public function getPendingChange($platformSubscriptionID, $newPlanID = false) {
     try {
       $sql = "SELECT * FROM SubscriptionChanges WHERE PlatformSubscriptionID = :platformSubscriptionID AND Status = 'PENDING'";
-      if ($newPlanID !== null) {
-        $sql .= " AND NewPlanID = :newPlanID";
-      } else {
-        $sql .= " AND NewPlanID IS NULL";
+      if ($newPlanID !== false) {
+        $sql .= $newPlanID === null ? " AND NewPlanID = :newPlanID " : " AND NewPlanID IS NULL ";
       }
       $sql .= " ORDER BY CreatedAt DESC LIMIT 1";
 
       $stmt = $this->db->prepare($sql);
       $stmt->bindValue(':platformSubscriptionID', $platformSubscriptionID, PDO::PARAM_STR);
-      if ($newPlanID !== null) {
+      if ($newPlanID !== false) {
         $stmt->bindValue(':newPlanID', $newPlanID, PDO::PARAM_INT);
       }
       $stmt->execute();
 
       return $stmt->fetch(PDO::FETCH_ASSOC);
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  // Cancela cambio pendiente
+  public function cancelSubscriptionChange($platformSubscriptionID) {
+    try {
+      $sql = "UPDATE SubscriptionChanges SET Status = 'CANCELLED'
+        WHERE PlatformSubscriptionID = :platformSubscriptionID AND Status = 'PENDING'";
+
+      $stmt = $this->db->prepare($sql);
+      $stmt->bindValue(':platformSubscriptionID', $platformSubscriptionID, PDO::PARAM_STR);
+      $stmt->execute();
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  // Obtiene una cancelacion pendiente
+  public function getPendingCancel($platformSubscriptionID) {
+    try {
+      $sql = "SELECT * FROM Subscriptions
+        WHERE PlatformSubscriptionID = :platformSubscriptionID AND CancelAtPeriodEnd = 1";
+      $stmt = $this->db->prepare($sql);
+      $stmt->bindValue(':platformSubscriptionID', $platformSubscriptionID, PDO::PARAM_STR);
+      $stmt->execute();
+
+      return $stmt->fetch(PDO::FETCH_ASSOC);
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  // cancela o reactiva una subscripcion
+  public function scheduleCancelSubscription($platformSubscriptionID, $cancelAt = false) {
+    try {
+      $sql = "UPDATE Subscriptions SET CancelAtPeriodEnd = :cancel, CancelAt = :cancelAt
+        WHERE PlatformSubscriptionID = :platformSubscriptionID";
+      $stmt = $this->db->prepare($sql);
+      $stmt->bindValue(':platformSubscriptionID', $platformSubscriptionID, PDO::PARAM_STR);
+      $stmt->bindValue(':cancel', $cancelAt ? 1 : 0, PDO::PARAM_INT);
+      $stmt->bindValue(':cancelAt', $cancelAt ? date('Y-m-d H:i:s', $cancelAt) : null, PDO::PARAM_STR);
+      $stmt->execute();
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
