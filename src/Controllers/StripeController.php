@@ -337,13 +337,14 @@ class StripeController{
       }
 
       $newPriceId = $plan['StripeID'];
-      $prorationDate = $data['ProrationDate'] ?? null;
+      $prorationDate = $data['ProrationDate'] ?? time();
 
-      if (!$prorationDate) {
+      // Tolerancia maxima prorrateo 2min
+      if (abs(time() - $prorationDate) > 120) { // 2 minutos
         return $response->withStatus(400)->withJson([
           "error" => [
-            "code" => "INVALID_PARAMETERS",
-            "desc" => "Missing or invalid parameters"
+            "code" => "EXPIRED_STRIPE_REQUEST",
+            "desc" => "The upgrade request must be confirmed within 2 minutes"
           ]
         ]);
       }
@@ -364,26 +365,40 @@ class StripeController{
       $invoice = $updated->latest_invoice ?? null;
       $pi = $invoice ? $invoice->payment_intent : null;
 
+      // Respuestas “sincronas” para la UI
       if ($invoice && $invoice->status === 'paid') {
-        return $response->withJson(['Status' => 'paid', 'SubscriptionId' => $updated->id]);
-      }
-
-      if ($pi && $pi->status === 'requires_action') {
-        // Devolvés client_secret para confirmar 3DS en el front
         return $response->withJson([
-          'Status' => 'requires_action',
-          'ClientSecret' => $pi->client_secret,
-          'SubscriptionId' => $updated->id
+          'Status'          => 'paid',
+          'OperationId'     => $operationId,
+          'SubscriptionId'  => $updated->id,
+          'InvoiceId'       => $invoice->id
+        ]);
+      }
+      if ($pi && $pi->status === 'requires_action') {
+        return $response->withJson([
+          'Status'          => 'requires_action',
+          'ClientSecret'    => $pi->client_secret,
+          'OperationId'     => $operationId,
+          'SubscriptionId'  => $updated->id,
+          'InvoiceId'       => $invoice->id
+        ]);
+      }
+      if ($pi && $pi->status === 'requires_payment_method') {
+        return $response->withJson([
+          'Status'          => 'requires_payment_method',
+          'OperationId'     => $operationId,
+          'SubscriptionId'  => $updated->id,
+          'InvoiceId'       => $invoice->id
         ]);
       }
 
-      if ($pi && $pi->status === 'requires_payment_method') {
-        // No hay método de pago válido. Mostrá UI para actualizar tarjeta (Billing Portal o Payment Element)
-        return $response->withJson(['Status' => 'requires_payment_method']);
-      }
-
-      // Fallback: pendiente (Stripe intentará cobrar)
-      return $response->withJson(['Status' => 'pending', 'SubscriptionId' => $updated->id]);
+      // Fallback: pendiente (stripe tratara de cobrar)
+      return $response->withJson([
+        'Status'          => 'pending',
+        'OperationId'     => $operationId,
+        'SubscriptionId'  => $updated->id,
+        'InvoiceId'       => $invoice ? $invoice->id : null
+      ]);
     } catch (\Stripe\Exception\ApiErrorException $e) {
       return $response->withStatus(400)->withJson([
         "error" => [
