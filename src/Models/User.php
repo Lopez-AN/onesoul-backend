@@ -122,7 +122,7 @@ clASs User
       u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
         ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
       u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-      s.PlanID, s.StartDate, sp.Name, sp.Description,
+      s.PlanID, s.StartDate, s.EndDate, s.Status,
       -- Subconsulta para reviews
       (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
         FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
@@ -133,7 +133,6 @@ clASs User
       LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
       LEFT JOIN Media AS m ON u.UserID = m.UserID
       LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
-      LEFT JOIN SubscriptionPlans AS sp ON s.PlanID = sp.PlanID
       LEFT JOIN (
         SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
         MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
@@ -181,18 +180,19 @@ clASs User
       ];
       unset($user['hasVirtual'], $user['hasInPerson']);
 
-      // Agregar información de suscripción
-      $user['Subscription'] = is_null($user['PlanID']) ? null : [
-        "PlanID" => (int)$user['PlanID'],
+      // Agregar información histórica de suscripción
+      $user['HistorySubscription'] = is_null($user['PlanID']) ? null : [
+        "LatestPlanID" => (int)$user['PlanID'],
         "StartDate" => $user['StartDate'],
-        "Name" => $user['Name'],
-        "Description" => $user['Description']
+        "EndDate" => $user['EndDate'],
+        "Status" => $user['Status'],
+        "UsedTrial" => 'True'
       ];
       unset(
         $user['PlanID'],
         $user['StartDate'],
-        $user['Name'],
-        $user['Description']
+        $user['EndDate'],
+        $user['Status']
       );
 
       // Verificar si la cuenta está desactivada
@@ -227,7 +227,7 @@ clASs User
       u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
         ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
       u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-      s.PlanID, s.StartDate, sp.Name, sp.Description,    
+      s.PlanID, s.StartDate, s.EndDate, s.Status,  
       -- Subconsulta para reviews
       (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
         FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
@@ -238,7 +238,6 @@ clASs User
       LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
       LEFT JOIN Media AS m ON u.UserID = m.UserID
       LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
-      LEFT JOIN SubscriptionPlans AS sp ON s.PlanID = sp.PlanID  
       LEFT JOIN (
         SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
         MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
@@ -286,19 +285,20 @@ clASs User
     ];
     unset($user['hasVirtual'], $user['hasInPerson']);
 
-    // Agregar información de suscripción
-     $user['Subscription'] = is_null($user['PlanID']) ? null : [
-      "PlanID" => (int)$user['PlanID'],
+    // Agregar información histórica de suscripción
+    $user['HistorySubscription'] = is_null($user['PlanID']) ? null : [
+      "LatestPlanID" => (int)$user['PlanID'],
       "StartDate" => $user['StartDate'],
-      "Name" => $user['Name'],
-      "Description" => $user['Description']
+      "EndDate" => $user['EndDate'],
+      "Status" => $user['Status'],
+     "UsedTrial" => 'True'
     ];
     unset(
       $user['PlanID'],
       $user['StartDate'],
-      $user['Name'],
-      $user['Description']
-    );    
+      $user['EndDate'],
+      $user['Status']
+    );   
 
     // Verificar si la cuenta está desactivada
     if (!is_null($user['DeactivationDate']) && strtotime($user['DeactivationDate']) <= time()) {
@@ -332,7 +332,7 @@ clASs User
       u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
         ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
       u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-      s.PlanID, s.StartDate, sp.Name, sp.Description,  
+      s.PlanID, s.StartDate, s.EndDate, s.Status,
       -- Subconsulta para reviews
       (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
         FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
@@ -343,7 +343,6 @@ clASs User
       LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
       LEFT JOIN Media AS m ON u.UserID = m.UserID
       LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
-      LEFT JOIN SubscriptionPlans AS sp ON s.PlanID = sp.PlanID
       LEFT JOIN (
         SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
         MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
@@ -391,19 +390,20 @@ clASs User
       ];
       unset($user['hasVirtual'], $user['hasInPerson']);
 
-      // Agregar información de suscripción
-      $user['Subscription'] = is_null($user['PlanID']) ? null : [
-        "PlanID" => (int)$user['PlanID'],
+      // Agregar información histórica de suscripción
+      $user['HistorySubscription'] = is_null($user['PlanID']) ? null : [
+        "LatestPlanID" => (int)$user['PlanID'],
         "StartDate" => $user['StartDate'],
-        "Name" => $user['Name'],
-        "Description" => $user['Description']
+        "EndDate" => $user['EndDate'],
+        "Status" => $user['Status'],
+      "UsedTrial" => 'True'
       ];
       unset(
         $user['PlanID'],
         $user['StartDate'],
-        $user['Name'],
-        $user['Description']
-      );    
+        $user['EndDate'],
+        $user['Status']
+      );   
 
       // Verificar si la cuenta está desactivada
       if (!is_null($user['DeactivationDate']) && strtotime($user['DeactivationDate']) <= time()) {
@@ -437,7 +437,7 @@ clASs User
       u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
         ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
       u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-      s.PlanID, s.StartDate, sp.Name, sp.Description,  
+      s.PlanID, s.StartDate, s.EndDate, s.Status,
       -- Subconsulta para reviews
       (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
         FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
@@ -448,7 +448,6 @@ clASs User
       LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
       LEFT JOIN Media AS m ON u.UserID = m.UserID
       LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
-      LEFT JOIN SubscriptionPlans AS sp ON s.PlanID = sp.PlanID
       LEFT JOIN (
         SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
         MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
@@ -497,19 +496,20 @@ clASs User
       ];
       unset($user['hasVirtual'], $user['hasInPerson']);
 
-      // Agregar información de suscripción
-      $user['Subscription'] = is_null($user['PlanID']) ? null : [
-        "PlanID" => (int)$user['PlanID'],
+      // Agregar información histórica de suscripción
+      $user['HistorySubscription'] = is_null($user['PlanID']) ? null : [
+        "LatestPlanID" => (int)$user['PlanID'],
         "StartDate" => $user['StartDate'],
-        "Name" => $user['Name'],
-        "Description" => $user['Description']
+        "EndDate" => $user['EndDate'],
+        "Status" => $user['Status'],
+      "UsedTrial" => 'True'
       ];
       unset(
         $user['PlanID'],
         $user['StartDate'],
-        $user['Name'],
-        $user['Description']
-      );    
+        $user['EndDate'],
+        $user['Status']
+      );  
 
       // Verificar si la cuenta está desactivada
       if (!is_null($user['DeactivationDate']) && strtotime($user['DeactivationDate']) <= time()) {
@@ -543,7 +543,7 @@ clASs User
         u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
           ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
         u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-        s.PlanID, s.StartDate, sp.Name, sp.Description,
+        s.PlanID, s.StartDate, s.EndDate, s.Status,
         -- Subconsulta para reviews
         (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
           FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
@@ -553,8 +553,7 @@ clASs User
         LEFT JOIN UsersCategories AS uc ON uc.UserID = u.UserID
         LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
         LEFT JOIN Media AS m ON u.UserID = m.UserID
-        LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
-        LEFT JOIN SubscriptionPlans AS sp ON s.PlanID = sp.PlanID    
+        LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID 
         LEFT JOIN (
           SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
           MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
@@ -575,7 +574,7 @@ clASs User
         u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
           ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
         u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-        s.PlanID, s.StartDate, sp.Name, sp.Description,
+        s.PlanID, s.StartDate, s.EndDate, s.Status,
         -- Subconsulta para reviews
         (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
           FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
@@ -586,7 +585,6 @@ clASs User
         LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
         LEFT JOIN Media AS m ON u.UserID = m.UserID
         LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
-        LEFT JOIN SubscriptionPlans AS sp ON s.PlanID = sp.PlanID 
         LEFT JOIN (
           SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
           MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
@@ -633,19 +631,20 @@ clASs User
 
         unset($e['hasVirtual'], $e['hasInPerson']);
 
-        // Agregar información de suscripción
-        $e['Subscription'] = is_null($e['PlanID']) ? null : [
-          "PlanID" => (int)$e['PlanID'],
-          "StartDate" => $e['StartDate'],
-          "Name" => $e['Name'],
-          "Description" => $e['Description']
+        // Agregar información histórica de suscripción
+        $user['HistorySubscription'] = is_null($user['PlanID']) ? null : [
+          "LatestPlanID" => (int)$user['PlanID'],
+          "StartDate" => $user['StartDate'],
+          "EndDate" => $user['EndDate'],
+          "Status" => $user['Status'],
+        "UsedTrial" => 'True'
         ];
         unset(
-          $e['PlanID'],
-          $e['StartDate'],
-          $e['Name'],
-          $e['Description']
-        );   
+          $user['PlanID'],
+          $user['StartDate'],
+          $user['EndDate'],
+          $user['Status']
+        );
 
         return $e;
       }, $rs);
@@ -672,7 +671,7 @@ clASs User
       u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
         ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
       u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-      s.PlanID, s.StartDate, sp.Name, sp.Description,
+      s.PlanID, s.StartDate, s.EndDate, s.Status,
       -- Subconsulta para reviews
       (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
         FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
@@ -684,7 +683,6 @@ clASs User
       LEFT JOIN Media AS m ON u.UserID = m.UserID
       LEFT JOIN Reviews AS r ON u.UserID = r.GuideID OR u.UserID = r.SeekerID
       LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
-      LEFT JOIN SubscriptionPlans AS sp ON s.PlanID = sp.PlanID
       LEFT JOIN (
         SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
         MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
@@ -725,19 +723,20 @@ clASs User
 
         unset($e['hasVirtual'], $e['hasInPerson']);
 
-        // Agregar información de suscripción
-        $e['Subscription'] = is_null($e['PlanID']) ? null : [
-          "PlanID" => (int)$e['PlanID'],
-          "StartDate" => $e['StartDate'],
-          "Name" => $e['Name'],
-          "Description" => $e['Description']
+        // Agregar información histórica de suscripción
+        $user['HistorySubscription'] = is_null($user['PlanID']) ? null : [
+          "LatestPlanID" => (int)$user['PlanID'],
+          "StartDate" => $user['StartDate'],
+          "EndDate" => $user['EndDate'],
+          "Status" => $user['Status'],
+        "UsedTrial" => 'True'
         ];
         unset(
-          $e['PlanID'],
-          $e['StartDate'],
-          $e['Name'],
-          $e['Description']
-        );   
+          $user['PlanID'],
+          $user['StartDate'],
+          $user['EndDate'],
+          $user['Status']
+        ); 
 
         return $e;
       }, $rs);
@@ -772,7 +771,7 @@ clASs User
       u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
         ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
       u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-      s.PlanID, s.StartDate, sp.Name, sp.Description,
+      s.PlanID, s.StartDate, s.EndDate, s.Status,
       -- Subconsulta para reviews
       (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
         FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
@@ -783,7 +782,6 @@ clASs User
       LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
       LEFT JOIN Media AS m ON u.UserID = m.UserID
       LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
-      LEFT JOIN SubscriptionPlans AS sp ON s.PlanID = sp.PlanID  
       LEFT JOIN (
         SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
         MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
@@ -831,19 +829,20 @@ clASs User
       ];
       unset($user['hasVirtual'], $user['hasInPerson']);
 
-      // Agregar información de suscripción
-      $user['Subscription'] = is_null($user['PlanID']) ? null : [
-        "PlanID" => (int)$user['PlanID'],
+      // Agregar información histórica de suscripción
+      $user['HistorySubscription'] = is_null($user['PlanID']) ? null : [
+        "LatestPlanID" => (int)$user['PlanID'],
         "StartDate" => $user['StartDate'],
-        "Name" => $user['Name'],
-        "Description" => $user['Description']
+        "EndDate" => $user['EndDate'],
+        "Status" => $user['Status'],
+      "UsedTrial" => 'True'
       ];
       unset(
         $user['PlanID'],
         $user['StartDate'],
-        $user['Name'],
-        $user['Description']
-      );   
+        $user['EndDate'],
+        $user['Status']
+      );  
 
       // Verificar si la cuenta está desactivada
       if (!is_null($user['DeactivationDate']) && strtotime($user['DeactivationDate']) <= time()) {

@@ -22,10 +22,10 @@ return function (App $app) {
   $app->post('/stripe/subscribe', [$stripeController, 'createCheckoutSession'])->add($jwtMiddleware);
   $app->post('/stripe/webhook', [$stripeController, 'handleWebhook']);
   $app->get('/stripe/session/{sessionID}', [$stripeController, 'getStripeSession'])->add($jwtMiddleware); 
-  $app->post('/subscription/stripe/upgrade/info/{subId}', [$stripeController, 'upgradeInfo'])->add($jwtMiddleware);
-  $app->post('/subscription/stripe/upgrade/apply/{subId}', [$stripeController, 'upgradeApply'])->add($jwtMiddleware);
-  $app->post('/subscription/stripe/downgrade/apply/{subId}', [$stripeController, 'downgradeApply'])->add($jwtMiddleware);
-  $app->post('/subscription/stripe/downgrade/cancel/{subId}', [$stripeController, 'downgradeCancel'])->add($jwtMiddleware);
+  $app->post('/subscription/stripe/upgrade/info', [$stripeController, 'upgradeInfo'])->add($jwtMiddleware);
+  $app->post('/subscription/stripe/upgrade/apply', [$stripeController, 'upgradeApply'])->add($jwtMiddleware);
+  $app->post('/subscription/stripe/downgrade/apply', [$stripeController, 'downgradeApply'])->add($jwtMiddleware);
+  $app->post('/subscription/stripe/downgrade/cancel', [$stripeController, 'downgradeCancel'])->add($jwtMiddleware);
   $app->delete('/subscription/stripe/cancel', [$stripeController, 'cancelSubscription'])->add($jwtMiddleware);
   $app->get('/subscription/stripe/resume', [$stripeController, 'resumeSubscription'])->add($jwtMiddleware);
   $app->get('/subscription/stripe/users/payment-method', [$stripeController, 'getUserPaymentMethod'])->add($jwtMiddleware);

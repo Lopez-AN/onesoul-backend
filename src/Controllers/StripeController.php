@@ -136,7 +136,6 @@ class StripeController{
   }
 
   public function upgradeInfo(Request $request, Response $response, array $args) {
-    $platformSubscriptionID = $args['subId'];
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
 
@@ -149,27 +148,20 @@ class StripeController{
       ]);
     }
 
-    try{
-      $subscription = $this->subscription->getUserSubscriptionByPlatformSubID($platformSubscriptionID);
-      if (!$subscription) {
+    try {
+      $userID = $jwt['data']->UserID;
+      $subscription = $this->subscription->getSubscriptionByUser($userID);
+
+      if (!$subscription || empty($subscription['PlatformSubscriptionID'])) {
         return $response->withStatus(404)->withJson([
           "error" => [
-            "code" => "SUBSCRIPTION_NOT_FOUND",
-            "desc" => "No active subscription found for this ID: {$platformSubscriptionID}."
+            "code" => "NO_ACTIVE_SUBSCRIPTION",
+            "desc" => "No active subscription to cancel."
           ]
         ]);
       }
 
-      $userID = $subscription['UserID'];
-      # Verificar si el usuario autenticado es el mismo o un administrador
-      if ($jwt['data']->UserID != $userID && $jwt['data']->UserType != 'Admin') {
-        return $response->withStatus(401)->withJson([
-          "error" => [
-            "code" => "UNAUTHORIZED",
-            "desc" => "You are not authorized to edit this subscription."
-          ]
-        ]);
-      }
+      $platformSubscriptionID = $subscription['PlatformSubscriptionID'];
 
       $newPlanID = $data['PlanID'] ?? null;
       // Obtener el ID de Stripe desde el plan
@@ -279,7 +271,6 @@ class StripeController{
   }
 
   public function upgradeApply(Request $request, Response $response, array $args) {
-    $platformSubscriptionID = $args['subId'];
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
 
@@ -292,37 +283,20 @@ class StripeController{
       ]);
     }
 
-    try{
-      $subscription = $this->subscription->getUserSubscriptionByPlatformSubID($platformSubscriptionID);
-      if (!$subscription) {
+    try {
+      $userID = $jwt['data']->UserID;
+      $subscription = $this->subscription->getSubscriptionByUser($userID);
+
+      if (!$subscription || empty($subscription['PlatformSubscriptionID'])) {
         return $response->withStatus(404)->withJson([
           "error" => [
-            "code" => "SUBSCRIPTION_NOT_FOUND",
-            "desc" => "No active subscription found for this ID: {$platformSubscriptionID}."
+            "code" => "NO_ACTIVE_SUBSCRIPTION",
+            "desc" => "No active subscription to cancel."
           ]
         ]);
       }
 
-      $userID = $subscription['UserID'];
-      # Verificar si el usuario autenticado es el mismo o un administrador
-      if ($jwt['data']->UserID != $userID && $jwt['data']->UserType != 'Admin') {
-        return $response->withStatus(401)->withJson([
-          "error" => [
-            "code" => "UNAUTHORIZED",
-            "desc" => "You are not authorized to edit this subscription."
-          ]
-        ]);
-      }
-
-      // Suscripciones no activas no se pueden downgradear
-      if ($subscription['Status'] != 'ACTIVE' && $subscription['Status'] != 'TRIALING') {
-        return $response->withStatus(400)->withJson([
-          "error" => [
-            "code" => "SUBSCRIPTION_NOT_ACTIVE",
-            "desc" => "The subscription is not active or trialing."
-          ]
-        ]);
-      }
+      $platformSubscriptionID = $subscription['PlatformSubscriptionID'];
 
       $newPlanID = $data['PlanID'] ?? null;
       // Obtener el ID de Stripe desde el plan
@@ -369,7 +343,7 @@ class StripeController{
       if ($invoice && $invoice->status === 'paid') {
         return $response->withJson([
           'Status'          => 'paid',
-          'OperationId'     => $operationId,
+          // 'OperationId'     => $operationId,
           'SubscriptionId'  => $updated->id,
           'InvoiceId'       => $invoice->id
         ]);
@@ -378,7 +352,7 @@ class StripeController{
         return $response->withJson([
           'Status'          => 'requires_action',
           'ClientSecret'    => $pi->client_secret,
-          'OperationId'     => $operationId,
+          // 'OperationId'     => $operationId,
           'SubscriptionId'  => $updated->id,
           'InvoiceId'       => $invoice->id
         ]);
@@ -386,7 +360,7 @@ class StripeController{
       if ($pi && $pi->status === 'requires_payment_method') {
         return $response->withJson([
           'Status'          => 'requires_payment_method',
-          'OperationId'     => $operationId,
+          // 'OperationId'     => $operationId,
           'SubscriptionId'  => $updated->id,
           'InvoiceId'       => $invoice->id
         ]);
@@ -395,7 +369,7 @@ class StripeController{
       // Fallback: pendiente (stripe tratara de cobrar)
       return $response->withJson([
         'Status'          => 'pending',
-        'OperationId'     => $operationId,
+        // 'OperationId'     => $operationId,
         'SubscriptionId'  => $updated->id,
         'InvoiceId'       => $invoice ? $invoice->id : null
       ]);
@@ -417,7 +391,6 @@ class StripeController{
   }
 
   public function downgradeApply(Request $request, Response $response, array $args) {
-    $platformSubscriptionID = $args['subId'];
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
 
@@ -431,36 +404,19 @@ class StripeController{
     }
 
     try {
-      $subscription = $this->subscription->getUserSubscriptionByPlatformSubID($platformSubscriptionID);
-      if (!$subscription) {
-        return $response->withStatus(400)->withJson([
+      $userID = $jwt['data']->UserID;
+      $subscription = $this->subscription->getSubscriptionByUser($userID);
+
+      if (!$subscription || empty($subscription['PlatformSubscriptionID'])) {
+        return $response->withStatus(404)->withJson([
           "error" => [
-            "code" => "STRIPE_SUBSCRIPTION_NOT_FOUND",
-            "desc" => "No subscription found with the provided id"
+            "code" => "NO_ACTIVE_SUBSCRIPTION",
+            "desc" => "No active subscription to cancel."
           ]
         ]);
       }
 
-      $userID = $subscription['UserID'];
-      # Verificar si el usuario autenticado es el mismo o un administrador
-      if ($jwt['data']->UserID != $userID && $jwt['data']->UserType != 'Admin') {
-        return $response->withStatus(401)->withJson([
-          "error" => [
-            "code" => "UNAUTHORIZED",
-            "desc" => "You are not authorized to edit this subscription."
-          ]
-        ]);
-      }
-
-      // Suscripciones no activas no se pueden downgradear
-      if ($subscription['Status'] != 'ACTIVE' && $subscription['Status'] != 'TRIALING') {
-        return $response->withStatus(400)->withJson([
-          "error" => [
-            "code" => "SUBSCRIPTION_NOT_ACTIVE",
-            "desc" => "The subscription is not active or trialing."
-          ]
-        ]);
-      }
+      $platformSubscriptionID = $subscription['PlatformSubscriptionID'];
 
       // Si ya tiene pendiente un downgrade no seguir
       $pendingChange = $this->subscription->getPendingChange($platformSubscriptionID);
@@ -501,6 +457,35 @@ class StripeController{
 
       // Traer la suscripción actual
       $sub = \Stripe\Subscription::retrieve($platformSubscriptionID);
+
+      // Si está en trial → aplicar downgrade inmediato
+      if ($sub->status === 'trialing') {
+        // Actualizar directamente la suscripción en Stripe
+        $updated = \Stripe\Subscription::update($platformSubscriptionID, [
+          'items' => [[
+            'id' => $sub->items->data[0]->id,
+            'price' => $newPriceId,
+          ]],
+          'proration_behavior' => 'none'
+        ]);
+
+        // Reflejar en BD como cambio aplicado inmediatamente
+        $res = $this->subscription->updateSubscriptionByUser(
+          $platformSubscriptionID,
+          $newPlanId,
+          date("Y-m-d H:i:s", $updated->current_period_end),
+          true // applyNow
+        );
+
+        return $response->withJson([
+          'Status' => 'applied',
+          'SubscriptionId' => $updated->id,
+          'NewPrice' => $newPriceId,
+          'AppliedAt' => date("Y-m-d H:i:s"),
+          'Result' => $res
+        ]);
+      }
+
       $currentPeriodEnd = $sub->items->data[0]->current_period_end;
       if(!$sub->schedule){
         // Creo el schedule si no existe
@@ -554,7 +539,7 @@ class StripeController{
       return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "STRIPE_ERROR",
-          "desc" => "Error processing upgrade: " . $e->getMessage()
+          "desc" => "Error processing downgrade: " . $e->getMessage()
         ]
       ]);
     } catch (\Throwable $e) {
@@ -568,8 +553,6 @@ class StripeController{
   }
 
   public function downgradeCancel(Request $request, Response $response, array $args) {
-    $platformSubscriptionID = $args['subId'];
-    $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
 
     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
@@ -582,33 +565,25 @@ class StripeController{
     }
 
     try {
-      $subscription = $this->subscription->getUserSubscriptionByPlatformSubID($platformSubscriptionID);
-      if (!$subscription) {
-        return $response->withStatus(400)->withJson([
+      $userID = $jwt['data']->UserID;
+      $subscription = $this->subscription->getSubscriptionByUser($userID);
+
+      if (!$subscription || empty($subscription['PlatformSubscriptionID'])) {
+        return $response->withStatus(404)->withJson([
           "error" => [
-            "code" => "STRIPE_SUBSCRIPTION_NOT_FOUND",
-            "desc" => "No subscription found with the provided id"
+            "code" => "NO_ACTIVE_SUBSCRIPTION",
+            "desc" => "No active subscription to cancel."
           ]
         ]);
       }
 
-      $userID = $subscription['UserID'];
-      # Verificar si el usuario autenticado es el mismo o un administrador
-      if ($jwt['data']->UserID != $userID && $jwt['data']->UserType != 'Admin') {
+      $platformSubscriptionID = $subscription['PlatformSubscriptionID'];
+
+      if ($subscription['Status'] == 'TRIALING') {
         return $response->withStatus(401)->withJson([
           "error" => [
-            "code" => "UNAUTHORIZED",
-            "desc" => "You are not authorized to edit this subscription."
-          ]
-        ]);
-      }
-
-      // No se puede cancelar el downgrade de una suscripcion no activa
-      if ($subscription['Status'] != 'ACTIVE' && $subscription['Status'] != 'TRIALING') {
-        return $response->withStatus(400)->withJson([
-          "error" => [
-            "code" => "SUBSCRIPTION_NOT_ACTIVE",
-            "desc" => "The subscription is not active or trialing."
+            "code" => "NO_PENDING_DOWNGRADE",
+            "desc" => "The subscription is in trialing status, so the downgrade was applied immediately and cannot be canceled."
           ]
         ]);
       }
@@ -656,7 +631,7 @@ class StripeController{
       return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "STRIPE_ERROR",
-          "desc" => "Error processing downgrade: " . $e->getMessage()
+          "desc" => "Error cancelling downgrade: " . $e->getMessage()
         ]
       ]);
     } catch (\Throwable $e) {
@@ -723,21 +698,27 @@ class StripeController{
 
       // Refrescar la suscripción para obtener los datos actualizados
       $sub = \Stripe\Subscription::retrieve($platformSubscriptionID);
-      $changeId = $this->subscription->scheduleCancelSubscription($platformSubscriptionID, $sub->cancel_at);
-      error_log("Cambio pendiente de cancelación creado en BD con ID: $changeId");
+      $currentPeriodEnd = $sub->items->data[0]->current_period_end;
+
+      // Agregar un cambio PENDING en BD
+      $changeId = $this->subscription->scheduleSubscriptionChange(
+        $platformSubscriptionID,
+        null,
+        $currentPeriodEnd
+      );
 
       return $response->withJson([
         'Status' => $sub->status,
         'SubscriptionId' => $sub->id,
         'CancelAtPeriodEnd' => $sub->cancel_at_period_end,
-        'CancelAt' => $sub->cancel_at
+        'CancelAt' => $currentPeriodEnd ? date("Y-m-d H:i:s", $currentPeriodEnd) : null
       ]);
 
     } catch (\Stripe\Exception\ApiErrorException $e) {
       return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "STRIPE_ERROR",
-          "desc" => "Error cancelling downgrade: " . $e->getMessage()
+          "desc" => "Error cancelling this subscription: " . $e->getMessage()
         ]
       ]);
     } catch (\Throwable $e) {
@@ -787,7 +768,7 @@ class StripeController{
           ]
         ]);
       }
-      if($pendingCancel['CancelAt'] < date("Y-m-d H:i:s")){
+      if($pendingCancel['EffectiveDate'] < date("Y-m-d H:i:s")){
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "SUBSCRIPTION_EXPIRED",
@@ -815,8 +796,11 @@ class StripeController{
 
       // Refrescar la suscripción para obtener los datos actualizados
       $sub = \Stripe\Subscription::retrieve($platformSubscriptionID);
-      $changeId = $this->subscription->scheduleCancelSubscription($platformSubscriptionID);
+      $changeId = $this->subscription->resumeSubscription($platformSubscriptionID);
       error_log("Se volvió a activar la sub con ID: $changeId");
+
+      // Quitar el pending el la base
+      $this->subscription->cancelSubscriptionChange($platformSubscriptionID);
 
       return $response->withJson([
         'Status' => $sub->status,
@@ -829,7 +813,7 @@ class StripeController{
       return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "STRIPE_ERROR",
-          "desc" => "Error cancelling downgrade: " . $e->getMessage()
+          "desc" => "Error activating subscription : " . $e->getMessage()
         ]
       ]);
     } catch (\Throwable $e) {
@@ -1026,7 +1010,7 @@ class StripeController{
 
             $trialStartTs = $stripeSub->trial_start ?? null;
             $trialEndTs   = $stripeSub->trial_end   ?? null;
-            $nextBillingDate = $stripeSub->items->data[0]->current_period_end ? date("Y-m-d", $stripeSub->items->data[0]->current_period_end) : null;
+            $nextBillingDate = $stripeSub->items->data[0]->current_period_end ? date("Y-m-d H:i:s", $stripeSub->items->data[0]->current_period_end) : null;
             $latestInvoice = $stripeSub->latest_invoice ?? null;
 
             $trialStart = $trialStartTs ? date('Y-m-d H:i:s', $trialStartTs) : null;
@@ -1228,8 +1212,7 @@ class StripeController{
 
           $platformSubscriptionID = $sub->id;
           $newPriceId = $sub->items->data[0]->price->id ?? null;
-
-          $nextBillingDate = $sub->items->data[0]->current_period_end ? date("Y-m-d", $sub->items->data[0]->current_period_end) : null;
+          $nextBillingDate = isset($sub->items->data[0]->current_period_end) ? date("Y-m-d H:i:s", $sub->items->data[0]->current_period_end) : null;
 
           error_log("Subscription actualizada en Stripe: $platformSubscriptionID con nuevo PriceID: $newPriceId");
 
@@ -1237,54 +1220,96 @@ class StripeController{
             $this->subscription->markCancelAtPeriodEnd(
               $platformSubscriptionID,
               date("Y-m-d H:i:s", $sub->canceled_at),
-              $nextBillingDate,
+              $nextBillingDate
             );
           }
 
           try {
-            $prevPriceId = $event->data->previous_attributes->items->data[0]->price->id ?? null;
-
-            if ($prevPriceId !== null && $prevPriceId != $newPriceId) {
-              $planInfo = $this->subscription->getSubscriptionPlanByStripeID($newPriceId);
-              if ($planInfo) {
-                // buscar un cambio pendiente para este plan
-                $pending = $this->subscription->getPendingChange($platformSubscriptionID, $planInfo['PlanID']);
-
-                if ($pending) {
-                  // aplicar downgrade al llegar el final del ciclo
-                  if (($sub->status === 'active' || $sub->status === 'trialing')
-                      && $sub->cancel_at_period_end === false) {
-                    error_log("Ignorado update intermedio de Stripe (cambio programado aún no aplicado)");
-                  } else {
-                    $this->subscription->applyScheduledChange($pending['id'], $nextBillingDate);
-                    error_log("Cambio pendiente aplicado en BD: changeId {$pending['id']}");
-                  }
-                } else {
-                  // upgrade → aplicar directamente
-                  $this->subscription->updateSubscriptionByUser(
-                    $platformSubscriptionID,
-                    $planInfo['PlanID'],
-                    $nextBillingDate,
-                    true // applyNow
-                  );
-                  error_log("Plan actualizado en BD (upgrade) a PlanID: " . $planInfo['PlanID']);
-                }
+            // Intentar extraer prevPriceId de previous_attributes (si existe), de forma robusta
+            $prevPriceId = null;
+            if (isset($event->data->previous_attributes->items)) {
+              // previous_attributes->items puede venir como array/obj; buscar la primera price->id disponible
+              $itemsPrev = $event->data->previous_attributes->items;
+              if (is_array($itemsPrev) && isset($itemsPrev[0]->price->id)) {
+                $prevPriceId = $itemsPrev[0]->price->id;
+              } elseif (is_object($itemsPrev) && isset($itemsPrev->data) && is_array($itemsPrev->data) && isset($itemsPrev->data[0]->price->id)) {
+                $prevPriceId = $itemsPrev->data[0]->price->id;
               }
+            }
+
+            // Si Stripe no nos dio previous_attributes (prevPriceId === null), comparamos con la BD
+            $subscriptionInDb = $this->subscription->getUserSubscriptionByPlatformSubID($platformSubscriptionID);
+            $currentPlanIDInDb = $subscriptionInDb['PlanID'] ?? null;
+            $currentPlanInfoInDb = null;
+            if ($currentPlanIDInDb) {
+              $currentPlanInfoInDb = $this->subscription->getSubscriptionPlanByID($currentPlanIDInDb);
+            }
+
+            // Obtener planInfo por newPriceId (si existe)
+            $planInfo = $newPriceId ? $this->subscription->getSubscriptionPlanByStripeID($newPriceId) : null;
+
+            // Caso: detectamos realmente un cambio de price (usando prevPriceId si está, sino comparando con BD)
+            $isDifferent = false;
+            if ($prevPriceId !== null) {
+              $isDifferent = ($prevPriceId != $newPriceId);
+            } else {
+              if ($planInfo && $currentPlanInfoInDb) {
+                // Validar explícitamente contra la BD
+                if ($planInfo['PlanID'] != $currentPlanInfoInDb['PlanID']) {
+                  $isDifferent = true;
+                }
+              } elseif ($planInfo && !$currentPlanInfoInDb) {
+                // no tenemos plan en BD: considerarlo diferente para aplicar
+                $isDifferent = true;
+              }
+            }
+
+            // Evitar duplicados: si el plan nuevo es igual al actual en BD → no hacer nada
+            if ($planInfo && $currentPlanInfoInDb && $planInfo['PlanID'] == $currentPlanInfoInDb['PlanID']) {
+              $isDifferent = false;
+            }
+
+            if ($isDifferent && $planInfo) {
+              // buscar un cambio pendiente para este plan
+              $pending = $this->subscription->getPendingChange($platformSubscriptionID, $planInfo['PlanID']);
+
+              if ($pending) {
+                // aplicar downgrade al llegar el final del ciclo o dependiendo del estado
+                if (($sub->status === 'active') && $sub->cancel_at_period_end === false) {
+                  error_log("Ignorado update intermedio de Stripe (cambio programado aún no aplicado)");
+                } else {
+                  $this->subscription->applyScheduledChange($pending['id'], $nextBillingDate);
+                  error_log("Cambio pendiente aplicado en BD: changeId {$pending['id']}");
+                }
+              } else {
+                // upgrade → aplicar directamente
+                $res = $this->subscription->updateSubscriptionByUser(
+                  $platformSubscriptionID,
+                  $planInfo['PlanID'],
+                  $nextBillingDate,
+                  true // applyNow
+                );
+                error_log("Plan actualizado en BD (upgrade) a PlanID: " . $planInfo['PlanID'] . " - resultado: " . json_encode($res));
+              }
+            } else {
+              error_log("No hay cambio de plan detectado o no se encontró planInfo para priceId: $newPriceId");
             }
           } catch (\Throwable $e) {
             error_log("Error al actualizar suscripción: " . $e->getMessage());
-            return $response->withStatus(500);
+            // Responder 200 para no re-intentar infinitamente; Stripe retryará si retornamos 500.
+            return $response->withStatus(200);
           }
         break;
 
         case 'customer.subscription.deleted':
           $subscription = $event->data->object;
           $platformSubscriptionID = $subscription->id;
+          $endDate = isset($sub->items->data[0]->current_period_end) ? date("Y-m-d H:i:s", $sub->items->data[0]->current_period_end) : null;
 
           error_log("Subscription eliminada en Stripe: " . $platformSubscriptionID);
 
           try {
-            $this->subscription->cancelSubscription($platformSubscriptionID);
+            $this->subscription->cancelSubscription($platformSubscriptionID, $endDate);
             error_log("Subscription cancelada en base de datos.");
           } catch (\Throwable $e) {
             error_log("Error al cancelar suscripción: " . $e->getMessage());

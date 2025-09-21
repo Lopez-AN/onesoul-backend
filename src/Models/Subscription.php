@@ -331,7 +331,7 @@ class Subscription {
     try {
       // Cancelar suscripción anterior si existe
       $stmt = $this->db->prepare("UPDATE Subscriptions
-                                SET EndDate = CURDATE(), Status = 'CANCELED'
+                                SET EndDate = NOW(), Status = 'CANCELED'
                                 WHERE UserID = :userID AND Status = 'ACTIVE'");
       $stmt->execute(['userID' => $userID]);
 
@@ -350,7 +350,7 @@ class Subscription {
       // Insertar nueva suscripción
       $stmt = $this->db->prepare("INSERT INTO Subscriptions (PlanID, UserID, TrialStart, TrialEnd, TrialSource,
               StartDate, Status, PaymentPlatform, PlatformSubscriptionID, PlatformCustomerID, NextBillingDate, LatestInvoiceID)
-              VALUES (:planID, :userID, :trialStart, :trialEnd, :trialSource, CURDATE(), :status,
+              VALUES (:planID, :userID, :trialStart, :trialEnd, :trialSource, NOW(), :status,
               :paymentPlatform, :platformSubscriptionID, :platformCustomerID, :nextBillingDate, :latestInvoice)");
 
       $stmt->execute([
@@ -460,14 +460,21 @@ class Subscription {
   public function getPendingChange($platformSubscriptionID, $newPlanID = false) {
     try {
       $sql = "SELECT * FROM SubscriptionChanges WHERE PlatformSubscriptionID = :platformSubscriptionID AND Status = 'PENDING'";
+
       if ($newPlanID !== false) {
-        $sql .= $newPlanID === null ? " AND NewPlanID = :newPlanID " : " AND NewPlanID IS NULL ";
+        // si vinimos con null: filtrar NewPlanID IS NULL, sino filtrar por valor
+        if ($newPlanID === null) {
+          $sql .= " AND NewPlanID IS NULL ";
+        } else {
+          $sql .= " AND NewPlanID = :newPlanID ";
+        }
       }
+
       $sql .= " ORDER BY CreatedAt DESC LIMIT 1";
 
       $stmt = $this->db->prepare($sql);
       $stmt->bindValue(':platformSubscriptionID', $platformSubscriptionID, PDO::PARAM_STR);
-      if ($newPlanID !== false) {
+      if ($newPlanID !== false && $newPlanID !== null) {
         $stmt->bindValue(':newPlanID', $newPlanID, PDO::PARAM_INT);
       }
       $stmt->execute();
@@ -486,7 +493,7 @@ class Subscription {
   */
   public function cancelSubscriptionChange($platformSubscriptionID) {
     try {
-      $sql = "UPDATE SubscriptionChanges SET Status = 'CANCELLED'
+      $sql = "UPDATE SubscriptionChanges SET Status = 'CANCELLED', AppliedAt = NOW()
         WHERE PlatformSubscriptionID = :platformSubscriptionID AND Status = 'PENDING'";
 
       $stmt = $this->db->prepare($sql);
@@ -505,8 +512,9 @@ class Subscription {
   */
   public function getPendingCancel($platformSubscriptionID) {
     try {
-      $sql = "SELECT * FROM Subscriptions
-        WHERE PlatformSubscriptionID = :platformSubscriptionID AND CancelAtPeriodEnd = 1";
+      $sql = "SELECT * FROM SubscriptionChanges
+        WHERE PlatformSubscriptionID = :platformSubscriptionID 
+        AND NewPlanID IS NULL AND Status = 'PENDING'";
       $stmt = $this->db->prepare($sql);
       $stmt->bindValue(':platformSubscriptionID', $platformSubscriptionID, PDO::PARAM_STR);
       $stmt->execute();
@@ -524,8 +532,7 @@ class Subscription {
   * @return void
   * @throws DatabaseException
   */
-  public function scheduleCancelSubscription($platformSubscriptionID, $cancelAt = false) {
-    sleep(5); // Para que el webhook no escriba - (PATCH)
+  public function resumeSubscription($platformSubscriptionID, $cancelAt = false) {
     try {
       $sql = "UPDATE Subscriptions SET CancelAtPeriodEnd = :cancel, CancelAt = :cancelAt
         WHERE PlatformSubscriptionID = :platformSubscriptionID";
@@ -538,7 +545,6 @@ class Subscription {
       throw new DatabaseException($e->getMessage());
     }
   }
-
 
   /**
   * Aplica un cambio programado y actualiza la suscripción.
@@ -619,22 +625,28 @@ class Subscription {
         ':platformSubscriptionID' => $platformSubscriptionID
       ]);
 
+      $affected = $stmt->rowCount();
+
       // registrar en historico como APPLIED
       $stmtHist = $this->db->prepare(
         "INSERT INTO SubscriptionChanges
         (PlatformSubscriptionID, UserID, OldPlanID, NewPlanID, EffectiveDate, Status, CreatedAt, AppliedAt)
-        VALUES (:platformSubscriptionID, :userID, :oldPlanID, :newPlanID, :effectivDate, 'APPLIED', NOW(), NOW())"
+        VALUES (:platformSubscriptionID, :userID, :oldPlanID, :newPlanID, NOW(), 'APPLIED', NOW(), NOW())"
       );
 
       $stmtHist->execute([
         ':platformSubscriptionID' => $platformSubscriptionID,
         ':userID' => $current['UserID'] ?? null,
         ':oldPlanID' => $oldPlanID,
-        ':newPlanID' => $newPlanID,
-        ':effectiveDate' => $nextBillingDate
+        ':newPlanID' => $newPlanID
       ]);
 
       $this->db->commit();
+
+      if ($affected === 0) {
+        error_log("Warning: updateSubscriptionByUser no afectó filas para PlatformSubscriptionID={$platformSubscriptionID}. 
+        Estado actual DB: " . json_encode($current));
+      }
 
       $subscription = $this->getUserSubscriptionByPlatformSubID($platformSubscriptionID);
       return ['Subscription' => $subscription];
@@ -764,13 +776,25 @@ class Subscription {
   * @return bool
   * @throws DatabaseException
   */
-  public function cancelSubscription($platformSubscriptionID) {
+  public function cancelSubscription($platformSubscriptionID, $endDate) {
     try {
+      // Cancelar la suscripción
       $stmt = $this->db->prepare("UPDATE Subscriptions
-                                  SET Status = 'CANCELED', EndDate = NOW()
+                                  SET Status = 'CANCELED', EndDate = :endDate, NextBillingDate = NULL
                                   WHERE PlatformSubscriptionID = :platformSubscriptionID
                                   AND Status IN ('ACTIVE','TRIALING')");
-      $stmt->execute(['platformSubscriptionID' => $platformSubscriptionID]);
+      $stmt->bindValue(':platformSubscriptionID', $platformSubscriptionID, PDO::PARAM_STR);
+      $stmt->bindValue(':endDate', $endDate, PDO::PARAM_STR);
+      $stmt->execute();
+
+      // Marcar cambios pendientes como aplicados
+      $sql = "UPDATE SubscriptionChanges
+              SET Status = 'APPLIED', AppliedAt = NOW()
+              WHERE PlatformSubscriptionID = :platformSubscriptionID
+              AND Status = 'PENDING'";
+      $stmt2 = $this->db->prepare($sql);
+      $stmt2->bindValue(':platformSubscriptionID', $platformSubscriptionID, PDO::PARAM_STR);
+      $stmt2->execute();
 
       return true;
     } catch (\PDOException $e) {

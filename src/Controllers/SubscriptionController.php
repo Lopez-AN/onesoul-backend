@@ -255,6 +255,17 @@ class SubscriptionController {
         ]);
       }
 
+      $subscription = $this->subscription->getSubscriptionByUser($userID);
+
+      if ($subscription) {
+        return $response->withStatus(400)->withJson((object)[
+          "error" => [
+            "code" => "SUBSCRIPTION_ALREADY_EXISTS",
+            "desc" => "User {$userID} already has an active or trialing subscription."
+          ]
+        ]);
+      }
+
       // Crear sesión de checkout
       $stripePriceId = $plan['StripeID'];
       $userEmail = $userResult->data['Email'];
