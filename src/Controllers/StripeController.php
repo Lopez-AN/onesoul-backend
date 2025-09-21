@@ -711,19 +711,15 @@ class StripeController{
 
       // Traer la suscripción actual
       $sub = \Stripe\Subscription::retrieve($platformSubscriptionID);
-
-      if (!empty($sub->schedule)) {
-        // La suscripción está controlada por un Schedule
-        \Stripe\SubscriptionSchedule::update(
-          $sub->schedule,
-          ['end_behavior' => 'cancel']
-        );
-      } else {
-        // Cancelación directa sobre la suscripción
-        $canceled = \Stripe\Subscription::update($platformSubscriptionID, [
-          'cancel_at_period_end' => true,
-        ]);
+      if($sub->schedule){
+        $schedule = \Stripe\SubscriptionSchedule::retrieve($sub->schedule);
+        $schedule->release();
       }
+
+      // Cancelación directa sobre la suscripción
+      $canceled = \Stripe\Subscription::update($platformSubscriptionID, [
+        'cancel_at_period_end' => true,
+      ]);
 
       // Refrescar la suscripción para obtener los datos actualizados
       $sub = \Stripe\Subscription::retrieve($platformSubscriptionID);
