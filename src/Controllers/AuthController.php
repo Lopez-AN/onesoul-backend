@@ -656,7 +656,7 @@ class AuthController{
     $referralCode = $data['ReferralCode'] ?? null;
     $receiveNewsletters = $data['ReceiveNewsletters'] ?? null;
 
-    if(empty($user_id) || empty($token) || empty($username) || empty($recaptchaToken) || empty($receiveNewsletters)){
+    if(empty($user_id) || empty($token) || empty($username) || empty($recaptchaToken) || !isset($receiveNewsletters)){
       return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "INVALID_PARAMETERS",
