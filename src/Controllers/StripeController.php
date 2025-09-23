@@ -469,20 +469,11 @@ class StripeController{
           'proration_behavior' => 'none'
         ]);
 
-        // Reflejar en BD como cambio aplicado inmediatamente
-        $res = $this->subscription->updateSubscriptionByUser(
-          $platformSubscriptionID,
-          $newPlanId,
-          date("Y-m-d H:i:s", $updated->current_period_end),
-          true // applyNow
-        );
-
         return $response->withJson([
           'Status' => 'applied',
           'SubscriptionId' => $updated->id,
           'NewPrice' => $newPriceId,
-          'AppliedAt' => date("Y-m-d H:i:s"),
-          'Result' => $res
+          'AppliedAt' => date("Y-m-d H:i:s")
         ]);
       }
 
@@ -620,11 +611,8 @@ class StripeController{
         $schedule->release();
       }
 
-      // Quitar el pending el la base
-      $this->subscription->cancelSubscriptionChange($platformSubscriptionID);
-
       return $response->withJson([
-        'Status' => 'downgrade_cancelled'
+        'Status' => 'downgrade_cancel_requested'
       ]);
 
     } catch (\Stripe\Exception\ApiErrorException $e) {
@@ -1219,9 +1207,14 @@ class StripeController{
           if ($sub->canceled_at) {
             $this->subscription->markCancelAtPeriodEnd(
               $platformSubscriptionID,
-              date("Y-m-d H:i:s", $sub->canceled_at),
               $nextBillingDate
             );
+          }
+
+          if (isset($event->data->previous_attributes->schedule)) {
+            // cancelar el pending en la BD
+            $this->subscription->cancelSubscriptionChange($platformSubscriptionID);
+            error_log("Downgrade pendiente cancelado en BD (prevAttributes->schedule detectado)");
           }
 
           try {
@@ -1248,7 +1241,7 @@ class StripeController{
             // Obtener planInfo por newPriceId (si existe)
             $planInfo = $newPriceId ? $this->subscription->getSubscriptionPlanByStripeID($newPriceId) : null;
 
-            // Caso: detectamos realmente un cambio de price (usando prevPriceId si está, sino comparando con BD)
+            // Detectamos realmente un cambio de price (usando prevPriceId si está, sino comparando con BD)
             $isDifferent = false;
             if ($prevPriceId !== null) {
               $isDifferent = ($prevPriceId != $newPriceId);
@@ -1274,13 +1267,20 @@ class StripeController{
               $pending = $this->subscription->getPendingChange($platformSubscriptionID, $planInfo['PlanID']);
 
               if ($pending) {
-                // aplicar downgrade al llegar el final del ciclo o dependiendo del estado
-                if (($sub->status === 'active') && $sub->cancel_at_period_end === false) {
-                  error_log("Ignorado update intermedio de Stripe (cambio programado aún no aplicado)");
-                } else {
+                // Si Stripe ya cambió el price.id, significa que el downgrade programado ya se ejecutó
+                if ($planInfo && $planInfo['PlanID'] == $pending['NewPlanID']) {
                   $this->subscription->applyScheduledChange($pending['id'], $nextBillingDate);
-                  error_log("Cambio pendiente aplicado en BD: changeId {$pending['id']}");
+                  error_log("Cambio pendiente aplicado en BD: changeId {$pending['id']} -> nuevo PlanID {$planInfo['PlanID']}");
+                } else {
+                  error_log("Stripe aún no aplicó el cambio pendiente, seguimos esperando");
                 }
+                // // aplicar downgrade al llegar el final del ciclo o dependiendo del estado
+                // if (($sub->status === 'active') && $sub->cancel_at_period_end === false) {
+                //   error_log("Ignorado update intermedio de Stripe (cambio programado aún no aplicado)");
+                // } else {
+                //   $this->subscription->applyScheduledChange($pending['id'], $nextBillingDate);
+                //   error_log("Cambio pendiente aplicado en BD: changeId {$pending['id']}");
+                // }
               } else {
                 // upgrade → aplicar directamente
                 $res = $this->subscription->updateSubscriptionByUser(
@@ -1302,8 +1302,8 @@ class StripeController{
         break;
 
         case 'customer.subscription.deleted':
-          $subscription = $event->data->object;
-          $platformSubscriptionID = $subscription->id;
+          $sub = $event->data->object;
+          $platformSubscriptionID = $sub->id;
           $endDate = isset($sub->items->data[0]->current_period_end) ? date("Y-m-d H:i:s", $sub->items->data[0]->current_period_end) : null;
 
           error_log("Subscription eliminada en Stripe: " . $platformSubscriptionID);
@@ -1311,21 +1311,25 @@ class StripeController{
           try {
             $this->subscription->cancelSubscription($platformSubscriptionID, $endDate);
             error_log("Subscription cancelada en base de datos.");
+
+            $this->subscription->cancelSubscriptionChange($platformSubscriptionID);
+            error_log("Downgrade pendiente cancelado.");
           } catch (\Throwable $e) {
             error_log("Error al cancelar suscripción: " . $e->getMessage());
-            return $response->withStatus(500);
+            // Responder 200 para no re-intentar infinitamente; Stripe retryará si retornamos 500.
+            return $response->withStatus(200);
           }
         break;
 
         case 'customer.subscription.trial_will_end':
-          $subscription = $event->data->object;
-          $platformSubscriptionID = $subscription->id;
-          $trialEnd = !empty($subscription->trial_end)
-                    ? date('Y-m-d H:i:s', $subscription->trial_end)
+          $sub = $event->data->object;
+          $platformSubscriptionID = $sub->id;
+          $trialEnd = !empty($sub->trial_end)
+                    ? date('Y-m-d H:i:s', $sub->trial_end)
                     : null;
 
-          $trialStart = !empty($subscription->trial_start)
-                    ? date('Y-m-d H:i:s', $subscription->trial_start)
+          $trialStart = !empty($sub->trial_start)
+                    ? date('Y-m-d H:i:s', $sub->trial_start)
                     : null;
 
           $this->subscription->handleTrialWillEnd($platformSubscriptionID, $trialEnd, $trialStart);

@@ -748,19 +748,17 @@ class Subscription {
   /**
   * Marca cancel_at_period_end y fecha de cancelación.
   * @param string $platformSubscriptionID
-  * @param string $canceledAt
   * @param string $nextBillingDate
   * @return bool
   * @throws DatabaseException
   */
-  public function markCancelAtPeriodEnd($platformSubscriptionID, $canceledAt, $nextBillingDate) {
+  public function markCancelAtPeriodEnd($platformSubscriptionID, $nextBillingDate) {
     try {
       $stmt = $this->db->prepare("UPDATE Subscriptions
-                                  SET CancelAtPeriodEnd = 1, CancelAt = :canceledAt, NextBillingDate = :nextBillingDate
+                                  SET CancelAtPeriodEnd = 1, CancelAt = NOW(), NextBillingDate = :nextBillingDate
                                   WHERE PlatformSubscriptionID = :platformSubscriptionID AND
                                   Status IN ('ACTIVE','TRIALING')");
       $stmt->execute([
-        'canceledAt' => $canceledAt,
         'nextBillingDate' => $nextBillingDate,
         'platformSubscriptionID' => $platformSubscriptionID
       ]);
