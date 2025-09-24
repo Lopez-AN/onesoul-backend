@@ -16,7 +16,7 @@ class Notification
   }
 
   public function createNotification($recipientUserID, $eventCode, $payload, $idempotencyKey = null) {
-    // 1. Obtener EventTypeID y prioridad
+    // Obtener EventTypeID y prioridad
     $sql = "SELECT ID, DefaultPriority FROM NotificationsEventType WHERE Code = ?";
     $stmt = $this->db->prepare($sql);
     $stmt->execute([$eventCode]);
@@ -26,7 +26,7 @@ class Notification
       throw new Exception("EventCode inválido: $eventCode");
     }
 
-    // 2. Insertar en Notifications
+    // Insertar en Notifications
     $sql = "INSERT INTO Notifications (EventTypeID, RecipientUserID, Payload, IdempotencyKey) 
             VALUES (?, ?, ?, ?)";
     $stmt = $this->db->prepare($sql);
@@ -38,7 +38,7 @@ class Notification
     ]);
     $notificationID = $this->db->lastInsertId();
 
-    // 3. Obtener preferencias del usuario
+    // Obtener preferencias del usuario
     $sql = "SELECT * FROM UsersNotifications WHERE UserID = ?";
     $stmt = $this->db->prepare($sql);
     $stmt->execute([$recipientUserID]);
@@ -56,7 +56,7 @@ class Notification
       ];
     }
 
-    // 4. Canales configurados para el evento
+    // Canales configurados para el evento
     $sql = "SELECT Channel FROM NotificationsEventChannel 
             WHERE EventTypeID = ? AND Enabled = 1 ORDER BY SendOrder ASC";
     $stmt = $this->db->prepare($sql);
