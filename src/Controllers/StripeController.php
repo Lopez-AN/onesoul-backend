@@ -327,6 +327,7 @@ class StripeController{
 
       $sub = \Stripe\Subscription::retrieve($platformSubscriptionID);
       $itemId = $sub->items->data[0]->id;
+      $currentPeriodEnd = $sub->items->data[0]->current_period_end;
 
       $updated = \Stripe\Subscription::update($platformSubscriptionID, [
         'items' => [[ 'id' => $itemId, 'price' => $newPriceId ]],
@@ -365,6 +366,13 @@ class StripeController{
           'InvoiceId'       => $invoice->id
         ]);
       }
+      
+      // Agregar un cambio WAITING en BD
+      $changeId = $this->subscription->waitingSubscriptionChange(
+        $platformSubscriptionID,
+        $newPlanID,
+        $currentPeriodEnd
+      );
 
       // Fallback: pendiente (stripe tratara de cobrar)
       return $response->withJson([
@@ -373,6 +381,7 @@ class StripeController{
         'SubscriptionId'  => $updated->id,
         'InvoiceId'       => $invoice ? $invoice->id : null
       ]);
+
     } catch (\Stripe\Exception\ApiErrorException $e) {
       return $response->withStatus(400)->withJson([
         "error" => [
@@ -1274,13 +1283,6 @@ class StripeController{
                 } else {
                   error_log("Stripe aún no aplicó el cambio pendiente, seguimos esperando");
                 }
-                // // aplicar downgrade al llegar el final del ciclo o dependiendo del estado
-                // if (($sub->status === 'active') && $sub->cancel_at_period_end === false) {
-                //   error_log("Ignorado update intermedio de Stripe (cambio programado aún no aplicado)");
-                // } else {
-                //   $this->subscription->applyScheduledChange($pending['id'], $nextBillingDate);
-                //   error_log("Cambio pendiente aplicado en BD: changeId {$pending['id']}");
-                // }
               } else {
                 // upgrade → aplicar directamente
                 $res = $this->subscription->updateSubscriptionByUser(
