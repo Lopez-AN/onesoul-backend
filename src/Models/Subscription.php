@@ -474,8 +474,7 @@ class Subscription {
       $sql = "SELECT * FROM SubscriptionChanges WHERE PlatformSubscriptionID = :platformSubscriptionID AND Status = 'PENDING'";
 
       if ($newPlanID !== null) {
-          $sql .= " AND NewPlanID = :newPlanID ";
-        }
+        $sql .= " AND NewPlanID = :newPlanID ";
       }
 
       $sql .= " ORDER BY CreatedAt DESC LIMIT 1";
