@@ -620,6 +620,9 @@ class StripeController{
         $schedule->release();
       }
 
+      // Quitar el pending el la base
+      $this->subscription->cancelSubscriptionChange($platformSubscriptionID);
+
       return $response->withJson([
         'Status' => 'downgrade_cancel_requested'
       ]);
