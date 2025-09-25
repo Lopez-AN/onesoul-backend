@@ -1210,6 +1210,7 @@ class StripeController{
           $platformSubscriptionID = $sub->id;
           $newPriceId = $sub->items->data[0]->price->id ?? null;
           $nextBillingDate = isset($sub->items->data[0]->current_period_end) ? date("Y-m-d H:i:s", $sub->items->data[0]->current_period_end) : null;
+          $skipHistory = false;
 
           error_log("Subscription actualizada en Stripe: $platformSubscriptionID con nuevo PriceID: $newPriceId");
 
@@ -1224,6 +1225,16 @@ class StripeController{
             // cancelar el pending en la BD
             $this->subscription->cancelSubscriptionChange($platformSubscriptionID);
             error_log("Downgrade pendiente cancelado en BD (prevAttributes->schedule detectado)");
+          }
+
+          // Aplicar WAITING cuando Stripe confirma pending_update
+          if (isset($event->data->previous_attributes->pending_update)) {
+            $waiting = $this->subscription->getWaitingChange($platformSubscriptionID);
+            if ($waiting) {
+              $this->subscription->applyScheduledChange($waiting['id'], $nextBillingDate);
+              $skipHistory = true;
+              error_log("Cambio pendiente aplicado en BD desde pending_update: changeId {$waiting['id']} → nuevo PlanID {$waiting['NewPlanID']}");
+            }
           }
 
           try {
@@ -1289,7 +1300,8 @@ class StripeController{
                   $platformSubscriptionID,
                   $planInfo['PlanID'],
                   $nextBillingDate,
-                  true // applyNow
+                  true, // applyNow
+                  $skipHistory
                 );
                 error_log("Plan actualizado en BD (upgrade) a PlanID: " . $planInfo['PlanID'] . " - resultado: " . json_encode($res));
               }

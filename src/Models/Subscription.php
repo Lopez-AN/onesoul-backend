@@ -518,18 +518,12 @@ class Subscription
     }
   }
 
-  public function updateSubscriptionByUser($platformSubscriptionID, $newPlanID, $nextBillingDate = null, $applyNow = true) {
+  public function updateSubscriptionByUser($platformSubscriptionID, $newPlanID, $nextBillingDate = null, $applyNow = true, $skipHistory = false) {
     try {
       if (!$applyNow) {
-        $waiting = $this->getWaitingChange($platformSubscriptionID);
-        if (!$waiting) {
-          // aplicar el WAITING cuando llega el webhook de pago exitoso
-          return $this->applyScheduledChange($waiting['id'], NOW());
-        } else {
           // crear registro pendiente
           return $this->scheduleSubscriptionChange($platformSubscriptionID, $newPlanID, $nextBillingDate);
         }
-      }
 
       // aplicar ahora (comportamiento previo) + registrar en SubscriptionChanges como APPLIED
       $this->db->beginTransaction();
@@ -551,20 +545,21 @@ class Subscription
         ':platformSubscriptionID' => $platformSubscriptionID
       ]);
 
-      // registrar en historico como APPLIED
-      $stmtHist = $this->db->prepare(
-        "INSERT INTO SubscriptionChanges
-        (PlatformSubscriptionID, UserID, OldPlanID, NewPlanID, EffectiveDate, Status, CreatedAt, AppliedAt)
-        VALUES (:platformSubscriptionID, :userID, :oldPlanID, :newPlanID, :effectiveDate, 'APPLIED', NOW(), NOW())"
-      );
-
-      $stmtHist->execute([
-        ':platformSubscriptionID' => $platformSubscriptionID,
-        ':userID' => $current['UserID'] ?? null,
-        ':oldPlanID' => $oldPlanID,
-        ':newPlanID' => $newPlanID,
-        ':effectiveDate' => $nextBillingDate
-      ]);
+      if (!$skipHistory) {
+        // registrar en historico como APPLIED
+        $stmtHist = $this->db->prepare("INSERT INTO SubscriptionChanges
+              (PlatformSubscriptionID, UserID, OldPlanID, NewPlanID, EffectiveDate, Status, CreatedAt, AppliedAt)
+              VALUES (:platformSubscriptionID, :userID, :oldPlanID, :newPlanID, :effectiveDate, 'APPLIED', NOW(), NOW())"
+        );
+        
+        $stmtHist->execute([
+          ':platformSubscriptionID' => $platformSubscriptionID,
+          ':userID' => $current['UserID'] ?? null,
+          ':oldPlanID' => $oldPlanID,
+          ':newPlanID' => $newPlanID,
+          ':effectiveDate' => $nextBillingDate
+        ]);
+      }
 
       $this->db->commit();
 
