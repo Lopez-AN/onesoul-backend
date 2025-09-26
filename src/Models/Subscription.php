@@ -272,17 +272,31 @@ class Subscription {
         return null;
       }
 
+      // Upgrade pendiente (por alguna demora en pago por ejemplo)
       $stmt1 = $this->db->prepare("SELECT NewPlanID
                                   FROM SubscriptionChanges
                                   WHERE UserID = :userID
                                   AND Status = 'WAITING'
                                   ORDER BY CreatedAt DESC
                                   LIMIT 1");
-                                  
+
       $stmt1->bindParam(':userID', $userID, PDO::PARAM_INT);
       $stmt1->execute();
       $newPlanID = $stmt1->fetchColumn();
-      $subscription['PendingUpdate'] = $newPlanID ?: null;
+      $subscription['PendingUpgrade'] = $newPlanID ?: null;
+
+      // Downgrade pendiente (aun no llego la fecha)
+      $stmt2 = $this->db->prepare("SELECT NewPlanID
+                                  FROM SubscriptionChanges
+                                  WHERE UserID = :userID
+                                  AND Status = 'PENDING'
+                                  ORDER BY CreatedAt DESC
+                                  LIMIT 1");
+
+      $stmt2->bindParam(':userID', $userID, PDO::PARAM_INT);
+      $stmt2->execute();
+      $newPlanID = $stmt2->fetchColumn();
+      $subscription['PendingDowngrade'] = $newPlanID ?: null;
 
       // Se obtiene los detalles del Plan del usuario
       $id = $subscription['PlanID'];
@@ -491,11 +505,11 @@ class Subscription {
       throw new DatabaseException($e->getMessage());
     }
   }
-  
+
   // Crea un cambio pendiente de pago
   public function waitingSubscriptionChange($platformSubscriptionID, $newPlanID, $effectiveDate = null) {
     $effectiveDate = $effectiveDate ? date("Y-m-d H:i:s", $effectiveDate) : null;
-    
+
     try {
       $sub = $this->getUserSubscriptionByPlatformSubID($platformSubscriptionID);
       if (!$sub) {
@@ -524,7 +538,7 @@ class Subscription {
 
   public function getWaitingChange($platformSubscriptionID) {
     try {
-      $sql = "SELECT * FROM SubscriptionChanges 
+      $sql = "SELECT * FROM SubscriptionChanges
               WHERE PlatformSubscriptionID = :platformSubscriptionID AND Status = 'WAITING'
               ORDER BY CreatedAt DESC LIMIT 1";
 
@@ -537,7 +551,7 @@ class Subscription {
       throw new DatabaseException($e->getMessage());
     }
   }
-  
+
   /**
   * Cancela cambios pendientes.
   * @param string $platformSubscriptionID
@@ -566,7 +580,7 @@ class Subscription {
   public function getPendingCancel($platformSubscriptionID) {
     try {
       $sql = "SELECT * FROM SubscriptionChanges
-        WHERE PlatformSubscriptionID = :platformSubscriptionID 
+        WHERE PlatformSubscriptionID = :platformSubscriptionID
         AND NewPlanID IS NULL AND Status = 'PENDING'";
       $stmt = $this->db->prepare($sql);
       $stmt->bindValue(':platformSubscriptionID', $platformSubscriptionID, PDO::PARAM_STR);
@@ -686,7 +700,7 @@ class Subscription {
               (PlatformSubscriptionID, UserID, OldPlanID, NewPlanID, EffectiveDate, Status, CreatedAt, AppliedAt)
               VALUES (:platformSubscriptionID, :userID, :oldPlanID, :newPlanID, :effectiveDate, 'APPLIED', NOW(), NOW())"
         );
-        
+
         $stmtHist->execute([
           ':platformSubscriptionID' => $platformSubscriptionID,
           ':userID' => $current['UserID'] ?? null,
@@ -699,7 +713,7 @@ class Subscription {
       $this->db->commit();
 
       if ($affected === 0) {
-        error_log("Warning: updateSubscriptionByUser no afectó filas para PlatformSubscriptionID={$platformSubscriptionID}. 
+        error_log("Warning: updateSubscriptionByUser no afectó filas para PlatformSubscriptionID={$platformSubscriptionID}.
         Estado actual DB: " . json_encode($current));
       }
 

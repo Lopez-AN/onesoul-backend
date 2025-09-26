@@ -62,11 +62,11 @@ class StripeController{
 
     // Validar formato de subdominio (solo letras A-Z, a-z)
     if (!empty($subDomain)) {
-      if (!preg_match('/^[a-zA-Z]+$/', $subDomain)) {
+      if (!preg_match('/^(([a-zA-Z]+)|(localhost:\d+))$/', $subDomain)) {
         return $response->withStatus(400)->withJson([
           "error" => [
             "code" => "INVALID_SUBDOMAIN",
-            "desc" => "Subdomain must contain only letters A-Z"
+            "desc" => "Subdomain must contain only letters A-Z or localhost:port"
           ]
         ]);
       }
@@ -532,6 +532,7 @@ class StripeController{
         'SubscriptionId' => $schedule->subscription,
         'CurrentPeriodEnd' => date("Y-m-d H:i:s", $currentPeriodEnd),
         'NewPrice' => $newPriceId,
+        'NewPlanId' => $newPlanId,
         'ScheduleId' => $schedule->id
       ]);
 
@@ -598,18 +599,6 @@ class StripeController{
           ]
         ]);
       }
-
-      $currentPlanId = $subscription['PlanID'] ?? null;
-      $currentPlan = $this->subscription->getSubscriptionPlanByID($currentPlanId);
-      if (!$currentPlan || empty($currentPlan['StripeID'])) {
-        return $response->withStatus(400)->withJson([
-          "error" => [
-            "code" => "STRIPE_PLAN_MISSING",
-            "desc" => "Stripe ID not configured for the current plan"
-          ]
-        ]);
-      }
-      $currentPriceId = $currentPlan['StripeID'];
 
       \Stripe\Stripe::setApiKey($GLOBALS['config']['stripe']['STRIPE_SECRET_KEY']);
 
@@ -911,18 +900,29 @@ class StripeController{
   public function createBillingPortalSession(Request $request, Response $response, array $args) {
     $jwt = $request->getAttribute('jwt');
     $data = $request->getParsedBody();
+    $returnPath = $data['ReturnPath'] ?? '';
     $subDomain = $data['SubDomain'] ?? '';
 
     // Validar formato de subdominio (solo letras A-Z, a-z)
     if (!empty($subDomain)) {
-      if (!preg_match('/^[a-zA-Z]+$/', $subDomain)) {
+      if (!preg_match('/^(([a-zA-Z]+)|(localhost:\d+))$/', $subDomain)) {
         return $response->withStatus(400)->withJson([
           "error" => [
             "code" => "INVALID_SUBDOMAIN",
-            "desc" => "Subdomain must contain only letters A-Z"
+            "desc" => "Subdomain must contain only letters A-Z or localhost:port"
           ]
         ]);
       }
+    }
+
+    // Validación
+    if (empty($returnPath)) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_PARAMETERS",
+          "desc" => "Missing or invalid parameters"
+        ]
+      ]);
     }
 
     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
@@ -949,7 +949,7 @@ class StripeController{
     }
 
     try {
-      $session = $this->stripe->createBillingPortalSession($platformCustomerID, $subDomain);
+      $session = $this->stripe->createBillingPortalSession($platformCustomerID, $subDomain, $returnPath);
 
       return $response->withJson([
         "success" => true,

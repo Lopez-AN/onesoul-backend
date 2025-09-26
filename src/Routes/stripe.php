@@ -25,7 +25,7 @@ return function (App $app) {
   $app->post('/subscription/stripe/upgrade/info', [$stripeController, 'upgradeInfo'])->add($jwtMiddleware);
   $app->post('/subscription/stripe/upgrade/apply', [$stripeController, 'upgradeApply'])->add($jwtMiddleware);
   $app->post('/subscription/stripe/downgrade/apply', [$stripeController, 'downgradeApply'])->add($jwtMiddleware);
-  $app->post('/subscription/stripe/downgrade/cancel', [$stripeController, 'downgradeCancel'])->add($jwtMiddleware);
+  $app->get('/subscription/stripe/downgrade/cancel', [$stripeController, 'downgradeCancel'])->add($jwtMiddleware);
   $app->delete('/subscription/stripe/cancel', [$stripeController, 'cancelSubscription'])->add($jwtMiddleware);
   $app->get('/subscription/stripe/resume', [$stripeController, 'resumeSubscription'])->add($jwtMiddleware);
   $app->get('/subscription/stripe/users/payment-method', [$stripeController, 'getUserPaymentMethod'])->add($jwtMiddleware);

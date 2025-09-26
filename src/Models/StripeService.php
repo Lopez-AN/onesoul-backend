@@ -22,7 +22,8 @@ class StripeService
       \Stripe\Stripe::setApiKey($GLOBALS['config']['stripe']['STRIPE_SECRET_KEY']);
 
       $hasTrial = ($trialDays !== null && (int)$trialDays > 0);
-      $origin = $subDomain ? "https://{$subDomain}.onesoul.app" : "https://onesoul.app";
+      $origin = !$subDomain ? "https://onesoul.app" :
+        (str_starts_with($subDomain, 'localhost') ? "https://$subDomain" : "https://{$subDomain}.onesoul.app");
 
       // Crear un Customer con nombre y domicilio (prefil)
       $customerParams = [
@@ -234,17 +235,19 @@ class StripeService
     ];
   }
 
-  public function createBillingPortalSession($platformCustomerID, $subDomain) {
+  public function createBillingPortalSession($platformCustomerID, $subDomain, $returnPath) {
     if (empty($platformCustomerID)) {
       throw new Exception("User has no Stripe customer ID");
     }
 
-    $origin = $subDomain ? "https://{$subDomain}.onesoul.app" : "https://onesoul.app";
+    $origin = !$subDomain ? "https://onesoul.app" :
+      (str_starts_with($subDomain, 'localhost') ? "https://$subDomain" : "https://{$subDomain}.onesoul.app");
+
     \Stripe\Stripe::setApiKey($GLOBALS['config']['stripe']['STRIPE_SECRET_KEY']);
 
     $session = \Stripe\BillingPortal\Session::create([
       'customer' => $platformCustomerID,
-      'return_url' => $origin . "/profile/subscription/payment-method/updated",
+      'return_url' => $origin . $returnPath,
     ]);
 
     return [
