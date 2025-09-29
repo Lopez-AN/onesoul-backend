@@ -5,6 +5,7 @@ use App\Controllers\BookingController;
 use App\Models\Booking;
 use App\Models\Offering;
 use App\Models\User;
+use App\Models\Notification;
 use Tuupola\Middleware\JwtAuthentication;
 
 return function (App $app) {
@@ -17,7 +18,8 @@ return function (App $app) {
   $booking = new Booking($pdo);
   $offering = new Offering($pdo);
   $user = new User($pdo);
-  $bookingController = new BookingController($booking, $offering, $user);
+  $notification = new Notification($pdo);
+  $bookingController = new BookingController($booking, $offering, $user, $notification);
 
   // Bookings protegidos
   $app->get('/bookings/{bookingID}', [$bookingController, 'getBookingByID'])->add($jwtMiddleware);

@@ -6,6 +6,7 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use App\Models\Booking;
 use App\Models\Offering;
+use App\Models\Notification;
 use App\Models\User;
 use App\Utils\EmailHelper;
 use \DateTime;
@@ -22,12 +23,14 @@ class BookingController
   protected $booking;
   protected $offering;
   protected $user;
+  protected $notification;
 
-  public function __construct(Booking $booking, Offering $offering, User $user)
+  public function __construct(Booking $booking, Offering $offering, User $user, Notification $notification)
   {
     $this->booking = $booking;
     $this->offering = $offering;
     $this->user = $user;
+    $this->notification = $notification;
   }
 
   public function getBookingByID(Request $request, Response $response, $args)
@@ -501,63 +504,57 @@ class BookingController
       if ($userInfo->http_code === 200) {
         $username = $userInfo->data['UserName'] ?? 'Usuario';
         $userEmail = $userInfo->data['Email'] ?? null;
-
-        // Enviar email al buscador
-        EmailHelper::send(
-          $username,
-          $userEmail,
-          "Solicitud de reserva creada en OneSoul",
-          ROOT . "/src/templates/email_booking.html",
-          [
-            '{YEAR}' => date('Y'),
-            '{USERNAME}' => $username,
-            '{OFFERING}' => $offering['Title'],
-            '{GUIDE_NAME}' => $guide,
-            '{GUIDE_EMAIL}' => $guideEmail,
-            '{GUIDE_PHONE}' => $guidePhone,
-            '{BOOKING_ID}' => $booking['PublicID'],
-            '{MESSAGE}' => $message,
-            '{SCHEDULED}' => date('d/m/Y H:i', strtotime($booking['ScheduledDate'])),
-            '{MODE}' => $booking['Mode'] === 'in-person' ? 'Presencial' : 'Virtual',
-            '{PRICE}' => $offering['Currency'] . ' ' . $price,
-            '{CONDITIONS}' => $conditions,
-            '{BOOKING_URL}' => "{$origin}/bookings/seeker",
-          ]
-        );
-      }
-
-      // Enviar email al guía
-      if ($result->http_code === 200) {
-        $offeringName = $offering['Title'] ?? 'Servicio';
         $searcherName = $userInfo->data['FirstName'] . ' ' . $userInfo->data['LastName'];
+        $searcherPhone = $userInfo->data['Phone'] ?? '-';
 
-        if ($guideID) {
-          if ($guideInfo->http_code === 200) {
-            $guideName = $guideInfo->data['UserName'] ?? 'Guía';
-            if ($guideEmail) {
-              EmailHelper::send(
-                $guideName,
-                $guideEmail,
-                "Recibiste una solicitud de reserva de {$username}",
-                ROOT . "/src/templates/email_booking_guide.html",
-                [
-                  '{YEAR}' => date('Y'),
-                  '{GUIDE_NAME}' => $guideName,
-                  '{BOOKING_ID}' => $booking['PublicID'],
-                  '{SERVICE_NAME}' => $offeringName,
-                  '{SEARCHER_NAME}' => $searcherName,
-                  '{SEARCHER_EMAIL}' => $userEmail,
-                  '{MESSAGE}' => $message,
-                  '{SEARCHER_PHONE}' => $userInfo->data['Phone'] ?? '-',
-                  '{SCHEDULED}' => date('d/m/Y H:i', strtotime($booking['ScheduledDate'])),
-                  '{MODE}' => $booking['Mode'] === 'in-person' ? 'Presencial' : 'Virtual',
-                  '{PRICE}' => $offering['Currency'] . ' ' . $price,
-                  '{BOOKING_URL}' => "{$origin}/bookings/guide"
-                ]
-              );
-            }
-          }
+        // Notificación para el guía
+        if ($guideID && $guideInfo->http_code === 200) {
+          $payloadGuide = [
+            "YEAR"          => date('Y'),
+            "GUIDE_NAME"    => $guideInfo->data['UserName'] ?? 'Guía',
+            "BOOKING_ID"    => $booking['PublicID'],
+            "SERVICE_NAME"  => $offering['Title'] ?? 'Servicio',
+            "SEARCHER_NAME" => $searcherName,
+            "SEARCHER_EMAIL"=> $userEmail,
+            "SEARCHER_PHONE"=> $searcherPhone,
+            "MESSAGE"       => $message,
+            "SCHEDULED"     => date('d/m/Y H:i', strtotime($booking['ScheduledDate'])),
+            "MODE"          => $booking['Mode'] === 'in-person' ? 'Presencial' : 'Virtual',
+            "PRICE"         => $offering['Currency'] . ' ' . $price,
+            "BOOKING_URL"   => "{$origin}/bookings/guide"
+          ];
+
+          $this->notification->createNotification(
+            $guideID,
+            "BOOKING.CREATED_FOR_GUIDE",
+            $payloadGuide,
+            "BOOKING." . $booking['BookingID'] . ".PENDING.GUIDE"
+          );
         }
+
+        // Notificación para el usuario que hizo la reserva
+        $payloadUser = [
+          "YEAR"        => date('Y'),
+          "USERNAME"    => $username,
+          "OFFERING"    => $offering['Title'] ?? 'Servicio',
+          "GUIDE_NAME"  => $guide,
+          "GUIDE_EMAIL" => $guideEmail,
+          "GUIDE_PHONE" => $guidePhone,
+          "SCHEDULED"   => date('d/m/Y H:i', strtotime($booking['ScheduledDate'])),
+          "MODE"        => $booking['Mode'] === 'in-person' ? 'Presencial' : 'Virtual',
+          "PRICE"       => $offering['Currency'] . ' ' . $price,
+          "CONDITIONS"  => $conditions,
+          "BOOKING_ID"  => $booking['PublicID'],
+          "MESSAGE"     => $message,
+          "BOOKING_URL" => "{$origin}/bookings/user"
+        ];
+
+        $this->notification->createNotification(
+          $userID,
+          "BOOKING.CREATED_FOR_SEEKER",
+          $payloadUser,
+          "BOOKING." . $booking['BookingID'] . ".PENDING.SEEKER"
+        );
       }
 
       return $response->withStatus(200)->withJson($booking);

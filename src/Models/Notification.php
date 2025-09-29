@@ -23,7 +23,7 @@ class Notification
     $event = $stmt->fetch();
 
     if (!$event) {
-      throw new Exception("EventCode inválido: $eventCode");
+      throw new \Exception("EventCode inválido: $eventCode");
     }
 
     // Insertar en Notifications
@@ -66,7 +66,7 @@ class Notification
     foreach ($channels as $ch) {
       $channel = $ch['Channel'];
 
-      // 5. Verificar preferencias del usuario
+      // Verificar preferencias del usuario
       $canSend = false;
       switch ($channel) {
         case 'IN_APP':
@@ -94,7 +94,7 @@ class Notification
         continue;
       }
 
-      // 6. Renderizar plantilla (si existe)
+      // Renderizar plantilla (si existe)
       $template = $this->getTemplate($event['ID'], $channel);
       $subject = null;
       $body = null;
@@ -104,7 +104,7 @@ class Notification
         $body = $this->renderTemplate($template['Body'], $payload);
       }
 
-      // 7. Insertar delivery
+      // Insertar delivery
       $sql = "INSERT INTO NotificationsDelivery 
               (NotificationID, Channel, TemplateID, RenderedSubject, RenderedBody, Status) 
               VALUES (?, ?, ?, ?, ?, 'Queued')";
@@ -117,7 +117,7 @@ class Notification
         $body
       ]);
 
-      // 8. Si es IN_APP → además insertamos en InAppNotification
+      // Si es IN_APP → además insertamos en InAppNotification
       if ($channel === 'IN_APP') {
         $sql = "INSERT INTO InAppNotification (UserID, Title, Body, Priority, IsRead) 
                 VALUES (?, ?, ?, ?, 0)";
@@ -128,10 +128,72 @@ class Notification
           $payload['body'] ?? ($body ?? ''),
           $event['DefaultPriority'] ?? 0
         ]);
+      } else {
+        // Canales asíncronos → crear job con JSON que entiende el sender
+        $messageForJob = [
+          'subject' => $subject ?: ($payload['subject'] ?? 'Notificación'),
+          'toName'  => $payload['toName'] ?? ($payload['USERNAME'] ?? null),
+          // si hay $body renderizado úsalo; si no, mandá el payload (sendEmail lo aplanará)
+          'body'    => $body ?? ($payload['body'] ?? $payload),
+        ];
+
+        $sql = "INSERT INTO NotificationJobs (Channel, Recipient, Message, Attempt, Status) 
+                VALUES (?, ?, ?, 1, 'PENDING')";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([
+          $channel,
+          $this->getRecipientAddress($recipientUserID, $channel),
+          json_encode($messageForJob, JSON_UNESCAPED_UNICODE)
+        ]);
       }
     }
 
     return $notificationID;
+  }
+
+    /**
+   * Obtiene la dirección de envío de un usuario según el canal
+   *
+   * @param int $userID ID del usuario destinatario
+   * @param string $channel Canal de notificación: "EMAIL", "PUSH", "WHATSAPP", etc.
+   * @return string Dirección o token de envío
+   * @throws Exception si no se encuentra la dirección
+   */
+  public function getRecipientAddress($userID, $channel) {
+    switch (strtoupper($channel)) {
+      case 'EMAIL':
+        $sql = "SELECT Email FROM Users WHERE UserID = ?";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([$userID]);
+        $email = $stmt->fetchColumn();
+        if (!$email) {
+          throw new Exception("No se encontró email para el usuario {$userID}");
+        }
+        return $email;
+
+      // case 'PUSH':
+      //   $sql = "SELECT PushToken FROM WebPushSubscription WHERE UserID = ? ORDER BY CreatedAt DESC LIMIT 1";
+      //   $stmt = $this->db->prepare($sql);
+      //   $stmt->execute([$userID]);
+      //   $token = $stmt->fetchColumn();
+      //   if (!$token) {
+      //     throw new Exception("No se encontró token push para el usuario {$userID}");
+      //   }
+      //   return $token;
+
+      case 'WHATSAPP':
+        $sql = "SELECT Phone FROM Users WHERE UserID = ?";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([$userID]);
+        $phone = $stmt->fetchColumn();
+        if (!$phone) {
+          throw new Exception("No se encontró número de WhatsApp para el usuario {$userID}");
+        }
+        return $phone;
+
+      default:
+      throw new Exception("Canal de notificación desconocido: {$channel}");
+    }
   }
 
   // Obtener In-App no leídas
@@ -155,10 +217,6 @@ class Notification
     return $stmt->rowCount() > 0;
   }
 
-  // -------------------------
-  // Helpers internos
-  // -------------------------
-
   private function getTemplate($eventTypeID, $channel, $locale = 'es') {
     $sql = "SELECT * FROM NotificationsTemplate 
             WHERE EventTypeID = ? AND Channel = ? AND Locale = ? AND Status = 'Active' 
@@ -170,10 +228,18 @@ class Notification
 
   private function renderTemplate($template, $payload) {
     if (!$template) return null;
+
     $rendered = $template;
+
+    // Reemplazos de payload: soporta {KEY} y {{KEY}}
     foreach ($payload as $key => $value) {
-      $rendered = str_replace('{{' . $key . '}}', $value, $rendered);
+      $val = is_array($value) ? implode(', ', array_map('strval', $value)) : (string)$value;
+      $rendered = str_replace(['{{' . $key . '}}', '{' . $key . '}'], $val, $rendered);
     }
+
+    // Extras útiles (YEAR, etc.) si aparecen en la plantilla
+    $rendered = str_replace(['{{YEAR}}', '{YEAR}'], date('Y'), $rendered);
+
     return $rendered;
   }
 

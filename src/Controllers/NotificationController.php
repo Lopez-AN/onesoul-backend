@@ -17,7 +17,7 @@ class NotificationController{
     $this->notification = $notification;
   }
 
-  public function sendNotification(Request $request, Response $response) {
+  public function createNotification(Request $request, Response $response) {
     $data = $request->getParsedBody();
 
     $recipientUserID = $data['RecipientUserID'] ?? null;
@@ -26,9 +26,12 @@ class NotificationController{
     $idempotencyKey = $data['IdempotencyKey'] ?? null;
 
     if (!$recipientUserID || !$eventCode) {
-      return $response->withJson([
-        'error' => ['code' => 'INVALID_PARAMS', 'desc' => 'RecipientUserID y EventCode son obligatorios']
-      ], 400);
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_PARAMS",
+          "desc" => "RecipientUserID y EventCode son obligatorios"
+        ]
+      ]);
     }
 
     try {
@@ -36,15 +39,17 @@ class NotificationController{
         $recipientUserID, $eventCode, $payload, $idempotencyKey
       );
 
-      return $response->withJson([
+      return $response->withStatus(201)->withJson([
         'success' => true,
         'notification_id' => $notificationID
-      ], 201);
+      ]);
 
     } catch (Exception $e) {
-      return $response->withJson([
-        'error' => ['code' => 'NOTIFICATION_ERROR', 'desc' => $e->getMessage()]
-      ], 500);
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "NOTIFICATION_ERROR", 
+          "desc" => $e->getMessage()]
+      ]);
     }
   }
 
@@ -67,9 +72,11 @@ class NotificationController{
     $updated = $this->notification->markInAppAsRead($userID, $notifID);
 
     if (!$updated) {
-      return $response->withJson([
-        'error' => ['code' => 'NOT_FOUND', 'desc' => 'Notificación no encontrada o ya leída']
-      ], 404);
+      return $response->withStatus(404)->withJson([
+        'error' => [
+          'code' => 'NOT_FOUND', 
+          'desc' => 'Notificación no encontrada o ya leída']
+      ]);
     }
 
     return $response->withJson(['success' => true]);

@@ -31,6 +31,7 @@ $errorMiddleware = $app->addErrorMiddleware(true, true, true);
 (require ROOT . '/src/Routes/util.php')($app);
 (require ROOT . '/src/Routes/stripe.php')($app);
 (require ROOT . '/src/Routes/calendly.php')($app);
+(require ROOT . '/src/Routes/notification.php')($app);
 
 $app->run();
 

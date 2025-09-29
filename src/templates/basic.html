@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>{{subject}}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f4;font-family:Helvetica,Arial,sans-serif;">
+  <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background-color:#f4f4f4;padding:20px 0;">
+    <tr>
+      <td align="center">
+        <table role="presentation" cellpadding="0" cellspacing="0" width="600" style="background-color:#ffffff;border-radius:10px;box-shadow:0 0 10px rgba(0,0,0,0.06);overflow:hidden;">
+          
+          <!-- HEADER (opcional logo) -->
+          <tr>
+            <td align="center" style="padding:30px 20px 10px;">
+              <img src="cid:logo2" alt="OneSoul Logo" style="max-width:180px;margin-bottom:16px;" />
+              <h1 style="font-size:22px;line-height:1.3;color:#333333;margin:0;">{{subject}}</h1>
+            </td>
+          </tr>
+
+          <!-- BODY -->
+          <tr>
+            <td style="padding:28px 32px;">
+              {{body}}
+            </td>
+          </tr>
+
+          <!-- FOOTER -->
+          <tr>
+            <td style="padding:18px;text-align:center;font-size:12px;color:#999999;background-color:#fafafa;">
+              © {{year}} OneSoul.app — Todos los derechos reservados
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
