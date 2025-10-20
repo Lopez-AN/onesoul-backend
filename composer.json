@@ -10,7 +10,9 @@
     "whichbrowser/parser": "^2.1",
     "pragmarx/google2fa": "^8.0",
     "aws/aws-sdk-php": "^3.339",
-    "stripe/stripe-php": "^17.3"
+    "stripe/stripe-php": "^17.3",
+    "predis/predis": "^3.2",
+    "php-di/php-di": "^7.1"
   },
   "autoload": {
     "psr-4": {

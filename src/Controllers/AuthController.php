@@ -863,18 +863,9 @@ class AuthController{
   }
 
   public function sendOtpMail(Request $request, Response $response, $args) {
-    $jwt = $request->getAttribute('jwt');
-    if(!isset($jwt['data']) || !property_exists($jwt['data'],'UserID')){
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
-
     $data = $request->getParsedBody();
     $recaptchaToken = $data['RecaptchaToken'] ?? '';
+    $email = filter_var($data['Email'] ?? '', FILTER_VALIDATE_EMAIL);
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
     $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
@@ -882,12 +873,30 @@ class AuthController{
       return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
     }
 
+    $jwt = $request->getAttribute('jwt');
+
     try {
-      $result = $this->auth->sendOtpMail($jwt['data'] -> UserID);
+      # MODO SIN TOKEN (usa redis, para usuarios no existentes)
+      if(!isset($jwt['data']) || !property_exists($jwt['data'],'UserID')){
+        if(!$email){ # Si no hay token tiene que haber email
+          return $response->withStatus(401)->withJson([
+            "error" => [
+              "code" => "INVALID_PARAMETERS",
+              "desc" => "Parameters are missing or invalid"
+            ]
+          ]);
+        }
+        $result = $this->auth->sendOtpMailNoUser($data['Email']);
+      }else{ # MODO CON TOKEN (usa la base, para usuarios existentes)
+        $result = $this->auth->sendOtpMailExistingUser($jwt['data'] -> UserID);
+      }
+
       if($result->http_code !== 200){
         return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
-      return $response->withStatus(200)->withJson(["Message" => "OTP code sent successfully"]);
+      return $response->withStatus(200)->withJson(
+        ["Message" => "OTP code sent successfully"]
+      );
     } catch (\Exception $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -900,18 +909,9 @@ class AuthController{
 
 
   public function validateOTP(Request $request, Response $response, $args) {
-    $jwt = $request->getAttribute('jwt');
-    if(!isset($jwt['data']) || !property_exists($jwt['data'],'UserID')){
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
-
     $data = $request->getParsedBody();
     $otpCode = $data['OTPCode'] ?? '';
+    $email = filter_var($data['Email'] ?? '', FILTER_VALIDATE_EMAIL);
     $recaptchaToken = $data['RecaptchaToken'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
@@ -929,10 +929,23 @@ class AuthController{
       return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
     }
 
+    $jwt = $request->getAttribute('jwt');
 
     try {
-      # Llamar a la validación del OTP
-      $result = $this->auth->validateOTP($jwt['data']->UserID, $otpCode);
+      # MODO SIN TOKEN (usa redis, para usuarios no existentes)
+      if(!isset($jwt['data']) || !property_exists($jwt['data'],'UserID')){
+        if(!$email){ # Si no hay token tiene que haber email
+          return $response->withStatus(401)->withJson([
+            "error" => [
+              "code" => "INVALID_PARAMETERS",
+              "desc" => "Parameters are missing or invalid"
+            ]
+          ]);
+        }
+        $result = $this->auth->validateOTPRedis($data['Email'], $otpCode);
+      }else{ # MODO CON TOKEN (usa la base, para usuarios existentes)
+        $result = $this->auth->validateOTP($jwt['data']->UserID, $otpCode);
+      }
       if ($result->http_code !== 200) {
         return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
@@ -1028,7 +1041,7 @@ class AuthController{
       $userID = $result->data['UserID'];
 
       // Envio el mail OTP
-      $result = $this->auth->sendOtpMail($userID, true);
+      $result = $this->auth->sendOtpMailExistingUser($userID, true);
       if($result->http_code !== 200){
         return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }

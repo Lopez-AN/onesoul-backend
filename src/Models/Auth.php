@@ -9,12 +9,15 @@ use PHPMailer\PHPMailer\Exception;
 use \DateTime;
 use Firebase\JWT\JWT;
 use Firebase\JWT\JWK;
+use Predis\Client as RedisClient;
 
 class Auth{
   protected $db;
+  protected $redis;
 
-  public function __construct(PDO $db){
+  public function __construct(PDO $db, RedisClient $redis){
     $this->db = $db;
+    $this->redis = $redis;
   }
 
   /*
@@ -1021,8 +1024,82 @@ class Auth{
     }
   }
 
-  # Envio de codigo OTP por email desde el JWT
-  public function sendOtpMail($userId,$recovery = false){
+
+  /* Validacion OTP email contra el redis para usuarios que aun estan en el proceso de registro */
+  public function validateOTPRedis($email, $otpCode){
+    try{
+      $MAX_ATTEMPTS = 5;
+
+      $otpJson = $this->redis->get("otp:{$email}");
+      // Decodificar JSON
+      $otpData = @json_decode($otpJson);
+      if (!$otpData) {
+        return (object)[
+          "http_code" => 401,
+          "error" => [
+            "code" => "OTP_CODE_NOT_FOUND",
+            "desc" => "OTP code is not set. Please request a new OTP."
+          ]
+        ];
+      }
+      $attempts = $otpData -> attempts;
+      $hashedOtp = $otpData -> otp_hash;
+      $expiresAt = $otpData -> expires_at;
+
+      // Verificar si expiro
+      if (time() > $expiresAt) {
+        $this->redis->del("otp:{$email}");
+        return (object)[
+          "http_code" => 400,
+          "error" => [
+            "code" => "EXPIRED_OTP",
+            "desc" => "OTP has expired. Please request a new OTP."
+          ]
+        ];
+      }
+
+      // Verificar intentos fallidos
+      if ($attempts >= $MAX_ATTEMPTS) {
+        $this->redis->del("otp:{$email}");
+        return (object)[
+          "http_code" => 401,
+          "error" => [
+            "code" => "OTP_MAX_ATTEMPTS",
+            "desc" => "Maximum OTP attempts reached. Please request a new OTP."
+          ]
+        ];
+      }
+
+      // Verificar OTP
+      if (!password_verify($otpCode, $hashedOtp)) {
+        // Incrementar intentos en el JSON
+        $otpData -> attempts++;
+        $this->redis->setex("otp:{$email}", 86400, json_encode($otpData));
+        return (object)[
+          "http_code" => 401,
+          "error" => [
+            "code" => "OTP_CODE_INVALID",
+            "desc" => "Invalid OTP code"
+          ]
+        ];
+      }
+
+      # OTP válido
+      $this->redis->del("otp:{$email}");
+      return (object)["http_code" => 200,"data" => []];
+    } catch (\Throwable $e) {
+      return (object)[
+        "http_code" => 500,
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ];
+    }
+  }
+
+  # Envio de codigo OTP por email trayendo al usuario de la base con un userID
+  public function sendOtpMailExistingUser($userId, $recovery = false){
     try{
       $stmt = $this->db->prepare("SELECT u.Email, u.UserName FROM Users AS u
       WHERE u.UserID = ?");
@@ -1030,18 +1107,48 @@ class Auth{
       $resp = $stmt->fetchAll(PDO::FETCH_ASSOC);
       if(empty($resp)){
         return (object)["http_code" => 404,
-        "error" => [
-          "code" => "USER_NOT_FOUND",
-          "desc" => "No user was found with the specified data."
-        ]
-      ];
+          "error" => [
+            "code" => "USER_NOT_FOUND",
+            "desc" => "No user was found with the specified data."
+          ]
+        ];
       }
 
       # Genero un nuevo codigo OTP y lo grabo en el usuario
       $otpCode = rand(100000, 999999); # Codigo que se enviara por mail
       $stmt = $this->db->prepare("UPDATE Users SET OTPCode = ?, OTPDate = ? WHERE UserID = ?");
       $stmt->execute([$otpCode, date("YmdHis"), $userId]);
-      $this -> _sendOtpMail($resp[0]['Email'],$resp[0]['UserName'],$otpCode,$recovery);
+      $result = $this -> _sendOtpMail($resp[0]['Email'],$otpCode,$resp[0]['UserName'],$recovery);
+      if ($result->http_code !== 200) {
+        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+      }
+
+      return (object)["http_code" => 200, "data" => []];
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  # Envio de codigo OTP para usuarios no existentes, almaceno el OTP code en redis
+  public function sendOtpMailNoUser($email){
+    $otpCode = rand(100000, 999999); # Codigo que se enviara por mail
+    $hashedOtp = password_hash((string)$otpCode, PASSWORD_BCRYPT); # Hasheo el OTP code
+
+    // Json que guardo en redis
+    $otpData = [
+      'otp_hash' => $hashedOtp,
+      'attempts' => 0, // Contador de intentos
+      'created_at' => time(),
+      'expires_at' => time() + $GLOBALS['config']['otp_exptime'] // Expiracion
+    ];
+
+    $this->redis->setex("otp:{$email}", 86400, json_encode($otpData));
+
+    try{
+      $result = $this -> _sendOtpMail($email, $otpCode);
+      if ($result->http_code !== 200) {
+        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+      }
 
       return (object)["http_code" => 200, "data" => []];
     } catch (\PDOException $e) {
@@ -1318,6 +1425,54 @@ class Auth{
     }
   }
 
+  private function _sendOtpMail($email, $otpCode, $username = false, $recovery = false){
+    $template = file_get_contents(ROOT."/src/templates/email_otp.html");
+    $template = str_replace("{CODIGO}", $otpCode, $template);
+    $template = str_replace("{USERNAME}", $username ?: $email, $template);
+    $template = str_replace("{T_MODE1}", $recovery ? '' : ', bienvenido a OneSoul', $template);
+    $template = str_replace("{T_MODE2}", $recovery ? 'recuperaci&oacute;n' : 'registro', $template);
+
+    $smtpAccount = $GLOBALS['config']['mailer']['account'];
+    $smtpPassword = $GLOBALS['config']['mailer']['password'];
+
+    # Configuración de PHPMailer
+    $mail = new PHPMailer(true);
+    try {
+      # Configuración del servidor SMTP
+      $mail->isSMTP();
+      $mail->Host = 'smtp.gmail.com';
+      $mail->SMTPAuth = true;
+      $mail->Username = $smtpAccount;
+      $mail->Password = $smtpPassword;
+      $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+      $mail->Port = 587;
+
+      # Configuración del remitente y destinatario
+      $mail->setFrom($smtpAccount,'Contacto OneSoul');
+      $mail->addAddress($email, $username);
+
+      # Contenido del correo
+      $mail->isHTML(true);
+      $mail->Subject = $recovery ? "Recupera tu cuenta de OneSoul" : "Complete su registro en OneSoul";
+      $mail->Body    = $template;
+      $mail->AltBody = $recovery ?
+        "Hola $username, bienvenido a OneSoul\nSu código de verificaci&oacute;n es $otpCode" :
+        "Hola $username\nSu código de recuperaci&oacute;n es $otpCode";
+      $mail->addEmbeddedImage(ROOT."/src/templates/logo2.png", 'logo');
+
+      # Enviar el correo
+      $mail->send();
+      return (object)["http_code" => 200,"data" =>[]];
+    } catch (Exception $e) {
+      return (object)["http_code" => 404,
+        "error" => [
+          "code" => "OTP_MAIL_ERROR",
+          "desc" => "Cant send the OTP mail, try again later"
+        ]
+      ];
+    }
+  }
+
   private function _passwordComplexity($newPassword): bool {
     $password = trim($newPassword);
 
@@ -1509,48 +1664,6 @@ class Auth{
 
     $json = json_decode($result, true);
     return $json['id_token'] ?? null;
-  }
-
-  private function _sendOtpMail($rec, $username, $otpCode, $recovery){
-    $template = file_get_contents(ROOT."/src/templates/email_otp.html");
-    $template = str_replace("{CODIGO}", $otpCode, $template);
-    $template = str_replace("{USERNAME}", $username, $template);
-    $template = str_replace("{T_MODE1}", $recovery ? '' : ', bienvenido a OneSoul', $template);
-    $template = str_replace("{T_MODE2}", $recovery ? 'recuperaci&oacute;n' : 'registro', $template);
-
-    $smtpAccount = $GLOBALS['config']['mailer']['account'];
-    $smtpPassword = $GLOBALS['config']['mailer']['password'];
-
-    # Configuración de PHPMailer
-    $mail = new PHPMailer(true);
-    try {
-      # Configuración del servidor SMTP
-      $mail->isSMTP();
-      $mail->Host = 'smtp.gmail.com';
-      $mail->SMTPAuth = true;
-      $mail->Username = $smtpAccount;
-      $mail->Password = $smtpPassword;
-      $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-      $mail->Port = 587;
-
-      # Configuración del remitente y destinatario
-      $mail->setFrom($smtpAccount,'Contacto OneSoul');
-      $mail->addAddress($rec, $username);
-
-      # Contenido del correo
-      $mail->isHTML(true);
-      $mail->Subject = $recovery ? "Recupera tu cuenta de OneSoul" : "Complete su registro en OneSoul";
-      $mail->Body    = $template;
-      $mail->AltBody = $recovery ?
-        "Hola $username, bienvenido a OneSoul\nSu código de verificaci&oacute;n es $otpCode" :
-        "Hola $username\nSu código de recuperaci&oacute;n es $otpCode";
-      $mail->addEmbeddedImage(ROOT."/src/templates/logo2.png", 'logo');
-
-      # Enviar el correo
-      $mail->send();
-    } catch (Exception $e) {
-      # echo "No se pudo enviar el correo. Error: {$mail->ErrorInfo}";
-    }
   }
 
   # Valida un token generado por el login SSO o reCaptcha

@@ -15,7 +15,23 @@ if(!$GLOBALS['config']){
 }
 
 use Slim\Factory\AppFactory;
+use Predis\Client as RedisClient;
+use DI\Container;
 
+// Crear contenedor explícitamente
+$container = new Container();
+
+// Registrar Redis
+$container->set('redis', function() {
+  return new RedisClient([
+    'scheme' => 'tcp',
+    'host'   => 'localhost',
+    'port'   => 6379,
+  ]);
+});
+
+// Pasar el contenedor a AppFactory
+AppFactory::setContainer($container);
 $app = AppFactory::create();
 
 $app->addRoutingMiddleware();
@@ -34,4 +50,3 @@ $errorMiddleware = $app->addErrorMiddleware(true, true, true);
 (require ROOT . '/src/Routes/notification.php')($app);
 
 $app->run();
-

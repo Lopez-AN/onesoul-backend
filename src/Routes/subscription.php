@@ -15,9 +15,10 @@ return function (App $app) {
   ]);
 
   $pdo = require __DIR__ . './../core/database.php';
+  $redis = $app->getContainer()->get('redis'); # Base de datos en RAM
   $subscription = new Subscription($pdo);
   $user = new User($pdo);
-  $auth = new Auth($pdo);  
+    $auth = new Auth($pdo, $redis);
   $stripe = new StripeService($pdo);
   $subscriptionController = new SubscriptionController($subscription, $user, $auth, $stripe);
 

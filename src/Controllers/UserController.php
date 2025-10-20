@@ -159,7 +159,7 @@ class UserController
     $id = $args['id'];
     try {
       $result = $this->user->latestConsentByUser($id);
-  
+
       if (!$result) {
         return $response->withStatus(404)->withJson([
           "error" => [
@@ -168,7 +168,7 @@ class UserController
           ]
         ]);
       }
-  
+
       return $response->withStatus(200)->withJson($result);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
@@ -206,7 +206,7 @@ class UserController
       }
 
       $result = $this->user->referralsByUser($id);
-  
+
       if (!$result) {
         return $response->withStatus(404)->withJson([
           "error" => [
@@ -215,7 +215,7 @@ class UserController
           ]
         ]);
       }
-  
+
       return $response->withStatus(200)->withJson($result);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
@@ -253,7 +253,7 @@ class UserController
       }
 
       $result = $this->user->rewardsByUser($id);
-  
+
       if (!$result) {
         return $response->withStatus(404)->withJson([
           "error" => [
@@ -262,7 +262,7 @@ class UserController
           ]
         ]);
       }
-  
+
       return $response->withStatus(200)->withJson($result);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
@@ -323,7 +323,7 @@ class UserController
         ]);
       }
     }
-    
+
     $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
     if ($result->http_code !== 200) {
       return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
@@ -331,14 +331,14 @@ class UserController
 
     try {
       $userID = $jwt['data'] -> UserID;
-      
+
       $result = $this->user->inviteByEmail($userID, $email, $subDomain);
       if (isset($result['error'])) {
         return $response->withStatus(400)->withJson(["error" => $result['error']]);
       }
-    
+
       return $response->withStatus(200)->withJson(["success" => true]);
-    
+
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -465,7 +465,7 @@ class UserController
     }
   }
 
-  public function deleteUser(Request $request, Response $response, $args)  
+  public function deleteUser(Request $request, Response $response, $args)
   {
     $id = $args['id'];
     $jwt = $request->getAttribute('jwt');
@@ -513,7 +513,7 @@ class UserController
     }
   }
 
-  public function updateProfilePhoto(Request $request, Response $response, $args)  
+  public function updateProfilePhoto(Request $request, Response $response, $args)
   {
     $userId = $args['id'];
     $jwt = $request->getAttribute('jwt');
@@ -576,7 +576,7 @@ class UserController
     }
   }
 
-  public function deleteProfilePhoto(Request $request, Response $response, $args) 
+  public function deleteProfilePhoto(Request $request, Response $response, $args)
   {
     $userId = $args['id'];
     $jwt = $request->getAttribute('jwt');
@@ -616,7 +616,7 @@ class UserController
     }
   }
 
-  public function updateUserCategories(Request $request, Response $response, $args) 
+  public function updateUserCategories(Request $request, Response $response, $args)
   {
     $userId = $args['id'];
     $jwt = $request->getAttribute('jwt');
@@ -694,7 +694,7 @@ class UserController
   {
     $userID = $args['id'];
     $jwt = $request->getAttribute('jwt');
-    
+
     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
       return $response->withStatus(401)->withJson([
         "error" => [
@@ -773,10 +773,10 @@ class UserController
       $toRemove = array_diff_key($currentMap, $newMap);
       $toUpdate = [];
 
-      foreach ($newMap as $name => $item) { 
-        if (isset($currentMap[$name]) && $currentMap[$name]['url'] !== $item['url']) { 
-          $toUpdate[$name] = $item; 
-        } 
+      foreach ($newMap as $name => $item) {
+        if (isset($currentMap[$name]) && $currentMap[$name]['url'] !== $item['url']) {
+          $toUpdate[$name] = $item;
+        }
       }
 
       if (!empty($toRemove)) {
@@ -791,8 +791,8 @@ class UserController
         }
       }
 
-      foreach ($toUpdate as $name => $item) { 
-        $this->user->updateUserSocialAccount($userID, $item['typeID'], $item['url']); 
+      foreach ($toUpdate as $name => $item) {
+        $this->user->updateUserSocialAccount($userID, $item['typeID'], $item['url']);
       }
 
       $result = $this->user->getUserSocialAccounts($userID);
@@ -852,7 +852,7 @@ class UserController
     }
   }
 
-  private function containsInappropriateContent($text) 
+  private function containsInappropriateContent($text)
   {
     return validateContentWithPerspective($text);
   }

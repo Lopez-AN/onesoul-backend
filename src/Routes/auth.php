@@ -6,12 +6,7 @@ use App\Models\User;
 use App\Models\Auth;
 use App\Models\Subscription;
 use Tuupola\Middleware\JwtAuthentication;
-
-// QUITAR
-// use Slim\Routing\RouteCollectorProxy;
-// use Psr\Http\Message\ResponseInterface as Response;
-// use Psr\Http\Message\ServerRequestInterface as Request;
-// ------
+use App\Middleware\OptionalJwtMiddleware;
 
 return function (App $app) {
   $jwtMiddleware = new JwtAuthentication([
@@ -19,11 +14,14 @@ return function (App $app) {
     "attribute" => "jwt"
   ]);
 
+  $optionalJwtMiddleware = new OptionalJwtMiddleware($jwtMiddleware);
+
   $pdo = require __DIR__ . './../core/database.php';
+  $redis = $app->getContainer()->get('redis'); # Base de datos en RAM
   $user = new User($pdo);
-  $auth = new Auth($pdo);
+  $auth = new Auth($pdo, $redis);
   $subscription = new Subscription($pdo);
-  $authController = new AuthController($user, $auth, $subscription);
+  $authController = new AuthController($user, $auth, $subscription, $redis);
 
   $app->post('/login', [$authController, 'login']);
   $app->post('/login/facebook', [$authController, 'loginFacebook']);
@@ -31,8 +29,8 @@ return function (App $app) {
   $app->post('/register', [$authController, 'register']);
   $app->post('/register/facebook', [$authController, 'registerFacebook']);
   $app->post('/register/google', [$authController, 'registerGoogle']);
-  $app->post('/register/otp', [$authController, 'validateOTP'])->add($jwtMiddleware);
-  $app->post('/register/send_otp_mail', [$authController, 'sendOtpMail'])->add($jwtMiddleware);
+  $app->post('/register/otp', [$authController, 'validateOTP'])->add($optionalJwtMiddleware);
+  $app->post('/register/send_otp_mail', [$authController, 'sendOtpMail'])->add($optionalJwtMiddleware);
   $app->post('/recaptcha', [$authController, 'validateReCaptcha']);
   $app->get('/auth/refresh_token', [$authController, 'refreshToken'])->add($jwtMiddleware);
   $app->post('/auth/request_password_reset', [$authController, 'requestPasswordReset']);
