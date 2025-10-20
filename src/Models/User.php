@@ -39,7 +39,7 @@ clASs User
       LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
       LEFT JOIN Media AS m ON u.UserID = m.UserID
       LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
-      LEFT JOIN SubscriptionPlans AS sp ON s.PlanID = sp.PlanID    
+      LEFT JOIN SubscriptionPlans AS sp ON s.PlanID = sp.PlanID
       LEFT JOIN (
         SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
         MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
@@ -163,7 +163,7 @@ clASs User
       $user['Floor'] = is_null($user['Floor']) ? null : (int)$user['Floor'];
       $user['UserLevel'] = !$user['UserLevel'] ? 1 : (int)$user['UserLevel'];
       $user['ValidatedEmail'] = (bool)$user['ValidatedEmail'];
-      $user['ValidatedPhone'] = (bool)$user['ValidatedPhone'];     
+      $user['ValidatedPhone'] = (bool)$user['ValidatedPhone'];
       $user['TwoFactorAuth'] = (bool)$user['TwoFactorAuth'];
       $user['Categories'] = is_null($user['Categories']) ? [] : array_map(
         function ($a) {
@@ -227,7 +227,7 @@ clASs User
       u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
         ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
       u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-      s.PlanID, s.StartDate, s.EndDate, s.Status,  
+      s.PlanID, s.StartDate, s.EndDate, s.Status,
       -- Subconsulta para reviews
       (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
         FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
@@ -298,7 +298,7 @@ clASs User
       $user['StartDate'],
       $user['EndDate'],
       $user['Status']
-    );   
+    );
 
     // Verificar si la cuenta está desactivada
     if (!is_null($user['DeactivationDate']) && strtotime($user['DeactivationDate']) <= time()) {
@@ -381,7 +381,7 @@ clASs User
           return ["Id" => intval($a[0]), "Name" => $a[1]];
         },
         explode(",", $user['Categories'])
-      ); 
+      );
 
       // Agregar sessionType con valores booleanos
       $user['SessionType'] = [
@@ -403,7 +403,7 @@ clASs User
         $user['StartDate'],
         $user['EndDate'],
         $user['Status']
-      );   
+      );
 
       // Verificar si la cuenta está desactivada
       if (!is_null($user['DeactivationDate']) && strtotime($user['DeactivationDate']) <= time()) {
@@ -509,7 +509,7 @@ clASs User
         $user['StartDate'],
         $user['EndDate'],
         $user['Status']
-      );  
+      );
 
       // Verificar si la cuenta está desactivada
       if (!is_null($user['DeactivationDate']) && strtotime($user['DeactivationDate']) <= time()) {
@@ -553,7 +553,7 @@ clASs User
         LEFT JOIN UsersCategories AS uc ON uc.UserID = u.UserID
         LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
         LEFT JOIN Media AS m ON u.UserID = m.UserID
-        LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID 
+        LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
         LEFT JOIN (
           SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
           MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
@@ -613,7 +613,7 @@ clASs User
         $e['Floor'] = is_null($e['Floor']) ? null : (int)$e['Floor'];
         $e['UserLevel'] = !$e['UserLevel'] ? 1 : (int)$e['UserLevel'];
         $e['ValidatedEmail'] = (bool)$e['ValidatedEmail'];
-        $e['ValidatedPhone'] = (bool)$e['ValidatedPhone'];      
+        $e['ValidatedPhone'] = (bool)$e['ValidatedPhone'];
         $e['TwoFactorAuth'] = (bool)$e['TwoFactorAuth'];
         $e['Categories'] = is_null($e['Categories']) ? [] : array_map(
           function ($a) {
@@ -632,18 +632,18 @@ clASs User
         unset($e['hasVirtual'], $e['hasInPerson']);
 
         // Agregar información histórica de suscripción
-        $user['HistorySubscription'] = is_null($user['PlanID']) ? null : [
-          "LatestPlanID" => (int)$user['PlanID'],
-          "StartDate" => $user['StartDate'],
-          "EndDate" => $user['EndDate'],
-          "Status" => $user['Status'],
+        $user['HistorySubscription'] = is_null($e['PlanID']) ? null : [
+          "LatestPlanID" => (int)$e['PlanID'],
+          "StartDate" => $e['StartDate'],
+          "EndDate" => $e['EndDate'],
+          "Status" => $e['Status'],
         "UsedTrial" => 'True'
         ];
         unset(
-          $user['PlanID'],
-          $user['StartDate'],
-          $user['EndDate'],
-          $user['Status']
+          $e['PlanID'],
+          $e['StartDate'],
+          $e['EndDate'],
+          $e['Status']
         );
 
         return $e;
@@ -705,7 +705,7 @@ clASs User
         $e['Floor'] = is_null($e['Floor']) ? null : (int)$e['Floor'];
         $e['UserLevel'] = !$e['UserLevel'] ? 1 : (int)$e['UserLevel'];
         $e['ValidatedEmail'] = (bool)$e['ValidatedEmail'];
-        $e['ValidatedPhone'] = (bool)$e['ValidatedPhone'];       
+        $e['ValidatedPhone'] = (bool)$e['ValidatedPhone'];
         $e['TwoFactorAuth'] = (bool)$e['TwoFactorAuth'];
         $e['Categories'] = is_null($e['Categories']) ? [] : array_map(
           function ($a) {
@@ -724,19 +724,19 @@ clASs User
         unset($e['hasVirtual'], $e['hasInPerson']);
 
         // Agregar información histórica de suscripción
-        $user['HistorySubscription'] = is_null($user['PlanID']) ? null : [
-          "LatestPlanID" => (int)$user['PlanID'],
-          "StartDate" => $user['StartDate'],
-          "EndDate" => $user['EndDate'],
-          "Status" => $user['Status'],
+        $user['HistorySubscription'] = is_null($e['PlanID']) ? null : [
+          "LatestPlanID" => (int)$e['PlanID'],
+          "StartDate" => $e['StartDate'],
+          "EndDate" => $e['EndDate'],
+          "Status" => $e['Status'],
         "UsedTrial" => 'True'
         ];
         unset(
-          $user['PlanID'],
-          $user['StartDate'],
-          $user['EndDate'],
-          $user['Status']
-        ); 
+          $e['PlanID'],
+          $e['StartDate'],
+          $e['EndDate'],
+          $e['Status']
+        );
 
         return $e;
       }, $rs);
@@ -812,7 +812,7 @@ clASs User
       $user['Floor'] = is_null($user['Floor']) ? null : (int)$user['Floor'];
       $user['UserLevel'] = !$user['UserLevel'] ? 1 : (int)$user['UserLevel'];
       $user['ValidatedEmail'] = (bool)$user['ValidatedEmail'];
-      $user['ValidatedPhone'] = (bool)$user['ValidatedPhone'];         
+      $user['ValidatedPhone'] = (bool)$user['ValidatedPhone'];
       $user['TwoFactorAuth'] = (bool)$user['TwoFactorAuth'];
       $user['Categories'] = is_null($user['Categories']) ? [] : array_map(
         function ($a) {
@@ -820,7 +820,7 @@ clASs User
           return ["Id" => intval($a[0]), "Name" => $a[1]];
         },
         explode(",", $user['Categories'])
-      );    
+      );
 
       // Agregar sessionType con valores booleanos
       $user['SessionType'] = [
@@ -842,7 +842,7 @@ clASs User
         $user['StartDate'],
         $user['EndDate'],
         $user['Status']
-      );  
+      );
 
       // Verificar si la cuenta está desactivada
       if (!is_null($user['DeactivationDate']) && strtotime($user['DeactivationDate']) <= time()) {
@@ -867,9 +867,9 @@ clASs User
 
   public function latestConsentByUser($id) {
     try {
-      $stmt = $this->db->prepare("SELECT * FROM UserLegalConsents 
-                            WHERE UserID = :id 
-                            ORDER BY ConsentDate DESC 
+      $stmt = $this->db->prepare("SELECT * FROM UserLegalConsents
+                            WHERE UserID = :id
+                            ORDER BY ConsentDate DESC
                             LIMIT 1");
       $stmt->bindParam(':id', $id, PDO::PARAM_INT);
       $stmt->execute();
@@ -896,7 +896,7 @@ clASs User
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
-  }      
+  }
 
   public function rewardsByUser ($id) {
     try {
@@ -958,7 +958,7 @@ clASs User
       # Configuración del remitente y destinatario
       $mail->setFrom($smtpAccount,'Contacto OneSoul');
       $mail->addAddress($email, $username);
-      
+
       # Contenido del correo
       $mail->isHTML(true);
       $mail->Subject = "Te invitan a OneSoul.app";
@@ -971,7 +971,7 @@ clASs User
       # echo "No se pudo enviar el correo. Error: {$mail->ErrorInfo}";
     }
   }
-    
+
   public function updateUser($userId, $data) {
     try {
       // Verificar si el usuario existe
@@ -1256,7 +1256,7 @@ clASs User
   public function getActiveSocialAccountsTypes() {
     $stmt = $this->db->prepare("SELECT SocialAccountTypeID, Name FROM SocialAccountsTypes WHERE IsActive = 1");
     $stmt->execute();
-    $result = $stmt->fetchAll(\PDO::FETCH_ASSOC); 
+    $result = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 
     $types = [];
     foreach ($result as $row) {
@@ -1292,7 +1292,7 @@ clASs User
   }
 
   public function updateUserSocialAccount($userID, $typeID, $accountName) {
-    $query = "UPDATE SocialAccounts SET AccountName = :accountName 
+    $query = "UPDATE SocialAccounts SET AccountName = :accountName
               WHERE UserID = :userID AND SocialAccountTypeID = :typeID";
     $stmt = $this->db->prepare($query);
     $stmt->bindParam(':userID', $userID, PDO::PARAM_INT);
@@ -1312,8 +1312,8 @@ clASs User
   public function formatSocialUrl($name, $url) {
     $query = "SELECT * FROM SocialAccountsTypes
               WHERE Name = :name";
-    $stmt = $this->db->prepare($query); 
-    $stmt->bindParam(':name', $name, PDO::PARAM_STR); 
+    $stmt = $this->db->prepare($query);
+    $stmt->bindParam(':name', $name, PDO::PARAM_STR);
     $stmt->execute();
     $socialurl = $stmt->fetch(PDO::FETCH_ASSOC);
 
