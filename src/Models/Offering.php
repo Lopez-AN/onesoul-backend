@@ -75,11 +75,14 @@ class Offering
             'City', l.City
           )
         ) FROM OfferingLocations AS l WHERE l.OfferingID = o.OfferingID) AS Locations,
-        ROUND(AVG(r.Rating),2) AS Rating
+        ROUND(AVG(r.Rating),2) AS Rating,
+        COUNT(DISTINCT r.ReviewID) AS TotalReviews,
+        COUNT(DISTINCT b.BookingID) as Bookings
         FROM Offerings AS o
         INNER JOIN Users AS u ON u.UserID = o.UserID
         LEFT JOIN Reviews AS r ON o.OfferingID = r.OfferingID
         LEFT JOIN Reviews AS ru ON u.UserID = ru.SeekerID
+        LEFT JOIN Bookings AS b ON b.OfferingID = o.OfferingID AND b.LastBookingEvent IN ('completed', 'rated')
         LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
         LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode
         GROUP BY o.OfferingID
@@ -232,11 +235,14 @@ class Offering
             'City', l.City
           )
         ) FROM OfferingLocations AS l WHERE l.OfferingID = o.OfferingID) AS Locations,
-        ROUND(AVG(r.Rating),2) AS Rating
+        ROUND(AVG(r.Rating),2) AS Rating,
+        COUNT(DISTINCT r.ReviewID) AS TotalReviews,
+        COUNT(DISTINCT b.BookingID) as Bookings
         FROM Offerings AS o
         INNER JOIN Users AS u ON u.UserID = o.UserID
         LEFT JOIN Reviews AS r ON o.OfferingID = r.OfferingID
         LEFT JOIN Reviews AS ru ON u.UserID = ru.SeekerID
+        LEFT JOIN Bookings AS b ON b.OfferingID = o.OfferingID AND b.LastBookingEvent IN ('completed', 'rated')
         LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
         LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode
         WHERE o.OfferingID = :id
@@ -385,11 +391,14 @@ class Offering
             'City', l.City
           )
         ) FROM OfferingLocations AS l WHERE l.OfferingID = o.OfferingID) AS Locations,
-        ROUND(AVG(r.Rating),2) AS Rating
+        ROUND(AVG(r.Rating),2) AS Rating,
+        COUNT(DISTINCT r.ReviewID) AS TotalReviews,
+        COUNT(DISTINCT b.BookingID) as Bookings
         FROM Offerings AS o
         INNER JOIN Users AS u ON u.UserID = o.UserID
         LEFT JOIN Reviews AS r ON o.OfferingID = r.OfferingID
         LEFT JOIN Reviews AS ru ON u.UserID = ru.SeekerID
+        LEFT JOIN Bookings AS b ON b.OfferingID = o.OfferingID AND b.LastBookingEvent IN ('completed', 'rated')
         LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
         LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode
         WHERE o.CategoryID = :categoryId
@@ -544,11 +553,14 @@ class Offering
             'City', l.City
           )
         ) FROM OfferingLocations AS l WHERE l.OfferingID = o.OfferingID) AS Locations,
-        ROUND(AVG(r.Rating),2) AS Rating
+        ROUND(AVG(r.Rating),2) AS Rating,
+        COUNT(DISTINCT r.ReviewID) AS TotalReviews,
+        COUNT(DISTINCT b.BookingID) as Bookings
         FROM Offerings AS o
         INNER JOIN Users AS u ON u.UserID = o.UserID
         LEFT JOIN Reviews AS r ON o.OfferingID = r.OfferingID
         LEFT JOIN Reviews AS ru ON u.UserID = ru.SeekerID
+        LEFT JOIN Bookings AS b ON b.OfferingID = o.OfferingID AND b.LastBookingEvent IN ('completed', 'rated')
         LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
         LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode
         WHERE o.UserID = :userId
