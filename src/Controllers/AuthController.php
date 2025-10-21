@@ -50,7 +50,7 @@ class AuthController{
 
     $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
     if ($result->http_code !== 200) {
-      return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+      return $response->withStatus($result->http_code)->withJson($result);
     }
 
     try {
@@ -107,7 +107,7 @@ class AuthController{
         } elseif (!empty($mfa_code)) {
           $result = $this->auth->mfaCheck($user['UserID'], $mfa_code);
           if ($result->http_code != 200) {
-            return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+            return $response->withStatus($result->http_code)->withJson($result);
           }
         } else {
           return $response->withStatus(400)->withJson([
@@ -172,14 +172,14 @@ class AuthController{
 
     $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
     if ($result->http_code !== 200) {
-      return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+      return $response->withStatus($result->http_code)->withJson($result);
     }
 
     try {
       // Validar el token de Google
       $result = $this->auth->loginGoogle($this -> user, $token);
       if ($result->http_code !== 200) {
-        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+        return $response->withStatus($result->http_code)->withJson($result);
       }
       $user = $result->data;
       $userPlan = $this->subscription->getSubscriptionByUser($user['UserID']);
@@ -210,7 +210,7 @@ class AuthController{
         } elseif (!empty($mfa_code)) {
           $result = $this->auth->mfaCheck($user['UserID'], $mfa_code);
           if ($result->http_code != 200) {
-            return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+            return $response->withStatus($result->http_code)->withJson($result);
           }
         } else {
           return $response->withStatus(400)->withJson([
@@ -276,13 +276,13 @@ class AuthController{
 
     $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
     if ($result->http_code !== 200) {
-      return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+      return $response->withStatus($result->http_code)->withJson($result);
     }
 
     try {
       $result = $this->auth->loginFacebook($this -> user, $user_id, $token);
       if ($result->http_code !== 200) {
-        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+        return $response->withStatus($result->http_code)->withJson($result);
       }
       $user = $result->data;
       $userPlan = $this->subscription->getSubscriptionByUser($user['UserID']);
@@ -313,7 +313,7 @@ class AuthController{
         } elseif (!empty($mfa_code)) {
           $result = $this->auth->mfaCheck($user['UserID'], $mfa_code);
           if ($result->http_code != 200) {
-            return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+            return $response->withStatus($result->http_code)->withJson($result);
           }
         } else {
           return $response->withStatus(400)->withJson([
@@ -381,13 +381,13 @@ class AuthController{
 
     $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
     if ($result->http_code !== 200) {
-      return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+      return $response->withStatus($result->http_code)->withJson($result);
     }
 
     try {
       $result = $this->auth->loginApple($this->user, $code, $idToken, $rawNonce);
       if ($result->http_code !== 200) {
-        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+        return $response->withStatus($result->http_code)->withJson($result);
       }
       $user = $result->data;
       $userPlan = $this->subscription->getSubscriptionByUser($user['UserID']);
@@ -418,7 +418,7 @@ class AuthController{
         } elseif (!empty($mfaCode)) {
           $result = $this->auth->mfaCheck($user['UserID'], $mfaCode);
           if ($result->http_code != 200) {
-            return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+            return $response->withStatus($result->http_code)->withJson($result);
           }
         } else {
           return $response->withStatus(400)->withJson([
@@ -489,7 +489,7 @@ class AuthController{
 
     $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
     if ($result->http_code !== 200) {
-      return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+      return $response->withStatus($result->http_code)->withJson($result);
     }
 
     try {
@@ -566,6 +566,7 @@ class AuthController{
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
     $referralCode = $data['ReferralCode'] ?? null;
     $receiveNewsletters = $data['ReceiveNewsletters'] ?? null;
+    $altEmail = $data['Email'] ?? null; // Opcional cuando el SSO no comparte el correo
 
     if(empty($token) || empty($username) || empty($recaptchaToken) || !isset($data['ReceiveNewsletters'])){
       return $response->withStatus(400)->withJson([
@@ -578,11 +579,13 @@ class AuthController{
 
     $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
     if ($result->http_code !== 200) {
-      return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+      return $response->withStatus($result->http_code)->withJson($result);
     }
 
     try {
-      $result = $this->auth->registerGoogle($this->user, $token, $username, $clientIp, $request, $referralCode, $receiveNewsletters);
+      $result = $this->auth->registerGoogle(
+        $this->user, $token, $username, $clientIp, $request, $referralCode, $receiveNewsletters, $altEmail
+      );
       switch($result->http_code) {
         case 200: # Logueo correcto o usuario existente
           $jwt = $this -> JWTgen($result -> data);
@@ -655,6 +658,7 @@ class AuthController{
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
     $referralCode = $data['ReferralCode'] ?? null;
     $receiveNewsletters = $data['ReceiveNewsletters'] ?? null;
+    $altEmail = $data['Email'] ?? null; // Opcional cuando el SSO no comparte el correo
 
     if(empty($user_id) || empty($token) || empty($username) || empty($recaptchaToken) || !isset($receiveNewsletters)){
       return $response->withStatus(400)->withJson([
@@ -667,7 +671,7 @@ class AuthController{
 
     $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
     if ($result->http_code !== 200) {
-      return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+      return $response->withStatus($result->http_code)->withJson($result);
     }
 
     try{
@@ -683,7 +687,7 @@ class AuthController{
           ]);
         }
         $result = $this->auth->registerFacebookNative(
-          $this->user, $jwtToken, $username, $clientIp, $request, $referralCode, $receiveNewsletters
+          $this->user, $jwtToken, $username, $clientIp, $request, $referralCode, $receiveNewsletters, $altEmail
         );
       } else {
         // Flujo Web (Graph API)
@@ -698,7 +702,9 @@ class AuthController{
           ]);
         }
 
-        $result = $this->auth->registerFacebook($this->user, $user_id, $token, $username, $clientIp, $request, $referralCode, $receiveNewsletters);
+        $result = $this->auth->registerFacebook(
+          $this->user, $user_id, $token, $username, $clientIp, $request, $referralCode, $receiveNewsletters, $altEmail
+        );
       }
 
       switch($result->http_code) {
@@ -775,6 +781,7 @@ class AuthController{
     $receiveNewsletters = $data['ReceiveNewsletters'] ?? null;
     $recaptchaToken = $data['RecaptchaToken'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
+    $altEmail = $data['Email'] ?? null; // Opcional cuando el SSO no comparte el correo
 
     if((empty($id_token) && empty($code)) || empty($username) || empty($recaptchaToken) || !isset($data['ReceiveNewsletters'])){
       return $response->withStatus(400)->withJson([
@@ -787,11 +794,13 @@ class AuthController{
 
     $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
     if ($result->http_code !== 200) {
-      return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+      return $response->withStatus($result->http_code)->withJson($result);
     }
 
     try {
-      $result = $this->auth->registerApple($this->user, $code, $idToken, $rawNonce, $username, $clientIp, $request, $referralCode, $receiveNewsletters);
+      $result = $this->auth->registerApple(
+        $this->user, $code, $idToken, $rawNonce, $username, $clientIp, $request, $referralCode, $receiveNewsletters, $altEmail
+      );
       switch($result->http_code) {
         case 200: # Usuario registrado o ya existente
           $jwt = $this -> JWTgen($result -> data);
@@ -870,7 +879,7 @@ class AuthController{
 
     $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
     if ($result->http_code !== 200) {
-      return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+      return $response->withStatus($result->http_code)->withJson($result);
     }
 
     $jwt = $request->getAttribute('jwt');
@@ -892,7 +901,7 @@ class AuthController{
       }
 
       if($result->http_code !== 200){
-        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+        return $response->withStatus($result->http_code)->withJson($result);
       }
       return $response->withStatus(200)->withJson(
         ["Message" => "OTP code sent successfully"]
@@ -926,7 +935,7 @@ class AuthController{
 
     $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
     if ($result->http_code !== 200) {
-      return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+      return $response->withStatus($result->http_code)->withJson($result);
     }
 
     $jwt = $request->getAttribute('jwt');
@@ -947,7 +956,7 @@ class AuthController{
         $result = $this->auth->validateOTP($jwt['data']->UserID, $otpCode);
       }
       if ($result->http_code !== 200) {
-        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+        return $response->withStatus($result->http_code)->withJson($result);
       }
 
       # OTP válido
@@ -981,7 +990,7 @@ class AuthController{
     unset($userPlan['PlanDetails']);
 
     if ($userData->http_code !== 200) {
-      return $response->withStatus($userData->http_code)->withJson($userData->error);
+      return $response->withStatus($result->http_code)->withJson($result);
     }
 
     $token = $this->JWTgen($userData -> data);
@@ -1028,7 +1037,7 @@ class AuthController{
     }
     $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
     if ($result->http_code !== 200) {
-      return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+      return $response->withStatus($result->http_code)->withJson($result);
     }
 
     try {
@@ -1036,14 +1045,14 @@ class AuthController{
       $result = !empty($email) ?
         $this->user->getUserByEmail($email) : $this->user->getUserByUserName($username);
       if($result->http_code != 200){
-        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+        return $response->withStatus($result->http_code)->withJson($result);
       }
       $userID = $result->data['UserID'];
 
       // Envio el mail OTP
       $result = $this->auth->sendOtpMailExistingUser($userID, true);
       if($result->http_code !== 200){
-        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+        return $response->withStatus($result->http_code)->withJson($result);
       }
       return $response->withStatus(200)->withJson([
         "Message" => "OTP code sent successfully"
@@ -1070,7 +1079,7 @@ class AuthController{
 
     $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
     if ($result->http_code !== 200) {
-      return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+      return $response->withStatus($result->http_code)->withJson($result);
     }
 
     if ((empty($email) && empty($username)) || empty($recaptchaToken) || empty($password) || empty($otpCode)) {
@@ -1087,19 +1096,19 @@ class AuthController{
       $result = !empty($email) ?
         $this->user->getUserByEmail($email) : $this->user->getUserByUserName($username);
       if($result->http_code != 200){
-        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+        return $response->withStatus($result->http_code)->withJson($result);
       }
       $userID = $result->data['UserID'];
 
       # Llamar a la validación del OTP
       $result = $this->auth->validateOTP($userID, $otpCode, false);
       if ($result->http_code !== 200) {
-        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+        return $response->withStatus($result->http_code)->withJson($result);
       }
 
       $result = $this->auth->resetPassword($userID, $password);
       if($result->http_code !== 200){
-        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+        return $response->withStatus($result->http_code)->withJson($result);
       }
       return $response->withStatus(200)->withJson([
         "Message" => "Password was reset successfully"
@@ -1130,7 +1139,7 @@ class AuthController{
     $userData = $this->user->getUserById($userID);
 
     if ($userData->http_code !== 200) {
-      return $response->withStatus($userData->http_code)->withJson($userData->error);
+      return $response->withStatus($result->http_code)->withJson($result);
     }
 
     $userName = $userData -> data['UserName'];
@@ -1177,7 +1186,7 @@ class AuthController{
     $userData = $this->user->getUserById($userID);
 
     if ($userData->http_code !== 200) {
-      return $response->withStatus($userData->http_code)->withJson($userData->error);
+      return $response->withStatus($result->http_code)->withJson($result);
     }
 
     if($userData -> data['TwoFactorAuth']){
@@ -1247,7 +1256,7 @@ class AuthController{
     $userData = $this->user->getUserById($userID);
 
     if ($userData->http_code !== 200) {
-      return $response->withStatus($userData->http_code)->withJson($userData->error);
+      return $response->withStatus($result->http_code)->withJson($result);
     }
 
     if(!$userData -> data['TwoFactorAuth']){
@@ -1300,7 +1309,7 @@ class AuthController{
     try{
       $result = $this->auth->mfaCheck($userID, $code);
       if($result -> http_code != 200){
-        return $response->withStatus($result -> http_code)->withJson(["error" => $result->error]);
+        return $response->withStatus($result->http_code)->withJson($result);
       }
       return $response->withStatus(200)->withJson([
         "Message" => "MFA Verified"

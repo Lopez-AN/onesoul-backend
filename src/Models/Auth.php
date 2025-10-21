@@ -55,8 +55,9 @@ class Auth{
 
     $userId = $response -> sub;
     $user_data = $userModel -> getUserByOAuthID($userId, "google");
-    if(empty($user_data)){
-      return (object)["http_code" => 404,
+    if($user_data -> http_code == 404){
+      return (object)[
+        "http_code" => 404,
         "error" => [
           "code" => "USER_NOT_FOUND",
           "desc" => "No user associated with the specified Google account was found"
@@ -84,8 +85,9 @@ class Auth{
     }
 
     $user_data = $userModel -> getUserByOAuthID($userId, "facebook");
-    if(empty($user_data)){
-      return (object)["http_code" => 404,
+    if($user_data -> http_code == 404){
+      return (object)[
+        "http_code" => 404,
         "error" => [
           "code" => "USER_NOT_FOUND",
           "desc" => "No user associated with the specified Facebook account was found"
@@ -132,7 +134,7 @@ class Auth{
 
     $userId = $response['sub'];
     $user_data = $userModel -> getUserByOAuthID($userId, "apple");
-    if ($user_data->http_code !== 200){
+    if($user_data -> http_code == 404){
       return (object)[
         "http_code" => 404,
         "error" => [
@@ -179,6 +181,20 @@ class Auth{
         ]
       ];
     }
+
+    $otpJson = $this->redis->get("otp:{$email}");
+    // Decodificar JSON
+    $otpData = @json_decode($otpJson);
+    if (!$otpData || !$otpData -> validated) {
+      return (object)[
+        "http_code" => 401,
+        "error" => [
+          "code" => "EMAIL_NOT_VALIDATED",
+          "desc" => "The email address is not validated."
+        ]
+      ];
+    }
+    $this->redis->del("otp:{$email}");
 
     $body = $request->getParsedBody();
 
@@ -272,7 +288,7 @@ class Auth{
 
   }
 
-  public function registerGoogle($userModel, $token, $username, $clientIp, $request, $referralCode, $receiveNewsletters){
+  public function registerGoogle($userModel, $token, $username, $clientIp, $request, $referralCode, $receiveNewsletters, $altEmail){
     $response = $this -> _validateToken("https://oauth2.googleapis.com/tokeninfo?id_token=$token");
     if($response === false){
       return (object)["http_code" => 401,
@@ -294,6 +310,15 @@ class Auth{
     $last_name = !empty($response -> family_name) ? $response -> family_name : null;
     $email = !empty($response -> email) ? $response -> email : null;
     $picture = !empty($response -> picture) ? $response -> picture : null;
+
+    # Si el SSO no trajo email usar el recibido desde el front
+    if(!$email){
+      $result = $this -> _checkSsoAltEmail($altEmail); # Verificar que este validado
+      if($result->http_code != 200){
+        return $result;
+      }
+      $email = $altEmail;
+    }
 
     # Verifico si hay otro usuario con ese email
     if(!empty($email) && $userModel->getUserByEmail($email)->http_code == 200){
@@ -405,7 +430,7 @@ class Auth{
     return $userModel -> getUserByOAuthID($userId, "google");
   }
 
-  public function registerFacebook($userModel, $userId, $token, $username, $clientIp, $request, $referralCode, $receiveNewsletters){
+  public function registerFacebook($userModel, $userId, $token, $username, $clientIp, $request, $referralCode, $receiveNewsletters, $altEmail){
     $response = $this -> _validateToken("https://graph.facebook.com/$userId?fields=id,first_name,last_name,email,picture.width(640)&access_token=$token");
     if($response === false){
       return (object)["http_code" => 401,
@@ -426,6 +451,15 @@ class Auth{
     $last_name = !empty($response -> last_name) ? $response -> last_name : null;
     $email = !empty($response -> email) ? $response -> email : null;
     $picture = !empty($response -> picture -> data -> url) ? $response -> picture -> data -> url : null;
+
+    # Si el SSO no trajo email usar el recibido desde el front
+    if(!$email){
+      $result = $this -> _checkSsoAltEmail($altEmail); # Verificar que este validado
+      if($result->http_code != 200){
+        return $result;
+      }
+      $email = $altEmail;
+    }
 
     # Verifico si hay otro usuario con ese email
     if(!empty($email) && $userModel->getUserByEmail($email)->http_code == 200){
@@ -537,7 +571,7 @@ class Auth{
     return $userModel -> getUserByOAuthID($userId, "facebook");
   }
 
-  public function registerFacebookNative($userModel, $jwtToken, $username, $clientIp, $request, $referralCode, $receiveNewsletters) {
+  public function registerFacebookNative($userModel, $jwtToken, $username, $clientIp, $request, $referralCode, $receiveNewsletters, $altEmail) {
     // 1. Validar JWT contra las claves públicas de Facebook
     $decoded = $this->_validateFacebookJWT($jwtToken);
     if ($decoded === false) {
@@ -555,6 +589,15 @@ class Auth{
     $first_name = $decoded->given_name ?? null;
     $last_name = $decoded->family_name ?? null;
     $picture = $decoded->picture ?? null;
+
+    # Si el SSO no trajo email usar el recibido desde el front
+    if(!$email){
+      $result = $this -> _checkSsoAltEmail($altEmail); # Verificar que este validado
+      if($result->http_code != 200){
+        return $result;
+      }
+      $email = $altEmail;
+    }
 
     if (empty($facebookId)) {
       return (object)[
@@ -691,7 +734,7 @@ class Auth{
     return $userModel->getUserByOAuthID($facebookId, "facebook");
   }
 
-  public function registerApple($userModel, $code, $idToken, $rawNonce, $username, $clientIp, $request, $referralCode, $receiveNewsletters) {
+  public function registerApple($userModel, $code, $idToken, $rawNonce, $username, $clientIp, $request, $referralCode, $receiveNewsletters, $altEmail) {
     // Si no vino id_token, hacer exchange con code
     if (empty($idToken) && !empty($code)) {
       $idToken = $this->_appleExchangeCodeForIdToken($code);
@@ -727,6 +770,15 @@ class Auth{
     }
 
     $email = $response['email'] ?? null;
+
+    # Si el SSO no trajo email usar el recibido desde el front
+    if(!$email){
+      $result = $this -> _checkSsoAltEmail($altEmail); # Verificar que este validado
+      if($result->http_code != 200){
+        return $result;
+      }
+      $email = $altEmail;
+    }
 
     if(!empty($email) && $userModel->getUserByEmail($email)->http_code == 200){
       return (object)["http_code" => 409,
@@ -1071,7 +1123,7 @@ class Auth{
       }
 
       // Verificar OTP
-      if (!password_verify($otpCode, $hashedOtp)) {
+      if (!password_verify($otpCode, $hashedOtp)) { // No es valido
         // Incrementar intentos en el JSON
         $otpData -> attempts++;
         $this->redis->setex("otp:{$email}", 86400, json_encode($otpData));
@@ -1085,7 +1137,8 @@ class Auth{
       }
 
       # OTP válido
-      $this->redis->del("otp:{$email}");
+      $otpData -> validated = true;
+      $this->redis->setex("otp:{$email}", 86400, json_encode($otpData));
       return (object)["http_code" => 200,"data" => []];
     } catch (\Throwable $e) {
       return (object)[
@@ -1138,6 +1191,7 @@ class Auth{
     $otpData = [
       'otp_hash' => $hashedOtp,
       'attempts' => 0, // Contador de intentos
+      'validated' => false, // Indica si ya se valido el email
       'created_at' => time(),
       'expires_at' => time() + $GLOBALS['config']['otp_exptime'] // Expiracion
     ];
@@ -1714,7 +1768,7 @@ class Auth{
       # Creo el usuario con los datos basicos
       $stmt = $this->db->prepare("INSERT INTO Users (Email, UserName, PasswordHash,
       OTPCode, OTPDate, RegistrationDate, ValidatedEmail)
-      VALUES (?,?,?,?,?,?,0)");
+      VALUES (?,?,?,?,?,?,1)");
       $stmt->execute([$userData -> Email, $userData -> UserName, $userData -> PasswordHash,
         $userData -> OTPCode, date('YmdHis'), date('YmdHis')]);
     } catch (\PDOException $e) {
@@ -1726,9 +1780,9 @@ class Auth{
   private function _registerUserSSO($userData){
     # Creo el usuario con los datos basicos
     try {
-      $stmt = $this->db->prepare("INSERT INTO Users (UserName, Oauth2ID, Oauth2Service, RegistrationDate)
-      VALUES (?,?,?,?)");
-      $stmt->execute([$userData -> UserName, $userData -> Oauth2ID, $userData -> Oauth2Service, date('YmdHis')]);
+      $stmt = $this->db->prepare("INSERT INTO Users (UserName, Oauth2ID, Oauth2Service, RegistrationDate, Email, ValidatedEmail)
+      VALUES (?,?,?,?,?,1)");
+      $stmt->execute([$userData -> UserName, $userData -> Oauth2ID, $userData -> Oauth2Service, date('YmdHis'), $userData -> Email]);
 
       # Obtengo el ID del usuario creado
       $userId = $this->db->lastInsertId();
@@ -1742,10 +1796,6 @@ class Auth{
         $stmt = $this->db->prepare("UPDATE Users SET LastName = ? WHERE UserID = ?");
         $stmt->execute([$userData -> LastName, $userId]);
       }
-      if(!empty($userData -> Email)){
-        $stmt = $this->db->prepare("UPDATE Users SET ValidatedEmail = 1, Email = ? WHERE UserID = ?");
-        $stmt->execute([$userData -> Email, $userId]);
-      }
       if(!empty($userData -> Picture)){
         # Inserto la foto de perfil en la tabla media
         $stmt = $this->db->prepare("INSERT INTO Media (UserID, `URL`) VALUES (?,?)");
@@ -1754,6 +1804,35 @@ class Auth{
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
+  }
+
+  /* Verifica si el email alternativo provisto por el usuario
+    cuando el SSO no comparte publicamente un email, este validado */
+  private function _checkSsoAltEmail($altEmail){
+    if(!$altEmail){ # Si tampoco se proporciono un email desde el front devolver un error
+      return (object)["http_code" => 400,
+        "error" => [
+          "code" => "MISSING_EMAIL",
+          "desc" => "A email must be provided by either SSO service or user"
+        ]
+      ];
+    }
+    # verifico que este validado el email
+    $otpJson = $this->redis->get("otp:{$altEmail}");
+    // Decodificar JSON
+    $otpData = @json_decode($otpJson);
+    if (!$otpData || !$otpData -> validated) {
+      return (object)[
+        "http_code" => 401,
+        "error" => [
+          "code" => "EMAIL_NOT_VALIDATED",
+          "desc" => "The email address is not validated."
+        ]
+      ];
+    }
+    $this->redis->del("otp:{$altEmail}");
+
+    return (object)["http_code" => 200, "data" => "ok"];
   }
 }
 
