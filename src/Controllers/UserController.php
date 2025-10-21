@@ -206,7 +206,6 @@ class UserController
       }
 
       $result = $this->user->referralsByUser($id);
-
       if (!$result) {
         return $response->withStatus(404)->withJson([
           "error" => [

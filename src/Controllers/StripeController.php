@@ -38,12 +38,11 @@ class StripeController{
 
     $userID = $jwt['data']->UserID;
     $result = $this->user->getUserById($userID);
-
     if ($result->http_code !== 200 || empty($result->data['Email'])) {
       return $response->withStatus(400)->withJson([
         "error" => [
-          "code" => "USER_NOT_FOUND",
-          "desc" => "Could not retrieve an email for the user."
+          "code" => "USER_EMAIL_NOT_FOUND",
+          "desc" => "Could not retrieve user email"
         ]
       ]);
     }

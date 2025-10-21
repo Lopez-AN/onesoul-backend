@@ -36,12 +36,12 @@ class BookingController
   public function getBookingByID(Request $request, Response $response, $args)
   {
     $bookingID = $args['bookingID'];
-    
+
     $jwt = $request->getAttribute('jwt');
     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
       return $response->withStatus(401)->withJson([
         "error" => [
-          "code" => "INVALID_TOKEN", 
+          "code" => "INVALID_TOKEN",
           "desc" => "Invalid JWT token"
         ]
       ]);
@@ -70,12 +70,12 @@ class BookingController
           ]
         ]);
       }
-    
+
       return $response->withStatus(200)->withJson($booking);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
-          "code" => "INTERNAL_SERVER_ERROR", 
+          "code" => "INTERNAL_SERVER_ERROR",
           "desc" => $e->getMessage()
         ]
       ]);
@@ -85,12 +85,12 @@ class BookingController
   public function getBookingByPublicID(Request $request, Response $response, $args)
   {
     $publicID = $args['publicID'];
-    
+
     $jwt = $request->getAttribute('jwt');
     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
       return $response->withStatus(401)->withJson([
         "error" => [
-          "code" => "INVALID_TOKEN", 
+          "code" => "INVALID_TOKEN",
           "desc" => "Invalid JWT token"
         ]
       ]);
@@ -100,7 +100,7 @@ class BookingController
 
     try {
       $booking = $this->booking->getBookingByPublicID($publicID);
-      
+
       if (!$booking) {
         return $response->withStatus(404)->withJson([
           "error" => [
@@ -124,7 +124,7 @@ class BookingController
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
-          "code" => "INTERNAL_SERVER_ERROR", 
+          "code" => "INTERNAL_SERVER_ERROR",
           "desc" => $e->getMessage()
         ]
       ]);
@@ -140,7 +140,7 @@ class BookingController
     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
       return $response->withStatus(401)->withJson([
         "error" => [
-          "code" => "INVALID_TOKEN", 
+          "code" => "INVALID_TOKEN",
           "desc" => "Invalid JWT token"
         ]
       ]);
@@ -173,7 +173,7 @@ class BookingController
           ]
         ]);
       }
-      
+
       // Validar si el user es el cliente o el guía
       if ($userJWT != $userID && $userType != 'Admin') {
         return $response->withStatus(401)->withJson([
@@ -183,12 +183,12 @@ class BookingController
           ]
         ]);
       }
-      
+
       return $response->withStatus(200)->withJson($bookings);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
-          "code" => "INTERNAL_SERVER_ERROR", 
+          "code" => "INTERNAL_SERVER_ERROR",
           "desc" => $e->getMessage()
         ]
       ]);
@@ -204,7 +204,7 @@ class BookingController
     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
       return $response->withStatus(401)->withJson([
         "error" => [
-          "code" => "INVALID_TOKEN", 
+          "code" => "INVALID_TOKEN",
           "desc" => "Invalid JWT token"
         ]
       ]);
@@ -219,7 +219,7 @@ class BookingController
       if ($bookings === null) {
         return $response->withStatus(404)->withJson([
           "error" => [
-            "code" => "BOOKING_NOT_FOUND", 
+            "code" => "BOOKING_NOT_FOUND",
             "desc" => "No Bookings found for this specific user."
           ]
         ]);
@@ -239,7 +239,7 @@ class BookingController
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
-          "code" => "INTERNAL_SERVER_ERROR", 
+          "code" => "INTERNAL_SERVER_ERROR",
           "desc" => $e->getMessage()
         ]
       ]);
@@ -252,7 +252,7 @@ class BookingController
     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
       return $response->withStatus(401)->withJson([
         "error" => [
-          "code" => "INVALID_TOKEN", 
+          "code" => "INVALID_TOKEN",
           "desc" => "Invalid JWT token"
         ]
       ]);
@@ -326,12 +326,12 @@ class BookingController
         }
       }
 
-      // VALIDAR: Offering si existe 
+      // VALIDAR: Offering si existe
       $id = $data['OfferingID'] ?? null;
       if (!$id) {
         return $response->withStatus(400)->withJson([
           "error" => [
-            "code" => "INVALID_OFFERING", 
+            "code" => "INVALID_OFFERING",
             "desc" => "Offering is required."
           ]
         ]);
@@ -357,7 +357,7 @@ class BookingController
           ]
         ]);
       }
-      
+
       // VALIDAR: Fecha de cita
       $scheduledDate = $data['ScheduledDate'] ?? null;
       if (!$scheduledDate) {
@@ -439,7 +439,7 @@ class BookingController
       $hasValidPackage = false;
       $price = null;
       $conditions = null;
-      
+
       if (!empty($offering['Packages'])) {
         foreach ($offering['Packages'] as $package) {
           if (in_array(strtolower($package['SessionType']), $validTypes)) {
@@ -460,17 +460,7 @@ class BookingController
         ]);
       }
 
-      // OBTENER CountryCode del usuario
-      if ($userInfo->http_code !== 200 || empty($userInfo->data['CountryCode'])) {
-        return $response->withStatus(404)->withJson([
-          "error" => [
-            "code" => "USER_NOT_FOUND",
-            "desc" => "Could not retrieve a CountryCode for the user."
-          ]
-        ]);
-      }
-
-      $countryCode = $userInfo->data['CountryCode'];
+      $countryCode = $userInfo->data['CountryCode'] ?? "AR";
       $type = 'B';
       $publicID = $this->booking->generatePublicId($countryCode, $type);
 
@@ -562,7 +552,7 @@ class BookingController
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
-          "code" => "INTERNAL_SERVER_ERROR", 
+          "code" => "INTERNAL_SERVER_ERROR",
           "desc" => $e->getMessage()
         ]
       ]);
@@ -575,7 +565,7 @@ class BookingController
     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
       return $response->withStatus(401)->withJson([
         "error" => [
-          "code" => "INVALID_TOKEN", 
+          "code" => "INVALID_TOKEN",
           "desc" => "Invalid JWT token"
         ]
       ]);
@@ -590,7 +580,7 @@ class BookingController
     $message = $data['Message'] ?? null;
     $locationID = $data['LocationID'] ?? null;
     $subDomain = $data['SubDomain'] ?? '';
-    
+
     // Validar formato de subdominio (solo letras A-Z, a-z)
     if (!empty($subDomain)) {
       if (!preg_match('/^[a-zA-Z]+$/', $subDomain)) {
@@ -646,7 +636,7 @@ class BookingController
 
       // Verificar si el booking está cancelado, confirmado, completado o calificado (último evento solamente)
       if (!empty($booking['Events'])) {
-        $latestEvent = $booking['Events'][0]; 
+        $latestEvent = $booking['Events'][0];
 
         if (in_array($latestEvent['BookingEvent'], ['Canceled', 'Confirmed', 'Completed', 'Rated'])) {
           return $response->withStatus(400)->withJson([
@@ -751,7 +741,7 @@ class BookingController
 
         $validTypes = $sessionTypes[$mode];
         $hasValidPackage = false;
-      
+
         if (!empty($offering['Packages'])) {
           foreach ($offering['Packages'] as $package) {
             if (in_array(strtolower($package['SessionType']), $validTypes)) {
@@ -847,7 +837,7 @@ class BookingController
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
-          "code" => "INTERNAL_SERVER_ERROR", 
+          "code" => "INTERNAL_SERVER_ERROR",
           "desc" => $e->getMessage()
         ]
       ]);
@@ -860,7 +850,7 @@ class BookingController
     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
       return $response->withStatus(401)->withJson([
         "error" => [
-          "code" => "INVALID_TOKEN", 
+          "code" => "INVALID_TOKEN",
           "desc" => "Invalid JWT token"
         ]
       ]);
@@ -871,7 +861,7 @@ class BookingController
     $userType = $jwt['data']->UserType;
     $bookingID = $args['bookingID'];
     $message = $data['Message'] ?? null;
-    
+
     // Validar que defina el motivo de la anulación (se guarda en campo Message)
     if (!$message) {
       return $response->withStatus(400)->withJson([
@@ -880,7 +870,7 @@ class BookingController
           "desc" => "The reason is required for cancellation."
         ]
       ]);
-    }    
+    }
 
     // Valida contenido con Perspective API
     if(!empty($data['Message'])){
@@ -899,10 +889,10 @@ class BookingController
           "desc" => "The message is too long (max 1000 characters)"
         ]
       ]);
-    }    
+    }
 
     $subDomain = $data['SubDomain'] ?? '';
-    
+
     // Validar formato de subdominio (solo letras A-Z, a-z)
     if (!empty($subDomain)) {
       if (!preg_match('/^[a-zA-Z]+$/', $subDomain)) {
@@ -939,7 +929,7 @@ class BookingController
 
       // Verificar si el booking está cancelado, completado o calificado (último evento solamente)
       if (!empty($booking['Events'])) {
-        $latestEvent = $booking['Events'][0]; 
+        $latestEvent = $booking['Events'][0];
 
         if (in_array($latestEvent['BookingEvent'], ['Canceled', 'Completed', 'Rated'])) {
           return $response->withStatus(400)->withJson([
@@ -975,7 +965,7 @@ class BookingController
             "La reserva {$booking['PublicID']} fue cancelada",
             ROOT . "/src/templates/email_booking_canceled.html",
             [
-              '{YEAR}' => date('Y'),            
+              '{YEAR}' => date('Y'),
               '{USERNAME}' => $username,
               '{OFFERING}' => $offeringName,
               '{BOOKING_ID}' => $booking['PublicID'],
@@ -1004,14 +994,14 @@ class BookingController
                   "La reserva {$booking['PublicID']} fue cancelada",
                   ROOT . "/src/templates/email_booking_canceled_guide.html",
                   [
-                    '{YEAR}' => date('Y'),            
+                    '{YEAR}' => date('Y'),
                     '{GUIDE_NAME}' => $guideName,
                     '{SERVICE_NAME}' => $offeringName,
-                    '{BOOKING_ID}' => $booking['PublicID'],                    
+                    '{BOOKING_ID}' => $booking['PublicID'],
                     '{SEARCHER_NAME}' => $searcherName,
                     '{SEARCHER_EMAIL}' => $userEmail,
                     '{SEARCHER_PHONE}' => $userInfo->data['Phone'] ?? '-',
-                    '{MESSAGE}' => $message,                    
+                    '{MESSAGE}' => $message,
                     '{BOOKING_URL}' => "{$origin}/bookings/guide"
                   ]
                 );
@@ -1026,7 +1016,7 @@ class BookingController
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
-          "code" => "INTERNAL_SERVER_ERROR", 
+          "code" => "INTERNAL_SERVER_ERROR",
           "desc" => $e->getMessage()
         ]
       ]);
@@ -1039,7 +1029,7 @@ class BookingController
     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
       return $response->withStatus(401)->withJson([
         "error" => [
-          "code" => "INVALID_TOKEN", 
+          "code" => "INVALID_TOKEN",
           "desc" => "Invalid JWT token"
         ]
       ]);
@@ -1049,7 +1039,7 @@ class BookingController
     $userID = $jwt['data']->UserID;
     $userType = $jwt['data']->UserType;
     $bookingID = $args['bookingID'];
-    $message = $data['Message'] ?? null; 
+    $message = $data['Message'] ?? null;
 
     // Valida contenido con Perspective API
     if(!empty($data['Message'])){
@@ -1071,7 +1061,7 @@ class BookingController
     }
 
     $subDomain = $data['SubDomain'] ?? '';
-    
+
     // Validar formato de subdominio (solo letras A-Z, a-z)
     if (!empty($subDomain)) {
       if (!preg_match('/^[a-zA-Z]+$/', $subDomain)) {
@@ -1108,7 +1098,7 @@ class BookingController
 
       // Verificar si el booking está cancelado, completado o calificado (último evento solamente)
       if (!empty($booking['Events'])) {
-        $latestEvent = $booking['Events'][0]; 
+        $latestEvent = $booking['Events'][0];
 
         if (in_array($latestEvent['BookingEvent'], ['Canceled', 'Confirmed', 'Completed', 'Rated'])) {
           return $response->withStatus(400)->withJson([
@@ -1144,7 +1134,7 @@ class BookingController
             "La reserva {$booking['PublicID']} fue confirmada",
             ROOT . "/src/templates/email_booking_confirmed.html",
             [
-              '{YEAR}' => date('Y'),            
+              '{YEAR}' => date('Y'),
               '{USERNAME}' => $username,
               '{OFFERING}' => $offeringName,
               '{BOOKING_ID}' => $booking['PublicID'],
@@ -1175,16 +1165,16 @@ class BookingController
                   "La reserva {$booking['PublicID']} fue confirmada",
                   ROOT . "/src/templates/email_booking_confirmed_guide.html",
                   [
-                    '{YEAR}' => date('Y'),            
+                    '{YEAR}' => date('Y'),
                     '{GUIDE_NAME}' => $guideName,
                     '{SERVICE_NAME}' => $offeringName,
                     '{BOOKING_ID}' => $booking['PublicID'],
                     '{SCHEDULED}' => $booking['ScheduledDate'] ? $booking['ScheduledDate'] : 'A confirmar',
-                    '{MODE}' => $booking['Mode'],                    
+                    '{MODE}' => $booking['Mode'],
                     '{SEARCHER_NAME}' => $searcherName,
                     '{SEARCHER_EMAIL}' => $userEmail,
                     '{SEARCHER_PHONE}' => $userInfo->data['Phone'] ?? '-',
-                    '{MESSAGE}' => $message,                    
+                    '{MESSAGE}' => $message,
                     '{BOOKING_URL}' => "{$origin}/bookings/guide"
                   ]
                 );
@@ -1199,20 +1189,20 @@ class BookingController
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
-          "code" => "INTERNAL_SERVER_ERROR", 
+          "code" => "INTERNAL_SERVER_ERROR",
           "desc" => $e->getMessage()
         ]
       ]);
     }
   }
-  
+
   public function completeBooking(Request $request, Response $response, $args)
   {
     $jwt = $request->getAttribute('jwt');
     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
       return $response->withStatus(401)->withJson([
         "error" => [
-          "code" => "INVALID_TOKEN", 
+          "code" => "INVALID_TOKEN",
           "desc" => "Invalid JWT token"
         ]
       ]);
@@ -1222,7 +1212,7 @@ class BookingController
     $userID = $jwt['data']->UserID;
     $userType = $jwt['data']->UserType;
     $bookingID = $args['bookingID'];
-    $message = $data['Message'] ?? null; 
+    $message = $data['Message'] ?? null;
     $rating = $data['Rating'] ?? null;
     $fulfilled = $data['Fulfilled'] ?? null;
 
@@ -1247,7 +1237,7 @@ class BookingController
     if (!in_array($data['Rating'], [1, 2, 3, 4, 5])) {
       return $response->withStatus(400)->withJson([
         "error" => [
-          "code" => "INVALID_RATING", 
+          "code" => "INVALID_RATING",
           "desc" => "Rating must be between 1 and 5"
         ]
       ]);
@@ -1296,7 +1286,7 @@ class BookingController
 
       // Verificar si el último evento del booking es distinto de 'Confirmed'
       if (!empty($booking['Events'])) {
-        $latestEvent = $booking['Events'][0]; 
+        $latestEvent = $booking['Events'][0];
 
         if ($latestEvent['BookingEvent'] !== 'Confirmed') {
           return $response->withStatus(400)->withJson([
@@ -1318,7 +1308,7 @@ class BookingController
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
-          "code" => "INTERNAL_SERVER_ERROR", 
+          "code" => "INTERNAL_SERVER_ERROR",
           "desc" => $e->getMessage()
         ]
       ]);
@@ -1331,7 +1321,7 @@ class BookingController
     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
       return $response->withStatus(401)->withJson([
         "error" => [
-          "code" => "INVALID_TOKEN", 
+          "code" => "INVALID_TOKEN",
           "desc" => "Invalid JWT token"
         ]
       ]);
@@ -1341,7 +1331,7 @@ class BookingController
     $userID = $jwt['data']->UserID;
     $userType = $jwt['data']->UserType;
     $bookingID = $args['bookingID'];
-    $message = $data['Message'] ?? null; 
+    $message = $data['Message'] ?? null;
     $rating = $data['Rating'] ?? null;
     $fulfilled = $data['Fulfilled'] ?? null;
 
@@ -1366,7 +1356,7 @@ class BookingController
     if (!in_array($data['Rating'], [1, 2, 3, 4, 5])) {
       return $response->withStatus(400)->withJson([
         "error" => [
-          "code" => "INVALID_RATING", 
+          "code" => "INVALID_RATING",
           "desc" => "Rating must be between 1 and 5"
         ]
       ]);
@@ -1415,7 +1405,7 @@ class BookingController
 
       // Verificar si el último evento del booking es distinto de 'Confirmed'
       if (!empty($booking['Events'])) {
-        $latestEvent = $booking['Events'][0]; 
+        $latestEvent = $booking['Events'][0];
 
         if ($latestEvent['BookingEvent'] !== 'Completed') {
           return $response->withStatus(400)->withJson([
@@ -1448,7 +1438,7 @@ class BookingController
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
-          "code" => "INTERNAL_SERVER_ERROR", 
+          "code" => "INTERNAL_SERVER_ERROR",
           "desc" => $e->getMessage()
         ]
       ]);
@@ -1485,7 +1475,7 @@ class BookingController
     if ($rating !== null && (!is_numeric($rating) || $rating < 1 || $rating > 5)) {
       return $response->withStatus(400)->withJson([
         "error" => [
-          "code" => "INVALID_RATING", 
+          "code" => "INVALID_RATING",
           "desc" => "El parámetro 'rating' debe estar entre 1 y 5."
         ]
       ]);
@@ -1507,7 +1497,7 @@ class BookingController
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
-          "code" => "INTERNAL_SERVER_ERROR", 
+          "code" => "INTERNAL_SERVER_ERROR",
           "desc" => $e->getMessage()
         ]
       ]);
@@ -1541,7 +1531,7 @@ class BookingController
     if ($rating !== null && (!is_numeric($rating) || $rating < 1 || $rating > 5)) {
       return $response->withStatus(400)->withJson([
         "error" => [
-          "code" => "INVALID_RATING", 
+          "code" => "INVALID_RATING",
           "desc" => "El parámetro 'rating' debe estar entre 1 y 5."
         ]
       ]);
@@ -1563,7 +1553,7 @@ class BookingController
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
-          "code" => "INTERNAL_SERVER_ERROR", 
+          "code" => "INTERNAL_SERVER_ERROR",
           "desc" => $e->getMessage()
         ]
       ]);
@@ -1597,7 +1587,7 @@ class BookingController
     if ($rating !== null && (!is_numeric($rating) || $rating < 1 || $rating > 5)) {
       return $response->withStatus(400)->withJson([
         "error" => [
-          "code" => "INVALID_RATING", 
+          "code" => "INVALID_RATING",
           "desc" => "El parámetro 'rating' debe estar entre 1 y 5."
         ]
       ]);
@@ -1619,7 +1609,7 @@ class BookingController
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
-          "code" => "INTERNAL_SERVER_ERROR", 
+          "code" => "INTERNAL_SERVER_ERROR",
           "desc" => $e->getMessage()
         ]
       ]);
@@ -1629,17 +1619,17 @@ class BookingController
   public function getReviewsByUser(Request $request, Response $response, $args){
     $userID = $args['userID'];
     $queryParams = $request->getQueryParams();
-  
+
     $from = $queryParams['from'] ?? null;
     $to = $queryParams['to'] ?? null;
     $rating = $queryParams['rating'] ?? null;
     $limit = isset($queryParams['limit']) ? (int)$queryParams['limit'] : 50;
-  
+
     // Validar formato YYYYMMDD
     $isValidDate = function($date) {
       return preg_match('/^\d{8}$/', $date) && DateTime::createFromFormat('Ymd', $date) !== false;
     };
-  
+
     if (($to !== null && !$isValidDate($to)) || ($from !== null && !$isValidDate($from))) {
       return $response->withStatus(400)->withJson([
         "error" => [
@@ -1648,16 +1638,16 @@ class BookingController
         ]
       ]);
     }
-  
+
     if ($rating !== null && (!is_numeric($rating) || $rating < 1 || $rating > 5)) {
       return $response->withStatus(400)->withJson([
         "error" => [
-          "code" => "INVALID_RATING", 
+          "code" => "INVALID_RATING",
           "desc" => "El parámetro 'rating' debe estar entre 1 y 5."
         ]
       ]);
     }
-  
+
     try {
       $reviews = $this->booking->getReviewsByUser($userID, $limit, $from, $to, $rating);
 
@@ -1674,7 +1664,7 @@ class BookingController
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
-          "code" => "INTERNAL_SERVER_ERROR", 
+          "code" => "INTERNAL_SERVER_ERROR",
           "desc" => $e->getMessage()
         ]
       ]);
@@ -1684,14 +1674,14 @@ class BookingController
   public function getReviewsByID(Request $request, Response $response, $args)
   {
     $reviewID = $args['reviewID'];
-    
+
     try {
       $review = $this->booking->getReviewsByID($reviewID);
-      
+
       if (!$review) {
         return $response->withStatus(404)->withJson([
           "error" => [
-            "code" => "REVIEW_NOT_FOUND", 
+            "code" => "REVIEW_NOT_FOUND",
             "desc" => "Review not found."
           ]
         ]);
@@ -1701,14 +1691,14 @@ class BookingController
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
-          "code" => "INTERNAL_SERVER_ERROR", 
+          "code" => "INTERNAL_SERVER_ERROR",
           "desc" => $e->getMessage()
         ]
       ]);
     }
   }
 
-  public function getReviewsByOffering(Request $request, Response $response, $args)  
+  public function getReviewsByOffering(Request $request, Response $response, $args)
   {
     $offeringID = $args['offeringID'];
     $queryParams = $request->getQueryParams();
@@ -1735,7 +1725,7 @@ class BookingController
     if ($rating !== null && (!is_numeric($rating) || $rating < 1 || $rating > 5)) {
       return $response->withStatus(400)->withJson([
         "error" => [
-          "code" => "INVALID_RATING", 
+          "code" => "INVALID_RATING",
           "desc" => "El parámetro 'rating' debe estar entre 1 y 5."
         ]
       ]);
@@ -1763,7 +1753,7 @@ class BookingController
     }
   }
 
-  private function containsInappropriateContent($text) 
+  private function containsInappropriateContent($text)
   {
     return validateContentWithPerspective($text);
   }

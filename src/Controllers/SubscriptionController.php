@@ -230,7 +230,7 @@ class SubscriptionController {
           ]
         ]);
       }
-  
+
       $newPlanID = $data['PlanID'] ?? null;
 
       // Obtener el email del usuario
@@ -238,7 +238,7 @@ class SubscriptionController {
       if ($userResult->http_code !== 200 || empty($userResult->data['Email'])) {
         return $response->withStatus(400)->withJson([
           "error" => [
-            "code" => "USER_NOT_FOUND",
+            "code" => "USER_EMAIL_NOT_FOUND",
             "desc" => "Could not retrieve user email"
           ]
         ]);
