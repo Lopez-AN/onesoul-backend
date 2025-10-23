@@ -271,6 +271,18 @@ class Donation
     }
   }
 
+  public function cancelDonation($voucherID){
+    try{
+      $stmt = $this->db->prepare("UPDATE DonationVouchers
+        SET Status = 'canceled' WHERE VoucherID = :voucherID");
+
+      $stmt->bindParam(':voucherID', $voucherID, PDO::PARAM_INT);
+      $stmt->execute();
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
   /**
    * Genera un RaffleCode - Código público de sorteo
    * Formato: XYZ9876578 (10 caracteres alfanuméricos)

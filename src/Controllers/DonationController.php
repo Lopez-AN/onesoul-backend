@@ -207,7 +207,7 @@ class DonationController
         return $response->withStatus(406)->withJson([
           "error" => [
             "code" => "MONTLY_DONATIONS_EXCEDED",
-            "desc" => "You only are allowed to cancel draft donations"
+            "desc" => "Monthly active donations limit reached"
           ]
         ]);
       }
@@ -241,6 +241,62 @@ class DonationController
 
       $this->donation->createDonation($userID, $offeringID);
       return $response->withJson("Donation added");
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  # Crea una donacion
+  public function cancelDonation(Request $request, Response $response, $args) {
+    $voucherID = $args['voucherID'];
+
+    $jwt = $request->getAttribute('jwt');
+    # Solo los guias pueden crear donaciones
+    if ($jwt['data']->UserType != 'Guide') {
+      return $response->withStatus(401)->withJson([
+        "error" => [
+          "code" => "UNAUTHORIZED",
+          "desc" => "You do not have permission to cancel a donation"
+        ]
+      ]);
+    }
+    $userID = $jwt['data']->UserID;
+
+    # Ahora busco si no supero el límite de donaciones
+    try {
+      $donation = $this->donation->getDonationById($voucherID);
+      if ($donation === null) {
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "DONATION_NOT_FOUND",
+            "desc" => "The donation is not found"
+          ]
+        ]);
+      }
+      if ($donation['GuideID'] != $userID && !$isAdmin) {
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "UNAUTHORIZED",
+            "desc" => "This donation does not belong to you"
+          ]
+        ]);
+      }
+      if ($donation['Status'] != 'draft') {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "DONATION_NOT_CANCELABLE",
+            "desc" => "Only draft donations can be canceled"
+          ]
+        ]);
+      }
+
+      $this->donation->cancelDonation($voucherID);
+      return $response->withJson("Donation canceled");
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [

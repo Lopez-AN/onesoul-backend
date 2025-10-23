@@ -21,5 +21,6 @@ return function (App $app) {
   $app->get('/donations/{voucherID}', [$donationController, 'getDonationById'])->add($jwtMiddleware);
   $app->get('/donations/validate/{redeemCode}', [$donationController, 'validateCoupon']);
   $app->get('/donations/montly/{userID}', [$donationController, 'getMontlyDonations'])->add($jwtMiddleware);
+  $app->delete('/donations/{voucherID}', [$donationController, 'cancelDonation'])->add($jwtMiddleware);
   $app->post('/donations', [$donationController, 'createDonation'])->add($jwtMiddleware);
 };
