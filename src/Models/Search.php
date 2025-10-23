@@ -35,7 +35,7 @@ class Search
       $stmt = $this->pdo->query("SELECT FOUND_ROWS() AS total");
       $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
-      return [
+      return (object) [
         "data" => $rs,
         "rows" => [
           "total" => $total['total'],
@@ -196,7 +196,7 @@ class Search
         return $e;
       }, $rs);
 
-      return [
+      return (object) [
         "data" => $rs,
         "rows" => [
           "total" => $total['total'],
@@ -362,7 +362,7 @@ class Search
         return $e;
       }, $rs);
 
-      return [
+      return (object) [
         "data" => $rs,
         "rows" => [
           "total" => $total['total'],

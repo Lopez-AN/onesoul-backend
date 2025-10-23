@@ -163,7 +163,7 @@ class Offering
         return $e;
       }, $rs);
 
-      return [
+      return (object) [
         "data" => $rs,
         "rows" => [
           "total" => $total['total'],
@@ -228,7 +228,7 @@ class Offering
         -- Subconsulta para locations
         (SELECT JSON_ARRAYAGG(
           JSON_OBJECT(
-            'LocationID', l.LocationID,          
+            'LocationID', l.LocationID,
             'CountryCode', l.CountryCode,
             'CountryName', c.CountryName,
             'State', l.State,
@@ -252,7 +252,7 @@ class Offering
       $stmt->execute();
 
       $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
-      
+
       if (empty($rs)) {
         return (object) [
           "http_code" => 404,
@@ -384,7 +384,7 @@ class Offering
         -- Subconsulta para locations
         (SELECT JSON_ARRAYAGG(
           JSON_OBJECT(
-            'LocationID', l.LocationID,          
+            'LocationID', l.LocationID,
             'CountryCode', l.CountryCode,
             'CountryName', c.CountryName,
             'State', l.State,
@@ -481,7 +481,7 @@ class Offering
         return $e;
       }, $rs);
 
-      return [
+      return (object) [
         "data" => $rs,
         "rows" => [
           "total" => $total['total'],
@@ -546,7 +546,7 @@ class Offering
         -- Subconsulta para locations
         (SELECT JSON_ARRAYAGG(
           JSON_OBJECT(
-            'LocationID', l.LocationID,          
+            'LocationID', l.LocationID,
             'CountryCode', l.CountryCode,
             'CountryName', c.CountryName,
             'State', l.State,
@@ -643,7 +643,7 @@ class Offering
         return $e;
       }, $rs);
 
-      return [
+      return (object) [
         "data" => $rs,
         "rows" => [
           "total" => $total['total'],
@@ -681,7 +681,7 @@ class Offering
 
       $stmt = $this->db->prepare("INSERT INTO Offerings (Title, ShortDescription, Description, CategoryID, UserID,
             Status, CreationDate, IsActive, Currency, Tags, SKU, Stock, ServiceType)
-            VALUES (:Title, :ShortDescription, :Description, :CategoryID, :UserID, :Status, 
+            VALUES (:Title, :ShortDescription, :Description, :CategoryID, :UserID, :Status,
             :CreationDate, 0, :Currency, :Tags, :SKU, :Stock, :ServiceType)");
 
       $stmt->bindParam(':Title', $data['Title'], PDO::PARAM_STR);
@@ -881,8 +881,8 @@ class Offering
       throw new DatabaseException($e->getMessage());
     }
   }
-  
-  public function updateOfferingLocations($id, $locations) 
+
+  public function updateOfferingLocations($id, $locations)
   {
     // Si se recibe `locations`, eliminar las existentes y agregar las nuevas
     if ($locations !== null &&  is_array($locations)) {
@@ -912,7 +912,7 @@ class Offering
       $stmt->bindParam(':id', $id, PDO::PARAM_INT);
       $stmt->execute();
 
-      $stmt = $this->db->prepare("INSERT INTO OfferingsFaqs (OfferingID, Position, Question, Answer) 
+      $stmt = $this->db->prepare("INSERT INTO OfferingsFaqs (OfferingID, Position, Question, Answer)
       VALUES (:id, :position, :question, :answer)");
       foreach ($faqs as $faq) {
         $stmt->bindParam(':id', $id, PDO::PARAM_INT);
@@ -931,7 +931,7 @@ class Offering
       $stmt->bindParam(':id', $id, PDO::PARAM_INT);
       $stmt->execute();
 
-      $stmt = $this->db->prepare("INSERT INTO OfferingsPackages (OfferingID, Package, Price, Description, Conditions, SessionType) 
+      $stmt = $this->db->prepare("INSERT INTO OfferingsPackages (OfferingID, Package, Price, Description, Conditions, SessionType)
       VALUES (:id, :package, :price, :description, :conditions, :sessionType)");
       foreach ($packages as $package) {
         $stmt->bindParam(':id', $id, PDO::PARAM_INT);
@@ -1016,7 +1016,7 @@ class Offering
       if ($fileURL) {
         // Actualización para Media con archivo
         $stmt = $this->db->prepare("UPDATE Media
-                SET Title = :title, Description = :description, URL = :fileURL, Path = :filePath, MediaType = :mediaType, 
+                SET Title = :title, Description = :description, URL = :fileURL, Path = :filePath, MediaType = :mediaType,
                 Position = :position
                 WHERE MediaID = :mediaID AND OfferingID = :id");
 

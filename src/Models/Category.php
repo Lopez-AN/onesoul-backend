@@ -32,7 +32,7 @@ class Category
       $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
       $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
-      return [
+      return (object) [
         "data" => $rs,
         "rows" => [
           "total" => $total['total'],
@@ -62,7 +62,7 @@ class Category
       $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
       $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
-      return [
+      return (object) [
         "data" => $rs,
         "rows" => [
           "total" => $total['total'],
@@ -95,7 +95,7 @@ class Category
       $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
       $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
-      return [
+      return (object) [
         "data" => $rs,
         "rows" => [
           "total" => $total['total'],

@@ -100,7 +100,7 @@ clASs User
         return $e;
       }, $rs);
 
-      return [
+      return (object) [
         "data" => $rs,
         "rows" => [
           "total" => $total['total'],
@@ -908,8 +908,8 @@ clASs User
       $rs = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 
       return (object) [
-        "Data" => $rs,
-        "Rows" => count($rs)
+        "data" => $rs,
+        "rows" => count($rs)
       ];
 
     } catch (\PDOException $e) {

@@ -1,0 +1,25 @@
+<?php
+
+use Slim\App;
+use App\Controllers\DonationController;
+use App\Models\Donation;
+use App\Models\Offering;
+use Tuupola\Middleware\JwtAuthentication;
+
+return function (App $app) {
+  $jwtMiddleware = new JwtAuthentication([
+    "secret" => $GLOBALS['config']['jwt']['secret'],
+    "attribute" => "jwt"
+  ]);
+
+  $pdo = require __DIR__ . './../core/database.php';
+  $donation = new Donation($pdo);
+  $offering = new Offering($pdo);
+  $donationController = new DonationController($donation, $offering);
+
+  $app->get('/donations/guide/{userID}', [$donationController, 'getDonations'])->add($jwtMiddleware);
+  $app->get('/donations/{voucherID}', [$donationController, 'getDonationById'])->add($jwtMiddleware);
+  $app->get('/donations/validate/{redeemCode}', [$donationController, 'validateCoupon']);
+  $app->get('/donations/montly/{userID}', [$donationController, 'getMontlyDonations'])->add($jwtMiddleware);
+  $app->post('/donations', [$donationController, 'createDonation'])->add($jwtMiddleware);
+};

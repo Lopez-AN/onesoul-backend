@@ -39,6 +39,7 @@ $errorMiddleware = $app->addErrorMiddleware(true, true, true);
 
 (require ROOT . '/src/Routes/categories.php')($app);
 (require ROOT . '/src/Routes/offerings.php')($app);
+(require ROOT . '/src/Routes/donations.php')($app);
 (require ROOT . '/src/Routes/users.php')($app);
 (require ROOT . '/src/Routes/search.php')($app);
 (require ROOT . '/src/Routes/auth.php')($app);
