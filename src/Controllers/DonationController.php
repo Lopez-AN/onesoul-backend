@@ -173,13 +173,14 @@ class DonationController
     }
   }
 
-  # Crea una donacion
+  # Crea una o varias donaciones
   public function createDonation(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
     $paginator = paginator($request);
 
     $offeringID = $data['OfferingID'] ?? null;
-    if (empty($offeringID)) {
+    $quantity = $data['Quantity'] ?? null;
+    if (empty($offeringID) || empty($quantity)) {
       return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "INVALID_PARAMETERS",
@@ -203,7 +204,7 @@ class DonationController
     # Ahora busco si no supero el límite de donaciones
     try {
       $result = $this->donation->getMontlyDonations($userID, $paginator);
-      if(count($result->data) > $GLOBALS['config']['donations']['max_montly_donations']){
+      if(count($result->data) + $quantity > $GLOBALS['config']['donations']['max_montly_donations']){
         return $response->withStatus(406)->withJson([
           "error" => [
             "code" => "MONTLY_DONATIONS_EXCEDED",
@@ -239,7 +240,7 @@ class DonationController
         ]);
       }
 
-      $this->donation->createDonation($userID, $offeringID);
+      $this->donation->createDonation($userID, $offeringID, $quantity);
       return $response->withJson("Donation added");
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
@@ -251,7 +252,7 @@ class DonationController
     }
   }
 
-  # Crea una donacion
+  # Cancela una donacion
   public function cancelDonation(Request $request, Response $response, $args) {
     $voucherID = $args['voucherID'];
 
@@ -266,6 +267,7 @@ class DonationController
       ]);
     }
     $userID = $jwt['data']->UserID;
+    $isAdmin = $jwt['data']->UserType === 'Admin';
 
     # Ahora busco si no supero el límite de donaciones
     try {
@@ -297,6 +299,41 @@ class DonationController
 
       $this->donation->cancelDonation($voucherID);
       return $response->withJson("Donation canceled");
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  # Cancela una donacion
+  public function raffleCoupons(Request $request, Response $response, $args) {
+    $quantity = $args['quantity'];
+    try{
+      $jwt = $request->getAttribute('jwt');
+      # Solo los administradores pueden sortear crear donaciones
+      // if ($jwt['data']->UserType != 'Admin') { // DEBUG (comentado por ahora)
+      //   return $response->withStatus(401)->withJson([
+      //     "error" => [
+      //       "code" => "UNAUTHORIZED",
+      //       "desc" => "Only administrators can raffle coupons"
+      //     ]
+      //   ]);
+      // }
+      if($quantity < 1 || $quantity > 1000){
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "INVALID_RAFFLE_QUANTITY",
+            "desc" => "Quantity must be in 1-1000 range"
+          ]
+        ]);
+      }
+
+      $result = $this->donation->raffleCoupons($quantity);
+      return $response->withJson($result);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [

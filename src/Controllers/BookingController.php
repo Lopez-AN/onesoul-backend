@@ -263,6 +263,7 @@ class BookingController
     $message = $data['Message'] ?? null;
     $subDomain = $data['SubDomain'] ?? '';
     $assocUUID = $data['AssocUUID'] ?? '';
+    $coupon = $data['Coupon'] ?? null;
     $userInfo = $this->user->getUserById($userID);
 
     $emailValidated = filter_var($userInfo->data['ValidatedEmail'], FILTER_VALIDATE_BOOLEAN);
@@ -310,7 +311,7 @@ class BookingController
 
     try {
       // Verificar si el usuario tiene conexión con Calendly
-      $hasCalendly = $this->booking->userHasCalendly($userID);
+      $hasCalendly = false; // $this->booking->userHasCalendly($userID);  // DEBUG!!!
 
       if ($hasCalendly) {
         // Buscar el webhook en CalendlyWebhooks
@@ -359,7 +360,7 @@ class BookingController
       }
 
       // VALIDAR: Fecha de cita
-      $scheduledDate = $data['ScheduledDate'] ?? null;
+      $scheduledDate = $data['ScheduledDate'] ?? '2025-11-20 12:00:00';  // null;   // DEBUG!!!
       if (!$scheduledDate) {
         return $response->withStatus(400)->withJson([
           "error" => [
@@ -475,7 +476,7 @@ class BookingController
         'Message' => $message
       ];
 
-      $booking = $this->booking->createBooking($data, $subDomain, $assocUUID);
+      $booking = $this->booking->createBooking($data, $subDomain, $assocUUID, $coupon);
 
       // Si había Calendly y se encontró el webhook → asociar BookingID en CalendlyWebhooks
       if ($hasCalendly && isset($booking['BookingID'])) {
@@ -575,7 +576,7 @@ class BookingController
     $userType = $jwt['data']->UserType;
     $bookingID = $args['bookingID'];
     $data = $request->getParsedBody();
-    $scheduledDate = $data['ScheduledDate'] ?? null;
+    $scheduledDate = $data['ScheduledDate'] ?? '2025-11-20 12:00:00';  // null;   // DEBUG!!!
     $mode = strtolower($data['Mode'] ?? '');
     $message = $data['Message'] ?? null;
     $locationID = $data['LocationID'] ?? null;
