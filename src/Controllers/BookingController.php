@@ -266,8 +266,8 @@ class BookingController
     $coupon = $data['Coupon'] ?? null;
     $userInfo = $this->user->getUserById($userID);
 
-    $emailValidated = filter_var($userInfo->data['ValidatedEmail'], FILTER_VALIDATE_BOOLEAN);
-    $phoneValidated = filter_var($userInfo->data['ValidatedPhone'], FILTER_VALIDATE_BOOLEAN);
+    $emailValidated = !empty($userInfo->data) && filter_var($userInfo->data['ValidatedEmail'], FILTER_VALIDATE_BOOLEAN);
+    $phoneValidated = !empty($userInfo->data) && filter_var($userInfo->data['ValidatedPhone'], FILTER_VALIDATE_BOOLEAN);
 
     if ($userInfo->http_code !== 200 || !$emailValidated || !$phoneValidated) {
       return $response->withStatus(400)->withJson([
@@ -291,8 +291,8 @@ class BookingController
     }
 
     // Valida contenido con Perspective API
-    if(!empty($data['Message'])){
-      if ($this->containsInappropriateContent($data['Message'])) {
+    if($message){
+      if ($this->containsInappropriateContent($message)) {
         return $response->withStatus(400)->withJson([
           "code" => "INAPPROPRIATE_CONTENT",
           "desc" => "Please remove inappropriate content and try again."
@@ -300,7 +300,7 @@ class BookingController
       }
     }
 
-    if (strlen($message) > 1000) {
+    if ($message && strlen($message) > 1000) {
       return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "MESSAGE_TOO_LONG",

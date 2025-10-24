@@ -257,7 +257,7 @@ class Booking
           SET WinnerUserID = :userID, RedeemedAt = :redeemedAt, Status = 'redeemed'
           WHERE RedeemCode = :redeemCode");
         $stmt->bindParam(':userID', $data['UserID'], PDO::PARAM_INT);
-        $stmt->bindParam(':redeemedAt', time(), PDO::PARAM_INT);
+        $stmt->bindValue(':redeemedAt', date('Y-m-d H:i:s'), PDO::PARAM_STR);
         $stmt->bindParam(':redeemCode', $coupon, PDO::PARAM_STR);
         $stmt->execute();
       }
