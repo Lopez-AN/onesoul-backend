@@ -8,6 +8,7 @@ use App\Models\Auth;
 use App\Models\User;
 use App\Models\Subscription;
 use Firebase\JWT\JWT;
+use Firebase\JWT\JWK;
 use Stripe\Stripe;
 
 #Definir zona horaria
@@ -95,10 +96,10 @@ class AuthController{
 
   public function loginGoogle(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
-    $token = $data['Token'] ?? '';
-    $mfa_id = $data['MfaID'] ?? '';
-    $mfa_code = $data['MfaCode'] ?? '';
-    $recaptchaToken = $data['RecaptchaToken'] ?? '';
+    $token = $data['Token'] ?? null;
+    $mfaID = $data['MfaID'] ?? null;
+    $mfaCode = $data['MfaCode'] ?? null;
+    $recaptchaToken = $data['RecaptchaToken'] ?? null;
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
     if (empty($token) || empty($recaptchaToken)) {
@@ -146,7 +147,7 @@ class AuthController{
       }
 
       # El resto del login es generico para todos los tipos de login
-      return $this->_loginGeneric($response, $request, $user, $mfa_id, $mfa_code, $clientIp);
+      return $this->_loginGeneric($response, $request, $user, $mfaID, $mfaCode, $clientIp);
     } catch (\Exception $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -159,11 +160,11 @@ class AuthController{
 
   public function loginFacebook(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
-    $oAuthID = $data['UserID'] ?? '';
-    $token = $data['Token'] ?? '';
-    $mfa_id = $data['MfaID'] ?? '';
-    $mfa_code = $data['MfaCode'] ?? '';
-    $recaptchaToken = $data['RecaptchaToken'] ?? '';
+    $oAuthID = $data['UserID'] ?? null;
+    $token = $data['Token'] ?? null;
+    $mfaID = $data['MfaID'] ?? null;
+    $mfaCode = $data['MfaCode'] ?? null;
+    $recaptchaToken = $data['RecaptchaToken'] ?? null;
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
 
@@ -211,7 +212,7 @@ class AuthController{
       }
 
       # El resto del login es generico para todos los tipos de login
-      return $this->_loginGeneric($response, $request, $user, $mfa_id, $mfa_code, $clientIp);
+      return $this->_loginGeneric($response, $request, $user, $mfaID, $mfaCode, $clientIp);
     } catch (\Exception $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -224,12 +225,12 @@ class AuthController{
 
   public function loginApple(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
-    $code = $data['Code'] ?? '';
-    $idToken = $data['IdToken'] ?? '';
-    $rawNonce = $data['RawNonce'] ?? '';
-    $mfaId = $data['MfaID'] ?? '';
-    $mfaCode = $data['MfaCode'] ?? '';
-    $recaptchaToken = $data['RecaptchaToken'] ?? '';
+    $code = $data['Code'] ?? null;
+    $idToken = $data['IdToken'] ?? null;
+    $rawNonce = $data['RawNonce'] ?? null;
+    $mfaID = $data['MfaID'] ?? null;
+    $mfaCode = $data['MfaCode'] ?? null;
+    $recaptchaToken = $data['RecaptchaToken'] ?? null;
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
     if ((empty($idToken) && empty($code)) || empty($recaptchaToken)) {
@@ -275,7 +276,7 @@ class AuthController{
       }
       $oAuthID = $oAuthResponse -> sub;
       $user = $this->user->getUserByOAuthID($oAuthID, "apple");
-      if($user -> http_code == 404){
+      if(!$user){
         return (object)[
           "http_code" => 404,
           "error" => [
@@ -288,7 +289,7 @@ class AuthController{
         ];
       }
       # El resto del login es generico para todos los tipos de login
-      return $this->_loginGeneric($response, $request, $user, $mfa_id, $mfa_code, $clientIp);
+      return $this->_loginGeneric($response, $request, $user, $mfaID, $mfaCode, $clientIp);
     } catch (\Exception $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -299,7 +300,7 @@ class AuthController{
     }
   }
 
-  private function _loginGeneric(Response $response, Request $request, $user, $mfa_id, $mfa_code, $clientIp) {
+  private function _loginGeneric(Response $response, Request $request, $user, $mfaID, $mfaCode, $clientIp) {
     # Verificar si el usuario esta bloqueado
     if (!is_null($user['LockedUntil']) && strtotime($user['LockedUntil']) > time()) {
       return $response->withStatus(403)->withJson([
@@ -450,6 +451,7 @@ class AuthController{
         'exp'            => $decoded->exp ?? null
       ];
     } catch (\Throwable $e) {
+      file_put_contents(ROOT."/debug.log", json_encode($e), FILE_APPEND);
       return false;
     }
   }

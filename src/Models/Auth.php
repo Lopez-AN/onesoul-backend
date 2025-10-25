@@ -7,8 +7,6 @@ use App\Exceptions\DatabaseException;
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 use \DateTime;
-use Firebase\JWT\JWT;
-use Firebase\JWT\JWK;
 use Predis\Client as RedisClient;
 
 class Auth{
@@ -40,52 +38,6 @@ class Auth{
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
-  }
-
-  public function loginApple($userModel, $code, $idToken, $rawNonce){
-    // Si no vino id_token, hacer exchange con code
-    if (empty($idToken) && !empty($code)) {
-      $idToken = $this->_appleExchangeCodeForIdToken($code);
-      if (!$idToken) {
-        return (object)[
-          "http_code" => 401,
-          "error" => [
-            "code" => "SSO_INVALID_CODE",
-            "desc" => "Invalid Apple authorization code"
-          ]
-        ];
-      }
-    }
-
-    /* Se valida contra el AUC (nuestro client ID) y el nonce recibido del front
-      vs el hasheado recibido en el token */
-    $expectedAud = $GLOBALS['config']['apple']['client_id'];
-    $response = $this->_validateAppleToken($idToken, $expectedAud, $rawNonce);
-    if ($response === false) {
-      return (object) [
-        "http_code" => 401,
-        "error" => [
-          "code" => "SSO_INVALID_TOKEN",
-          "desc" => "Invalid Apple token"
-        ]
-      ];
-    }
-
-    $userId = $response['sub'];
-    $user_data = $userModel -> getUserByOAuthID($userId, "apple");
-    if($user_data -> http_code == 404){
-      return (object)[
-        "http_code" => 404,
-        "error" => [
-          "code" => "USER_NOT_FOUND",
-          "desc" => "No user associated with the specified Apple account was found"
-        ],
-        "data" => [
-          "Email" => $response['email'] ?? null
-        ]
-      ];
-    }
-    return $user_data;
   }
 
   /*
