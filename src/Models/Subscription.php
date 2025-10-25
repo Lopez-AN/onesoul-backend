@@ -298,11 +298,6 @@ class Subscription {
       $newPlanID = $stmt2->fetchColumn();
       $subscription['PendingDowngrade'] = $newPlanID ?: null;
 
-      // Se obtiene los detalles del Plan del usuario
-      $id = $subscription['PlanID'];
-      $planDetails = $this->getSubscriptionPlanByID($id);
-      $subscription['PlanDetails'] = $planDetails;
-
       return $subscription;
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());

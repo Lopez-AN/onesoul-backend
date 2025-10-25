@@ -26,81 +26,20 @@ class Auth{
   public function login($username, $email){
     try {
       if($username){
-        $stmt = $this->db->prepare("SELECT u.*,m.URL FROM Users AS u
-        LEFT JOIN Media as m ON u.UserID = m.UserID
+        $stmt = $this->db->prepare("SELECT u.UserID,
+        u.PasswordHash,u.FailedLoginAttempts FROM Users AS u
         WHERE u.UserName = ? AND u.PasswordHash IS NOT NULL");
         $stmt->execute([$username]);
       }else{
-        $stmt = $this->db->prepare("SELECT u.*,m.URL FROM Users AS u
-        LEFT JOIN Media as m ON u.UserID = m.UserID
+        $stmt = $this->db->prepare("SELECT u.UserID,
+        u.PasswordHash,u.FailedLoginAttempts FROM Users AS u
         WHERE u.Email = ? AND u.PasswordHash IS NOT NULL");
         $stmt->execute([$email]);
       }
-      return $stmt->fetchAll(PDO::FETCH_ASSOC);
+      return $stmt->fetch(PDO::FETCH_ASSOC);
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
-  }
-
-  public function loginGoogle($userModel, $token){
-    $response = $this -> _validateToken("https://oauth2.googleapis.com/tokeninfo?id_token=$token");
-    if($response === false){
-      return (object)["http_code" => 401,
-        "error" => [
-          "code" => "SSO_INVALID_TOKEN",
-          "desc" => "Invalid Google token"
-        ]
-      ];
-    }
-
-    $userId = $response -> sub;
-    $user_data = $userModel -> getUserByOAuthID($userId, "google");
-    if($user_data -> http_code == 404){
-      return (object)[
-        "http_code" => 404,
-        "error" => [
-          "code" => "USER_NOT_FOUND",
-          "desc" => "No user associated with the specified Google account was found"
-        ],
-        "data" => [
-          "FirstName" => !empty($response -> given_name) ? $response -> given_name : null,
-          "LastName" => !empty($response -> family_name) ? $response -> family_name : null,
-          "Email" => !empty($response -> email) ? $response -> email : null,
-          "Picture" => !empty($response -> picture) ? $response -> picture : null
-        ]
-      ];
-    }
-    return $user_data;
-  }
-
-  public function loginFacebook($userModel, $userId, $token){
-    $response = $this -> _validateToken("https://graph.facebook.com/$userId?fields=id,first_name,last_name,email,picture.width(640)&access_token=$token");
-    if($response === false){
-      return (object)["http_code" => 401,
-        "error" => [
-          "code" => "SSO_INVALID_TOKEN",
-          "desc" => "Invalid Facebook token"
-        ]
-      ];
-    }
-
-    $user_data = $userModel -> getUserByOAuthID($userId, "facebook");
-    if($user_data -> http_code == 404){
-      return (object)[
-        "http_code" => 404,
-        "error" => [
-          "code" => "USER_NOT_FOUND",
-          "desc" => "No user associated with the specified Facebook account was found"
-        ],
-        "data" => [
-          "FirstName" => !empty($response -> first_name) ? $response -> first_name : null,
-          "LastName" => !empty($response -> last_name) ? $response -> last_name : null,
-          "Email" => !empty($response -> email) ? $response -> email : null,
-          "Picture" => !empty($response -> picture -> data -> url) ? $response -> picture -> data -> url : null
-        ]
-      ];
-    }
-    return $user_data;
   }
 
   public function loginApple($userModel, $code, $idToken, $rawNonce){
@@ -1607,138 +1546,6 @@ class Auth{
     }
     return base64_decode(strtr($input, '-_', '+/'));
   }
-
-  /**
-  * Valida firma y claims del id_token de Apple y devuelve claims normalizados.
-  *
-  * @param    $idToken
-  * @param    $expectedAud  p.ej. 'com.onesoul.app.web'
-  * @param    $rawNonce, enviado por el front y se compara contra el token
-  * @return array|false
-  */
-  private function _validateAppleToken($idToken, $expectedAud, $rawNonce) {
-    try {
-      // Tolerancia por drift de reloj
-      JWT::$leeway = 120;
-
-      // Descargar JWKS
-      $jwksJson = @file_get_contents('https://appleid.apple.com/auth/keys');
-      if ($jwksJson === false) {
-        return false;
-      }
-
-      // Extraigo las keys
-      $jwks = json_decode($jwksJson, true);
-      if (!isset($jwks['keys'])) {
-        return false;
-      }
-
-      // Decodifico token
-      $keys = JWK::parseKeySet($jwks);
-      $decoded = JWT::decode($idToken, $keys, ['RS256']);
-
-      // Validaciones de claims
-      $iss = $decoded->iss ?? null;
-      if ($iss !== 'https://appleid.apple.com') {
-        return false;
-      }
-
-      // Valido AUD
-      if ($decoded->aud !== $expectedAud) {
-        return false;
-      }
-
-      // Valido nonce
-      if ($decoded->nonce !== hash('sha256',$rawNonce)) {
-        return false;
-      }
-
-      // Normalizar salida
-      $emailVerifiedRaw = $decoded->email_verified ?? null;
-      $emailVerified = ($emailVerifiedRaw === true || $emailVerifiedRaw === 'true');
-
-      return [
-        'sub'            => $decoded->sub ?? null,
-        'email'          => $decoded->email ?? null,
-        'email_verified' => $emailVerified,
-        'nonce'          => $decoded->nonce ?? null,
-        'auth_time'      => $decoded->auth_time ?? null,
-        'iat'            => $decoded->iat ?? null,
-        'exp'            => $decoded->exp ?? null
-      ];
-    } catch (\Throwable $e) {
-      return false;
-    }
-  }
-
-  /**
-  * Intercambia un CODE por un IDToken en la API de apple
-  *
-  * @param    $idToken
-  * @param    $expectedAud  p.ej. 'com.onesoul.app.web'
-  * @param    $rawNonce, enviado por el front y se compara contra el token
-  * @return array|false
-  */
-  private function _appleExchangeCodeForIdToken($code) {
-    $client_id = $GLOBALS['config']['apple']['client_id'];
-    $team_id = $GLOBALS['config']['apple']['team_id'];
-    $key_id = $GLOBALS['config']['apple']['key_id'];
-    $private_key = base64_decode($GLOBALS['config']['apple']['private_key_b64']);
-    //$redirect_uri = $GLOBALS['config']['apple']['redirect_url'];
-
-    // Generar client_secret como JWT
-    $header = ['alg' => 'ES256', 'kid' => $key_id];
-    $claims = [
-      'iss' => $team_id,
-      'iat' => time(),
-      'exp' => time() + 3600,
-      'aud' => 'https://appleid.apple.com',
-      'sub' => $client_id
-    ];
-
-    $client_secret = \Firebase\JWT\JWT::encode($claims, $private_key, 'ES256', $key_id, $header);
-
-    $params = [
-      'client_id' => $client_id,
-      'client_secret' => $client_secret,
-      'code' => $code,
-      'grant_type' => 'authorization_code'
-    ];
-
-    $ch = curl_init('https://appleid.apple.com/auth/token');
-    curl_setopt_array($ch, [
-      CURLOPT_POST           => true,
-      CURLOPT_POSTFIELDS     => http_build_query($params),
-      CURLOPT_HTTPHEADER     => ['Content-Type: application/x-www-form-urlencoded'],
-      CURLOPT_RETURNTRANSFER => true,
-      CURLOPT_TIMEOUT        => 15,
-    ]);
-    $result = curl_exec($ch);
-    curl_close($ch);
-
-    $json = json_decode($result, true);
-    return $json['id_token'] ?? null;
-  }
-
-  # Valida un token generado por el login SSO o reCaptcha
-  private function _validateToken($url){
-    $ch = curl_init();
-
-    # Configuración de cURL
-    curl_setopt($ch, CURLOPT_URL, $url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_HEADER, false);
-
-    $response = curl_exec($ch);
-
-    # Verifica si hubo un error en la solicitud
-    if(curl_errno($ch) || curl_getinfo($ch, CURLINFO_HTTP_CODE) != 200){
-      return false;
-    }
-    curl_close($ch);
-    return json_decode($response);
-  }
-
 
   private function _incrementOtpAttempts($userId) {
     # Incrementar el contador de intentos fallidos

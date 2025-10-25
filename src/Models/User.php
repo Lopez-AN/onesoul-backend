@@ -148,18 +148,12 @@ clASs User
 
       $stmt->bindParam(':id', $id, PDO::PARAM_INT);
       $stmt->execute();
-      $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+      $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-      if (empty($rs)) {
-        return (object) [
-          "http_code" => 404,
-          "error" => [
-            "code" => "USER_NOT_FOUND",
-            "desc" => "No user was found with the specified ID"
-          ]
-        ];
+      if (empty($user)) {
+        return null;
       }
-      $user = $rs[0];
+
       $user['Floor'] = is_null($user['Floor']) ? null : (int)$user['Floor'];
       $user['UserLevel'] = !$user['UserLevel'] ? 1 : (int)$user['UserLevel'];
       $user['ValidatedEmail'] = (bool)$user['ValidatedEmail'];
@@ -195,22 +189,7 @@ clASs User
         $user['Status']
       );
 
-      // Verificar si la cuenta está desactivada
-      if (!is_null($user['DeactivationDate']) && strtotime($user['DeactivationDate']) <= time()) {
-        return (object) [
-          "http_code" => 401,
-          "error" => [
-            "code" => "USER_DISABLED",
-            "desc" => "The specified user is disabled"
-          ]
-        ];
-      }
-
-      return (object) [
-        "http_code" => 200,
-        "data" => $user
-      ];
-
+      return $user;
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
@@ -251,125 +230,14 @@ clASs User
       GROUP BY u.UserID
       ORDER BY u.UserID");
 
-    $stmt->bindParam(':username', $username, PDO::PARAM_STR);
-    $stmt->execute();
-    $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-    if (empty($rs)) {
-      return (object) [
-        "http_code" => 404,
-        "error" => [
-          "code" => "USER_NOT_FOUND",
-          "desc" => "No user was found with the specified ID"
-        ]
-      ];
-    }
-    $user = $rs[0];
-    $user['Floor'] = is_null($user['Floor']) ? null : (int)$user['Floor'];
-    $user['UserLevel'] = !$user['UserLevel'] ? 1 : (int)$user['UserLevel'];
-    $user['ValidatedEmail'] = (bool)$user['ValidatedEmail'];
-    $user['ValidatedPhone'] = (bool)$user['ValidatedPhone'];
-    $user['TwoFactorAuth'] = (bool)$user['TwoFactorAuth'];
-    $user['Categories'] = is_null($user['Categories']) ? [] : array_map(
-      function ($a) {
-        $a = explode(":", $a);
-        return ["Id" => intval($a[0]), "Name" => $a[1]];
-      },
-      explode(",", $user['Categories'])
-    );
-
-    // Agregar sessionType con valores booleanos
-    $user['SessionType'] = [
-      "Virtual" => $user['hasVirtual'] == 1,
-      "InPerson" => $user['hasInPerson'] == 1
-    ];
-    unset($user['hasVirtual'], $user['hasInPerson']);
-
-    // Agregar información histórica de suscripción
-    $user['HistorySubscription'] = is_null($user['PlanID']) ? null : [
-      "LatestPlanID" => (int)$user['PlanID'],
-      "StartDate" => $user['StartDate'],
-      "EndDate" => $user['EndDate'],
-      "Status" => $user['Status'],
-     "UsedTrial" => 'True'
-    ];
-    unset(
-      $user['PlanID'],
-      $user['StartDate'],
-      $user['EndDate'],
-      $user['Status']
-    );
-
-    // Verificar si la cuenta está desactivada
-    if (!is_null($user['DeactivationDate']) && strtotime($user['DeactivationDate']) <= time()) {
-      return (object) [
-        "http_code" => 401,
-        "error" => [
-          "code" => "USER_DISABLED",
-          "desc" => "The specified user is disabled"
-        ]
-      ];
-    }
-
-    return (object) [
-      "http_code" => 200,
-      "data" => $user
-    ];
-
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
-  }
-
-  # Busca un usuario por email
-  public function getUserByEmail($email) {
-    try {
-      $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
-      u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
-      u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
-      u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth, u.UserType,
-      u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
-      u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
-        ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
-      u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-      s.PlanID, s.StartDate, s.EndDate, s.Status,
-      -- Subconsulta para reviews
-      (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-        FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
-      (SELECT COUNT(DISTINCT r.ReviewID)
-        FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
-      FROM Users AS u
-      LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
-      LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
-      LEFT JOIN Media AS m ON u.UserID = m.UserID
-      LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
-      LEFT JOIN (
-        SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
-        MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
-        MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
-        FROM Offerings AS o
-        INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
-        WHERE o.Status = 'Active'
-        GROUP BY o.UserID
-      ) AS sub ON sub.UserID = u.UserID
-      WHERE u.Email = :email
-      GROUP BY u.UserID
-      ORDER BY u.UserID");
-
-      $stmt->bindParam(':email', $email, PDO::PARAM_STR);
+      $stmt->bindParam(':username', $username, PDO::PARAM_STR);
       $stmt->execute();
-      $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-      if (empty($rs)) {
-        return (object) [
-          "http_code" => 404,
-          "error" => [
-            "code" => "USER_NOT_FOUND",
-            "desc" => "No user was found with the specified ID"
-          ]
-        ];
+      $user = $stmt->fetch(PDO::FETCH_ASSOC);
+      if (empty($user)) {
+        return null;
       }
-      $user = $rs[0];
+
       $user['Floor'] = is_null($user['Floor']) ? null : (int)$user['Floor'];
       $user['UserLevel'] = !$user['UserLevel'] ? 1 : (int)$user['UserLevel'];
       $user['ValidatedEmail'] = (bool)$user['ValidatedEmail'];
@@ -416,11 +284,91 @@ clASs User
         ];
       }
 
-      return (object) [
-        "http_code" => 200,
-        "data" => $user
-      ];
+      return $user;
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
 
+  # Busca un usuario por email
+  public function getUserByEmail($email) {
+    try {
+      $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
+      u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
+      u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
+      u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth, u.UserType,
+      u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
+      u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
+        ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
+      u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
+      s.PlanID, s.StartDate, s.EndDate, s.Status,
+      -- Subconsulta para reviews
+      (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
+        FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
+      (SELECT COUNT(DISTINCT r.ReviewID)
+        FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
+      FROM Users AS u
+      LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
+      LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
+      LEFT JOIN Media AS m ON u.UserID = m.UserID
+      LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
+      LEFT JOIN (
+        SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
+        MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
+        MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
+        FROM Offerings AS o
+        INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
+        WHERE o.Status = 'Active'
+        GROUP BY o.UserID
+      ) AS sub ON sub.UserID = u.UserID
+      WHERE u.Email = :email
+      GROUP BY u.UserID
+      ORDER BY u.UserID");
+
+      $stmt->bindParam(':email', $email, PDO::PARAM_STR);
+      $stmt->execute();
+
+      $user = $stmt->fetch(PDO::FETCH_ASSOC);
+      if (empty($user)) {
+        return null;
+      }
+
+      $user['Floor'] = is_null($user['Floor']) ? null : (int)$user['Floor'];
+      $user['UserLevel'] = !$user['UserLevel'] ? 1 : (int)$user['UserLevel'];
+      $user['ValidatedEmail'] = (bool)$user['ValidatedEmail'];
+      $user['ValidatedPhone'] = (bool)$user['ValidatedPhone'];
+      $user['TwoFactorAuth'] = (bool)$user['TwoFactorAuth'];
+      $user['Categories'] = is_null($user['Categories']) ? [] : array_map(
+        function ($a) {
+          $a = explode(":", $a);
+          return ["Id" => intval($a[0]), "Name" => $a[1]];
+        },
+        explode(",", $user['Categories'])
+      );
+
+      // Agregar sessionType con valores booleanos
+      $user['SessionType'] = [
+        "Virtual" => $user['hasVirtual'] == 1,
+        "InPerson" => $user['hasInPerson'] == 1
+      ];
+      unset($user['hasVirtual'], $user['hasInPerson']);
+
+      // Agregar información histórica de suscripción
+      $user['HistorySubscription'] = is_null($user['PlanID']) ? null : [
+        "LatestPlanID" => (int)$user['PlanID'],
+        "StartDate" => $user['StartDate'],
+        "EndDate" => $user['EndDate'],
+        "Status" => $user['Status'],
+      "UsedTrial" => 'True'
+      ];
+      unset(
+        $user['PlanID'],
+        $user['StartDate'],
+        $user['EndDate'],
+        $user['Status']
+      );
+
+      return $user;
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
@@ -464,18 +412,12 @@ clASs User
       $stmt->bindParam(':oAuthID', $oAuthID, PDO::PARAM_STR);
       $stmt->bindParam(':oAuthService', $oAuthService, PDO::PARAM_STR);
       $stmt->execute();
-      $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-      if (empty($rs)) {
-        return (object) [
-          "http_code" => 404,
-          "error" => [
-            "code" => "USER_NOT_FOUND",
-            "desc" => "No user was found with the specified ID"
-          ]
-        ];
+      $user = $stmt->fetch(PDO::FETCH_ASSOC);
+      if (empty($user)) {
+        return null;
       }
-      $user = $rs[0];
+
       $user['Floor'] = is_null($user['Floor']) ? null : (int)$user['Floor'];
       $user['UserLevel'] = !$user['UserLevel'] ? 1 : (int)$user['UserLevel'];
       $user['ValidatedEmail'] = (bool)$user['ValidatedEmail'];
@@ -511,22 +453,7 @@ clASs User
         $user['Status']
       );
 
-      // Verificar si la cuenta está desactivada
-      if (!is_null($user['DeactivationDate']) && strtotime($user['DeactivationDate']) <= time()) {
-        return (object) [
-          "http_code" => 401,
-          "error" => [
-            "code" => "USER_DISABLED",
-            "desc" => "The specified user is disabled"
-          ]
-        ];
-      }
-
-      return (object) [
-        "http_code" => 200,
-        "data" => $user
-      ];
-
+      return $user;
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
@@ -661,7 +588,7 @@ clASs User
     }
   }
 
-  public function getUserByCategory($categoryID) {
+  public function getUserByCategory($paginator, $categoryID) {
     try {
       $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
       u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
@@ -694,12 +621,17 @@ clASs User
       ) AS sub ON sub.UserID = u.UserID
       WHERE uc.CategoryID = :categoryID AND u.DeactivationDate is null
       GROUP BY u.UserID
-      ORDER BY u.UserID");
+      ORDER BY u.UserID
+      LIMIT :_limit OFFSET :_offset");
 
+      $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
+      $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
       $stmt->bindParam(':categoryID', $categoryID, PDO::PARAM_INT);
       $stmt->execute();
 
       $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+      $stmt = $this->db->query("SELECT FOUND_ROWS() AS total");
+      $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
       $rs = array_map(function ($e) {
         $e['Floor'] = is_null($e['Floor']) ? null : (int)$e['Floor'];
@@ -741,21 +673,13 @@ clASs User
         return $e;
       }, $rs);
 
-      if (empty($rs)) {
-        return (object) [
-          "http_code" => 404,
-          "error" => [
-            "code" => "USER_NOT_FOUND",
-            "desc" => "No user was found with the specified CategoryID"
-          ]
-        ];
-      }
-
       return (object) [
-        "http_code" => 200,
-        "data" => $rs
+        "data" => $rs,
+        "rows" => [
+          "total" => $total['total'],
+          "fetched" => count($rs)
+        ]
       ];
-
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
@@ -797,18 +721,12 @@ clASs User
 
       $stmt->bindParam(':referralCode', $referralCode, PDO::PARAM_INT);
       $stmt->execute();
-      $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-      if (empty($rs)) {
-        return (object) [
-          "http_code" => 404,
-          "error" => [
-            "code" => "USER_NOT_FOUND",
-            "desc" => "No user was found with the specified Referral Code"
-          ]
-        ];
+      $user = $stmt->fetch(PDO::FETCH_ASSOC);
+      if (empty($user)) {
+        return null;
       }
-      $user = $rs[0];
+
       $user['Floor'] = is_null($user['Floor']) ? null : (int)$user['Floor'];
       $user['UserLevel'] = !$user['UserLevel'] ? 1 : (int)$user['UserLevel'];
       $user['ValidatedEmail'] = (bool)$user['ValidatedEmail'];
@@ -844,22 +762,7 @@ clASs User
         $user['Status']
       );
 
-      // Verificar si la cuenta está desactivada
-      if (!is_null($user['DeactivationDate']) && strtotime($user['DeactivationDate']) <= time()) {
-        return (object) [
-          "http_code" => 401,
-          "error" => [
-            "code" => "USER_DISABLED",
-            "desc" => "The specified user is disabled"
-          ]
-        ];
-      }
-
-      return (object) [
-        "http_code" => 200,
-        "data" => $user
-      ];
-
+      return $user;
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
@@ -1060,22 +963,8 @@ clASs User
     }
   }
 
-  public function deleteUser($id) {
+  public function disableUser($id) {
     try {
-      $stmt = $this->db->prepare("SELECT UserID FROM Users WHERE UserID = :id");
-      $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-      $stmt->execute();
-      $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-      if (empty($rs)) {
-        return (object) [
-          "http_code" => 404,
-          "error" => [
-            "code" => "USER_NOT_FOUND",
-            "desc" => "No user was found with the specified ID"
-          ]
-        ];
-      }
       $stmt = $this->db->prepare("DELETE FROM Users WHERE UserID = :id");
       $stmt->bindParam(':id', $id, PDO::PARAM_INT);
       $stmt->execute();

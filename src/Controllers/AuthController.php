@@ -40,7 +40,7 @@ class AuthController{
 
     // Validar credenciales básicas
     if((empty($email) && empty($username)) || empty($password) || empty($recaptchaToken)){
-      return $response->withStatus(401)->withJson([
+      return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "INVALID_PARAMETERS",
           "desc" => "Parameters are missing or invalid"
@@ -48,15 +48,16 @@ class AuthController{
       ]);
     }
 
+    // Valido recaptcha
     $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
     if ($result->http_code !== 200) {
       return $response->withStatus($result->http_code)->withJson($result);
     }
 
     try {
-      // Consultar usuario
-      $result = $this->auth->login($username, $email);
-      if(empty($result)){
+      // valido credenciales
+      $userAuth = $this->auth->login($username, $email);
+      if(empty($userAuth)){
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "USER_INVALID_CREDENTIALS",
@@ -64,25 +65,12 @@ class AuthController{
           ]
         ]);
       }
-
-      $user = $result[0];
-
-      # Verificar si el usuario esta bloqueado
-      if (!is_null($user['LockedUntil']) && strtotime($user['LockedUntil']) > time()) {
-        return $response->withStatus(403)->withJson([
-          "error" => [
-            "code" => "USER_LOCKED",
-            "desc" => "Account is temporaly locked until " . $user['LockedUntil']
-          ]
-        ]);
-      }
-
-      if (!password_verify($password, $user['PasswordHash'])) {
+      if (!password_verify($password, $userAuth['PasswordHash'])) {
         # Logueo fallido actualizar contador de erroneos y tiempo bloqueo si corresponde
-        $failedAttempts = $user['FailedLoginAttempts'] + 1;
+        $failedAttempts = $userAuth['FailedLoginAttempts'] + 1;
         $lockTime = $this->auth->calculateLockTime($failedAttempts);
 
-        $this->auth->updateFailedLogin($user['UserID'], $failedAttempts, $lockTime);
+        $this->auth->updateFailedLogin($userAuth['UserID'], $failedAttempts, $lockTime);
 
         return $response->withStatus(401)->withJson([
           "error" => [
@@ -91,58 +79,10 @@ class AuthController{
           ]
         ]);
       }
-
-      $newMfaId = null;
-      if($user['TwoFactorAuth'] == 1){
-        // Validar MFA (mfa_id o mfa_code)
-        if (!empty($mfa_id)) {
-          if (!$this->auth->validateMfaId($user['UserID'], $mfa_id)) {
-            return $response->withStatus(401)->withJson([
-              "error" => [
-                "code" => "INVALID_MFA_ID",
-                "desc" => "MFA ID is not valid"
-              ]
-            ]);
-          }
-        } elseif (!empty($mfa_code)) {
-          $result = $this->auth->mfaCheck($user['UserID'], $mfa_code);
-          if ($result->http_code != 200) {
-            return $response->withStatus($result->http_code)->withJson($result);
-          }
-        } else {
-          return $response->withStatus(400)->withJson([
-            "error" => [
-              "code" => "MFA_REQUIRED",
-              "desc" => "MFA validation is required"
-            ]
-          ]);
-        }
-        if(empty($mfa_id)){
-          $newMfaId = uniqid();
-        }
-      }
-
-      # Login exitoso, resetear intentos fallidos y bloqueo
-      $this->auth->updateFailedLogin($user['UserID'], 0, null);
-
-      $jwt = $this -> JWTgen($user);
-
-      // Si se esta vinculando un nuevo navegador guardarlo
-      if($newMfaId !== null){
-        // Guardar datos del navegador
-        $this->auth->storeBrowserData($user['UserID'], $request, $newMfaId, $clientIp);
-      }
-
-      $userData = $this->user->getUserById($user['UserID']);
-      $userPlan = $this->subscription->getSubscriptionByUser($user['UserID']);
-      unset($userPlan['PlanDetails']);
-
-      return $response->withStatus(200)->withJson([
-        "Token" => $jwt,
-        "MfaID" => $newMfaId,
-        "UserData" => $userData -> data,
-        "UserPlan" => $userPlan
-      ]);
+      // Traigo el resto de los datos del usuario
+      $user = $this->user->getUserById($userAuth['UserID']);
+      # El resto del login es generico para todos los tipos de login
+      return $this->_loginGeneric($response, $request, $user, $mfa_id, $mfa_code, $clientIp);
     } catch (\Exception $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -170,80 +110,43 @@ class AuthController{
       ]);
     }
 
-    $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
-    if ($result->http_code !== 200) {
-      return $response->withStatus($result->http_code)->withJson($result);
-    }
-
     try {
-      // Validar el token de Google
-      $result = $this->auth->loginGoogle($this -> user, $token);
+      $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
       if ($result->http_code !== 200) {
         return $response->withStatus($result->http_code)->withJson($result);
       }
-      $user = $result->data;
-      $userPlan = $this->subscription->getSubscriptionByUser($user['UserID']);
-      unset($userPlan['PlanDetails']);
 
-      // Verificar si el usuario está bloqueado
-      if (!is_null($user['LockedUntil']) && strtotime($user['LockedUntil']) > time()) {
-        return $response->withStatus(403)->withJson([
+      // Validar el token de Google
+      $oAuthResponse = $this -> _validateToken("https://oauth2.googleapis.com/tokeninfo?id_token=$token");
+      if($oAuthResponse === false || !$oAuthResponse -> sub){
+        return $response->withStatus(401)->withJson([
           "error" => [
-            "code" => "USER_LOCKED",
-            "desc" => "Account is temporarily locked until " . $user['LockedUntil']
+            "code" => "SSO_INVALID_TOKEN",
+            "desc" => "Invalid Google token"
+          ]
+        ]);
+      }
+      $oAuthID = $oAuthResponse -> sub;
+
+      // Traigo el resto de los datos del usuario
+      $user = $this->user->getUserByOAuthID($oAuthID, 'google');
+      if(!$user){
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "USER_NOT_FOUND",
+            "desc" => "No user associated with the specified Google account was found"
+          ],
+          "data" => [
+            "FirstName" => !empty($oAuthResponse -> given_name) ? $oAuthResponse -> given_name : null,
+            "LastName" => !empty($oAuthResponse -> family_name) ? $oAuthResponse -> family_name : null,
+            "Email" => !empty($oAuthResponse -> email) ? $oAuthResponse -> email : null,
+            "Picture" => !empty($oAuthResponse -> picture) ? $oAuthResponse -> picture : null
           ]
         ]);
       }
 
-      // Manejar MFA si está habilitado
-      $newMfaId = null;
-      if ($user['TwoFactorAuth'] == 1) {
-        if (!empty($mfa_id)) {
-          if (!$this->auth->validateMfaId($user['UserID'], $mfa_id)) {
-            return $response->withStatus(401)->withJson([
-              "error" => [
-                "code" => "INVALID_MFA_ID",
-                "desc" => "MFA ID is not valid"
-              ]
-            ]);
-          }
-        } elseif (!empty($mfa_code)) {
-          $result = $this->auth->mfaCheck($user['UserID'], $mfa_code);
-          if ($result->http_code != 200) {
-            return $response->withStatus($result->http_code)->withJson($result);
-          }
-        } else {
-          return $response->withStatus(400)->withJson([
-            "error" => [
-              "code" => "MFA_REQUIRED",
-              "desc" => "MFA validation is required"
-            ]
-          ]);
-        }
-
-        if (empty($mfa_id)) {
-          $newMfaId = uniqid();
-        }
-      }
-
-      // Login exitoso: resetear intentos fallidos y desbloquear cuenta
-      $this->auth->updateFailedLogin($user['UserID'], 0, null);
-
-      // Generar JWT
-      $jwt = $this->JWTgen($user);
-
-      // Guardar datos del navegador si es necesario
-      if ($newMfaId !== null) {
-        $this->auth->storeBrowserData($user['UserID'], $request, $newMfaId, $clientIp);
-      }
-
-      return $response->withStatus(200)->withJson([
-        'Token' => $jwt,
-        'MfaID' => $newMfaId,
-        'UserData' => $user,
-        'UserPlan' => $userPlan
-      ]);
-
+      # El resto del login es generico para todos los tipos de login
+      return $this->_loginGeneric($response, $request, $user, $mfa_id, $mfa_code, $clientIp);
     } catch (\Exception $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -256,7 +159,7 @@ class AuthController{
 
   public function loginFacebook(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
-    $user_id = $data['UserID'] ?? '';
+    $oAuthID = $data['UserID'] ?? '';
     $token = $data['Token'] ?? '';
     $mfa_id = $data['MfaID'] ?? '';
     $mfa_code = $data['MfaCode'] ?? '';
@@ -265,7 +168,7 @@ class AuthController{
 
 
 
-    if (empty($user_id) || empty($token) || empty($recaptchaToken)) {
+    if (empty($oAuthID) || empty($token) || empty($recaptchaToken)) {
       return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "INVALID_PARAMETERS",
@@ -274,82 +177,41 @@ class AuthController{
       ]);
     }
 
-    $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
-    if ($result->http_code !== 200) {
-      return $response->withStatus($result->http_code)->withJson($result);
-    }
-
     try {
-      $result = $this->auth->loginFacebook($this -> user, $user_id, $token);
+      $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
       if ($result->http_code !== 200) {
         return $response->withStatus($result->http_code)->withJson($result);
       }
-      $user = $result->data;
-      $userPlan = $this->subscription->getSubscriptionByUser($user['UserID']);
-      unset($userPlan['PlanDetails']);
 
-      // Verificar si el usuario está bloqueado
-      if (!is_null($user['LockedUntil']) && strtotime($user['LockedUntil']) > time()) {
-        return $response->withStatus(403)->withJson([
+      $oAuthResponse = $this -> _validateToken("https://graph.facebook.com/$oAuthID?fields=id,first_name,last_name,email,picture.width(640)&access_token=$token");
+      if($oAuthResponse === false){
+        return $response->withStatus(401)->withJson([
           "error" => [
-            "code" => "USER_LOCKED",
-            "desc" => "Account is temporarily locked until " . $user['LockedUntil']
+            "code" => "SSO_INVALID_TOKEN",
+            "desc" => "Invalid Facebook token"
           ]
         ]);
       }
 
-      // Manejar MFA si está habilitado
-      $newMfaId = null;
-      if ($user['TwoFactorAuth'] == 1) {
-        if (!empty($mfa_id)) {
-          if (!$this->auth->validateMfaId($user['UserID'], $mfa_id)) {
-            return $response->withStatus(401)->withJson([
-              "error" => [
-                "code" => "INVALID_MFA_ID",
-                "desc" => "MFA ID is not valid"
-              ]
-            ]);
-          }
-        } elseif (!empty($mfa_code)) {
-          $result = $this->auth->mfaCheck($user['UserID'], $mfa_code);
-          if ($result->http_code != 200) {
-            return $response->withStatus($result->http_code)->withJson($result);
-          }
-        } else {
-          return $response->withStatus(400)->withJson([
-            "error" => [
-              "code" => "MFA_REQUIRED",
-              "desc" => "MFA validation is required"
-            ]
-          ]);
-        }
-
-        if (empty($mfa_id)) {
-          $newMfaId = uniqid();
-        }
+      // Traigo el resto de los datos del usuario
+      $user = $this->user->getUserByOAuthID($oAuthID, "facebook");
+      if(!$user){
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "USER_NOT_FOUND",
+            "desc" => "No user associated with the specified Facebook account was found"
+          ],
+          "data" => [
+            "FirstName" => !empty($oAuthResponse -> first_name) ? $oAuthResponse -> first_name : null,
+            "LastName" => !empty($oAuthResponse -> last_name) ? $oAuthResponse -> last_name : null,
+            "Email" => !empty($oAuthResponse -> email) ? $oAuthResponse -> email : null,
+            "Picture" => !empty($oAuthResponse -> picture -> data -> url) ? $oAuthResponse -> picture -> data -> url : null
+          ]
+        ]);
       }
 
-      // Login exitoso: resetear intentos fallidos y desbloquear cuenta
-      $this->auth->updateFailedLogin($user['UserID'], 0, null);
-
-      // Generar JWT
-      $jwt = $this->JWTgen($user);
-
-      // Guardar datos del navegador si es necesario
-      if ($newMfaId !== null) {
-        $this->auth->storeBrowserData($user['UserID'], $request, $newMfaId, $clientIp);
-      }
-
-      // Obtener datos completos del usuario
-      $userData = $this->user->getUserById($user['UserID']);
-
-      return $response->withStatus(200)->withJson([
-        'Token' => $jwt,
-        'MfaID' => $newMfaId,
-        'UserData' => $userData->data,
-        'UserPlan' => $userPlan
-      ]);
-
+      # El resto del login es generico para todos los tipos de login
+      return $this->_loginGeneric($response, $request, $user, $mfa_id, $mfa_code, $clientIp);
     } catch (\Exception $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -379,82 +241,54 @@ class AuthController{
       ]);
     }
 
-    $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
-    if ($result->http_code !== 200) {
-      return $response->withStatus($result->http_code)->withJson($result);
-    }
-
-    try {
-      $result = $this->auth->loginApple($this->user, $code, $idToken, $rawNonce);
+    try{
+      $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
       if ($result->http_code !== 200) {
         return $response->withStatus($result->http_code)->withJson($result);
       }
-      $user = $result->data;
-      $userPlan = $this->subscription->getSubscriptionByUser($user['UserID']);
-      unset($userPlan['PlanDetails']);
 
-      // Verificar si el usuario está bloqueado
-      if (!is_null($user['LockedUntil']) && strtotime($user['LockedUntil']) > time()) {
-        return $response->withStatus(403)->withJson([
+      // Si no vino id_token, hacer exchange con code
+      if (empty($idToken) && !empty($code)) {
+        $idToken = $this->_appleExchangeCodeForIdToken($code);
+        if (!$idToken) {
+          return (object)[
+            "http_code" => 401,
+            "error" => [
+              "code" => "SSO_INVALID_CODE",
+              "desc" => "Invalid Apple authorization code"
+            ]
+          ];
+        }
+      }
+
+      /* Se valida contra el AUC (nuestro client ID) y el nonce recibido del front
+        vs el hasheado recibido en el token */
+      $expectedAud = $GLOBALS['config']['apple']['client_id'];
+      $oAuthResponse = $this->_validateAppleToken($idToken, $expectedAud, $rawNonce);
+      if ($oAuthResponse === false) {
+        return $response->withStatus(401)->withJson([
           "error" => [
-            "code" => "USER_LOCKED",
-            "desc" => "Account is temporarily locked until " . $user['LockedUntil']
+            "code" => "SSO_INVALID_TOKEN",
+            "desc" => "Invalid Apple token"
           ]
         ]);
       }
-
-      // Manejar MFA si está habilitado
-      $newMfaId = null;
-      if ($user['TwoFactorAuth'] == 1) {
-        if (!empty($mfaId)) {
-          if (!$this->auth->validateMfaId($user['UserID'], $mfaId)) {
-            return $response->withStatus(401)->withJson([
-              "error" => [
-                "code" => "INVALID_MFA_ID",
-                "desc" => "MFA ID is not valid"
-              ]
-            ]);
-          }
-        } elseif (!empty($mfaCode)) {
-          $result = $this->auth->mfaCheck($user['UserID'], $mfaCode);
-          if ($result->http_code != 200) {
-            return $response->withStatus($result->http_code)->withJson($result);
-          }
-        } else {
-          return $response->withStatus(400)->withJson([
-            "error" => [
-              "code" => "MFA_REQUIRED",
-              "desc" => "MFA validation is required3"
-            ]
-          ]);
-        }
-
-        if (empty($mfaId)) {
-          $newMfaId = uniqid();
-        }
+      $oAuthID = $oAuthResponse -> sub;
+      $user = $this->user->getUserByOAuthID($oAuthID, "apple");
+      if($user -> http_code == 404){
+        return (object)[
+          "http_code" => 404,
+          "error" => [
+            "code" => "USER_NOT_FOUND",
+            "desc" => "No user associated with the specified Apple account was found"
+          ],
+          "data" => [
+            "Email" => $response['email'] ?? null
+          ]
+        ];
       }
-
-      // Login exitoso: resetear intentos fallidos y desbloquear cuenta
-      $this->auth->updateFailedLogin($user['UserID'], 0, null);
-
-      // Generar JWT
-      $jwt = $this->JWTgen($user);
-
-      // Guardar datos del navegador si es necesario
-      if ($newMfaId !== null) {
-        $this->auth->storeBrowserData($user['UserID'], $request, $newMfaId, $clientIp);
-      }
-
-      // Obtener datos completos del usuario
-      $userData = $this->user->getUserById($user['UserID']);
-
-      return $response->withStatus(200)->withJson([
-        'Token' => $jwt,
-        'MfaID' => $newMfaId,
-        'UserData' => $userData->data,
-        'UserPlan' => $userPlan
-      ]);
-
+      # El resto del login es generico para todos los tipos de login
+      return $this->_loginGeneric($response, $request, $user, $mfa_id, $mfa_code, $clientIp);
     } catch (\Exception $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -463,6 +297,210 @@ class AuthController{
         ]
       ]);
     }
+  }
+
+  private function _loginGeneric(Response $response, Request $request, $user, $mfa_id, $mfa_code, $clientIp) {
+    # Verificar si el usuario esta bloqueado
+    if (!is_null($user['LockedUntil']) && strtotime($user['LockedUntil']) > time()) {
+      return $response->withStatus(403)->withJson([
+        "error" => [
+          "code" => "USER_LOCKED",
+          "desc" => "Account is temporaly locked until " . $user['LockedUntil']
+        ]
+      ]);
+    }
+    # Verificar si el usuario esta deshabilitado
+    if (!is_null($user['DeactivationDate'])) {
+      return $response->withStatus(403)->withJson([
+        "error" => [
+          "code" => "USER_DISABLED",
+          "desc" => "Account is disabled"
+        ]
+      ]);
+    }
+
+    // Manejar MFA si está habilitado
+    $newMfaId = null;
+    if ($user['TwoFactorAuth'] == 1) {
+      if (!empty($mfa_id)) {
+        if (!$this->auth->validateMfaId($user['UserID'], $mfa_id)) {
+          return $response->withStatus(401)->withJson([
+            "error" => [
+              "code" => "INVALID_MFA_ID",
+              "desc" => "MFA ID is not valid"
+            ]
+          ]);
+        }
+      } elseif (!empty($mfa_code)) {
+        $result = $this->auth->mfaCheck($user['UserID'], $mfa_code);
+        if ($result->http_code != 200) {
+          return $response->withStatus($result->http_code)->withJson($result);
+        }
+      } else {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "MFA_REQUIRED",
+            "desc" => "MFA validation is required"
+          ]
+        ]);
+      }
+
+      if (empty($mfa_id)) {
+        $newMfaId = uniqid();
+      }
+    }
+
+    // Login exitoso: resetear intentos fallidos y desbloquear cuenta
+    $this->auth->updateFailedLogin($user['UserID'], 0, null);
+
+    // Generar JWT
+    $jwt = $this->JWTgen($user);
+
+    // Guardar datos del navegador si es necesario
+    if ($newMfaId !== null) {
+      $this->auth->storeBrowserData($user['UserID'], $request, $newMfaId, $clientIp);
+    }
+
+    $userPlan = $this->subscription->getSubscriptionByUser($user['UserID']);
+
+    return $response->withStatus(200)->withJson([
+      'Token' => $jwt,
+      'MfaID' => $newMfaId,
+      'UserData' => $user,
+      'UserPlan' => $userPlan
+    ]);
+  }
+
+  # Valida un token generado por el login SSO o reCaptcha
+  private function _validateToken($url){
+    $ch = curl_init();
+
+    # Configuración de cURL
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HEADER, false);
+
+    $response = curl_exec($ch);
+
+    # Verifica si hubo un error en la solicitud
+    if(curl_errno($ch) || curl_getinfo($ch, CURLINFO_HTTP_CODE) != 200){
+      return false;
+    }
+    curl_close($ch);
+    return json_decode($response);
+  }
+
+
+  /**
+  * Valida firma y claims del id_token de Apple y devuelve claims normalizados.
+  *
+  * @param    $idToken
+  * @param    $expectedAud  p.ej. 'com.onesoul.app.web'
+  * @param    $rawNonce, enviado por el front y se compara contra el token
+  * @return array|false
+  */
+  private function _validateAppleToken($idToken, $expectedAud, $rawNonce) {
+    try {
+      // Tolerancia por drift de reloj
+      JWT::$leeway = 120;
+
+      // Descargar JWKS
+      $jwksJson = @file_get_contents('https://appleid.apple.com/auth/keys');
+      if ($jwksJson === false) {
+        return false;
+      }
+
+      // Extraigo las keys
+      $jwks = json_decode($jwksJson, true);
+      if (!isset($jwks['keys'])) {
+        return false;
+      }
+
+      // Decodifico token
+      $keys = JWK::parseKeySet($jwks);
+      $decoded = JWT::decode($idToken, $keys, ['RS256']);
+
+      // Validaciones de claims
+      $iss = $decoded->iss ?? null;
+      if ($iss !== 'https://appleid.apple.com') {
+        return false;
+      }
+
+      // Valido AUD
+      if ($decoded->aud !== $expectedAud) {
+        return false;
+      }
+
+      // Valido nonce
+      if ($decoded->nonce !== hash('sha256',$rawNonce)) {
+        return false;
+      }
+
+      // Normalizar salida
+      $emailVerifiedRaw = $decoded->email_verified ?? null;
+      $emailVerified = ($emailVerifiedRaw === true || $emailVerifiedRaw === 'true');
+
+      return (object)[
+        'sub'            => $decoded->sub ?? null,
+        'email'          => $decoded->email ?? null,
+        'email_verified' => $emailVerified,
+        'nonce'          => $decoded->nonce ?? null,
+        'auth_time'      => $decoded->auth_time ?? null,
+        'iat'            => $decoded->iat ?? null,
+        'exp'            => $decoded->exp ?? null
+      ];
+    } catch (\Throwable $e) {
+      return false;
+    }
+  }
+
+  /**
+  * Intercambia un CODE por un IDToken en la API de apple
+  *
+  * @param    $idToken
+  * @param    $expectedAud  p.ej. 'com.onesoul.app.web'
+  * @param    $rawNonce, enviado por el front y se compara contra el token
+  * @return array|false
+  */
+  private function _appleExchangeCodeForIdToken($code) {
+    $client_id = $GLOBALS['config']['apple']['client_id'];
+    $team_id = $GLOBALS['config']['apple']['team_id'];
+    $key_id = $GLOBALS['config']['apple']['key_id'];
+    $private_key = base64_decode($GLOBALS['config']['apple']['private_key_b64']);
+    //$redirect_uri = $GLOBALS['config']['apple']['redirect_url'];
+
+    // Generar client_secret como JWT
+    $header = ['alg' => 'ES256', 'kid' => $key_id];
+    $claims = [
+      'iss' => $team_id,
+      'iat' => time(),
+      'exp' => time() + 3600,
+      'aud' => 'https://appleid.apple.com',
+      'sub' => $client_id
+    ];
+
+    $client_secret = \Firebase\JWT\JWT::encode($claims, $private_key, 'ES256', $key_id, $header);
+
+    $params = [
+      'client_id' => $client_id,
+      'client_secret' => $client_secret,
+      'code' => $code,
+      'grant_type' => 'authorization_code'
+    ];
+
+    $ch = curl_init('https://appleid.apple.com/auth/token');
+    curl_setopt_array($ch, [
+      CURLOPT_POST           => true,
+      CURLOPT_POSTFIELDS     => http_build_query($params),
+      CURLOPT_HTTPHEADER     => ['Content-Type: application/x-www-form-urlencoded'],
+      CURLOPT_RETURNTRANSFER => true,
+      CURLOPT_TIMEOUT        => 15,
+    ]);
+    $result = curl_exec($ch);
+    curl_close($ch);
+
+    $json = json_decode($result, true);
+    return $json['id_token'] ?? null;
   }
 
   /*
@@ -591,7 +629,6 @@ class AuthController{
           $jwt = $this -> JWTgen($result -> data);
           $userID = $result->data['UserID'] ?? null;
           $userPlan = $this->subscription->getSubscriptionByUser($userID);
-          unset($userPlan['PlanDetails']);
 
           if (!empty($referralCode)) {
             $referrerResult = $this->user->getUserByRefCode($referralCode);
@@ -713,7 +750,6 @@ class AuthController{
           $userData = $this->user->getUserById($result -> data['UserID']);
           $userID = $result->data['UserID'] ?? null;
           $userPlan = $this->subscription->getSubscriptionByUser($userID);
-          unset($userPlan['PlanDetails']);
 
           if (!empty($referralCode)) {
             $referrerResult = $this->user->getUserByRefCode($referralCode);
@@ -806,7 +842,6 @@ class AuthController{
           $jwt = $this -> JWTgen($result -> data);
           $userID = $result->data['UserID'] ?? null;
           $userPlan = $this->subscription->getSubscriptionByUser($userID);
-          unset($userPlan['PlanDetails']);
 
           if (!empty($referralCode)) {
             $referrerResult = $this->user->getUserByRefCode($referralCode);
@@ -987,7 +1022,6 @@ class AuthController{
     $userID = $jwt['data'] -> UserID;
     $userData = $this->user->getUserById($userID);
     $userPlan = $this->subscription->getSubscriptionByUser($userID);
-    unset($userPlan['PlanDetails']);
 
     if ($userData->http_code !== 200) {
       return $response->withStatus($result->http_code)->withJson($result);

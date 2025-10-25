@@ -337,6 +337,61 @@ class Donation
     }
   }
 
+  /*
+   * --- AGENCIAS ---
+  */
+  public function createAgency($userID, $offeringID, $quantity){
+    try{
+      for($x = 0; $x < $quantity; $x++){
+        // Evita que pueda llegar a repetirse un rafflecode o redeemcode
+        $raffleCode = "";
+        $redeemCode = "";
+        $redeemCodeMasked = "";
+        do{
+          $raffleCode = $this -> _generateRaffleCode();
+          $redeemCode = $this -> _generateRedeemCode();
+          $aRedeemCode = explode("-", $redeemCode);
+          $redeemCodeMasked = "****-****-".$aRedeemCode[2];
+
+          $stmt = $this->db->prepare("SELECT VoucherID FROM DonationVouchers
+            WHERE RaffleCode = :raffleCode OR RedeemCode = :redeemCode");
+          $stmt->bindValue(':raffleCode', $raffleCode, PDO::PARAM_STR);
+          $stmt->bindValue(':redeemCode', $redeemCode, PDO::PARAM_STR);
+          $stmt->execute();
+
+          $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        }while(!empty($rs));
+
+        $stmt = $this->db->prepare("INSERT INTO DonationVouchers
+          (GuideID, OfferingID, RaffleCode, RedeemCode, RedeemCodeMasked) VALUES
+          (:guideID, :offeringID, :raffleCode, :redeemCode, :redeemCodeMasked)");
+
+        $stmt->bindValue(':guideID', $userID, PDO::PARAM_INT);
+        $stmt->bindValue(':offeringID', $offeringID, PDO::PARAM_INT);
+        $stmt->bindValue(':raffleCode', $raffleCode, PDO::PARAM_STR);
+        $stmt->bindValue(':redeemCode', $redeemCode, PDO::PARAM_STR);
+        $stmt->bindValue(':redeemCodeMasked', $redeemCodeMasked, PDO::PARAM_STR);
+
+        $stmt->execute();
+      }
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  public function disableAgency($voucherID){
+    try{
+      $stmt = $this->db->prepare("UPDATE DonationVouchers
+        SET Status = 'canceled' WHERE VoucherID = :voucherID");
+
+      $stmt->bindValue(':voucherID', $voucherID, PDO::PARAM_INT);
+      $stmt->execute();
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+
   /**
    * Genera un RaffleCode - Código público de sorteo
    * Formato: XYZ9876578 (10 caracteres alfanuméricos)

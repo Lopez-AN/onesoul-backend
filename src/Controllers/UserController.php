@@ -492,10 +492,13 @@ class UserController
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
-            "desc" => "You do not have permission to delete this user"
+            "desc" => "You do not have permission to disable this user"
           ]
         ]);
       }
+
+      
+
 
       $result = $this->user->deleteUser($id);
       if($result -> http_code != 200){
