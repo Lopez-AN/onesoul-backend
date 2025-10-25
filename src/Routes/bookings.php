@@ -14,7 +14,8 @@ return function (App $app) {
     "attribute" => "jwt"
   ]);
 
-  $pdo = require __DIR__ . './../core/database.php';
+  // Obtener PDO del contenedor DI
+  $pdo = $app->getContainer()->get('pdo');
   $booking = new Booking($pdo);
   $offering = new Offering($pdo);
   $user = new User($pdo);

@@ -20,7 +20,8 @@ return function (App $app) {
     "attribute" => "jwt"
   ]));
 
-  $pdo = require __DIR__ . './../core/database.php';
+  // Obtener PDO del contenedor DI
+  $pdo = $app->getContainer()->get('pdo');
   $category = new Category($pdo);
   $categoryController = new CategoryController($category);
 

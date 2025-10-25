@@ -260,11 +260,11 @@ class Donation
           (GuideID, OfferingID, RaffleCode, RedeemCode, RedeemCodeMasked) VALUES
           (:guideID, :offeringID, :raffleCode, :redeemCode, :redeemCodeMasked)");
 
-        $stmt->bindParam(':guideID', $userID, PDO::PARAM_INT);
-        $stmt->bindParam(':offeringID', $offeringID, PDO::PARAM_INT);
-        $stmt->bindParam(':raffleCode', $raffleCode, PDO::PARAM_STR);
-        $stmt->bindParam(':redeemCode', $redeemCode, PDO::PARAM_STR);
-        $stmt->bindParam(':redeemCodeMasked', $redeemCodeMasked, PDO::PARAM_STR);
+        $stmt->bindValue(':guideID', $userID, PDO::PARAM_INT);
+        $stmt->bindValue(':offeringID', $offeringID, PDO::PARAM_INT);
+        $stmt->bindValue(':raffleCode', $raffleCode, PDO::PARAM_STR);
+        $stmt->bindValue(':redeemCode', $redeemCode, PDO::PARAM_STR);
+        $stmt->bindValue(':redeemCodeMasked', $redeemCodeMasked, PDO::PARAM_STR);
 
         $stmt->execute();
       }
@@ -278,7 +278,7 @@ class Donation
       $stmt = $this->db->prepare("UPDATE DonationVouchers
         SET Status = 'canceled' WHERE VoucherID = :voucherID");
 
-      $stmt->bindParam(':voucherID', $voucherID, PDO::PARAM_INT);
+      $stmt->bindValue(':voucherID', $voucherID, PDO::PARAM_INT);
       $stmt->execute();
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());

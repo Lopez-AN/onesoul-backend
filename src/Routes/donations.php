@@ -12,7 +12,8 @@ return function (App $app) {
     "attribute" => "jwt"
   ]);
 
-  $pdo = require __DIR__ . './../core/database.php';
+  // Obtener PDO del contenedor DI
+  $pdo = $app->getContainer()->get('pdo');
   $donation = new Donation($pdo);
   $offering = new Offering($pdo);
   $donationController = new DonationController($donation, $offering);
@@ -22,6 +23,10 @@ return function (App $app) {
   $app->get('/donations/validate/{redeemCode}', [$donationController, 'validateCoupon']);
   $app->get('/donations/montly/{userID}', [$donationController, 'getMontlyDonations'])->add($jwtMiddleware);
   $app->post('/donations', [$donationController, 'createDonation'])->add($jwtMiddleware);
+  $app->post('/donations/assign', [$donationController, 'assignDonation'])->add($jwtMiddleware);
   $app->delete('/donations/{voucherID}', [$donationController, 'cancelDonation'])->add($jwtMiddleware);
   $app->get('/coupon/raffle/{quantity}', [$donationController, 'raffleCoupons'])->add($jwtMiddleware);
+
+  $app->get('/coupon/assign/{quantity}', [$donationController, 'raffleCoupons'])->add($jwtMiddleware);
+
 };

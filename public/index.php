@@ -14,6 +14,9 @@ if(!$GLOBALS['config']){
   exit("Error reading ~/config/config.json");
 }
 
+// Cargar la clase Database
+require ROOT . '/src/core/Database.php';
+
 use Slim\Factory\AppFactory;
 use Predis\Client as RedisClient;
 use DI\Container;
@@ -28,6 +31,11 @@ $container->set('redis', function() {
     'host'   => 'localhost',
     'port'   => 6379,
   ]);
+});
+
+// Registrar PDO como servicio único
+$container->set('pdo', function() {
+  return Database::getInstance()->getConnection();
 });
 
 // Pasar el contenedor a AppFactory

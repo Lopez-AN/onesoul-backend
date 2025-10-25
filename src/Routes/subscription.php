@@ -14,7 +14,8 @@ return function (App $app) {
     "attribute" => "jwt"
   ]);
 
-  $pdo = require __DIR__ . './../core/database.php';
+  // Obtener PDO del contenedor DI
+  $pdo = $app->getContainer()->get('pdo');
   $redis = $app->getContainer()->get('redis'); # Base de datos en RAM
   $subscription = new Subscription($pdo);
   $user = new User($pdo);
