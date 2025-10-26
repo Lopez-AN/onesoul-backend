@@ -10,6 +10,7 @@ use App\Models\Subscription;
 use Firebase\JWT\JWT;
 use Firebase\JWT\JWK;
 use Stripe\Stripe;
+use \DateTime;
 use Predis\Client as RedisClient;
 
 #Definir zona horaria
@@ -87,7 +88,7 @@ class AuthController{
       $user = $this->user->getUserById($userAuth['UserID']);
       # El resto del login es generico para todos los tipos de login
       return $this->_loginGeneric($response, $request, $user, $mfaId, $mfaCode, $clientIp);
-    } catch (\Exception $e) {
+    } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
@@ -151,7 +152,7 @@ class AuthController{
 
       # El resto del login es generico para todos los tipos de login
       return $this->_loginGeneric($response, $request, $user, $mfaID, $mfaCode, $clientIp);
-    } catch (\Exception $e) {
+    } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
@@ -239,7 +240,7 @@ class AuthController{
 
       # El resto del login es generico para todos los tipos de login
       return $this->_loginGeneric($response, $request, $user, $mfaID, $mfaCode, $clientIp);
-    } catch (\Exception $e) {
+    } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
@@ -312,7 +313,7 @@ class AuthController{
       }
       # El resto del login es generico para todos los tipos de login
       return $this->_loginGeneric($response, $request, $user, $mfaID, $mfaCode, $clientIp);
-    } catch (\Exception $e) {
+    } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
@@ -548,7 +549,7 @@ class AuthController{
         'UserData' => $user,
         'UserPlan' => null
       ]);
-    } catch (\Exception $e) {
+    } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
@@ -616,7 +617,7 @@ class AuthController{
         $receiveNewsletters, $referralCode, $clientIp, $userAgent,
         $firstName, $lastName, $picture
       );
-    } catch (\Exception $e) {
+    } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
@@ -702,7 +703,7 @@ class AuthController{
         $receiveNewsletters, $referralCode, $clientIp, $userAgent,
         $firstName, $lastName, $picture
       );
-    } catch (\Exception $e) {
+    } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
@@ -781,7 +782,7 @@ class AuthController{
         $acceptedTerms, $acceptedPrivacy, $tycVersion, $privacyVersion,
         $receiveNewsletters, $referralCode, $clientIp, $userAgent
       );
-    } catch (\Exception $e) {
+    } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
@@ -911,7 +912,7 @@ class AuthController{
         'UserPlan' => null
       ]);
 
-    } catch (\Exception $e) {
+    } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
@@ -923,8 +924,8 @@ class AuthController{
 
   public function sendOtpMail(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
-    $recaptchaToken = $data['RecaptchaToken'] ?? '';
-    $email = filter_var($data['Email'] ?? '', FILTER_VALIDATE_EMAIL);
+    $recaptchaToken = $data['RecaptchaToken'] ?? null;
+    $email = filter_var($data['Email'] ?? null, FILTER_VALIDATE_EMAIL);
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
     $result = $this->_validateReCaptcha($recaptchaToken, $clientIp);
@@ -945,18 +946,30 @@ class AuthController{
             ]
           ]);
         }
-        $result = $this->auth->sendOtpMailNoUser($data['Email']);
+        $result = $this->auth->sendOtpMailNoUser($email);
       }else{ # MODO CON TOKEN (usa la base, para usuarios existentes)
-        $result = $this->auth->sendOtpMailExistingUser($jwt['data'] -> UserID);
+        $user = $this->user->getUserById($jwt['data'] -> UserID);
+        if(empty($user)){
+          return $response->withStatus(404)->withJson([
+            "error" => [
+              "code" => "USER_NOT_FOUND",
+              "desc" => "No user associated with the specified id was found"
+            ]
+          ]);
+        }
+        $result = $this->auth->sendOtpMailExistingUser($user['UserID'], $user['Email'], $user['UserName']);
       }
 
-      if($result->http_code !== 200){
-        return $response->withStatus($result->http_code)->withJson($result);
+      if(!$result){
+        return $response->withStatus(500)->withJson([
+          "error" => [
+            "code" => "OTP_NOT_SENT",
+            "desc" => "Cannot send the OTP email, try again later"
+          ]
+        ]);
       }
-      return $response->withStatus(200)->withJson(
-        ["Message" => "OTP code sent successfully"]
-      );
-    } catch (\Exception $e) {
+      return $response->withStatus(200)->withJson("OTP code sent successfully");
+    } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
@@ -1000,25 +1013,247 @@ class AuthController{
             ]
           ]);
         }
-        $result = $this->auth->validateOTPRedis($data['Email'], $otpCode);
-      }else{ # MODO CON TOKEN (usa la base, para usuarios existentes)
-        $result = $this->auth->validateOTP($jwt['data']->UserID, $otpCode);
+        return $this->_validateOTPRedis($response, $email, $otpCode);
       }
-      if ($result->http_code !== 200) {
-        return $response->withStatus($result->http_code)->withJson($result);
-      }
-
-      # OTP válido
-      return $response->withStatus(200)->withJson([
-        "Message" => "OTP code validated successfully"
-      ]);
-    } catch (\Exception $e) {
+      # MODO CON TOKEN (usa la base, para usuarios existentes)
+      return $this->_validateOTP($response, $jwt['data']->UserID, $otpCode);
+    } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
            "desc" => $e->getMessage()
         ]
       ]);
+    }
+  }
+
+  /* Validacion OTP email contra el redis para usuarios que aun estan en el proceso de registro */
+  private function _validateOTPRedis($response, $email, $otpCode){
+    try{
+      $MAX_ATTEMPTS = 5;
+
+      $otpJson = $this->redis->get("otp:{$email}");
+      // Decodificar JSON
+      $otpData = @json_decode($otpJson);
+      if (!$otpData) {
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "OTP_CODE_NOT_FOUND",
+            "desc" => "OTP code is not set. Please request a new OTP."
+          ]
+        ]);
+      }
+      $attempts = $otpData -> attempts;
+      $hashedOtp = $otpData -> otp_hash;
+      $expiresAt = $otpData -> expires_at;
+
+      // Verificar si expiro
+      if (time() > $expiresAt) {
+        $this->redis->del("otp:{$email}");
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "EXPIRED_OTP",
+            "desc" => "OTP has expired. Please request a new OTP."
+          ]
+        ]);
+      }
+
+      // Verificar intentos fallidos
+      if ($attempts >= $MAX_ATTEMPTS) {
+        $this->redis->del("otp:{$email}");
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "OTP_MAX_ATTEMPTS",
+            "desc" => "Maximum OTP attempts reached. Please request a new OTP."
+          ]
+        ]);
+      }
+
+      // Verificar OTP
+      if (!password_verify($otpCode, $hashedOtp)) { // No es valido
+        // Incrementar intentos en el JSON
+        $otpData -> attempts++;
+        $this->redis->setex("otp:{$email}", 86400, json_encode($otpData));
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "OTP_CODE_INVALID",
+            "desc" => "Invalid OTP code"
+          ]
+        ]);
+      }
+
+      # OTP válido
+      $otpData -> validated = true;
+      $this->redis->setex("otp:{$email}", 86400, json_encode($otpData));
+      return $response->withStatus(200)->withJson("OTP code validated successfully");
+    } catch (\Throwable $e) {
+      return (object)[
+        "http_code" => 500,
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ];
+    }
+  }
+
+  /* Validacion OTP email contra la base para usuarios registrados */
+  private function _validateOTP($response, $userID, $otpCode) {
+    $validation = $this->_validateOtpCode($response, $userID, $otpCode);
+
+    if (!$validation['valid']) {
+      return $validation['response'];
+    }
+
+    $this->auth->clearUserOtp($userID);
+    $this->auth->validateUserEmail($userID);
+
+    return $response->withStatus(200)->withJson("OTP code validated successfully");
+  }
+
+
+  public function resetPassword(Request $request, Response $response, $args) {
+    $data = $request->getParsedBody();
+    $email = $data['Email'] ?? '';
+    $userName = $data['UserName'] ?? '';
+    $password = $data['Password'] ?? '';
+    $otpCode = $data['OTPCode'] ?? '';
+    $recaptchaToken = $data['RecaptchaToken'] ?? '';
+    $clientIp = $request->getServerParams()['REMOTE_ADDR'];
+
+    if ((empty($email) && empty($userName)) || empty($recaptchaToken) || empty($password) || empty($otpCode)) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_PARAMETERS",
+          "desc" => "Parameters are missing or invalid"
+        ]
+      ]);
+    }
+
+    try {
+      $result = $this->_validateReCaptcha($recaptchaToken, $clientIp);
+      if ($result->http_code !== 200) {
+        return $response->withStatus($result->http_code)->withJson($result);
+      }
+
+      // Buscar por email o username
+      $user = !empty($email) ?
+        $this->user->getUserByEmail($email) : $this->user->getUserByUserName($userName);
+
+      if (empty($user)) {
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "USER_NOT_FOUND",
+            "desc" => "No user associated with the specified email or username was found"
+          ]
+        ]);
+      }
+
+      $userID = $user['UserID'];
+
+      // Validar OTP - si falla, retorna el error
+      $validation = $this->_validateOtpCode($response, $userID, $otpCode);
+      if (!$validation['valid']) {
+        return $validation['response'];
+      }
+
+      // Si llegamos aquí, el OTP es válido
+      $this->auth->clearUserOtp($userID);
+      $this->auth->resetPassword($userID, $password);
+
+      return $response->withStatus(200)->withJson("Password reset successful");
+
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  /**
+   * Valida un código OTP genérico
+   * Retorna un array con ['valid' => bool, 'response' => Response|null]
+   * Si es válido, retorna ['valid' => true, 'response' => null]
+   * Si es inválido, retorna ['valid' => false, 'response' => Response con error]
+   */
+  private function _validateOtpCode($response, $userID, $otpCode) {
+    try {
+      $otpExptime = $GLOBALS['config']['otp_exptime'];
+      $user = $this->auth->getUserOtp($userID);
+
+      if (empty($user)) {
+        return [
+          'valid' => false,
+          'response' => $response->withStatus(404)->withJson([
+            "error" => [
+              "code" => "USER_NOT_FOUND",
+              "desc" => "No user was found with the specified Id."
+            ]
+          ])
+        ];
+      }
+
+      if (is_null($user['OTPCode'])) {
+        return [
+          'valid' => false,
+          'response' => $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "OTP_CODE_NOT_FOUND",
+              "desc" => "OTP code is not set. Please request a new OTP."
+            ]
+          ])
+        ];
+      }
+
+      // Verificar si el OTP ha expirado
+      $otpDate = new DateTime($user['OTPDate']);
+      $now = new DateTime();
+      $interval_in_seconds = $now->getTimestamp() - $otpDate->getTimestamp();
+
+      if ($interval_in_seconds > $otpExptime) {
+        $this->auth->clearUserOtp($userID);
+        return [
+          'valid' => false,
+          'response' => $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "EXPIRED_OTP",
+              "desc" => "OTP has expired. Please request a new OTP."
+            ]
+          ])
+        ];
+      }
+
+      // Comparar el código OTP recibido con el código generado
+      if ($otpCode != $user['OTPCode']) {
+        $this->auth->incrementUserOtpAttempts($userID);
+
+        // Verificar si ya ha alcanzado el límite de intentos fallidos
+        if ($this->auth->getUserOtpAttempts($userID) > 3) {
+          $this->auth->clearUserOtp($userID);
+          return [
+            'valid' => false,
+            'response' => $response->withStatus(401)->withJson([
+              "error" => [
+                "code" => "OTP_MAX_ATTEMPTS",
+                "desc" => "Maximum OTP attempts reached. Please request a new OTP."
+              ]
+            ])
+          ];
+        }
+
+        return [
+          'valid' => false,
+          'response' => $response->withStatus(401)->withJson([
+            "error" => [
+              "code" => "OTP_CODE_INVALID",
+              "desc" => "Invalid OTP code"
+            ]
+          ])
+        ];
+      }
+
+      return ['valid' => true, 'response' => null];
+
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
     }
   }
 
@@ -1033,24 +1268,33 @@ class AuthController{
       ]);
     }
 
-    $userID = $jwt['data'] -> UserID;
-    $user = $this->user->getUserById($userID);
-    if(!$user){
-      return $response->withStatus(404)->withJson([
+    try {
+      $userID = $jwt['data'] -> UserID;
+      $user = $this->user->getUserById($userID);
+      if(!$user){
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "USER_NOT_FOUND",
+            "desc" => "No user associated with the specified id was found"
+          ]
+        ]);
+      }
+      $userPlan = $this->subscription->getSubscriptionByUser($userID);
+
+      $token = $this->JWTgen($user);
+      return $response->withStatus(200)->withJson([
+        'Token' => $token,
+        'UserData' => $user,
+        'UserPlan' => $userPlan
+      ]);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
         "error" => [
-          "code" => "USER_NOT_FOUND",
-          "desc" => "No user associated with the specified id was found"
+          "code" => "INTERNAL_SERVER_ERROR",
+           "desc" => $e->getMessage()
         ]
       ]);
     }
-    $userPlan = $this->subscription->getSubscriptionByUser($userID);
-
-    $token = $this->JWTgen($user);
-    return $response->withStatus(200)->withJson([
-      'Token' => $token,
-      'UserData' => $user,
-      'UserPlan' => $userPlan
-    ]);
   }
 
   public function validateReCaptcha(Request $request, Response $response, $args) {
@@ -1087,85 +1331,39 @@ class AuthController{
         ]
       ]);
     }
-    $result = $this->_validateReCaptcha($recaptchaToken, $clientIp);
-    if ($result->http_code !== 200) {
-      return $response->withStatus($result->http_code)->withJson($result);
-    }
 
     try {
-      #Busco por mail o username
-      $result = !empty($email) ?
-        $this->user->getUserByEmail($email) : $this->user->getUserByUserName($userName);
-      if($result->http_code != 200){
-        return $response->withStatus($result->http_code)->withJson($result);
-      }
-      $userID = $result->data['UserID'];
-
-      // Envio el mail OTP
-      $result = $this->auth->sendOtpMailExistingUser($userID, true);
-      if($result->http_code !== 200){
-        return $response->withStatus($result->http_code)->withJson($result);
-      }
-      return $response->withStatus(200)->withJson([
-        "Message" => "OTP code sent successfully"
-      ]);
-    } catch (\Exception $e) {
-      return $response->withStatus(500)->withJson([
-        "error" => [
-          "code" => "INTERNAL_SERVER_ERROR",
-           "desc" => $e->getMessage()
-        ]
-      ]);
-    }
-  }
-
-  # Resetear contraseña
-  public function resetPassword(Request $request, Response $response, $args) {
-    $data = $request->getParsedBody();
-    $email = $data['Email'] ?? '';
-    $userName = $data['UserName'] ?? '';
-    $password = $data['Password'] ?? '';
-    $otpCode = $data['OTPCode'] ?? '';
-    $recaptchaToken = $data['RecaptchaToken'] ?? '';
-    $clientIp = $request->getServerParams()['REMOTE_ADDR'];
-
-    $result = $this->_validateReCaptcha($recaptchaToken, $clientIp);
-    if ($result->http_code !== 200) {
-      return $response->withStatus($result->http_code)->withJson($result);
-    }
-
-    if ((empty($email) && empty($userName)) || empty($recaptchaToken) || empty($password) || empty($otpCode)) {
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "INVALID_PARAMETERS",
-          "desc" => "Parameters are missing or invalid"
-        ]
-      ]);
-    }
-
-    try {
-      #Busco por mail o username
-      $result = !empty($email) ?
-        $this->user->getUserByEmail($email) : $this->user->getUserByUserName($userName);
-      if($result->http_code != 200){
-        return $response->withStatus($result->http_code)->withJson($result);
-      }
-      $userID = $result->data['UserID'];
-
-      # Llamar a la validación del OTP
-      $result = $this->auth->validateOTP($userID, $otpCode, false);
+      $result = $this->_validateReCaptcha($recaptchaToken, $clientIp);
       if ($result->http_code !== 200) {
         return $response->withStatus($result->http_code)->withJson($result);
       }
 
-      $result = $this->auth->resetPassword($userID, $password);
-      if($result->http_code !== 200){
-        return $response->withStatus($result->http_code)->withJson($result);
+      #Busco por mail o username
+      $user = !empty($email) ?
+        $this->user->getUserByEmail($email) : $this->user->getUserByUserName($userName);
+      if(empty($user)){
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "USER_NOT_FOUND",
+            "desc" => "No user associated with the specified email or username was found"
+          ]
+        ]);
+      }
+
+      // Envio el mail OTP
+      $result = $this->auth->sendOtpMailExistingUser($user['UserID'], $user['Email'], $user['UserName'], true);
+      if(!$result){
+        return $response->withStatus(500)->withJson([
+          "error" => [
+            "code" => "OTP_NOT_SENT",
+            "desc" => "Cannot send the OTP email, try again later"
+          ]
+        ]);
       }
       return $response->withStatus(200)->withJson([
-        "Message" => "Password was reset successfully"
+        "Message" => "OTP code sent successfully"
       ]);
-    } catch (\Exception $e) {
+    } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
@@ -1215,7 +1413,7 @@ class AuthController{
         "Secret" => $secret,
         "QR" => $qr,
       ]);
-    } catch (\Exception $e) {
+    } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
@@ -1285,7 +1483,7 @@ class AuthController{
       return $response->withStatus(200)->withJson([
         "Message" => "MFA is set"
       ]);
-    } catch (\Exception $e) {
+    } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
@@ -1335,7 +1533,7 @@ class AuthController{
       return $response->withStatus(200)->withJson([
         "Message" => "MFA unset"
       ]);
-    } catch (\Exception $e) {
+    } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
@@ -1376,7 +1574,7 @@ class AuthController{
       return $response->withStatus(200)->withJson([
         "Message" => "MFA Verified"
       ]);
-    } catch (\Exception $e) {
+    } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
@@ -1450,7 +1648,7 @@ class AuthController{
 
       return $response->withStatus(200)->withJson($consent);
 
-    } catch (\Exception $e) {
+    } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
@@ -1466,7 +1664,7 @@ class AuthController{
       $documents = $this->auth->legalDocuments();
 
       return $response->withStatus(200)->withJson($documents);
-    } catch (\Exception $e) {
+    } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
@@ -1694,7 +1892,7 @@ class AuthController{
 
       return $decoded;
 
-    } catch (\Exception $e) {
+    } catch (\Throwable $e) {
       error_log("Facebook JWT validation failed: " . $e->getMessage());
       return false;
     }

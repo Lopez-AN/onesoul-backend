@@ -54,7 +54,6 @@ class Auth{
     }
   }
 
-
   /*
   * Registro usuario
   */
@@ -145,17 +144,37 @@ class Auth{
     }
   }
 
+  public function getUserOtp($userID){
+    try{
+      $stmt = $this->db->prepare("SELECT u.OTPCode, u.OTPDate, u.OTPAttemps, u.Email
+      FROM Users AS u WHERE u.UserID = ?");
+      $stmt->execute([$userID]);
+      return $stmt->fetch(PDO::FETCH_ASSOC);
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  public function validateUserEmail($userID){
+    try{
+      $stmt = $this->db->prepare("UPDATE Users SET ValidatedEmail = 1 WHERE UserID = ?");
+      $stmt->execute([$userID]);
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
   public function handleReferralReward($referrerUserID, $newUserID) {
     try {
       // Insertar el referral como pendiente
       $stmt = $this->db->prepare("INSERT INTO Referrals (UserID, ReferredUserID, ReferralStatus)
-                                  VALUES (?, ?, 'Pending')");
+        VALUES (?, ?, 'Pending')");
       $stmt->execute([$referrerUserID, $newUserID]);
 
       // Contar la cantidad de referidos pendientes + usados
       $countStmt = $this->db->prepare("SELECT COUNT(*) as total
-                                      FROM Referrals
-                                      WHERE UserID = ?");
+        FROM Referrals
+        WHERE UserID = ?");
       $countStmt->execute([$referrerUserID]);
       $count = (int) $countStmt->fetch(PDO::FETCH_ASSOC)['total'];
 
@@ -164,284 +183,31 @@ class Auth{
       if ($count >= 5) {
         // Marcar 5 referidos como usados
         $updateStmt = $this->db->prepare("UPDATE Referrals
-                                          SET UpdatedAt = NOW(), ReferralStatus = 'Redeemed'
-                                          WHERE UserID = ? AND ReferralStatus = 'Pending'
-                                          LIMIT 5");
+          SET UpdatedAt = NOW(), ReferralStatus = 'Redeemed'
+          WHERE UserID = ? AND ReferralStatus = 'Pending'
+          LIMIT 5");
         $updateStmt->execute([$referrerUserID]);
 
         // Insertar recompensa
         $rewardStmt = $this->db->prepare("INSERT INTO ReferralRewards (UserID, RewardType, RewardAmount)
-                                          VALUES (?, 'SubscriptionMonth', 1)");
+          VALUES (?, 'SubscriptionMonth', 1)");
         $rewardStmt->execute([$referrerUserID]);
 
         $rewardTriggered = true;
       }
-
-      return [
-        "Message" => "Referral reward generated successfully",
-        "RewardTriggered" => $rewardTriggered
-      ];
-
-    } catch (\Exception $e) {
-      return $response->withStatus(500)->withJson([
-        "error" => [
-          "code" => "INTERNAL_SERVER_ERROR",
-           "desc" => $e->getMessage()
-        ]
-      ]);
-    }
-  }
-
-  /* Validacion OTP, el parametro resetOTP se envia en false para el metodo de resetear
-    contraseña, debido a que este ultimo metodo es el que blanquea el OTP si es exitoso */
-  public function validateOTP($userID, $otpCode, $resetOTP = true){
-    try{
-      $otp_exptime = $GLOBALS['config']['otp_exptime'];
-      $stmt = $this->db->prepare("SELECT u.OTPCode, u.OTPDate, u.OTPAttemps, u.Email
-      FROM Users AS u
-      LEFT JOIN Media as m ON u.UserID = m.UserID
-      WHERE u.UserID = ?");
-      $stmt->execute([$userID]);
-      $user = $stmt->fetch(PDO::FETCH_ASSOC);
-
-      # Si no se encontro el usuario devolver el error
-      if(empty($user)){
-        return (object)["http_code" => 404,
-          "error" => [
-            "code" => "USER_NOT_FOUND",
-            "desc" => "No user was found with the specified data."
-          ]
-        ];
-      }
-
-      if(is_null($user['OTPCode'])){
-        return (object)[
-          "http_code" => 401,
-          "error" => [
-            "code" => "OTP_CODE_NOT_FOUND",
-            "desc" => "OTP code is not set. Please request a new OTP."
-          ]
-        ];
-      }
-
-      # Comparar el codigo OTP recibido con el codigo generado
-      if($otpCode != $user['OTPCode']){
-        # Incrementar los intentos fallidos si el código no era correcto
-        $this->_incrementOtpAttempts($userID);
-
-        # Verificar si ya ha alcanzado el límite de intentos fallidos
-        if ($this->_getOtpAttempts($userID) > 3) {
-          # Resetear OTP y contador de intentos
-          $this->_resetOtp($userID);
-          return (object)[
-            "http_code" => 401,
-            "error" => [
-              "code" => "OTP_MAX_ATTEMPTS",
-              "desc" => "Maximum OTP attempts reached. Please request a new OTP."
-            ]
-          ];
-        }
-
-        return (object)[
-          "http_code" => 401,
-          "error" => [
-            "code" => "OTP_CODE_INVALID",
-            "desc" => "Invalid OTP code"
-          ]
-        ];
-      }
-
-      # Verificar si el OTP ha expirado
-      $otpDate = new DateTime($user['OTPDate']);
-      $now = new DateTime();
-      $interval_in_seconds = $now->getTimestamp() - $otpDate->getTimestamp();
-
-      # Comparar el intervalo con otp_exptime
-      if ($interval_in_seconds > $otp_exptime) {
-        # Resetear OTP y contador de intentos
-        $this->_resetOtp($userID);
-        return (object)[
-          "http_code" => 400,
-          "error" => [
-            "code" => "EXPIRED_OTP",
-            "desc" => "OTP has expired. Please request a new OTP."
-          ]
-        ];
-      }
-
-      if($resetOTP){
-        # Si el OTP es válido, resetear el OTP y los intentos
-        $this->_resetOtp($userID);
-      }
-
-      $stmt = $this->db->prepare("UPDATE Users SET ValidatedEmail = 1 WHERE UserID = ?");
-      $stmt->execute([$userID]);
-
-      # OTP válido
-      return (object)["http_code" => 200,"data" => []];
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
   }
 
-
-  /* Validacion OTP email contra el redis para usuarios que aun estan en el proceso de registro */
-  public function validateOTPRedis($email, $otpCode){
-    try{
-      $MAX_ATTEMPTS = 5;
-
-      $otpJson = $this->redis->get("otp:{$email}");
-      // Decodificar JSON
-      $otpData = @json_decode($otpJson);
-      if (!$otpData) {
-        return (object)[
-          "http_code" => 401,
-          "error" => [
-            "code" => "OTP_CODE_NOT_FOUND",
-            "desc" => "OTP code is not set. Please request a new OTP."
-          ]
-        ];
-      }
-      $attempts = $otpData -> attempts;
-      $hashedOtp = $otpData -> otp_hash;
-      $expiresAt = $otpData -> expires_at;
-
-      // Verificar si expiro
-      if (time() > $expiresAt) {
-        $this->redis->del("otp:{$email}");
-        return (object)[
-          "http_code" => 400,
-          "error" => [
-            "code" => "EXPIRED_OTP",
-            "desc" => "OTP has expired. Please request a new OTP."
-          ]
-        ];
-      }
-
-      // Verificar intentos fallidos
-      if ($attempts >= $MAX_ATTEMPTS) {
-        $this->redis->del("otp:{$email}");
-        return (object)[
-          "http_code" => 401,
-          "error" => [
-            "code" => "OTP_MAX_ATTEMPTS",
-            "desc" => "Maximum OTP attempts reached. Please request a new OTP."
-          ]
-        ];
-      }
-
-      // Verificar OTP
-      if (!password_verify($otpCode, $hashedOtp)) { // No es valido
-        // Incrementar intentos en el JSON
-        $otpData -> attempts++;
-        $this->redis->setex("otp:{$email}", 86400, json_encode($otpData));
-        return (object)[
-          "http_code" => 401,
-          "error" => [
-            "code" => "OTP_CODE_INVALID",
-            "desc" => "Invalid OTP code"
-          ]
-        ];
-      }
-
-      # OTP válido
-      $otpData -> validated = true;
-      $this->redis->setex("otp:{$email}", 86400, json_encode($otpData));
-      return (object)["http_code" => 200,"data" => []];
-    } catch (\Throwable $e) {
-      return (object)[
-        "http_code" => 500,
-        "error" => [
-          "code" => "INTERNAL_SERVER_ERROR",
-          "desc" => $e->getMessage()
-        ]
-      ];
-    }
-  }
-
-  # Envio de codigo OTP por email trayendo al usuario de la base con un userID
-  public function sendOtpMailExistingUser($userID, $recovery = false){
-    try{
-      $stmt = $this->db->prepare("SELECT u.Email, u.UserName FROM Users AS u
-      WHERE u.UserID = ?");
-      $stmt->execute([$userID]);
-      $resp = $stmt->fetchAll(PDO::FETCH_ASSOC);
-      if(empty($resp)){
-        return (object)["http_code" => 404,
-          "error" => [
-            "code" => "USER_NOT_FOUND",
-            "desc" => "No user was found with the specified data."
-          ]
-        ];
-      }
-
-      # Genero un nuevo codigo OTP y lo grabo en el usuario
-      $otpCode = rand(100000, 999999); # Codigo que se enviara por mail
-      $stmt = $this->db->prepare("UPDATE Users SET OTPCode = ?, OTPDate = ? WHERE UserID = ?");
-      $stmt->execute([$otpCode, date("YmdHis"), $userID]);
-      $result = $this -> _sendOtpMail($resp[0]['Email'],$otpCode,$resp[0]['UserName'],$recovery);
-      if ($result->http_code !== 200) {
-        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
-      }
-
-      return (object)["http_code" => 200, "data" => []];
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
-  }
-
-  # Envio de codigo OTP para usuarios no existentes, almaceno el OTP code en redis
-  public function sendOtpMailNoUser($email){
-    $otpCode = rand(100000, 999999); # Codigo que se enviara por mail
-    $hashedOtp = password_hash((string)$otpCode, PASSWORD_BCRYPT); # Hasheo el OTP code
-
-    // Json que guardo en redis
-    $otpData = [
-      'otp_hash' => $hashedOtp,
-      'attempts' => 0, // Contador de intentos
-      'validated' => false, // Indica si ya se valido el email
-      'created_at' => time(),
-      'expires_at' => time() + $GLOBALS['config']['otp_exptime'] // Expiracion
-    ];
-
-    $this->redis->setex("otp:{$email}", 86400, json_encode($otpData));
-
-    try{
-      $result = $this -> _sendOtpMail($email, $otpCode);
-      if ($result->http_code !== 200) {
-        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
-      }
-
-      return (object)["http_code" => 200, "data" => []];
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
-  }
-
-  public function resetPassword($userID, $newPassword) {
-    # Validar la fortaleza de la nueva contraseña
-    if (!$this->_passwordComplexity($newPassword)) {
-      return (object)[
-        "http_code" => 400,
-        "error" => [
-          "code" => "WEAK_PASSWORD",
-          "desc" => "Password doesn't meet complexity requirements"
-        ]
-      ];
-    }
-
+  public function resetPassword($userID, $password) {
     # Encripta la nueva contraseña
-    $newPasswordHash = password_hash($newPassword, PASSWORD_BCRYPT);
+    $passwordHash = password_hash($password, PASSWORD_BCRYPT);
 
     # Actualiza la contraseña en la base de datos
     try {
       $stmt = $this->db->prepare("UPDATE Users SET PasswordHash = ? WHERE UserID = ?");
-      $stmt->execute([$newPasswordHash, $userID]);
-
-      # Blanqueo el OTP
-      $this -> _resetOtp($userID);
-
-      return (object)["http_code" => 200,"data" =>[]];
+      $stmt->execute([$passwordHash, $userID]);
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
@@ -650,6 +416,43 @@ class Auth{
     }
   }
 
+
+  # Envio de codigo OTP por email trayendo al usuario de la base con un userID
+  public function sendOtpMailExistingUser($userID, $email, $userName, $recovery = false){
+    try{
+      # Genero un nuevo codigo OTP y lo grabo en el usuario
+      $otpCode = rand(100000, 999999); # Codigo que se enviara por mail
+      $stmt = $this->db->prepare("UPDATE Users SET OTPCode = ?, OTPDate = ? WHERE UserID = ?");
+      $stmt->execute([$otpCode, date("YmdHis"), $userID]);
+
+      return $this -> _sendOtpMail($email, $otpCode, $userName, $recovery);
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  # Envio de codigo OTP para usuarios no existentes, almaceno el OTP code en redis
+  public function sendOtpMailNoUser($email){
+    $otpCode = rand(100000, 999999); # Codigo que se enviara por mail
+    $hashedOtp = password_hash((string)$otpCode, PASSWORD_BCRYPT); # Hasheo el OTP code
+
+    // Json que guardo en redis
+    $otpData = [
+      'otp_hash' => $hashedOtp,
+      'attempts' => 0, // Contador de intentos
+      'validated' => false, // Indica si ya se valido el email
+      'created_at' => time(),
+      'expires_at' => time() + $GLOBALS['config']['otp_exptime'] // Expiracion
+    ];
+
+    try{
+      $this->redis->setex("otp:{$email}", 86400, json_encode($otpData));
+      return $this -> _sendOtpMail($email, $otpCode);
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
   private function _sendOtpMail($email, $otpCode, $username = false, $recovery = false){
     $template = file_get_contents(ROOT."/src/templates/email_otp.html");
     $template = str_replace("{CODIGO}", $otpCode, $template);
@@ -687,37 +490,45 @@ class Auth{
 
       # Enviar el correo
       $mail->send();
-      return (object)["http_code" => 200,"data" =>[]];
+      return true;
     } catch (Exception $e) {
-      return (object)["http_code" => 404,
-        "error" => [
-          "code" => "OTP_MAIL_ERROR",
-          "desc" => "Cant send the OTP mail, try again later"
-        ]
-      ];
+      return false;
     }
   }
 
-  private function _incrementOtpAttempts($userID) {
-    # Incrementar el contador de intentos fallidos
-    $stmt = $this->db->prepare("UPDATE Users SET OTPAttemps = IFNULL(OTPAttemps, 0) + 1 WHERE UserID = ?");
-    $stmt->execute([$userID]);
+  public function incrementUserOtpAttempts($userID) {
+    try{
+      # Incrementar el contador de intentos fallidos
+      $stmt = $this->db->prepare("UPDATE Users SET OTPAttemps = IFNULL(OTPAttemps, 0) + 1
+        WHERE UserID = ?");
+      $stmt->execute([$userID]);
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
   }
 
-  private function _getOtpAttempts($userID) {
-    # Obtener el número de intentos fallidos
-    $stmt = $this->db->prepare("SELECT OTPAttemps FROM Users WHERE UserID = ?");
-    $stmt->execute([$userID]);
-    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+  public function getUserOtpAttempts($userID) {
+    try{
+      # Obtener el número de intentos fallidos
+      $stmt = $this->db->prepare("SELECT OTPAttemps FROM Users WHERE UserID = ?");
+      $stmt->execute([$userID]);
+      $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    return $user['OTPAttemps'] ?? 0;
+      return $user ? ($user['OTPAttemps'] ?? 0) : 0;
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
   }
 
-  private function _resetOtp($userID) {
-    # Resetear el OTP y el contador de intentos fallidos
-    $stmt = $this->db->prepare("UPDATE Users SET OTPCode = NULL, OTPDate = NULL, OTPAttemps = NULL
-    WHERE UserID = ?");
-    $stmt->execute([$userID]);
+  public function clearUserOtp($userID) {
+    try{
+      # Resetear el OTP y el contador de intentos fallidos
+      $stmt = $this->db->prepare("UPDATE Users SET OTPCode = NULL, OTPDate = NULL, OTPAttemps = NULL
+      WHERE UserID = ?");
+      $stmt->execute([$userID]);
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
   }
 }
 
