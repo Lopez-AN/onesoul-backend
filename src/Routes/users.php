@@ -26,7 +26,7 @@ return function (App $app) {
   $app->get('/users/type/{type}', [$userController, 'getUsersByType']);
   $app->get('/users/email/{email}', [$userController, 'getUserByEmail']);
   $app->get('/users/username/{username}', [$userController, 'getUserByUserName']);
-  $app->get('/users/category/{id}', [$userController, 'getUserByCategory']);
+  $app->get('/users/category/{id}', [$userController, 'getUsersByCategory']);
   $app->get('/users/referred/{referralCode}', [$userController, 'getUserByRefCode']);
   $app->get('/users/consent/{id}', [$userController, 'latestConsentByUser']);
   $app->get('/users/{id}/referrals', [$userController, 'referralsByUser'])->add($jwtMiddleware);
@@ -35,7 +35,7 @@ return function (App $app) {
   $app->post('/users/profile_photo/{id}', [$userController, 'updateProfilePhoto'])->add($jwtMiddleware);
   $app->delete('/users/profile_photo/{id}', [$userController, 'deleteProfilePhoto'])->add($jwtMiddleware);
   $app->patch('/users/{id}', [$userController, 'updateUser'])->add($jwtMiddleware);
-  $app->delete('/users/{id}', [$userController, 'deleteUser'])->add($jwtMiddleware);
+  $app->delete('/users/{id}', [$userController, 'disableUser'])->add($jwtMiddleware);
   $app->post('/users/categories/{id}', [$userController, 'updateUserCategories'])->add($jwtMiddleware);
   $app->post('/users/social/{id}', [$userController, 'updateUserSocialAccounts'])->add($jwtMiddleware);
   $app->get('/users/social/{id}', [$userController, 'getUserSocialAccounts']);

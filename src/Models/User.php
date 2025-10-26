@@ -7,9 +7,7 @@ use App\Exceptions\DatabaseException;
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
-require_once(ROOT . '/src/Utils/AWSRekognition.php');
-
-clASs User
+class User
 {
   protected $db;
 
@@ -18,6 +16,12 @@ clASs User
     $this->db = $db;
   }
 
+  /**
+   * Obtiene todos los usuarios con paginación
+   * @param  object $paginator: objeto con limit y offset
+   * @return object: { data: [], rows: { total: int, fetched: int } }
+   * @throws DatabaseException
+   **/
   public function getUsers($paginator) {
     try {
       $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName,
@@ -112,6 +116,12 @@ clASs User
     }
   }
 
+  /**
+   * Obtiene un usuario por su ID
+   * @param  int $id: ID del usuario
+   * @return array|null: datos del usuario o null si no existe
+   * @throws DatabaseException
+   **/
   public function getUserById($id) {
     try {
       $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
@@ -195,7 +205,12 @@ clASs User
     }
   }
 
-  # Busca un usuario por username
+  /**
+   * Obtiene un usuario por username
+   * @param  string $username: nombre de usuario
+   * @return array|null: datos del usuario o null si no existe
+   * @throws DatabaseException
+   **/
   public function getUserByUserName($username) {
     try {
       $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
@@ -273,24 +288,18 @@ clASs User
         $user['Status']
       );
 
-      // Verificar si la cuenta está desactivada
-      if (!is_null($user['DeactivationDate']) && strtotime($user['DeactivationDate']) <= time()) {
-        return (object) [
-          "http_code" => 401,
-          "error" => [
-            "code" => "USER_DISABLED",
-            "desc" => "The specified user is disabled"
-          ]
-        ];
-      }
-
       return $user;
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
   }
 
-  # Busca un usuario por email
+  /**
+   * Obtiene un usuario por email
+   * @param  string $email: email del usuario
+   * @return array|null: datos del usuario o null si no existe
+   * @throws DatabaseException
+   **/
   public function getUserByEmail($email) {
     try {
       $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
@@ -374,7 +383,13 @@ clASs User
     }
   }
 
-  # Busca un usuario por oAuthID
+  /**
+   * Obtiene un usuario por OAuth ID
+   * @param  string $oAuthID: ID del OAuth
+   * @param  string $oAuthService: servicio OAuth (Google, Facebook, etc)
+   * @return array|null: datos del usuario o null si no existe
+   * @throws DatabaseException
+   **/
   public function getUserByOAuthID($oAuthID, $oAuthService) {
     try {
       $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
@@ -444,7 +459,7 @@ clASs User
         "StartDate" => $user['StartDate'],
         "EndDate" => $user['EndDate'],
         "Status" => $user['Status'],
-      "UsedTrial" => 'True'
+        "UsedTrial" => 'True'
       ];
       unset(
         $user['PlanID'],
@@ -459,6 +474,13 @@ clASs User
     }
   }
 
+  /**
+   * Obtiene usuarios filtrados por tipo con paginación
+   * @param  object $paginator: objeto con limit y offset
+   * @param  string $userType: tipo de usuario (Guide, Seeker, Admin)
+   * @return object: { data: [], rows: { total: int, fetched: int } }
+   * @throws DatabaseException
+   **/
   public function getUsersByType($paginator, $userType) {
     try {
       if ($userType == 'Guide') {
@@ -588,7 +610,14 @@ clASs User
     }
   }
 
-  public function getUserByCategory($paginator, $categoryID) {
+  /**
+   * Obtiene usuarios por categoría con paginación
+   * @param  object $paginator: objeto con limit y offset
+   * @param  int $categoryID: ID de la categoría
+   * @return object: { data: [], rows: { total: int, fetched: int } }
+   * @throws DatabaseException
+   **/
+  public function getUsersByCategory($paginator, $categoryID) {
     try {
       $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
       u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
@@ -685,6 +714,12 @@ clASs User
     }
   }
 
+  /**
+   * Obtiene un usuario por su código de referencia
+   * @param  string $referralCode: código de referencia
+   * @return array|null: datos del usuario o null si no existe
+   * @throws DatabaseException
+   **/
   public function getUserByRefCode($referralCode) {
     try {
       $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
@@ -768,14 +803,19 @@ clASs User
     }
   }
 
-  public function latestConsentByUser($id) {
+  /**
+   * Obtiene el consentimiento legal más reciente del usuario
+   * @param  int $userID: ID del usuario
+   * @return array|null: datos del consentimiento o null
+   * @throws DatabaseException
+   **/
+  public function latestConsentByUser($userID) {
     try {
       $stmt = $this->db->prepare("SELECT * FROM UserLegalConsents
-                            WHERE UserID = :id
-                            ORDER BY ConsentDate DESC
-                            LIMIT 1");
-      $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-      $stmt->execute();
+        WHERE UserID = ?
+        ORDER BY ConsentDate DESC
+        LIMIT 1");
+      $stmt->execute([$userID]);
 
       return $stmt->fetch(PDO::FETCH_ASSOC);
     } catch (\PDOException $e) {
@@ -783,6 +823,12 @@ clASs User
     }
   }
 
+  /**
+   * Obtiene los referidos de un usuario
+   * @param  int $id: ID del usuario
+   * @return array: lista de usuarios referidos
+   * @throws DatabaseException
+   **/
   public function referralsByUser ($id) {
     try {
       $stmt = $this->db->prepare("SELECT u.UserID, u.DisplayName, u.FirstName, u.LastName, u.RegistrationDate,
@@ -801,6 +847,12 @@ clASs User
     }
   }
 
+  /**
+   * Obtiene las recompensas de referencia de un usuario
+   * @param  int $id: ID del usuario
+   * @return array: lista de recompensas
+   * @throws DatabaseException
+   **/
   public function rewardsByUser($id) {
     try {
       $stmt = $this->db->prepare("SELECT * FROM ReferralRewards
@@ -815,20 +867,15 @@ clASs User
     }
   }
 
-  public function inviteByEmail ($userID, $email, $subDomain) {
-    $userResult = $this->getUserById($userID);
-    if (empty($userResult->data['ReferralCode'])) {
-      return [
-        "error" => [
-          "code" => "USER_NOT_FOUND",
-          "desc" => "Could not retrieve referral code for the user"
-        ]
-      ];
-    }
-
-    $referralCode = $userResult->data['ReferralCode'];
-    $username = $userResult->data['UserName'];
-
+  /**
+   * Envía un email de invitación con código de referencia
+   * @param  string $userName: nombre de usuario que invita
+   * @param  string $referralCode: código de referencia
+   * @param  string $email: email a invitar
+   * @param  string $subDomain: subdominio opcional de onesoul.app
+   * @return bool: true si se envió exitosamente, false en caso contrario
+   **/
+  public function inviteByEmail ($userName, $referralCode, $subDomain) {
     // Construir enlace de referido
     $origin = $subDomain ? "https://{$subDomain}.onesoul.app" : "https://onesoul.app";
     $referralUrl = $origin ."/onboard/register?refid=" . urlencode($referralCode);
@@ -836,7 +883,7 @@ clASs User
     // Cargar plantilla HTML
     $template = file_get_contents(ROOT."/src/templates/email_refCode.html");
     $template = str_replace("{LINK}", $referralUrl, $template);
-    $template = str_replace("{USERNAME}", $username, $template);
+    $template = str_replace("{USERNAME}", $userName, $template);
 
     $smtpAccount = $GLOBALS['config']['mailer']['account'];
     $smtpPassword = $GLOBALS['config']['mailer']['password'];
@@ -855,7 +902,7 @@ clASs User
 
       # Configuración del remitente y destinatario
       $mail->setFrom($smtpAccount,'Contacto OneSoul');
-      $mail->addAddress($email, $username);
+      $mail->addAddress($email, $userName);
 
       # Contenido del correo
       $mail->isHTML(true);
@@ -865,69 +912,22 @@ clASs User
 
       # Enviar el correo
       $mail->send();
+      return true;
     } catch (Exception $e) {
-      # echo "No se pudo enviar el correo. Error: {$mail->ErrorInfo}";
+      return false;
     }
   }
 
-  public function updateUser($userID, $data) {
+  /**
+   * Actualiza los datos de un usuario
+   * @param  int $userID: ID del usuario a actualizar
+   * @param  array $fields: campos a actualizar en formato ["campo = ?", ...]
+   * @param  array $data: valores correspondientes a los campos
+   * @return void
+   * @throws DatabaseException
+   **/
+  public function updateUser($userID, $fields, $data) {
     try {
-      // Verificar si el usuario existe
-      $resp = $this->getUserById($userID);
-      if (!$resp) {
-        return $resp;
-      }
-
-      // Verificar si hay campos para actualizar
-      if (empty($data)) {
-        return (object) [
-          "http_code" => 400,
-          "error" => [
-            "code" => "INVALID_PARAMETERS",
-            "desc" => "Parameters are missing or invalid"
-          ]
-        ];
-      }
-
-      // Lista de campos permitidos para actualizar
-      $allowedFields = [
-        'FirstName',
-        'LastName',
-        'DisplayName',
-        'Email',
-        'Phone',
-        'AddressName',
-        'AddressNumber',
-        'Floor',
-        'Department',
-        'Cp',
-        'City',
-        'State',
-        'CountryCode',
-        'DateOfBirth',
-        'Gender',
-        'Biography',
-        'UserType',
-        'SignedContract',
-        'LegalDocuments',
-        'ShortDescription'
-      ];
-
-      // Filtrar y preparar los campos a actualizar
-      $fields = [];
-      foreach ($data AS $key => $value) {
-        if (!in_array($key, $allowedFields)) {
-          return (object) [
-            "http_code" => 400,
-            "error" => [
-              "code" => "INVALID_UPDATE_KEY",
-              "desc" => "Key '$key' present in the JSON is not supported"
-            ]
-          ];
-        }
-        $fields[] = "$key = :$key";
-      }
-
       // Construir la consulta SQL para la actualización
       $sql = "UPDATE Users SET " . implode(", ", $fields) . " WHERE UserID = :UserID";
       $stmt = $this->db->prepare($sql);
@@ -950,169 +950,118 @@ clASs User
           $stmt->execute(); // Ejecutar la consulta
         }
       }
-
-      // Devolver los datos actualizados del usuario
-      return $this->getUserById($userID);
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
   }
 
-  public function disableUser($id) {
+  /**
+   * Desactiva un usuario estableciendo fecha de desactivación
+   * @param  int $userID: ID del usuario a desactivar
+   * @return void
+   * @throws DatabaseException
+   **/
+  public function disableUser($userID) {
     try {
-      $stmt = $this->db->prepare("DELETE FROM Users WHERE UserID = :id");
-      $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-      $stmt->execute();
-
-      return (object) [
-        "http_code" => 200,
-        "data" => [
-          "Message" => "User deleted"
-        ]
-      ];
+      $stmt = $this->db->prepare("UPDATE Users SET DeactivationDate = ? WHERE UserID = :id");
+      $stmt->execute([date('Y-m-d H:i:s'), $userID]);
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
   }
 
-  public function updateProfilePhoto($userID, $uploadedFile) {
-    $fileWritten = false; # Indica que se grabo el archivo en el FS
-    try {
-      # Busco al usuario y si tenia imagen antes
+  /**
+   * Actualiza la foto de perfil de un usuario
+   * @param  int $userID: ID del usuario
+   * @param  string $fileURL: URL de la imagen optimizada
+   * @param  string $filePath: ruta local del archivo
+   * @return bool: true si se actualizó exitosamente
+   * @throws DatabaseException
+   **/
+  public function updateProfilePhoto($userID, $fileURL, $filePath) {
+    try {      # Busco al usuario y si tenia imagen antes
       $stmt = $this->db->prepare("SELECT u.UserID,m.MediaID,m.Path FROM Users AS u
-            LEFT JOIN Media AS m ON u.UserID = m.UserID WHERE u.UserID = :id");
-      $stmt->bindParam(':id', $userID, PDO::PARAM_INT);
-      $stmt->execute();
-      $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
-      if (empty($rs)) {
-        return (object) [
-          "http_code" => 404,
-          "error" => [
-            "code" => "USER_NOT_FOUND",
-            "desc" => "No user was found with the specified ID"
-          ]
-        ];
-      }
+        LEFT JOIN Media AS m ON u.UserID = m.UserID WHERE u.UserID = ?");
+      $stmt->execute([$userID]);
+      $profilePhoto = $stmt->fetch(PDO::FETCH_ASSOC);
 
-      # Extraigo el nombre del archivo y su extension
-      $fileName = $uploadedFile->getClientFilename();
-      $fileExtension = pathinfo($fileName, PATHINFO_EXTENSION);
-      $imgID = uniqid(); #Le doy un ID unico a la imagen
+      // Iniciar transacción
+      $this->db->beginTransaction();
 
-      # Directorio destino
-      $uploadDirectory = $GLOBALS['config']['media_folder']['path'];
-
-      # El archivo destino se guarda con ID unico
-      $filePath = $uploadDirectory . "/user/" . $imgID . "." . $fileExtension;
-
-      #Grabo el archivo en el FS
-      $uploadedFile->moveTo($filePath);
-      $fileWritten = true;
-
-      // Validar con Amazon Rekognition
-      if(empty($GLOBALS['config']['debug_mode']) || !$GLOBALS['config']['debug_mode']){
-        $rekognitionResult = analyzeImageWithRekognition($filePath);
-        if ($rekognitionResult['error']) {
-          unlink($filePath); // Borrar la imagen si es inapropiada
-          return (object) [
-            "http_code" => 400,
-            "error" => [
-              "code" => "INAPPROPRIATE_CONTENT",
-              "desc" => $rekognitionResult['reASon']
-            ]
-          ];
-        }
-      }
-
-      // Aquí optimizamos la imagen usando la función optimizeImage
-      $optimizedPath = optimizeImage($filePath);
-      unlink($filePath);
-      $filePath = $optimizedPath;
-
-      # Genero la URL del archivo
-      $fileURL = $GLOBALS['config']['media_folder']['url'] . "/user/" . $imgID . ".webp";
-
-      # Borro lAS imagenes que tuviera antes (si son locales)
-      foreach ($rs AS $r) {
-        if (!is_null($r['Path']) && is_file($r['Path'])) {
-          unlink($r['Path']);
-        }
-      }
-
-      if (!is_null($rs[0]['MediaID'])) {
-        $stmt = $this->db->prepare("UPDATE Media SET `URL` = :fileURL, `Path` = :filePath
-                WHERE `UserID` = :userID");
-        $stmt->bindParam(':fileURL', $fileURL, PDO::PARAM_STR);
-        $stmt->bindParam(':filePath', $filePath, PDO::PARAM_STR);
-        $stmt->bindParam(':userID', $userID, PDO::PARAM_INT);
-        $stmt->execute();
+      if (!empty($profilePhoto)) {
+        $stmt2 = $this->db->prepare("UPDATE Media SET `URL` = ?, `Path` = ?
+          WHERE `UserID` = ?");
+        $stmt2->execute([$fileURL, $filePath, $userID]);
 
         # Borro la imagen anterior si existe en el sistema de archivos
-        if (!empty($rs[0]['Path']) && file_exists($rs[0]['Path'])) {
-          unlink($rs[0]['Path']);
+        if (file_exists($filePath)) {
+          unlink($filePath);
         }
       } else {
-        $stmt = $this->db->prepare("INSERT INTO Media (`URL`,`UserID`,`Path`)
-                VALUES (:fileURL,:userID,:filePath)");
-        $stmt->bindParam(':fileURL', $fileURL, PDO::PARAM_STR);
-        $stmt->bindParam(':filePath', $filePath, PDO::PARAM_STR);
-        $stmt->bindParam(':userID', $userID, PDO::PARAM_INT);
-        $stmt->execute();
+        $stmt2 = $this->db->prepare("INSERT INTO Media (`URL`,`Path`,`UserID`)
+          VALUES (?,?,?)");
+        $stmt2->execute([$fileURL, $filePath, $userID]);
       }
 
-      // Devolver los datos actualizados del usuario
-      return $this->getUserById($userID);
+      // Confirmo transacción
+      $this->db->commit();
+      return true;
     } catch (\PDOException $e) {
+      $this->db->rollBack(); // Revierto en caso de error
       # Si hubo algun error de DB y se llego a grabar el archivo en el FS borrarlo
       if ($fileWritten && file_exists($rs[0]['Path'])) {
         unlink($filePath);
       }
       throw new DatabaseException($e->getMessage());
     } catch (Exception $e) {
+      $this->db->rollBack(); // Revierto en caso de error
       throw new Exception($e->getMessage());
     }
   }
 
+  /**
+   * Elimina la foto de perfil de un usuario
+   * @param  int $userID: ID del usuario
+   * @return bool: true si se eliminó exitosamente, false si no existe foto
+   * @throws Exception
+   **/
   public function deleteProfilePhoto($userID) {
     try {
       # Seleccionar el MediaID para eliminar la entrada
-      $stmt = $this->db->prepare("SELECT m.MediaID, m.URL, m.Path FROM Media AS m WHERE m.UserID = :id");
-      $stmt->bindParam(':id', $userID, PDO::PARAM_INT);
-      $stmt->execute();
-      $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+      $stmt = $this->db->prepare("SELECT m.MediaID, m.URL, m.Path FROM Media AS m WHERE m.UserID = ?");
+      $stmt->execute([$userID]);
+      $profilePhoto = $stmt->fetch(PDO::FETCH_ASSOC);
 
-      if (empty($rs[0]['MediaID'])) {
-        return (object) [
-          "http_code" => 404,
-          "error" => [
-            "code" => "PHOTO_NOT_FOUND",
-            "desc" => "No profile photo found for this user"
-          ]
-        ];
+      if (empty($profilePhoto['MediaID'])) {
+        return false;
       }
+
+      // Iniciar transacción
+      $this->db->beginTransaction();
+
       # Eliminar la entrada en la tabla Media
-      $stmt = $this->db->prepare("DELETE FROM Media WHERE MediaID = :mediaID");
-      $stmt->bindParam(':mediaID', $rs[0]['MediaID'], PDO::PARAM_INT);
-      $stmt->execute();
+      $stmt = $this->db->prepare("DELETE FROM Media WHERE MediaID = ?");
+      $stmt->execute([$profilePhoto]);
 
       # Si existe el archivo local lo borro
       if (!is_null($rs[0]['Path']) && file_exists($rs[0]['Path'])) {
         unlink($rs[0]['Path']); // Eliminar el archivo del sistema
       }
 
-      return (object) [
-        "http_code" => 200,
-        "data" => [
-          "Message" => "Profile photo deleted"
-        ]
-      ];
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
+      // Confirmo transacción
+      $this->db->commit();
+      return true;
     } catch (Exception $e) {
+      $this->db->rollBack(); // Revierto en caso de error
       throw new Exception($e->getMessage());
     }
   }
 
+  /**
+   * Obtiene las categorías asociadas a un usuario
+   * @param  int $userID: ID del usuario
+   * @return array: lista de CategoryIDs
+   **/
   public function getUserCategories($userID) {
     $query = "SELECT CategoryID FROM UsersCategories WHERE UserID = :userId";
     $stmt = $this->db->prepare($query);
@@ -1121,6 +1070,12 @@ clASs User
     return $stmt->fetchAll(\PDO::FETCH_ASSOC);
   }
 
+  /**
+   * Agrega una categoría a un usuario
+   * @param  int $userID: ID del usuario
+   * @param  int $categoryId: ID de la categoría
+   * @return void
+   **/
   public function addUserCategory($userID, $categoryId) {
     $query = "INSERT INTO UsersCategories (UserID, CategoryID) VALUES (:userId, :categoryId)";
     $stmt = $this->db->prepare($query);
@@ -1129,6 +1084,12 @@ clASs User
     $stmt->execute();
   }
 
+  /**
+   * Elimina una categoría de un usuario
+   * @param  int $userID: ID del usuario
+   * @param  int $categoryId: ID de la categoría
+   * @return void
+   **/
   public function deleteUserCategory($userID, $categoryId) {
     $query = "DELETE FROM UsersCategories WHERE UserID = :userId AND CategoryID = :categoryId";
     $stmt = $this->db->prepare($query);
@@ -1137,6 +1098,10 @@ clASs User
     $stmt->execute();
   }
 
+  /**
+   * Obtiene los tipos de redes sociales activos
+   * @return array: mapa de tipos sociales activos { nombre => [SocialAccountTypeID, Name] }
+   **/
   public function getActiveSocialAccountsTypes() {
     $stmt = $this->db->prepare("SELECT SocialAccountTypeID, Name FROM SocialAccountsTypes WHERE IsActive = 1");
     $stmt->execute();
@@ -1153,18 +1118,30 @@ clASs User
     return $types;
   }
 
+  /**
+   * Obtiene las cuentas sociales de un usuario
+   * @param  int $userID: ID del usuario
+   * @return array: lista de cuentas sociales con SocialAccountID, SocialAccountTypeID, Name, AccountName
+   **/
   public function getUserSocialAccounts($userID) {
     $query = "SELECT sma.SocialAccountID, sma.SocialAccountTypeID, LOWER(TRIM(smt.Name)) as Name, sma.AccountName
       FROM SocialAccounts AS sma
-      INNER JOIN SocialAccountsTypes AS smt ON sma.SocialAccountTypeID = smt.SocialAccountTypeID
-      WHERE sma.UserID = :userID AND sma.IsActive = 1";
+      INNER JOIN SocialAccountsTypes AS smt
+        ON sma.SocialAccountTypeID = smt.SocialAccountTypeID
+      WHERE sma.UserID = ? AND sma.IsActive = 1";
 
     $stmt = $this->db->prepare($query);
-    $stmt->bindParam(':userID', $userID, PDO::PARAM_INT);
-    $stmt->execute();
+    $stmt->execute([$userID]);
     return $stmt->fetchAll(\PDO::FETCH_ASSOC);
   }
 
+  /**
+   * Agrega una cuenta social a un usuario
+   * @param  int $userID: ID del usuario
+   * @param  int $typeID: ID del tipo de red social
+   * @param  string $accountName: URL o nombre de cuenta de la red social
+   * @return void
+   **/
   public function addUserSocialAccount($userID, $typeID, $accountName) {
   $query = "INSERT INTO SocialAccounts (UserID, SocialAccountTypeID, AccountName, IsActive)
             VALUES (:userID, :typeID, :accountName, 1)";
@@ -1175,24 +1152,40 @@ clASs User
     $stmt->execute();
   }
 
+  /**
+   * Actualiza una cuenta social de un usuario
+   * @param  int $userID: ID del usuario
+   * @param  int $typeID: ID del tipo de red social
+   * @param  string $accountName: nuevo URL o nombre de cuenta
+   * @return void
+   **/
   public function updateUserSocialAccount($userID, $typeID, $accountName) {
-    $query = "UPDATE SocialAccounts SET AccountName = :accountName
-              WHERE UserID = :userID AND SocialAccountTypeID = :typeID";
+    $query = "UPDATE SocialAccounts SET AccountName = ?
+      WHERE UserID = ? AND SocialAccountTypeID = ?";
     $stmt = $this->db->prepare($query);
-    $stmt->bindParam(':userID', $userID, PDO::PARAM_INT);
-    $stmt->bindParam(':typeID', $typeID, PDO::PARAM_INT);
-    $stmt->bindParam(':accountName', $accountName, PDO::PARAM_STR);
-    $stmt->execute();
+    $stmt->execute([$accountName, $userID, $typeID]);
   }
 
+  /**
+   * Elimina una cuenta social de un usuario
+   * @param  int $userID: ID del usuario
+   * @param  int $typeID: ID del tipo de red social
+   * @return void
+   **/
   public function deleteUserSocialAccount($userID, $typeID) {
-    $query = "DELETE FROM SocialAccounts WHERE UserID = :userID AND SocialAccountTypeID = :typeID";
+    $query = "DELETE FROM SocialAccounts
+      WHERE UserID = ? AND SocialAccountTypeID = ?";
     $stmt = $this->db->prepare($query);
-    $stmt->bindParam(':userID', $userID, PDO::PARAM_INT);
-    $stmt->bindParam(':typeID', $typeID, PDO::PARAM_INT);
-    $stmt->execute();
+    $stmt->execute([$userID, $typeID]);
   }
 
+  /**
+   * Formatea y normaliza una URL de red social
+   * @param  string $name: nombre de la red social (twitter, instagram, etc)
+   * @param  string $url: URL o username a formatear
+   * @return string: URL formateada correctamente
+   * @throws Exception si el tipo de red social no es válido
+   **/
   public function formatSocialUrl($name, $url) {
     $query = "SELECT * FROM SocialAccountsTypes
               WHERE Name = :name";

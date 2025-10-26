@@ -370,22 +370,8 @@ class Auth{
   public function uploadLegalDocuments($type, $version, $releaseDate, $content){
     try {
       $stmt = $this->db->prepare("INSERT INTO LegalDocuments (DocumentType, Version, ReleaseDate, Content)
-                                  VALUES (:type, :version, :releaseDate, :content)");
-
-      $stmt->bindParam(':type', $type, PDO::PARAM_STR);
-      $stmt->bindParam(':version', $version, PDO::PARAM_STR);
-      $stmt->bindParam(':releaseDate', $releaseDate, PDO::PARAM_STR);
-      $stmt->bindParam(':content', $content, PDO::PARAM_STR);
-      $stmt->execute();
-
-      return [
-        "Message" => "Legal document uploaded successfully",
-        "Document" => [
-          "Type" => $type,
-          "Version" => $version
-        ]
-      ];
-
+        VALUES (?,?,?,?)");
+      $stmt->execute([$type, $version, $releaseDate, $content]);
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
@@ -393,14 +379,13 @@ class Auth{
 
   public function legalDocuments() {
     try {
-      $stmt = $this->db->prepare("SELECT t.*
-                                  FROM LegalDocuments t
-                                  INNER JOIN (
-                                    SELECT DocumentType, MAX(ReleaseDate) AS MaxDate
-                                    FROM LegalDocuments
-                                    GROUP BY DocumentType
-                                  ) latest
-                                  ON t.DocumentType = latest.DocumentType AND t.ReleaseDate = latest.MaxDate");
+      $stmt = $this->db->prepare("SELECT t.* FROM LegalDocuments t
+        INNER JOIN (
+          SELECT DocumentType, MAX(ReleaseDate) AS MaxDate
+          FROM LegalDocuments
+          GROUP BY DocumentType
+        ) latest
+        ON t.DocumentType = latest.DocumentType AND t.ReleaseDate = latest.MaxDate");
       $stmt->execute();
       $documents = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -408,9 +393,7 @@ class Auth{
       foreach ($documents as $doc) {
         $result[$doc['DocumentType']] = $doc;
       }
-
       return $result;
-
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }

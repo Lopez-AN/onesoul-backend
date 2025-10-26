@@ -1662,8 +1662,13 @@ class AuthController{
   public function legalDocuments(Request $request, Response $response, $args) {
     try {
       $documents = $this->auth->legalDocuments();
-
-      return $response->withStatus(200)->withJson($documents);
+      return $response->withStatus(200)->withJson([
+        "Message" => "Legal document uploaded successfully",
+        "Document" => [
+          "Type" => $type,
+          "Version" => $version
+        ]
+      ]);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
