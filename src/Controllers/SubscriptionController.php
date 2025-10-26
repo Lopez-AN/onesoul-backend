@@ -235,7 +235,7 @@ class SubscriptionController {
 
       // Obtener el email del usuario
       $userResult = $this->user->getUserById($userID);
-      if ($userResult->http_code !== 200 || empty($userResult->data['Email'])) {
+      if (empty($userResult['Email'])) {
         return $response->withStatus(400)->withJson([
           "error" => [
             "code" => "USER_EMAIL_NOT_FOUND",
@@ -268,13 +268,13 @@ class SubscriptionController {
 
       // Crear sesión de checkout
       $stripePriceId = $plan['StripeID'];
-      $userEmail = $userResult->data['Email'];
+      $userEmail = $userResult['Email'];
 
-      $firstName = $userResult->data['FirstName'] ?? '';
-      $lastName  = $userResult->data['LastName'] ?? '';
+      $firstName = $userResult['FirstName'] ?? '';
+      $lastName  = $userResult['LastName'] ?? '';
 
       $userInfo = [
-        'name' => trim(($userResult->data['FirstName'] ?? '') . ' ' . ($userResult->data['LastName'] ?? '')),
+        'name' => trim(($userResult['FirstName'] ?? '') . ' ' . ($userResult['LastName'] ?? '')),
       ];
 
       $checkout = $this->stripe->createCheckoutSession($stripePriceId, $userEmail, $userID, $newPlanID, $subDomain, $trialDays, $userInfo);

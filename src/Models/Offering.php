@@ -95,10 +95,6 @@ class Offering
 
       $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-      if (empty($rs)) {
-        return null;
-      }
-
       $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
       $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -251,19 +247,11 @@ class Offering
       $stmt->bindParam(':id', $id, PDO::PARAM_INT);
       $stmt->execute();
 
-      $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+      $offering = $stmt->fetch(PDO::FETCH_ASSOC);
 
-      if (empty($rs)) {
-        return (object) [
-          "http_code" => 404,
-          "error" => [
-            "code" => "OFFERING_NOT_FOUND",
-            "desc" => "No offering was found with the specified ID"
-          ]
-        ];
+      if (empty($offering)) {
+        return null;
       }
-
-      $offering = $rs[0];
 
       // Desagrupo los json traidos por MYSQL para armar el JSON anidado de respuesta
       $offering['Media'] = [
@@ -322,10 +310,7 @@ class Offering
         $offering['CountryCode'],
         $offering['City']);
 
-      return (object) [
-        "http_code" => 200,
-        "data" => $offering
-      ];
+      return $offering;
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
@@ -412,10 +397,6 @@ class Offering
       $stmt->execute();
 
       $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-      if (empty($rs)) {
-        return null;
-      }
 
       $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
       $total = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -574,10 +555,6 @@ class Offering
       $stmt->execute();
 
       $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-      if (empty($rs)) {
-        return null;
-      }
 
       $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
       $total = $stmt->fetch(PDO::FETCH_ASSOC);

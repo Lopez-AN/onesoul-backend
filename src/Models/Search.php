@@ -101,7 +101,7 @@ class Search
         -- Subconsulta para locations
         (SELECT JSON_ARRAYAGG(
           JSON_OBJECT(
-            'LocationID', l.LocationID,          
+            'LocationID', l.LocationID,
             'CountryCode', l.CountryCode,
             'CountryName', c.CountryName,
             'State', l.State,
@@ -227,7 +227,7 @@ class Search
         u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
           ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
         u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-        s.PlanID, s.StartDate, sp.Name, sp.Description,    
+        s.PlanID, s.StartDate, sp.Name, sp.Description,
         -- Subconsulta para reviews
         (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
           FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
@@ -239,7 +239,7 @@ class Search
         LEFT JOIN Media AS m ON u.UserID = m.UserID
         LEFT JOIN Offerings AS o ON u.UserID = o.UserID
         LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
-        LEFT JOIN SubscriptionPlans AS sp ON s.PlanID = sp.PlanID       
+        LEFT JOIN SubscriptionPlans AS sp ON s.PlanID = sp.PlanID
         LEFT JOIN (
           SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
           MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
@@ -336,7 +336,7 @@ class Search
           },
           explode(",", $e['Categories'])
         );
-        
+
         // Agregar sessionType con valores booleanos
         $e['SessionType'] = [
         "Virtual" => $e['hasVirtual'] == 1,
@@ -357,7 +357,7 @@ class Search
           $e['StartDate'],
           $e['Name'],
           $e['Description']
-        );   
+        );
 
         return $e;
       }, $rs);

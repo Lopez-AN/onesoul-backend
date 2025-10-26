@@ -786,12 +786,12 @@ clASs User
   public function referralsByUser ($id) {
     try {
       $stmt = $this->db->prepare("SELECT u.UserID, u.DisplayName, u.FirstName, u.LastName, u.RegistrationDate,
-                                  m.URL AS ProfilePhoto, r.ReferralStatus
-                                FROM Referrals AS r
-                                LEFT JOIN Users AS u ON u.UserID = r.ReferredUserID
-                                LEFT JOIN Media AS m ON u.UserID = m.UserID
-                                WHERE r.UserID = :id
-                                ORDER BY u.RegistrationDate DESC");
+        m.URL AS ProfilePhoto, r.ReferralStatus
+        FROM Referrals AS r
+        LEFT JOIN Users AS u ON u.UserID = r.ReferredUserID
+        LEFT JOIN Media AS m ON u.UserID = m.UserID
+        WHERE r.UserID = :id
+        ORDER BY u.RegistrationDate DESC");
       $stmt->bindParam(':id', $id, PDO::PARAM_INT);
       $stmt->execute();
 
@@ -801,19 +801,14 @@ clASs User
     }
   }
 
-  public function rewardsByUser ($id) {
+  public function rewardsByUser($id) {
     try {
       $stmt = $this->db->prepare("SELECT * FROM ReferralRewards
-                                  WHERE UserID = :id");
+        WHERE UserID = :id");
       $stmt->bindParam(':id', $id, PDO::PARAM_INT);
       $stmt->execute();
 
-      $rs = $stmt->fetchAll(\PDO::FETCH_ASSOC);
-
-      return (object) [
-        "data" => $rs,
-        "rows" => count($rs)
-      ];
+      return $stmt->fetchAll(\PDO::FETCH_ASSOC);
 
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
@@ -822,7 +817,7 @@ clASs User
 
   public function inviteByEmail ($userID, $email, $subDomain) {
     $userResult = $this->getUserById($userID);
-    if ($userResult->http_code !== 200 || empty($userResult->data['ReferralCode'])) {
+    if (empty($userResult->data['ReferralCode'])) {
       return [
         "error" => [
           "code" => "USER_NOT_FOUND",
@@ -879,7 +874,7 @@ clASs User
     try {
       // Verificar si el usuario existe
       $resp = $this->getUserById($userID);
-      if ($resp->http_code != 200) {
+      if (!$resp) {
         return $resp;
       }
 

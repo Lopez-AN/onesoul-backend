@@ -46,10 +46,15 @@ class UserController
 
     try {
       $result = $this->user->getUserById($id);
-      if($result->http_code != 200){
-        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+      if(!$result){
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "USER_NOT_FOUND",
+            "desc" => "No user associated with the specified id was found"
+          ]
+        ]);
       }
-      return $response->withStatus(200)->withJson($result->data);
+      return $response->withStatus(200)->withJson($result);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -147,10 +152,15 @@ class UserController
 
     try {
       $result = $this->user->getUserByRefCode($referralCode);
-      if($result->http_code != 200){
-        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+      if(!$result){
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "USER_NOT_FOUND",
+            "desc" => "No user associated with the specified referral code was found"
+          ]
+        ]);
       }
-      return $response->withStatus(200)->withJson($result->data);
+      return $response->withStatus(200)->withJson($result);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -213,7 +223,7 @@ class UserController
       }
 
       $result = $this->user->referralsByUser($id);
-      if (!$result) {
+      if (empty($result)) {
         return $response->withStatus(404)->withJson([
           "error" => [
             "code" => "REFERRED_USER_NOT_FOUND",
@@ -259,8 +269,7 @@ class UserController
       }
 
       $result = $this->user->rewardsByUser($id);
-
-      if (!$result) {
+      if (empty($result)) {
         return $response->withStatus(404)->withJson([
           "error" => [
             "code" => "REWARDS_NOT_FOUND",
@@ -685,10 +694,7 @@ class UserController
       }
 
       $result = $this->user->getUserById($userID);
-      if($result->http_code != 200){
-        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
-      }
-      return $response->withStatus(200)->withJson($result->data);
+      return $response->withStatus(200)->withJson($result);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [

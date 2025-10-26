@@ -38,7 +38,7 @@ class StripeController{
 
     $userID = $jwt['data']->UserID;
     $result = $this->user->getUserById($userID);
-    if ($result->http_code !== 200 || empty($result->data['Email'])) {
+    if (empty($result['Email'])) {
       return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "USER_EMAIL_NOT_FOUND",
@@ -46,8 +46,7 @@ class StripeController{
         ]
       ]);
     }
-
-    $userEmail = $result->data['Email'];
+    $userEmail = $result['Email'];
 
     // Validación
     if (empty($priceId) || !filter_var($userEmail, FILTER_VALIDATE_EMAIL)) {
@@ -1017,10 +1016,10 @@ class StripeController{
           $userResult = $this->user->getUserById($userID);
           $userData = [];
 
-          if ($userResult->http_code === 200 && !empty($userResult->data['UserName']) && !empty($userResult->data['Email'])) {
+          if ($userResult && !empty($userResult['UserName']) && !empty($userResult['Email'])) {
             $userData = [
-              'UserName' => $userResult->data['UserName'],
-              'Email' => $userResult->data['Email'],
+              'UserName' => $userResult['UserName'],
+              'Email' => $userResult['Email'],
               'TrialStart' => $trialStart,
               'TrialEnd' => $trialEnd,
               'TrialSource' => 'PLATFORM',

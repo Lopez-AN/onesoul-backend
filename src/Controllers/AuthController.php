@@ -534,8 +534,8 @@ class AuthController{
       # Registro al usuario
       $userID = $this->auth->register($email, $userName, $passwordHash, $tycVersion,
         $privacyVersion, $receiveNewsletters, $clientIp, $userAgent);
-      $user = $this->user->getUserById($userID);
 
+      $user = $this->user->getUserById($userID);
       $jwt = $this -> JWTgen($user);
       $this->redis->del("otp:{$email}");
 
@@ -1034,8 +1034,8 @@ class AuthController{
     }
 
     $userID = $jwt['data'] -> UserID;
-    $userData = $this->user->getUserById($userID);
-    if(!$userData){
+    $user = $this->user->getUserById($userID);
+    if(!$user){
       return $response->withStatus(404)->withJson([
         "error" => [
           "code" => "USER_NOT_FOUND",
@@ -1045,10 +1045,10 @@ class AuthController{
     }
     $userPlan = $this->subscription->getSubscriptionByUser($userID);
 
-    $token = $this->JWTgen($userData -> data);
+    $token = $this->JWTgen($user);
     return $response->withStatus(200)->withJson([
       'Token' => $token,
-      'UserData' => $userData -> data,
+      'UserData' => $user,
       'UserPlan' => $userPlan
     ]);
   }
@@ -1188,14 +1188,16 @@ class AuthController{
     }
 
     $userID = $jwt['data'] -> UserID;
-    $userData = $this->user->getUserById($userID);
-
-    if ($userData->http_code !== 200) {
-      return $response->withStatus($result->http_code)->withJson($result);
+    $user = $this->user->getUserById($userID);
+    if(!$user){
+      return $response->withStatus(404)->withJson([
+        "error" => [
+          "code" => "USER_NOT_FOUND",
+          "desc" => "No user associated with the specified id was found"
+        ]
+      ]);
     }
-
-    $userName = $userData -> data['UserName'];
-    if($userData -> data['TwoFactorAuth']){
+    if($user['TwoFactorAuth']){
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "MFA_ALREADY_SET",
@@ -1208,8 +1210,8 @@ class AuthController{
     try{
       $g2fa = new \PragmaRX\Google2FA\Google2FA();
       $secret = $g2fa -> generateSecretKey();
-      $qr = $g2fa -> getQRCodeUrl("OneSoul.app", $userName,	$secret);
-      return $response->withStatus($userData->http_code)->withJson([
+      $qr = $g2fa -> getQRCodeUrl("OneSoul.app", $user['UserName'],	$secret);
+      return $response->withStatus(200)->withJson([
         "Secret" => $secret,
         "QR" => $qr,
       ]);
@@ -1235,13 +1237,17 @@ class AuthController{
     }
 
     $userID = $jwt['data'] -> UserID;
-    $userData = $this->user->getUserById($userID);
-
-    if ($userData->http_code !== 200) {
-      return $response->withStatus($result->http_code)->withJson($result);
+    $user = $this->user->getUserById($userID);
+    if(!$user){
+      return $response->withStatus(404)->withJson([
+        "error" => [
+          "code" => "USER_NOT_FOUND",
+          "desc" => "No user associated with the specified id was found"
+        ]
+      ]);
     }
 
-    if($userData -> data['TwoFactorAuth']){
+    if($user['TwoFactorAuth']){
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "MFA_ALREADY_SET",
@@ -1305,13 +1311,17 @@ class AuthController{
     }
 
     $userID = $jwt['data'] -> UserID;
-    $userData = $this->user->getUserById($userID);
-
-    if ($userData->http_code !== 200) {
-      return $response->withStatus($result->http_code)->withJson($result);
+    $user = $this->user->getUserById($userID);
+    if(!$user){
+      return $response->withStatus(404)->withJson([
+        "error" => [
+          "code" => "USER_NOT_FOUND",
+          "desc" => "No user associated with the specified id was found"
+        ]
+      ]);
     }
 
-    if(!$userData -> data['TwoFactorAuth']){
+    if(!$user['TwoFactorAuth']){
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "MFA_NOT_SET",

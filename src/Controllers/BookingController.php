@@ -265,11 +265,19 @@ class BookingController
     $assocUUID = $data['AssocUUID'] ?? '';
     $coupon = $data['Coupon'] ?? null;
     $userInfo = $this->user->getUserById($userID);
+    if(!$userInfo){
+      return $response->withStatus(404)->withJson([
+        "error" => [
+          "code" => "USER_NOT_FOUND",
+          "desc" => "No user associated with the specified id was found"
+        ]
+      ]);
+    }
 
-    $emailValidated = !empty($userInfo->data) && filter_var($userInfo->data['ValidatedEmail'], FILTER_VALIDATE_BOOLEAN);
-    $phoneValidated = !empty($userInfo->data) && filter_var($userInfo->data['ValidatedPhone'], FILTER_VALIDATE_BOOLEAN);
+    $emailValidated = !empty($userInfo) && filter_var($userInfo['ValidatedEmail'], FILTER_VALIDATE_BOOLEAN);
+    $phoneValidated = !empty($userInfo) && filter_var($userInfo['ValidatedPhone'], FILTER_VALIDATE_BOOLEAN);
 
-    if ($userInfo->http_code !== 200 || !$emailValidated || !$phoneValidated) {
+    if (!$userInfo || !$emailValidated || !$phoneValidated) {
       return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "USER_NOT_VALIDATE_EMAIL_PHONE",
@@ -338,8 +346,8 @@ class BookingController
         ]);
       }
 
-      $result = $this->offering->getOfferingById($id);
-      if ($result->http_code != 200) {
+      $offering = $this->offering->getOfferingById($id);
+      if (!$offering) {
         return $response->withStatus(404)->WithJson([
           "error" => [
             "code" => "OFFERING_NOT_FOUND",
@@ -347,8 +355,6 @@ class BookingController
           ]
         ]);
       }
-
-      $offering = $result->data;
 
       if ($offering['UserID'] === $userID) {
         return $response->withStatus(401)->withJson([
@@ -461,7 +467,7 @@ class BookingController
         ]);
       }
 
-      $countryCode = $userInfo->data['CountryCode'] ?? "AR";
+      $countryCode = $userInfo['CountryCode'] ?? "AR";
       $type = 'B';
       $publicID = $this->booking->generatePublicId($countryCode, $type);
 
@@ -487,22 +493,31 @@ class BookingController
 
       $guideID = $offering['UserID'] ?? null;
       $guideInfo = $this->user->getUserById($guideID);
-      $guide = $guideInfo->data['FirstName'] . ' ' . $guideInfo->data['LastName'];
-      $guideEmail = $guideInfo->data['Email'] ?? null;
-      $guidePhone = $guideInfo->data['Phone'] ?? null;
+      if(!$guideInfo){
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "USER_NOT_FOUND",
+            "desc" => "No user associated with the specified id was found"
+          ]
+        ]);
+      }
+
+      $guide = $guideInfo['FirstName'] . ' ' . $guideInfo['LastName'];
+      $guideEmail = $guideInfo['Email'] ?? null;
+      $guidePhone = $guideInfo['Phone'] ?? null;
 
       // Obtener info del usuario (quien reserva)
-      if ($userInfo->http_code === 200) {
-        $username = $userInfo->data['UserName'] ?? 'Usuario';
-        $userEmail = $userInfo->data['Email'] ?? null;
-        $searcherName = $userInfo->data['FirstName'] . ' ' . $userInfo->data['LastName'];
-        $searcherPhone = $userInfo->data['Phone'] ?? '-';
+      if ($userInfo) {
+        $username = $userInfo['UserName'] ?? 'Usuario';
+        $userEmail = $userInfo['Email'] ?? null;
+        $searcherName = $userInfo['FirstName'] . ' ' . $userInfo['LastName'];
+        $searcherPhone = $userInfo['Phone'] ?? '-';
 
         // Notificación para el guía
-        if ($guideID && $guideInfo->http_code === 200) {
+        if ($guideID && $guideInfo) {
           $payloadGuide = [
             "YEAR"          => date('Y'),
-            "GUIDE_NAME"    => $guideInfo->data['UserName'] ?? 'Guía',
+            "GUIDE_NAME"    => $guideInfo['UserName'] ?? 'Guía',
             "BOOKING_ID"    => $booking['PublicID'],
             "SERVICE_NAME"  => $offering['Title'] ?? 'Servicio',
             "SEARCHER_NAME" => $searcherName,
@@ -683,12 +698,12 @@ class BookingController
 
       $id = $booking['OfferingID'];
 
-      $result = $this->offering->getOfferingById($id);
-      if ($result->http_code != 200) {
+      $offering = $this->offering->getOfferingById($id);
+      if (!$offering) {
         return $response->withStatus(404)->WithJson([
           "error" => [
             "code" => "OFFERING_NOT_FOUND",
-            "desc"=> "No Offering found for this specific ID."
+            "desc" => "No Offering found for this specific ID."
           ]
         ]);
       }
@@ -738,8 +753,6 @@ class BookingController
           $locationID = null;
         }
 
-        $offering = $result->data;
-
         $validTypes = $sessionTypes[$mode];
         $hasValidPackage = false;
 
@@ -768,8 +781,8 @@ class BookingController
 
       // Obtener datos del usuario que hizo la reserva
       $userInfo = $this->user->getUserById($booking['UserID']);
-      if ($userInfo->http_code === 200) {
-        $user = $userInfo->data;
+      if ($userInfo) {
+        $user = $userInfo;
         $username = $user['UserName'] ?? $user['DisplayName'] ?? 'Usuario';
         $userEmail = $user['Email'] ?? null;
 
@@ -797,16 +810,16 @@ class BookingController
         }
 
         // Enviar email al guía
-        if ($result->http_code === 200) {
+        if ($offering) {
           $guideID = $offering['UserID'] ?? null;
           $offeringName = $offering['Title'] ?? 'Servicio';
-          $searcherName = $userInfo->data['FirstName'] . ' ' . $userInfo->data['LastName'];
+          $searcherName = $userInfo['FirstName'] . ' ' . $userInfo['LastName'];
 
           if ($guideID) {
             $guideInfo = $this->user->getUserById($guideID);
-            if ($guideInfo->http_code === 200) {
-              $guideName = $guideInfo->data['UserName'] ?? 'Guía';
-              $guideEmail = $guideInfo->data['Email'] ?? null;
+            if ($guideInfo) {
+              $guideName = $guideInfo['UserName'] ?? 'Guía';
+              $guideEmail = $guideInfo['Email'] ?? null;
 
               if ($guideEmail) {
                 EmailHelper::send(
@@ -822,7 +835,7 @@ class BookingController
                     '{SEARCHER_EMAIL}' => $userEmail,
                     '{BOOKING_ID}' => $booking['PublicID'],
                     '{MESSAGE}' => $message,
-                    '{SEARCHER_PHONE}' => $userInfo->data['Phone'] ?? '-',
+                    '{SEARCHER_PHONE}' => $userInfo['Phone'] ?? '-',
                     '{SCHEDULED}' => date('d/m/Y H:i', strtotime($booking['ScheduledDate'])),
                     '{MODE}' => $booking['Mode'] === 'in-person' ? 'Presencial' : 'Virtual',
                     '{BOOKING_URL}' => "{$origin}/bookings/guide"
@@ -948,14 +961,13 @@ class BookingController
 
       // Obtener datos del usuario que hizo la reserva
       $userInfo = $this->user->getUserById($booking['UserID']);
-      if ($userInfo->http_code === 200) {
-        $user = $userInfo->data;
+      if ($userInfo) {
+        $user = $userInfo;
         $username = $user['UserName'] ?? $user['DisplayName'] ?? 'Usuario';
         $userEmail = $user['Email'] ?? null;
 
         // Obtener info del servicio
-        $result = $this->offering->getOfferingById($booking['OfferingID']);
-        $offering = $result->data ?? [];
+        $offering = $this->offering->getOfferingById($booking['OfferingID']);
         $offeringName = $offering['Title'] ?? 'Servicio';
 
         // Enviar email al buscador
@@ -977,16 +989,16 @@ class BookingController
         }
 
         // Enviar email al guía
-        if ($result->http_code === 200) {
+        if ($offering) {
           $guideID = $offering['UserID'] ?? null;
           $offeringName = $offering['Title'] ?? 'Servicio';
-          $searcherName = $userInfo->data['FirstName'] . ' ' . $userInfo->data['LastName'];
+          $searcherName = $userInfo['FirstName'] . ' ' . $userInfo['LastName'];
 
           if ($guideID) {
             $guideInfo = $this->user->getUserById($guideID);
-            if ($guideInfo->http_code === 200) {
-              $guideName = $guideInfo->data['UserName'] ?? 'Guía';
-              $guideEmail = $guideInfo->data['Email'] ?? null;
+            if ($guideInfo) {
+              $guideName = $guideInfo['UserName'] ?? 'Guía';
+              $guideEmail = $guideInfo['Email'] ?? null;
 
               if ($guideEmail) {
                 EmailHelper::send(
@@ -1001,7 +1013,7 @@ class BookingController
                     '{BOOKING_ID}' => $booking['PublicID'],
                     '{SEARCHER_NAME}' => $searcherName,
                     '{SEARCHER_EMAIL}' => $userEmail,
-                    '{SEARCHER_PHONE}' => $userInfo->data['Phone'] ?? '-',
+                    '{SEARCHER_PHONE}' => $userInfo['Phone'] ?? '-',
                     '{MESSAGE}' => $message,
                     '{BOOKING_URL}' => "{$origin}/bookings/guide"
                   ]
@@ -1117,14 +1129,13 @@ class BookingController
 
       // Obtener datos del usuario que hizo la reserva
       $userInfo = $this->user->getUserById($booking['UserID']);
-      if ($userInfo->http_code === 200) {
-        $user = $userInfo->data;
+      if ($userInfo) {
+        $user = $userInfo;
         $username = $user['UserName'] ?? $user['DisplayName'] ?? 'Usuario';
         $userEmail = $user['Email'] ?? null;
 
         // Obtener info del servicio
-        $result = $this->offering->getOfferingById($booking['OfferingID']);
-        $offering = $result->data ?? [];
+        $offering = $this->offering->getOfferingById($booking['OfferingID']);
         $offeringName = $offering['Title'] ?? 'Servicio';
 
         // Enviar email al buscador
@@ -1148,16 +1159,16 @@ class BookingController
         }
 
         // Enviar email al guía
-        if ($result->http_code === 200) {
+        if ($offering) {
           $guideID = $offering['UserID'] ?? null;
           $offeringName = $offering['Title'] ?? 'Servicio';
-          $searcherName = $userInfo->data['FirstName'] . ' ' . $userInfo->data['LastName'];
+          $searcherName = $userInfo['FirstName'] . ' ' . $userInfo['LastName'];
 
           if ($guideID) {
             $guideInfo = $this->user->getUserById($guideID);
-            if ($guideInfo->http_code === 200) {
-              $guideName = $guideInfo->data['UserName'] ?? 'Guía';
-              $guideEmail = $guideInfo->data['Email'] ?? null;
+            if ($guideInfo) {
+              $guideName = $guideInfo['UserName'] ?? 'Guía';
+              $guideEmail = $guideInfo['Email'] ?? null;
 
               if ($guideEmail) {
                 EmailHelper::send(
@@ -1174,7 +1185,7 @@ class BookingController
                     '{MODE}' => $booking['Mode'],
                     '{SEARCHER_NAME}' => $searcherName,
                     '{SEARCHER_EMAIL}' => $userEmail,
-                    '{SEARCHER_PHONE}' => $userInfo->data['Phone'] ?? '-',
+                    '{SEARCHER_PHONE}' => $userInfo['Phone'] ?? '-',
                     '{MESSAGE}' => $message,
                     '{BOOKING_URL}' => "{$origin}/bookings/guide"
                   ]
@@ -1265,7 +1276,6 @@ class BookingController
 
     try {
       $booking = $this->booking->getBookingByID($bookingID);
-
       if (!$booking) {
         return $response->withStatus(404)->withJson([
           "error" => [
@@ -1422,8 +1432,8 @@ class BookingController
       $guideID = $booking['Guide'];
       $offeringID = $booking['OfferingID'];
 
-      $result = $this->offering->getOfferingById($offeringID);
-      if ($result->http_code != 200) {
+      $offering = $this->offering->getOfferingById($offeringID);
+      if (!$offering) {
         return $response->withStatus(404)->WithJson([
           "error" => [
             "code" => "OFFERING_NOT_FOUND",
