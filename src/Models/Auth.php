@@ -40,737 +40,109 @@ class Auth{
     }
   }
 
+  public function checkLegalDocuments($tycVersion, $privacyPolicyVersion){
+    try{
+      // Verificar que las versiones legales existan en la base de datos
+      $stmt = $this->db->prepare("SELECT COUNT(*) as total FROM LegalDocuments
+        WHERE (DocumentType = 'TermsAndConditions' AND Version = ?)
+          OR (DocumentType = 'PrivacyPolicy' AND Version = ?)");
+      $stmt->execute([$tycVersion, $privacyPolicyVersion]);
+
+      return $stmt->fetch(PDO::FETCH_ASSOC);
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+
   /*
   * Registro usuario
   */
-  public function register($userModel, $email, $username, $newPassword, $clientIp, $request, $referralCode, $receiveNewsletters){
-    # Validación de fortaleza de contraseña
-    if(!$this->_passwordComplexity($newPassword)) {
-      return (object)[
-        "http_code" => 400,
-        "error" => [
-          "code" => "WEAK_PASSWORD",
-          "desc" => "Password doesn't meet complexity requirements"
-        ]
-      ];
+  public function register($email, $userName, $passwordHash,
+    $tycVersion, $privacyVersion, $receiveNewsletters, $clientIp, $userAgent
+  ){
+    try {
+      // Iniciar transacción
+      $this->db->beginTransaction();
+
+      # Creo el usuario con los datos basicos
+      $stmt = $this->db->prepare("INSERT INTO Users (Email, UserName, PasswordHash, RegistrationDate, ValidatedEmail)
+      VALUES (?,?,?,?,1)");
+      $stmt->execute([$email, $userName, $passwordHash, date('YmdHis')]);
+
+      // Obtener el ID del usuario creado
+      $userID = $this->db->lastInsertId();
+
+      // Insertar recibir novedades si eligio esta opcion
+      $stmt2 = $this->db->prepare("INSERT INTO UserSettings (UserID, ReceiveNewsletters) VALUES (?, ?)");
+      $stmt2->execute([$userID, $receiveNewsletters]);
+
+      // Insertar consentimiento
+      $stmt3 = $this->db->prepare("INSERT INTO UserLegalConsents
+        (UserID, UserIP, UserAgent, Version, DocumentType, Accepted)
+        VALUES (?, ?, ?, ?, 'TermsAndConditions', 1)");
+      $stmt3->execute([$userID, $clientIp, $userAgent, $tycVersion]);
+
+      $stmt4 = $this->db->prepare("INSERT INTO UserLegalConsents
+        (UserID, UserIP, UserAgent, Version, DocumentType, Accepted)
+        VALUES (?, ?, ?, ?, 'PrivacyPolicy', 1)");
+      $stmt4->execute([$userID, $clientIp, $userAgent, $privacyVersion]);
+
+      // Confirmo transacción
+      $this->db->commit();
+
+      return $userID;
+    } catch (\PDOException $e) {
+      $this->db->rollBack(); // Revierto en caso de error
+      throw new DatabaseException($e->getMessage());
     }
-
-    if($userModel->getUserByEmail($email)->http_code == 200){
-      return (object)["http_code" => 409,
-        "error" => [
-          "code" => "DUPLICATED_EMAIL",
-          "desc" => "A user with the specified email address already exists"
-        ]
-      ];
-    }
-
-    if($userModel->getUserByUserName($username)->http_code == 200){
-      return (object)["http_code" => 409,
-        "error" => [
-          "code" => "DUPLICATED_USERNAME",
-          "desc" => "A user with the specified username already exists"
-        ]
-      ];
-    }
-
-    $otpJson = $this->redis->get("otp:{$email}");
-    // Decodificar JSON
-    $otpData = @json_decode($otpJson);
-    if (!$otpData || !$otpData -> validated) {
-      return (object)[
-        "http_code" => 401,
-        "error" => [
-          "code" => "EMAIL_NOT_VALIDATED",
-          "desc" => "The email address is not validated."
-        ]
-      ];
-    }
-    $this->redis->del("otp:{$email}");
-
-    $body = $request->getParsedBody();
-
-    $acceptedTerms = $body['AcceptedTerms'] ?? null;
-    $acceptedPrivacy = $body['AcceptedPrivacyPolicy'] ?? null;
-    $TyCVersion = $body['TyCVersion'] ?? null;
-    $PrivacyPolicyVersion = $body['PrivacyPolicyVersion'] ?? null;
-
-    // Verificar que las versiones legales existan en la base de datos
-    $legalCheckStmt = $this->db->prepare("SELECT COUNT(*) as total FROM LegalDocuments
-                      WHERE (DocumentType = 'TermsAndConditions' AND Version = ?)
-                        OR (DocumentType = 'PrivacyPolicy' AND Version = ?)");
-    $legalCheckStmt->execute([$TyCVersion, $PrivacyPolicyVersion]);
-    $result = $legalCheckStmt->fetch(PDO::FETCH_ASSOC);
-
-    if ((int)$result['total'] < 2) {
-      return (object)[
-        "http_code" => 400,
-        "error" => [
-          "code" => "INVALID_LEGAL_DOCUMENT_VERSION",
-          "desc" => "One or both legal document versions are invalid."
-        ]
-      ];
-    }
-
-    // Validar que AcceptedTerms y AcceptedPrivacyPolicy esten aceptados
-    if ($acceptedTerms !== 1 || $acceptedPrivacy !== 1) {
-      return (object)[
-        "http_code" => 400,
-        "error" => [
-          "code" => "CONSENT_REQUIRED",
-          "desc" => "AcceptedTerms and AcceptedPrivacyPolicy must both be accepted."
-        ]
-      ];
-    }
-
-    $password_hash = password_hash($newPassword,PASSWORD_BCRYPT); #El password se guarda hasheado (obvio!)
-    $otpCode = rand(100000, 999999); # Codigo que se enviara por mail
-
-    $this -> _registerUser((object)[
-      "Email" => $email,
-      "UserName" => $username,
-      "PasswordHash" => $password_hash,
-      "OTPCode" => $otpCode
-    ]);
-
-    $newUser = $userModel->getUserByUserName($username);
-    if ($newUser->http_code !== 200 || !isset($newUser->data["UserID"])) {
-      return (object)[
-        "http_code" => 500,
-        "error" => [
-          "code" => "USER_CREATION_FAILED",
-          "desc" => "User created but could not be retrieved"
-        ]
-      ];
-    }
-
-    $userId = $newUser->data["UserID"];
-
-    // Crear consentimiento legal
-    $consentData = [
-      "UserID" => $userId,
-      "AcceptedTerms" => $acceptedTerms,
-      "AcceptedPrivacyPolicy" => $acceptedPrivacy,
-      "UserIP" => $clientIp,
-      "UserAgent" => $request->getHeader('User-Agent')[0] ?? '',
-      "TyCVersion" => $TyCVersion,
-      "PrivacyPolicyVersion" => $PrivacyPolicyVersion
-    ];
-
-    $consentResult = $this->createConsent($consentData);
-    if (isset($consentResult['error'])) {
-      return (object)[
-        "http_code" => 400,
-        "error" => [
-          "code" => "CONSENT_ERROR",
-          "desc" => $consentResult['error']
-        ]
-      ];
-    }
-
-    // Insertar recibir novedades si existe
-    $stmt = $this->db->prepare("INSERT INTO UserSettings (UserID, ReceiveNewsletters)
-                                VALUES (:userId , :receiveNewsletters)");
-    $stmt->execute([
-      ':userId' => $userId,
-      ':receiveNewsletters' => (int) filter_var($receiveNewsletters, FILTER_VALIDATE_BOOLEAN)
-    ]);
-
-    return $newUser;
-
   }
 
-  public function registerGoogle($userModel, $token, $username, $clientIp, $request, $referralCode, $receiveNewsletters, $altEmail){
-    $response = $this -> _validateToken("https://oauth2.googleapis.com/tokeninfo?id_token=$token");
-    if($response === false){
-      return (object)["http_code" => 401,
-        "error" => [
-          "code" => "SSO_INVALID_TOKEN",
-          "desc" => "Invalid Google token"
-        ]
-      ];
-    }
+  public function registerSSO($oAuthID, $oAuthService, $email, $firstName, $lastName, $picture, $userName,
+    $tycVersion, $privacyVersion, $receiveNewsletters, $clientIp, $userAgent
+  ){
+    try {
+      // Iniciar transacción
+      $this->db->beginTransaction();
 
-    $userId = $response -> sub;
-    $user_data = $userModel -> getUserByOAuthID($userId, "google");
-    if($user_data->http_code == 200){ # Si el usuario existe lo devuelvo para generar el token
-      return $user_data;
-    }
+      # Creo el usuario con los datos basicos
+      $stmt = $this->db->prepare("INSERT INTO Users (Email, FirstName, LastName, UserName,
+        RegistrationDate, Oauth2ID, Oauth2Service, ValidatedEmail)
+      VALUES (?,?,?,?,?,?,?,1)");
+      $stmt->execute([$email, $firstName, $lastName, $userName, date('YmdHis'), $oAuthID, $oAuthService]);
 
-    # Fix por posibles campos nulos
-    $first_name = !empty($response -> given_name) ? $response -> given_name : null;
-    $last_name = !empty($response -> family_name) ? $response -> family_name : null;
-    $email = !empty($response -> email) ? $response -> email : null;
-    $picture = !empty($response -> picture) ? $response -> picture : null;
+      // Obtener el ID del usuario creado
+      $userID = $this->db->lastInsertId();
 
-    # Si el SSO no trajo email usar el recibido desde el front
-    if(!$email){
-      $result = $this -> _checkSsoAltEmail($altEmail); # Verificar que este validado
-      if($result->http_code != 200){
-        return $result;
+      // Insertar recibir novedades si eligio esta opcion
+      $stmt2 = $this->db->prepare("INSERT INTO UserSettings (UserID, ReceiveNewsletters) VALUES (?, ?)");
+      $stmt2->execute([$userID, $receiveNewsletters]);
+
+      // Insertar consentimiento
+      $stmt3 = $this->db->prepare("INSERT INTO UserLegalConsents
+        (UserID, UserIP, UserAgent, Version, DocumentType, Accepted)
+        VALUES (?, ?, ?, ?, 'TermsAndConditions', 1)");
+      $stmt3->execute([$userID, $clientIp, $userAgent, $tycVersion]);
+
+      $stmt4 = $this->db->prepare("INSERT INTO UserLegalConsents
+        (UserID, UserIP, UserAgent, Version, DocumentType, Accepted)
+        VALUES (?, ?, ?, ?, 'PrivacyPolicy', 1)");
+      $stmt4->execute([$userID, $clientIp, $userAgent, $privacyVersion]);
+
+      if(!empty($picture)){
+        # Inserto la foto de perfil en la tabla media
+        $stmt5 = $this->db->prepare("INSERT INTO Media (UserID, `URL`) VALUES (?,?)");
+        $stmt5->execute([$userID, $picture]);
       }
-      $email = $altEmail;
+
+      // Confirmo transacción
+      $this->db->commit();
+
+      return $userID;
+    } catch (\PDOException $e) {
+      $this->db->rollBack(); // Revierto en caso de error
+      throw new DatabaseException($e->getMessage());
     }
-
-    # Verifico si hay otro usuario con ese email
-    if(!empty($email) && $userModel->getUserByEmail($email)->http_code == 200){
-      return (object)["http_code" => 409,
-        "error" => [
-          "code" => "DUPLICATED_EMAIL",
-          "desc" => "A user with the specified email address already exists"
-        ]
-      ];
-    }
-    # Verifico si hay otro usuario con ese username
-    if(!empty($username) && $userModel->getUserByUserName($username)->http_code == 200){
-      return (object)["http_code" => 409,
-        "error" => [
-          "code" => "DUPLICATED_USERNAME",
-          "desc" => "A user with the specified username already exists"
-        ]
-      ];
-    }
-
-    $body = $request->getParsedBody();
-
-    $acceptedTerms = $body['AcceptedTerms'] ?? null;
-    $acceptedPrivacy = $body['AcceptedPrivacyPolicy'] ?? null;
-    $TyCVersion = $body['TyCVersion'] ?? null;
-    $PrivacyPolicyVersion = $body['PrivacyPolicyVersion'] ?? null;
-
-    // Verificar que las versiones legales existan en la base de datos
-    $legalCheckStmt = $this->db->prepare("SELECT COUNT(*) as total FROM LegalDocuments
-                      WHERE (DocumentType = 'TermsAndConditions' AND Version = ?)
-                        OR (DocumentType = 'PrivacyPolicy' AND Version = ?)");
-    $legalCheckStmt->execute([$TyCVersion, $PrivacyPolicyVersion]);
-    $result = $legalCheckStmt->fetch(PDO::FETCH_ASSOC);
-
-    if ((int)$result['total'] < 2) {
-      return (object)[
-        "http_code" => 400,
-        "error" => [
-          "code" => "INVALID_LEGAL_DOCUMENT_VERSION",
-          "desc" => "One or both legal document versions are invalid."
-        ]
-      ];
-    }
-
-    // Validar que AcceptedTerms y AcceptedPrivacyPolicy esten aceptados
-    if ($acceptedTerms !== 1 || $acceptedPrivacy !== 1) {
-      return (object)[
-        "http_code" => 400,
-        "error" => [
-          "code" => "CONSENT_REQUIRED",
-          "desc" => "AcceptedTerms and AcceptedPrivacyPolicy must both be accepted."
-        ]
-      ];
-    }
-
-    $this -> _registerUserSSO((object)[
-      "FirstName" => $first_name,
-      "LastName" => $last_name,
-      "Email" => $email,
-      "UserName" => $username,
-      "Picture" => $picture,
-      "Oauth2ID" => $userId,
-      "Oauth2Service" => "google"
-    ]);
-
-    $newUser = $userModel->getUserByUserName($username);
-    if ($newUser->http_code !== 200 || !isset($newUser->data["UserID"])) {
-      return (object)[
-        "http_code" => 500,
-        "error" => [
-          "code" => "USER_CREATION_FAILED",
-          "desc" => "User created but could not be retrieved"
-        ]
-      ];
-    }
-
-    $userID = $newUser->data["UserID"];
-
-    // Crear consentimiento legal
-    $consentData = [
-      "UserID" => $userID,
-      "AcceptedTerms" => $acceptedTerms,
-      "AcceptedPrivacyPolicy" => $acceptedPrivacy,
-      "UserIP" => $clientIp,
-      "UserAgent" => $request->getHeader('User-Agent')[0] ?? '',
-      "TyCVersion" => $TyCVersion,
-      "PrivacyPolicyVersion" => $PrivacyPolicyVersion
-    ];
-
-    $consentResult = $this->createConsent($consentData);
-    if (isset($consentResult['error'])) {
-      return (object)[
-        "http_code" => 400,
-        "error" => [
-          "code" => "CONSENT_ERROR",
-          "desc" => $consentResult['error']
-        ]
-      ];
-    }
-
-    // Insertar recibir novedades si existe
-    $stmt = $this->db->prepare("INSERT INTO UserSettings (UserID, ReceiveNewsletters)
-                                VALUES (:userID , :receiveNewsletters)");
-    $stmt->execute([
-      ':userID' => $userID,
-      ':receiveNewsletters' => (int) filter_var($receiveNewsletters, FILTER_VALIDATE_BOOLEAN)
-    ]);
-
-    return $userModel -> getUserByOAuthID($userId, "google");
-  }
-
-  public function registerFacebook($userModel, $userId, $token, $username, $clientIp, $request, $referralCode, $receiveNewsletters, $altEmail){
-    $response = $this -> _validateToken("https://graph.facebook.com/$userId?fields=id,first_name,last_name,email,picture.width(640)&access_token=$token");
-    if($response === false){
-      return (object)["http_code" => 401,
-        "error" => [
-          "code" => "SSO_INVALID_TOKEN",
-          "desc" => "Invalid Facebook token"
-        ]
-      ];
-    }
-
-    $user_data = $userModel -> getUserByOAuthID($userId, "facebook");
-    if($user_data->http_code == 200){ # Si el usuario existe lo devuelvo para generar el token
-      return $user_data;
-    }
-
-    # Fix por posibles campos nulos
-    $first_name = !empty($response -> first_name) ? $response -> first_name : null;
-    $last_name = !empty($response -> last_name) ? $response -> last_name : null;
-    $email = !empty($response -> email) ? $response -> email : null;
-    $picture = !empty($response -> picture -> data -> url) ? $response -> picture -> data -> url : null;
-
-    # Si el SSO no trajo email usar el recibido desde el front
-    if(!$email){
-      $result = $this -> _checkSsoAltEmail($altEmail); # Verificar que este validado
-      if($result->http_code != 200){
-        return $result;
-      }
-      $email = $altEmail;
-    }
-
-    # Verifico si hay otro usuario con ese email
-    if(!empty($email) && $userModel->getUserByEmail($email)->http_code == 200){
-      return (object)["http_code" => 409,
-        "error" => [
-          "code" => "DUPLICATED_EMAIL",
-          "desc" => "A user with the specified email address already exists"
-        ]
-      ];
-    }
-   # Verifico si hay otro usuario con ese username
-   if(!empty($username) && $userModel->getUserByUserName($username)->http_code == 200){
-      return (object)["http_code" => 409,
-        "error" => [
-          "code" => "DUPLICATED_USERNAME",
-          "desc" => "A user with the specified username already exists"
-        ]
-      ];
-    }
-
-    $body = $request->getParsedBody();
-
-    $acceptedTerms = $body['AcceptedTerms'] ?? null;
-    $acceptedPrivacy = $body['AcceptedPrivacyPolicy'] ?? null;
-    $TyCVersion = $body['TyCVersion'] ?? null;
-    $PrivacyPolicyVersion = $body['PrivacyPolicyVersion'] ?? null;
-
-    // Verificar que las versiones legales existan en la base de datos
-    $legalCheckStmt = $this->db->prepare("SELECT COUNT(*) as total FROM LegalDocuments
-                      WHERE (DocumentType = 'TermsAndConditions' AND Version = ?)
-                        OR (DocumentType = 'PrivacyPolicy' AND Version = ?)");
-    $legalCheckStmt->execute([$TyCVersion, $PrivacyPolicyVersion]);
-    $result = $legalCheckStmt->fetch(PDO::FETCH_ASSOC);
-
-    if ((int)$result['total'] < 2) {
-      return (object)[
-        "http_code" => 400,
-        "error" => [
-          "code" => "INVALID_LEGAL_DOCUMENT_VERSION",
-          "desc" => "One or both legal document versions are invalid."
-        ]
-      ];
-    }
-
-    // Validar que AcceptedTerms y AcceptedPrivacyPolicy esten aceptados
-    if ($acceptedTerms !== 1 || $acceptedPrivacy !== 1) {
-      return (object)[
-        "http_code" => 400,
-        "error" => [
-          "code" => "CONSENT_REQUIRED",
-          "desc" => "AcceptedTerms and AcceptedPrivacyPolicy must both be accepted."
-        ]
-      ];
-    }
-
-    $this -> _registerUserSSO((object)[
-      "FirstName" => $first_name,
-      "LastName" => $last_name,
-      "Email" => $email,
-      "UserName" => $username,
-      "Picture" => $picture,
-      "Oauth2ID" => $userId,
-      "Oauth2Service" => "facebook"
-    ]);
-
-    $newUser = $userModel->getUserByUserName($username);
-    if ($newUser->http_code !== 200 || !isset($newUser->data["UserID"])) {
-      return (object)[
-        "http_code" => 500,
-        "error" => [
-          "code" => "USER_CREATION_FAILED",
-          "desc" => "User created but could not be retrieved"
-        ]
-      ];
-    }
-
-    $userID = $newUser->data["UserID"];
-
-    // Crear consentimiento legal
-    $consentData = [
-      "UserID" => $userID,
-      "AcceptedTerms" => $acceptedTerms,
-      "AcceptedPrivacyPolicy" => $acceptedPrivacy,
-      "UserIP" => $clientIp,
-      "UserAgent" => $request->getHeader('User-Agent')[0] ?? '',
-      "TyCVersion" => $TyCVersion,
-      "PrivacyPolicyVersion" => $PrivacyPolicyVersion
-    ];
-
-    $consentResult = $this->createConsent($consentData);
-    if (isset($consentResult['error'])) {
-      return (object)[
-        "http_code" => 400,
-        "error" => [
-          "code" => "CONSENT_ERROR",
-          "desc" => $consentResult['error']
-        ]
-      ];
-    }
-
-    // Insertar recibir novedades si existe
-    $stmt = $this->db->prepare("INSERT INTO UserSettings (UserID, ReceiveNewsletters)
-                                VALUES (:userID , :receiveNewsletters)");
-    $stmt->execute([
-      ':userID' => $userID,
-      ':receiveNewsletters' => (int) filter_var($receiveNewsletters, FILTER_VALIDATE_BOOLEAN)
-    ]);
-
-    return $userModel -> getUserByOAuthID($userId, "facebook");
-  }
-
-  public function registerFacebookNative($userModel, $jwtToken, $username, $clientIp, $request, $referralCode, $receiveNewsletters, $altEmail) {
-    // 1. Validar JWT contra las claves públicas de Facebook
-    $decoded = $this->_validateFacebookJWT($jwtToken);
-    if ($decoded === false) {
-      return (object)[
-        "http_code" => 401,
-        "error" => [
-          "code" => "SSO_INVALID_TOKEN",
-          "desc" => "Invalid Facebook JWT token"
-        ]
-      ];
-    }
-
-    $facebookId = $decoded->sub ?? null;
-    $email = $decoded->email ?? null;
-    $first_name = $decoded->given_name ?? null;
-    $last_name = $decoded->family_name ?? null;
-    $picture = $decoded->picture ?? null;
-
-    # Si el SSO no trajo email usar el recibido desde el front
-    if(!$email){
-      $result = $this -> _checkSsoAltEmail($altEmail); # Verificar que este validado
-      if($result->http_code != 200){
-        return $result;
-      }
-      $email = $altEmail;
-    }
-
-    if (empty($facebookId)) {
-      return (object)[
-        "http_code" => 400,
-        "error" => [
-          "code" => "INVALID_JWT_PAYLOAD",
-          "desc" => "Facebook JWT does not contain a valid user ID"
-        ]
-      ];
-    }
-
-    // 2. Si ya existe, devuelvo el usuario
-    $user_data = $userModel->getUserByOAuthID($facebookId, "facebook");
-    if ($user_data->http_code == 200) {
-      return $user_data;
-    }
-
-    // 3. Validaciones de email/username duplicados
-    if (!empty($email) && $userModel->getUserByEmail($email)->http_code == 200) {
-      return (object)[
-        "http_code" => 409,
-        "error" => [
-          "code" => "DUPLICATED_EMAIL",
-          "desc" => "A user with the specified email address already exists"
-        ]
-      ];
-    }
-    if (!empty($username) && $userModel->getUserByUserName($username)->http_code == 200) {
-      return (object)[
-        "http_code" => 409,
-        "error" => [
-          "code" => "DUPLICATED_USERNAME",
-          "desc" => "A user with the specified username already exists"
-        ]
-      ];
-    }
-
-    // 4. Validación de referral code (igual a tu flujo Web)
-    $referrerUserID = null;
-    if (!empty($referralCode)) {
-      $referrerResult = $userModel->getUserByRefCode($referralCode);
-      if ($referrerResult->http_code !== 200 || empty($referrerResult->data['UserID'])) {
-        return (object)[
-          "http_code" => 400,
-          "error" => [
-            "code" => "INVALID_REFERRAL_CODE",
-            "desc" => "The provided referral code is not valid"
-          ]
-        ];
-      }
-      $referrerUserID = $referrerResult->data['UserID'];
-    }
-
-    // 5. Legal docs + consent (igual a tu flujo Web)
-    $body = $request->getParsedBody();
-    $acceptedTerms = $body['AcceptedTerms'] ?? null;
-    $acceptedPrivacy = $body['AcceptedPrivacyPolicy'] ?? null;
-    $TyCVersion = $body['TyCVersion'] ?? null;
-    $PrivacyPolicyVersion = $body['PrivacyPolicyVersion'] ?? null;
-
-    $legalCheckStmt = $this->db->prepare("SELECT COUNT(*) as total FROM LegalDocuments
-                      WHERE (DocumentType = 'TermsAndConditions' AND Version = ?)
-                        OR (DocumentType = 'PrivacyPolicy' AND Version = ?)");
-    $legalCheckStmt->execute([$TyCVersion, $PrivacyPolicyVersion]);
-    $result = $legalCheckStmt->fetch(PDO::FETCH_ASSOC);
-
-    if ((int)$result['total'] < 2) {
-      return (object)[
-        "http_code" => 400,
-        "error" => [
-          "code" => "INVALID_LEGAL_DOCUMENT_VERSION",
-          "desc" => "One or both legal document versions are invalid."
-        ]
-      ];
-    }
-
-    if ($acceptedTerms !== 1 || $acceptedPrivacy !== 1) {
-      return (object)[
-        "http_code" => 400,
-        "error" => [
-          "code" => "CONSENT_REQUIRED",
-          "desc" => "AcceptedTerms and AcceptedPrivacyPolicy must both be accepted."
-        ]
-      ];
-    }
-
-    // 6. Crear usuario
-    $this->_registerUserSSO((object)[
-      "FirstName" => $first_name,
-      "LastName" => $last_name,
-      "Email" => $email,
-      "UserName" => $username,
-      "Picture" => $picture,
-      "Oauth2ID" => $facebookId,
-      "Oauth2Service" => "facebook"
-    ]);
-
-    // Insertar referral si corresponde
-    if ($referrerUserID) {
-      $stmt = $this->db->prepare("INSERT INTO Referrals (UserID, ReferredUserID, ReferralStatus)
-              VALUES (?, ?, 'Pending')");
-      $stmt->execute([$referrerUserID, $facebookId]);
-    }
-
-    // Consentimiento legal
-    $consentData = [
-      "UserID" => $facebookId,
-      "AcceptedTerms" => 1,
-      "AcceptedPrivacyPolicy" => 1,
-      "UserIP" => $clientIp,
-      "UserAgent" => $request->getHeader('User-Agent')[0] ?? '',
-      "TyCVersion" => $TyCVersion,
-      "PrivacyPolicyVersion" => $PrivacyPolicyVersion
-    ];
-
-    $consentResult = $this->createConsent($consentData);
-    if (isset($consentResult['error'])) {
-      return (object)[
-        "http_code" => 400,
-        "error" => [
-          "code" => "CONSENT_ERROR",
-          "desc" => $consentResult['error']
-        ]
-      ];
-    }
-
-    // Insertar newsletters
-    if ($receiveNewsletters) {
-      $stmt = $this->db->prepare("INSERT INTO UserSettings (UserID, ReceiveNewsletters)
-                                  VALUES (:userId, 1)");
-      $stmt->execute([':userId' => $facebookId]);
-    }
-
-    return $userModel->getUserByOAuthID($facebookId, "facebook");
-  }
-
-  public function registerApple($userModel, $code, $idToken, $rawNonce, $username, $clientIp, $request, $referralCode, $receiveNewsletters, $altEmail) {
-    // Si no vino id_token, hacer exchange con code
-    if (empty($idToken) && !empty($code)) {
-      $idToken = $this->_appleExchangeCodeForIdToken($code);
-      if (!$idToken) {
-        return (object)[
-          "http_code" => 401,
-          "error" => [
-            "code" => "SSO_INVALID_CODE2",
-            "desc" => "Invalid Apple authorization code"
-          ]
-        ];
-      }
-    }
-
-    /* Se valida contra el AUC (nuestro client ID) y el nonce recibido del front
-      vs el hasheado recibido en el token */
-    $expectedAud = $GLOBALS['config']['apple']['client_id'];
-    $response = $this->_validateAppleToken($idToken, $expectedAud, $rawNonce);
-    if ($response === false) {
-      return (object) [
-        "http_code" => 401,
-        "error" => [
-          "code" => "SSO_INVALID_TOKEN3",
-          "desc" => "Invalid Apple token"
-        ]
-      ];
-    }
-
-    $userId = $response['sub'];
-    $user_data = $userModel -> getUserByOAuthID($userId, "apple");
-    if($user_data->http_code == 200){
-      return $user_data;
-    }
-
-    $email = $response['email'] ?? null;
-
-    # Si el SSO no trajo email usar el recibido desde el front
-    if(!$email){
-      $result = $this -> _checkSsoAltEmail($altEmail); # Verificar que este validado
-      if($result->http_code != 200){
-        return $result;
-      }
-      $email = $altEmail;
-    }
-
-    if(!empty($email) && $userModel->getUserByEmail($email)->http_code == 200){
-      return (object)["http_code" => 409,
-        "error" => [
-          "code" => "DUPLICATED_EMAIL",
-          "desc" => "A user with the specified email address already exists"
-        ]
-      ];
-    }
-
-    if(!empty($username) && $userModel->getUserByUserName($username)->http_code == 200){
-      return (object)["http_code" => 409,
-        "error" => [
-          "code" => "DUPLICATED_USERNAME",
-          "desc" => "A user with the specified username already exists"
-        ]
-      ];
-    }
-
-    $body = $request->getParsedBody();
-
-    $acceptedTerms = $body['AcceptedTerms'] ?? null;
-    $acceptedPrivacy = $body['AcceptedPrivacyPolicy'] ?? null;
-    $TyCVersion = $body['TyCVersion'] ?? null;
-    $PrivacyPolicyVersion = $body['PrivacyPolicyVersion'] ?? null;
-
-    $legalCheckStmt = $this->db->prepare("SELECT COUNT(*) as total FROM LegalDocuments
-                      WHERE (DocumentType = 'TermsAndConditions' AND Version = ?)
-                        OR (DocumentType = 'PrivacyPolicy' AND Version = ?)");
-    $legalCheckStmt->execute([$TyCVersion, $PrivacyPolicyVersion]);
-    $result = $legalCheckStmt->fetch(PDO::FETCH_ASSOC);
-
-    if ((int)$result['total'] < 2) {
-      return (object)[
-        "http_code" => 400,
-        "error" => [
-          "code" => "INVALID_LEGAL_DOCUMENT_VERSION",
-          "desc" => "One or both legal document versions are invalid."
-        ]
-      ];
-    }
-
-    if ($acceptedTerms !== 1 || $acceptedPrivacy !== 1) {
-      return (object)[
-        "http_code" => 400,
-        "error" => [
-          "code" => "CONSENT_REQUIRED",
-          "desc" => "AcceptedTerms and AcceptedPrivacyPolicy must both be accepted."
-        ]
-      ];
-    }
-
-    $this -> _registerUserSSO((object)[
-      "Email" => $email,
-      "UserName" => $username,
-      "Oauth2ID" => $userId,
-      "Oauth2Service" => "apple"
-    ]);
-
-    $newUser = $userModel->getUserByUserName($username);
-    if ($newUser->http_code !== 200 || !isset($newUser->data["UserID"])) {
-      return (object)[
-        "http_code" => 500,
-        "error" => [
-          "code" => "USER_CREATION_FAILED",
-          "desc" => "User created but could not be retrieved"
-        ]
-      ];
-    }
-
-    $userID = $newUser->data["UserID"];
-
-    $consentData = [
-      "UserID" => $userID,
-      "AcceptedTerms" => $acceptedTerms,
-      "AcceptedPrivacyPolicy" => $acceptedPrivacy,
-      "UserIP" => $clientIp,
-      "UserAgent" => $request->getHeader('User-Agent')[0] ?? '',
-      "TyCVersion" => $TyCVersion,
-      "PrivacyPolicyVersion" => $PrivacyPolicyVersion
-    ];
-
-    $consentResult = $this->createConsent($consentData);
-    if (isset($consentResult['error'])) {
-      return (object)[
-        "http_code" => 400,
-        "error" => [
-          "code" => "CONSENT_ERROR",
-          "desc" => $consentResult['error']
-        ]
-      ];
-    }
-
-    $stmt = $this->db->prepare("INSERT INTO UserSettings (UserID, ReceiveNewsletters)
-                                VALUES (:userID , :receiveNewsletters)");
-    $stmt->execute([
-      ':userID' => $userID,
-      ':receiveNewsletters' => (int) filter_var($receiveNewsletters, FILTER_VALIDATE_BOOLEAN)
-    ]);
-
-    return $userModel -> getUserByOAuthID($userId, "apple");
   }
 
   public function handleReferralReward($referrerUserID, $newUserID) {
@@ -820,71 +192,16 @@ class Auth{
     }
   }
 
-  public function createConsent($consentData)
-  {
-    // Validar que el usuario exista
-    $stmt = $this->db->prepare("SELECT 1 FROM Users WHERE UserID = ?");
-    $stmt->execute([$consentData['UserID']]);
-    if (!$stmt->fetch()) {
-      return ['error' => 'User not found'];
-    }
-
-    // Validar IP
-    if (!filter_var($consentData['UserIP'], FILTER_VALIDATE_IP)) {
-      return ['error' => 'Invalid IP address'];
-    }
-
-    // Validar que al menos uno de los consentimientos esté presente
-    $hasTerms = isset($consentData['AcceptedTerms']) && isset($consentData['TyCVersion']);
-    $hasPrivacy = isset($consentData['AcceptedPrivacyPolicy']) && isset($consentData['PrivacyPolicyVersion']);
-
-    if (!$hasTerms && !$hasPrivacy) {
-      return ['error' => 'At least one legal document consent must be provided'];
-    }
-
-    // Insertar consentimiento
-    $stmt = $this->db->prepare("INSERT INTO UserLegalConsents
-      (UserID, Accepted, UserIP, UserAgent, DocumentType, Version)
-      VALUES (?, ?, ?, ?, ?, ?)");
-
-    // Insertar consentimiento para Términos y Condiciones
-    if ($hasTerms) {
-      $stmt->execute([
-        $consentData['UserID'],
-        $consentData['AcceptedTerms'] ? 1 : 0,
-        $consentData['UserIP'],
-        $consentData['UserAgent'],
-        'TermsAndConditions',
-        $consentData['TyCVersion']
-      ]);
-    }
-
-    // Insertar consentimiento para Política de Privacidad
-    if ($hasPrivacy) {
-      $stmt->execute([
-        $consentData['UserID'],
-        $consentData['AcceptedPrivacyPolicy'] ? 1 : 0,
-        $consentData['UserIP'],
-        $consentData['UserAgent'],
-        'PrivacyPolicy',
-        $consentData['PrivacyPolicyVersion']
-      ]);
-    }
-
-    return ['success' => true];
-  }
-
-
   /* Validacion OTP, el parametro resetOTP se envia en false para el metodo de resetear
     contraseña, debido a que este ultimo metodo es el que blanquea el OTP si es exitoso */
-  public function validateOTP($userId, $otpCode, $resetOTP = true){
+  public function validateOTP($userID, $otpCode, $resetOTP = true){
     try{
       $otp_exptime = $GLOBALS['config']['otp_exptime'];
       $stmt = $this->db->prepare("SELECT u.OTPCode, u.OTPDate, u.OTPAttemps, u.Email
       FROM Users AS u
       LEFT JOIN Media as m ON u.UserID = m.UserID
       WHERE u.UserID = ?");
-      $stmt->execute([$userId]);
+      $stmt->execute([$userID]);
       $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
       # Si no se encontro el usuario devolver el error
@@ -910,12 +227,12 @@ class Auth{
       # Comparar el codigo OTP recibido con el codigo generado
       if($otpCode != $user['OTPCode']){
         # Incrementar los intentos fallidos si el código no era correcto
-        $this->_incrementOtpAttempts($userId);
+        $this->_incrementOtpAttempts($userID);
 
         # Verificar si ya ha alcanzado el límite de intentos fallidos
-        if ($this->_getOtpAttempts($userId) > 3) {
+        if ($this->_getOtpAttempts($userID) > 3) {
           # Resetear OTP y contador de intentos
-          $this->_resetOtp($userId);
+          $this->_resetOtp($userID);
           return (object)[
             "http_code" => 401,
             "error" => [
@@ -942,7 +259,7 @@ class Auth{
       # Comparar el intervalo con otp_exptime
       if ($interval_in_seconds > $otp_exptime) {
         # Resetear OTP y contador de intentos
-        $this->_resetOtp($userId);
+        $this->_resetOtp($userID);
         return (object)[
           "http_code" => 400,
           "error" => [
@@ -954,11 +271,11 @@ class Auth{
 
       if($resetOTP){
         # Si el OTP es válido, resetear el OTP y los intentos
-        $this->_resetOtp($userId);
+        $this->_resetOtp($userID);
       }
 
       $stmt = $this->db->prepare("UPDATE Users SET ValidatedEmail = 1 WHERE UserID = ?");
-      $stmt->execute([$userId]);
+      $stmt->execute([$userID]);
 
       # OTP válido
       return (object)["http_code" => 200,"data" => []];
@@ -1043,11 +360,11 @@ class Auth{
   }
 
   # Envio de codigo OTP por email trayendo al usuario de la base con un userID
-  public function sendOtpMailExistingUser($userId, $recovery = false){
+  public function sendOtpMailExistingUser($userID, $recovery = false){
     try{
       $stmt = $this->db->prepare("SELECT u.Email, u.UserName FROM Users AS u
       WHERE u.UserID = ?");
-      $stmt->execute([$userId]);
+      $stmt->execute([$userID]);
       $resp = $stmt->fetchAll(PDO::FETCH_ASSOC);
       if(empty($resp)){
         return (object)["http_code" => 404,
@@ -1061,7 +378,7 @@ class Auth{
       # Genero un nuevo codigo OTP y lo grabo en el usuario
       $otpCode = rand(100000, 999999); # Codigo que se enviara por mail
       $stmt = $this->db->prepare("UPDATE Users SET OTPCode = ?, OTPDate = ? WHERE UserID = ?");
-      $stmt->execute([$otpCode, date("YmdHis"), $userId]);
+      $stmt->execute([$otpCode, date("YmdHis"), $userID]);
       $result = $this -> _sendOtpMail($resp[0]['Email'],$otpCode,$resp[0]['UserName'],$recovery);
       if ($result->http_code !== 200) {
         return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
@@ -1130,42 +447,6 @@ class Auth{
     }
   }
 
-
-  public function validateReCaptcha($recaptchaToken, $clientIp) {
-    # Si esta el modo debug no se valida esto
-    if(!empty($GLOBALS['config']['debug_mode']) && $GLOBALS['config']['debug_mode']){
-      return (object)["http_code" => 200, "data" => []];
-    }
-
-    $secret = $GLOBALS['config']['recaptcha']['secret'];
-    $minScore = $GLOBALS['config']['recaptcha']['min_score'];
-    $url = "https://www.google.com/recaptcha/api/siteverify?secret=$secret&response=$recaptchaToken&remoteip=$clientIp";
-
-    # Hacer la petición a la API de reCAPTCHA
-    $response = $this -> _validateToken($url);
-    if($response === false || empty($response -> success)){
-      return (object)["http_code" => 401,
-        "error" => [
-          "code" => "INVALID_RECAPTCHA_TOKEN",
-          "desc" => "Invalid reCaptcha token"
-        ]
-      ];
-    }
-
-    # Si el score es muy bajo
-    if ($response -> score < $minScore) {
-      return (object)["http_code" => 401,
-        "error" => [
-          "code" => "RECAPTCHA_LOW_SCORE",
-          "desc" => "reCaptcha score is too low"
-        ]
-      ];
-    }
-
-    # Validación exitosa
-    return (object)["http_code" => 200, "data" => []];
-  }
-
   public function mfaSet($userID, $secret){
 
     try {
@@ -1178,7 +459,6 @@ class Auth{
       throw new DatabaseException($e->getMessage());
     }
   }
-
 
   public function mfaCheck($userID, $code)
   {
@@ -1261,17 +541,17 @@ class Auth{
     }
   }
 
-  public function validateMfaId($userId, $mfaId) {
+  public function validateMfaId($userID, $mfaId) {
     try {
       $stmt = $this->db->prepare("SELECT * FROM UserBrowser WHERE UserID = ? AND MfaID = ?");
-      $stmt->execute([$userId, $mfaId]);
+      $stmt->execute([$userID, $mfaId]);
       return $stmt->fetch(PDO::FETCH_ASSOC) !== false;
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
   }
 
-  public function storeBrowserData($userId, $request, $newMfaId, $clientIp) {
+  public function storeBrowserData($userID, $request, $newMfaId, $clientIp) {
     // Obtener información del navegador desde el encabezado User-Agent
     $userAgent = $request->getHeader('User-Agent')[0];
     $parser = new \WhichBrowser\Parser($userAgent);
@@ -1290,17 +570,17 @@ class Auth{
         INSERT INTO UserBrowser (UserID, MfaID, Browser, Version, Os, Device, IP, Expiry)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ");
-      $stmt->execute([$userId, $newMfaId, $browser, $version, $os, $device, $ip, $expiry]);
+      $stmt->execute([$userID, $newMfaId, $browser, $version, $os, $device, $ip, $expiry]);
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
   }
 
-  public function updateFailedLogin($userId, $failedAttempts, $lockedUntil = null) {
+  public function updateFailedLogin($userID, $failedAttempts, $lockedUntil = null) {
     try {
       $stmt = $this->db->prepare("UPDATE Users SET FailedLoginAttempts = ?,
       LockedUntil = ? WHERE UserID = ?");
-      $stmt->execute([$failedAttempts, $lockedUntil, $userId]);
+      $stmt->execute([$failedAttempts, $lockedUntil, $userID]);
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
@@ -1418,180 +698,26 @@ class Auth{
     }
   }
 
-  private function _passwordComplexity($newPassword): bool {
-    $password = trim($newPassword);
-
-    return strlen($password) >= 8 &&
-      preg_match('/[A-Z]/', $password) &&   // Debe tener al menos una mayúscula
-      preg_match('/[a-z]/', $password) &&   // Debe tener al menos una minúscula
-      (preg_match('/[0-9]/', $password) || preg_match('/\W/', $password));  // Debe tener un número O un símbolo
-  }
-
-  private function _validateFacebookJWT($jwtToken) {
-    try {
-      // Obtener JWKS de Facebook
-      $jwksUrl = "https://www.facebook.com/.well-known/oauth/openid/jwks/";
-      $jwks = json_decode(file_get_contents($jwksUrl), true);
-
-      // Decodificar encabezado para obtener el kid
-      $header = json_decode(base64_decode(str_replace(['-', '_'], ['+', '/'], explode('.', $jwtToken)[0])), true);
-      $kid = $header['kid'] ?? null;
-
-      if (!$kid) return false;
-
-      // Buscar clave pública que coincida
-      $keyData = null;
-      foreach ($jwks['keys'] as $key) {
-        if ($key['kid'] === $kid) {
-          $keyData = $key;
-          break;
-        }
-      }
-      if (!$keyData) return false;
-
-      // Convertir a clave pública
-      $publicKey = $this->_convertJWKToPEM($keyData);
-
-      // Usar Firebase JWT para verificar
-      $decoded = \Firebase\JWT\JWT::decode(
-        $jwtToken,
-        new \Firebase\JWT\Key($publicKey, $keyData['alg'])
-      );
-
-      // Validaciones adicionales
-      $expectedIssuer = 'https://www.facebook.com';
-      $expectedAudience = $GLOBALS['config']['facebook']['APP_ID'];
-
-      if (($decoded->iss ?? '') !== $expectedIssuer) {
-        throw new \Exception("Invalid issuer");
-      }
-
-      if (($decoded->aud ?? '') !== $expectedAudience) {
-        throw new \Exception("Invalid audience");
-      }
-
-      if (isset($decoded->exp) && $decoded->exp < time()) {
-        throw new \Exception("Token expired");
-      }
-
-      return $decoded;
-
-    } catch (\Exception $e) {
-      error_log("Facebook JWT validation failed: " . $e->getMessage());
-      return false;
-    }
-  }
-
-  private function _convertJWKToPEM($jwk) {
-    $modulus = $this->_base64UrlDecode($jwk['n']);
-    $exponent = $this->_base64UrlDecode($jwk['e']);
-    $rsa = new \phpseclib3\Crypt\RSA();
-    $rsa = $rsa->loadKey(['n' => $modulus, 'e' => $exponent]);
-    return $rsa->getPublicKey();
-  }
-
-  private function _base64UrlDecode($input) {
-    $remainder = strlen($input) % 4;
-    if ($remainder) {
-      $padlen = 4 - $remainder;
-      $input .= str_repeat('=', $padlen);
-    }
-    return base64_decode(strtr($input, '-_', '+/'));
-  }
-
-  private function _incrementOtpAttempts($userId) {
+  private function _incrementOtpAttempts($userID) {
     # Incrementar el contador de intentos fallidos
     $stmt = $this->db->prepare("UPDATE Users SET OTPAttemps = IFNULL(OTPAttemps, 0) + 1 WHERE UserID = ?");
-    $stmt->execute([$userId]);
+    $stmt->execute([$userID]);
   }
 
-  private function _getOtpAttempts($userId) {
+  private function _getOtpAttempts($userID) {
     # Obtener el número de intentos fallidos
     $stmt = $this->db->prepare("SELECT OTPAttemps FROM Users WHERE UserID = ?");
-    $stmt->execute([$userId]);
+    $stmt->execute([$userID]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
     return $user['OTPAttemps'] ?? 0;
   }
 
-  private function _resetOtp($userId) {
+  private function _resetOtp($userID) {
     # Resetear el OTP y el contador de intentos fallidos
     $stmt = $this->db->prepare("UPDATE Users SET OTPCode = NULL, OTPDate = NULL, OTPAttemps = NULL
     WHERE UserID = ?");
-    $stmt->execute([$userId]);
-  }
-
-  # Registra los datos basicos de un usuario en modo por email
-  private function _registerUser($userData){
-    try {
-      # Creo el usuario con los datos basicos
-      $stmt = $this->db->prepare("INSERT INTO Users (Email, UserName, PasswordHash,
-      OTPCode, OTPDate, RegistrationDate, ValidatedEmail)
-      VALUES (?,?,?,?,?,?,1)");
-      $stmt->execute([$userData -> Email, $userData -> UserName, $userData -> PasswordHash,
-        $userData -> OTPCode, date('YmdHis'), date('YmdHis')]);
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
-  }
-
-  # Registra los datos basicos de un usuario en los logueos por SSO
-  private function _registerUserSSO($userData){
-    # Creo el usuario con los datos basicos
-    try {
-      $stmt = $this->db->prepare("INSERT INTO Users (UserName, Oauth2ID, Oauth2Service, RegistrationDate, Email, ValidatedEmail)
-      VALUES (?,?,?,?,?,1)");
-      $stmt->execute([$userData -> UserName, $userData -> Oauth2ID, $userData -> Oauth2Service, date('YmdHis'), $userData -> Email]);
-
-      # Obtengo el ID del usuario creado
-      $userId = $this->db->lastInsertId();
-
-      // Campos opcionales
-      if(!empty($userData -> FirstName)){
-        $stmt = $this->db->prepare("UPDATE Users SET FirstName = ? WHERE UserID = ?");
-        $stmt->execute([$userData -> FirstName, $userId]);
-      }
-      if(!empty($userData -> LastName)){
-        $stmt = $this->db->prepare("UPDATE Users SET LastName = ? WHERE UserID = ?");
-        $stmt->execute([$userData -> LastName, $userId]);
-      }
-      if(!empty($userData -> Picture)){
-        # Inserto la foto de perfil en la tabla media
-        $stmt = $this->db->prepare("INSERT INTO Media (UserID, `URL`) VALUES (?,?)");
-        $stmt->execute([$userId, $userData -> Picture]);
-      }
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
-  }
-
-  /* Verifica si el email alternativo provisto por el usuario
-    cuando el SSO no comparte publicamente un email, este validado */
-  private function _checkSsoAltEmail($altEmail){
-    if(!$altEmail){ # Si tampoco se proporciono un email desde el front devolver un error
-      return (object)["http_code" => 400,
-        "error" => [
-          "code" => "MISSING_EMAIL",
-          "desc" => "A email must be provided by either SSO service or user"
-        ]
-      ];
-    }
-    # verifico que este validado el email
-    $otpJson = $this->redis->get("otp:{$altEmail}");
-    // Decodificar JSON
-    $otpData = @json_decode($otpJson);
-    if (!$otpData || !$otpData -> validated) {
-      return (object)[
-        "http_code" => 401,
-        "error" => [
-          "code" => "EMAIL_NOT_VALIDATED",
-          "desc" => "The email address is not validated."
-        ]
-      ];
-    }
-    $this->redis->del("otp:{$altEmail}");
-
-    return (object)["http_code" => 200, "data" => "ok"];
+    $stmt->execute([$userID]);
   }
 }
 

@@ -493,7 +493,7 @@ class Offering
     }
   }
 
-  public function getOfferingsByUserId($paginator, $userId)
+  public function getOfferingsByUserId($paginator, $userID)
   {
     try {
       $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*,
@@ -568,7 +568,7 @@ class Offering
         ORDER BY o.OfferingID
         LIMIT :_limit OFFSET :_offset");
 
-      $stmt->bindParam(':userId', $userId, PDO::PARAM_INT);
+      $stmt->bindParam(':userId', $userID, PDO::PARAM_INT);
       $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
       $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
       $stmt->execute();

@@ -42,6 +42,15 @@ $container->set('pdo', function() {
 AppFactory::setContainer($container);
 $app = AppFactory::create();
 
+// Evita bloqueos de imagenes
+$app->add(function ($request, $handler) {
+  $response = $handler->handle($request);
+  return $response->withAddedHeader(
+    'Content-Security-Policy',
+    "img-src * data: blob:;"
+  );
+});
+
 $app->addRoutingMiddleware();
 $errorMiddleware = $app->addErrorMiddleware(true, true, true);
 

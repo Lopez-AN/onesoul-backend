@@ -102,9 +102,9 @@ class OfferingController {
 
   public function getOfferingsByUserId(Request $request, Response $response, $args)  {
     $paginator = paginator($request);
-    $userId = $args['userID'];
+    $userID = $args['userID'];
     try {
-      $result = $this->offering->getOfferingsByUserId($paginator, $userId);
+      $result = $this->offering->getOfferingsByUserId($paginator, $userID);
 
       if ($result === null) {
         return $response->withStatus(404)->withJson([
@@ -781,7 +781,7 @@ class OfferingController {
     $id = $args['id'];
     $mediaID = $args['mediaID'];
     $jwt = $request->getAttribute('jwt');
-    $userId = $jwt['data']->UserID;
+    $userID = $jwt['data']->UserID;
 
     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
       return $response->withStatus(401)->withJson([
@@ -805,7 +805,7 @@ class OfferingController {
       $offeringData = $result->data;
 
       // Verificar si el usuario autenticado es el mismo que el que se intenta crear, o si es un administrador
-      if ($offeringData['UserID'] != $userId && $jwt['data']->UserType != 'Admin') {
+      if ($offeringData['UserID'] != $userID && $jwt['data']->UserType != 'Admin') {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",

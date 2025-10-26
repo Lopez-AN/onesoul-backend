@@ -64,10 +64,15 @@ class UserController
     $email = $args['email'];
     try {
       $result = $this->user->getUserByEmail($email);
-      if($result->http_code != 200){
-        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+      if(!$result){
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "USER_NOT_FOUND",
+            "desc" => "No user associated with the specified email account was found"
+          ]
+        ]);
       }
-      return $response->withStatus(200)->withJson($result ->data);
+      return $response->withStatus(200)->withJson($result);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -82,13 +87,15 @@ class UserController
     $username = $args['username'];
     try {
       $result = $this->user->getUserByUserName($username);
-      if($result->http_code != 200){
-        return $response->withStatus(404)->withJson((object)["error" => [
-          "code" => "USER_NOT_FOUND",
-          "desc" => "No user associated with the specified username"
-        ]]);
+      if(!$result){
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "USER_NOT_FOUND",
+            "desc" => "No user associated with the specified username was found"
+          ]
+        ]);
       }
-      return $response->withStatus(200)->withJson($result->data);
+      return $response->withStatus(200)->withJson($result);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -349,7 +356,7 @@ class UserController
   }
 
   public function updateUser(Request $request, Response $response, $args){
-    $userId = $args['id'];
+    $userID = $args['id'];
     $data = $request->getParsedBody();
 
     $jwt = $request->getAttribute('jwt');
@@ -373,7 +380,7 @@ class UserController
         ]);
       }
       # Verificar si el usuario autenticado es el mismo que el que se intenta modificar, o si es un administrador
-      if ($jwt['data']->UserID != $userId && $jwt['data']->UserType != 'Admin') {
+      if ($jwt['data']->UserID != $userID && $jwt['data']->UserType != 'Admin') {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
@@ -401,13 +408,13 @@ class UserController
         }
       }
 
-      $result = $this->user->updateUser($userId, $data);
+      $result = $this->user->updateUser($userID, $data);
       if($result->http_code != 200){
         return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
 
       # --- Sincronizar con Stripe si corresponde ---
-      $subscription = $this->subscription->getSubscriptionByUser($userId);
+      $subscription = $this->subscription->getSubscriptionByUser($userID);
       if ($subscription && $subscription['PaymentPlatform'] === 'STRIPE' && in_array($subscription['Status'], ['ACTIVE', 'TRIALING'])) {
         try {
           \Stripe\Stripe::setApiKey($GLOBALS['config']['stripe']['STRIPE_SECRET_KEY']);
@@ -517,7 +524,7 @@ class UserController
 
   public function updateProfilePhoto(Request $request, Response $response, $args)
   {
-    $userId = $args['id'];
+    $userID = $args['id'];
     $jwt = $request->getAttribute('jwt');
     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
       return $response->withStatus(401)->withJson([
@@ -539,7 +546,7 @@ class UserController
         ]);
       }
       # Verificar si el usuario autenticado es el mismo que el que se intenta modificar, o si es un administrador
-      if ($jwt['data']->UserID != $userId && $jwt['data']->UserType != 'Admin') {
+      if ($jwt['data']->UserID != $userID && $jwt['data']->UserType != 'Admin') {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
@@ -561,7 +568,7 @@ class UserController
         ]);
       }
 
-      $result = $this->user->updateProfilePhoto($userId, $uploadedFile);
+      $result = $this->user->updateProfilePhoto($userID, $uploadedFile);
       if($result->http_code != 200){
         return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
@@ -580,7 +587,7 @@ class UserController
 
   public function deleteProfilePhoto(Request $request, Response $response, $args)
   {
-    $userId = $args['id'];
+    $userID = $args['id'];
     $jwt = $request->getAttribute('jwt');
 
     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
@@ -594,7 +601,7 @@ class UserController
 
     try {
       # Verificar si el usuario autenticado es el mismo que el que se intenta modificar, o si es un administrador
-      if ($jwt['data']->UserID != $userId && $jwt['data']->UserType != 'Admin') {
+      if ($jwt['data']->UserID != $userID && $jwt['data']->UserType != 'Admin') {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
@@ -603,7 +610,7 @@ class UserController
         ]);
       }
 
-      $result = $this->user->deleteProfilePhoto($userId);
+      $result = $this->user->deleteProfilePhoto($userID);
       if ($result->http_code != 200) {
         return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
@@ -620,7 +627,7 @@ class UserController
 
   public function updateUserCategories(Request $request, Response $response, $args)
   {
-    $userId = $args['id'];
+    $userID = $args['id'];
     $jwt = $request->getAttribute('jwt');
 
     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
@@ -633,7 +640,7 @@ class UserController
     }
 
     # Verificar si el usuario autenticado es el mismo que el que se intenta modificar, o si es un administrador
-    if ($jwt['data']->UserID != $userId && $jwt['data']->UserType != 'Admin') {
+    if ($jwt['data']->UserID != $userID && $jwt['data']->UserType != 'Admin') {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
@@ -656,7 +663,7 @@ class UserController
 
     try {
       # Obtener las categorías actuales del usuario
-      $existingCategories = $this->user->getUserCategories($userId);
+      $existingCategories = $this->user->getUserCategories($userID);
       $existingCategoryIds = array_column($existingCategories, 'CategoryID');
 
       # Categorías a agregar y eliminar
@@ -666,18 +673,18 @@ class UserController
       # Agregar nuevas asociaciones
       if (!empty($categoriesToAdd)) {
         foreach ($categoriesToAdd as $categoryId) {
-          $this->user->addUserCategory($userId, $categoryId);
+          $this->user->addUserCategory($userID, $categoryId);
         }
       }
 
       # Eliminar asociaciones que no están en el array enviado
       if (!empty($categoriesToDelete)) {
         foreach ($categoriesToDelete as $categoryId) {
-          $this->user->deleteUserCategory($userId, $categoryId);
+          $this->user->deleteUserCategory($userID, $categoryId);
         }
       }
 
-      $result = $this->user->getUserById($userId);
+      $result = $this->user->getUserById($userID);
       if($result->http_code != 200){
         return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }

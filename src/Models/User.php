@@ -875,10 +875,10 @@ clASs User
     }
   }
 
-  public function updateUser($userId, $data) {
+  public function updateUser($userID, $data) {
     try {
       // Verificar si el usuario existe
-      $resp = $this->getUserById($userId);
+      $resp = $this->getUserById($userID);
       if ($resp->http_code != 200) {
         return $resp;
       }
@@ -943,7 +943,7 @@ clASs User
       }
 
       // Vincular el ID del usuario
-      $stmt->bindValue(':UserID', $userId, PDO::PARAM_INT);
+      $stmt->bindValue(':UserID', $userID, PDO::PARAM_INT);
       $stmt->execute(); // Ejecutar la consulta
 
       // Si cambio el mail se marca el email como no validado
@@ -951,13 +951,13 @@ clASs User
         if ($data['Email'] != $resp->data['Email']) {
           $stmt = $this->db->prepare("UPDATE Users SET ValidatedEmail = 0 WHERE UserID = :UserID");
           // Vincular el ID del usuario
-          $stmt->bindValue(':UserID', $userId, PDO::PARAM_INT);
+          $stmt->bindValue(':UserID', $userID, PDO::PARAM_INT);
           $stmt->execute(); // Ejecutar la consulta
         }
       }
 
       // Devolver los datos actualizados del usuario
-      return $this->getUserById($userId);
+      return $this->getUserById($userID);
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
@@ -980,13 +980,13 @@ clASs User
     }
   }
 
-  public function updateProfilePhoto($userId, $uploadedFile) {
+  public function updateProfilePhoto($userID, $uploadedFile) {
     $fileWritten = false; # Indica que se grabo el archivo en el FS
     try {
       # Busco al usuario y si tenia imagen antes
       $stmt = $this->db->prepare("SELECT u.UserID,m.MediaID,m.Path FROM Users AS u
             LEFT JOIN Media AS m ON u.UserID = m.UserID WHERE u.UserID = :id");
-      $stmt->bindParam(':id', $userId, PDO::PARAM_INT);
+      $stmt->bindParam(':id', $userID, PDO::PARAM_INT);
       $stmt->execute();
       $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
       if (empty($rs)) {
@@ -1049,7 +1049,7 @@ clASs User
                 WHERE `UserID` = :userID");
         $stmt->bindParam(':fileURL', $fileURL, PDO::PARAM_STR);
         $stmt->bindParam(':filePath', $filePath, PDO::PARAM_STR);
-        $stmt->bindParam(':userID', $userId, PDO::PARAM_INT);
+        $stmt->bindParam(':userID', $userID, PDO::PARAM_INT);
         $stmt->execute();
 
         # Borro la imagen anterior si existe en el sistema de archivos
@@ -1061,12 +1061,12 @@ clASs User
                 VALUES (:fileURL,:userID,:filePath)");
         $stmt->bindParam(':fileURL', $fileURL, PDO::PARAM_STR);
         $stmt->bindParam(':filePath', $filePath, PDO::PARAM_STR);
-        $stmt->bindParam(':userID', $userId, PDO::PARAM_INT);
+        $stmt->bindParam(':userID', $userID, PDO::PARAM_INT);
         $stmt->execute();
       }
 
       // Devolver los datos actualizados del usuario
-      return $this->getUserById($userId);
+      return $this->getUserById($userID);
     } catch (\PDOException $e) {
       # Si hubo algun error de DB y se llego a grabar el archivo en el FS borrarlo
       if ($fileWritten && file_exists($rs[0]['Path'])) {
@@ -1078,11 +1078,11 @@ clASs User
     }
   }
 
-  public function deleteProfilePhoto($userId) {
+  public function deleteProfilePhoto($userID) {
     try {
       # Seleccionar el MediaID para eliminar la entrada
       $stmt = $this->db->prepare("SELECT m.MediaID, m.URL, m.Path FROM Media AS m WHERE m.UserID = :id");
-      $stmt->bindParam(':id', $userId, PDO::PARAM_INT);
+      $stmt->bindParam(':id', $userID, PDO::PARAM_INT);
       $stmt->execute();
       $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -1118,26 +1118,26 @@ clASs User
     }
   }
 
-  public function getUserCategories($userId) {
+  public function getUserCategories($userID) {
     $query = "SELECT CategoryID FROM UsersCategories WHERE UserID = :userId";
     $stmt = $this->db->prepare($query);
-    $stmt->bindParam(':userId', $userId, PDO::PARAM_INT);
+    $stmt->bindParam(':userId', $userID, PDO::PARAM_INT);
     $stmt->execute();
     return $stmt->fetchAll(\PDO::FETCH_ASSOC);
   }
 
-  public function addUserCategory($userId, $categoryId) {
+  public function addUserCategory($userID, $categoryId) {
     $query = "INSERT INTO UsersCategories (UserID, CategoryID) VALUES (:userId, :categoryId)";
     $stmt = $this->db->prepare($query);
-    $stmt->bindParam(':userId', $userId, PDO::PARAM_INT);
+    $stmt->bindParam(':userId', $userID, PDO::PARAM_INT);
     $stmt->bindParam(':categoryId', $categoryId, PDO::PARAM_INT);
     $stmt->execute();
   }
 
-  public function deleteUserCategory($userId, $categoryId) {
+  public function deleteUserCategory($userID, $categoryId) {
     $query = "DELETE FROM UsersCategories WHERE UserID = :userId AND CategoryID = :categoryId";
     $stmt = $this->db->prepare($query);
-    $stmt->bindParam(':userId', $userId, PDO::PARAM_INT);
+    $stmt->bindParam(':userId', $userID, PDO::PARAM_INT);
     $stmt->bindParam(':categoryId', $categoryId, PDO::PARAM_INT);
     $stmt->execute();
   }

@@ -150,7 +150,7 @@ class CalendlyService
    *  @param  refreshToken: token para obtener nuevo accesstoken cuando este expira
    *  @param  tokenExpiresAt: fechahora de expiracion del accesstoken
   **/
-  public function saveCalendlyUser($userId, $accessToken, $refreshToken, $tokenExpiresAt, $data){
+  public function saveCalendlyUser($userID, $accessToken, $refreshToken, $tokenExpiresAt, $data){
     try {
       $stmt = $this->db->prepare("REPLACE INTO CalendlyConnections
         (UserUUID, UserID, OrgUUID, Slug, SchedulingUrl, Timezone,
@@ -162,7 +162,7 @@ class CalendlyService
       $orgUuid = basename($data->current_organization);
 
       $stmt->bindParam(':userUUID',       $userUuid,             PDO::PARAM_STR);
-      $stmt->bindParam(':userId',         $userId,               PDO::PARAM_INT);
+      $stmt->bindParam(':userId',         $userID,               PDO::PARAM_INT);
       $stmt->bindParam(':orgUUID',        $orgUuid,              PDO::PARAM_STR);
       $stmt->bindParam(':slug',           $data->slug,           PDO::PARAM_STR);
       $stmt->bindParam(':schedulingUrl',  $data->scheduling_url, PDO::PARAM_STR);
@@ -214,12 +214,12 @@ class CalendlyService
       $stmt->bindParam(':userUuid',      $userUuid,       PDO::PARAM_STR);
       $stmt->bindParam(':eventUuid',     $eventUuid,      PDO::PARAM_STR);
 
-      $userId = $utmContent->UserId;
+      $userID = $utmContent->UserId;
       $bookingId = $utmContent->BookingId;
       $offeringId = $utmContent->OfferingId;
       $assocUuid = $utmContent->Uuid;
 
-      $stmt->bindParam(':userId',        $userId,                           PDO::PARAM_INT);
+      $stmt->bindParam(':userId',        $userID,                           PDO::PARAM_INT);
       $stmt->bindParam(':bookingId',     $bookingId,                        PDO::PARAM_INT);
       $stmt->bindParam(':offeringId',    $offeringId,                       PDO::PARAM_INT);
       $stmt->bindParam(':assocUuid',     $assocUuid,                        PDO::PARAM_STR);
@@ -250,11 +250,11 @@ class CalendlyService
    *  @param  userId: ID usuario OneSoul
    *  @return: datos del usuario calendly
   **/
-  public function getCalendlyUser($userId){
+  public function getCalendlyUser($userID){
     try {
       $stmt = $this->db->prepare("SELECT * FROM CalendlyConnections
         WHERE UserID = :userId");
-      $stmt->bindParam(':userId', $userId, PDO::PARAM_INT);
+      $stmt->bindParam(':userId', $userID, PDO::PARAM_INT);
       $stmt->execute();
 
       return $stmt->fetch(\PDO::FETCH_ASSOC);

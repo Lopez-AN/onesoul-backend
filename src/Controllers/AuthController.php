@@ -10,6 +10,7 @@ use App\Models\Subscription;
 use Firebase\JWT\JWT;
 use Firebase\JWT\JWK;
 use Stripe\Stripe;
+use Predis\Client as RedisClient;
 
 #Definir zona horaria
 date_default_timezone_set('America/Argentina/Buenos_Aires');
@@ -19,11 +20,13 @@ class AuthController{
   protected $user;
   protected $auth;
   protected $subscription;
+  protected $redis;
 
-  public function __construct(User $user, Auth $auth, Subscription $subscription){
-    $this->user = $user;
+  public function __construct(Auth $auth, User $user, Subscription $subscription, RedisClient $redisClient){
     $this->auth = $auth;
+    $this->user = $user;
     $this->subscription = $subscription;
+    $this->redis = $redisClient;
   }
 
   /*
@@ -31,16 +34,16 @@ class AuthController{
   */
   public function login(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
-    $email = $data['Email'] ?? '';
-    $username = $data['UserName'] ?? '';
-    $password = $data['Password'] ?? '';
-    $mfa_id = $data['MfaID'] ?? '';
-    $mfa_code = $data['MfaCode'] ?? '';
-    $recaptchaToken = $data['RecaptchaToken'] ?? '';
+    $email = $data['Email'] ?? null;
+    $userName = $data['UserName'] ?? null;
+    $password = $data['Password'] ?? null;
+    $mfaId = $data['MfaID'] ?? null;
+    $mfaCode = $data['MfaCode'] ?? null;
+    $recaptchaToken = $data['RecaptchaToken'] ?? null;
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
     // Validar credenciales básicas
-    if((empty($email) && empty($username)) || empty($password) || empty($recaptchaToken)){
+    if(($email === null && $userName === null) || $password === null || $recaptchaToken === null){
       return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "INVALID_PARAMETERS",
@@ -50,14 +53,14 @@ class AuthController{
     }
 
     // Valido recaptcha
-    $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
+    $result = $this->_validateReCaptcha($recaptchaToken, $clientIp);
     if ($result->http_code !== 200) {
       return $response->withStatus($result->http_code)->withJson($result);
     }
 
     try {
       // valido credenciales
-      $userAuth = $this->auth->login($username, $email);
+      $userAuth = $this->auth->login($userName, $email);
       if(empty($userAuth)){
         return $response->withStatus(401)->withJson([
           "error" => [
@@ -83,7 +86,7 @@ class AuthController{
       // Traigo el resto de los datos del usuario
       $user = $this->user->getUserById($userAuth['UserID']);
       # El resto del login es generico para todos los tipos de login
-      return $this->_loginGeneric($response, $request, $user, $mfa_id, $mfa_code, $clientIp);
+      return $this->_loginGeneric($response, $request, $user, $mfaId, $mfaCode, $clientIp);
     } catch (\Exception $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -102,7 +105,7 @@ class AuthController{
     $recaptchaToken = $data['RecaptchaToken'] ?? null;
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
-    if (empty($token) || empty($recaptchaToken)) {
+    if($token=== null || $recaptchaToken === null){
       return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "INVALID_PARAMETERS",
@@ -112,7 +115,7 @@ class AuthController{
     }
 
     try {
-      $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
+      $result = $this->_validateReCaptcha($recaptchaToken, $clientIp);
       if ($result->http_code !== 200) {
         return $response->withStatus($result->http_code)->withJson($result);
       }
@@ -138,10 +141,10 @@ class AuthController{
             "desc" => "No user associated with the specified Google account was found"
           ],
           "data" => [
-            "FirstName" => !empty($oAuthResponse -> given_name) ? $oAuthResponse -> given_name : null,
-            "LastName" => !empty($oAuthResponse -> family_name) ? $oAuthResponse -> family_name : null,
-            "Email" => !empty($oAuthResponse -> email) ? $oAuthResponse -> email : null,
-            "Picture" => !empty($oAuthResponse -> picture) ? $oAuthResponse -> picture : null
+            "FirstName" => $oAuthResponse->given_name ?? null,
+            "LastName"  => $oAuthResponse->family_name ?? null,
+            "Email"     => $oAuthResponse->email ?? null,
+            "Picture"   => $oAuthResponse->picture ?? null,
           ]
         ]);
       }
@@ -161,15 +164,14 @@ class AuthController{
   public function loginFacebook(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
     $oAuthID = $data['UserID'] ?? null;
+    $jwtToken = $data['JwtToken'] ?? null; // null = web, not null = native
     $token = $data['Token'] ?? null;
     $mfaID = $data['MfaID'] ?? null;
     $mfaCode = $data['MfaCode'] ?? null;
     $recaptchaToken = $data['RecaptchaToken'] ?? null;
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
-
-
-    if (empty($oAuthID) || empty($token) || empty($recaptchaToken)) {
+    if($oAuthID === null || $token === null || $recaptchaToken === null) {
       return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "INVALID_PARAMETERS",
@@ -179,20 +181,44 @@ class AuthController{
     }
 
     try {
-      $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
+      $result = $this->_validateReCaptcha($recaptchaToken, $clientIp);
       if ($result->http_code !== 200) {
         return $response->withStatus($result->http_code)->withJson($result);
       }
 
-      $oAuthResponse = $this -> _validateToken("https://graph.facebook.com/$oAuthID?fields=id,first_name,last_name,email,picture.width(640)&access_token=$token");
-      if($oAuthResponse === false){
-        return $response->withStatus(401)->withJson([
-          "error" => [
-            "code" => "SSO_INVALID_TOKEN",
-            "desc" => "Invalid Facebook token"
-          ]
-        ]);
+      // NATIVE
+      if($jwtToken){
+        // 1. Validar JWT contra las claves públicas de Facebook
+        $oAuthResponse = $this->_validateFacebookJWT($jwtToken);
+        if ($oAuthResponse === false) {
+          return (object)[
+            "http_code" => 401,
+            "error" => [
+              "code" => "SSO_INVALID_TOKEN",
+              "desc" => "Invalid Facebook JWT token"
+            ]
+          ];
+        }
+
+        # Me traigo el ID de facebook
+        $oAuthID = $oAuthResponse->sub ?? null;
+      }else{ // WEB
+        $oAuthResponse = $this -> _validateToken("https://graph.facebook.com/$oAuthID?fields=id,first_name,last_name,email,picture.width(640)&access_token=$token");
+        if($oAuthResponse === false){
+          return $response->withStatus(401)->withJson([
+            "error" => [
+              "code" => "SSO_INVALID_TOKEN",
+              "desc" => "Invalid Facebook token"
+            ]
+          ]);
+        }
       }
+
+      # Me traigo los datos del SSO
+      $email = $oAuthResponse -> email ?? null;
+      $firstName = $oAuthResponse -> first_name ?? null;
+      $lastName = $oAuthResponse -> last_name ?? null;
+      $picture = $oAuthResponse -> picture -> data -> url ?? null;
 
       // Traigo el resto de los datos del usuario
       $user = $this->user->getUserByOAuthID($oAuthID, "facebook");
@@ -203,10 +229,10 @@ class AuthController{
             "desc" => "No user associated with the specified Facebook account was found"
           ],
           "data" => [
-            "FirstName" => !empty($oAuthResponse -> first_name) ? $oAuthResponse -> first_name : null,
-            "LastName" => !empty($oAuthResponse -> last_name) ? $oAuthResponse -> last_name : null,
-            "Email" => !empty($oAuthResponse -> email) ? $oAuthResponse -> email : null,
-            "Picture" => !empty($oAuthResponse -> picture -> data -> url) ? $oAuthResponse -> picture -> data -> url : null
+            "FirstName" => $oAuthResponse->first_name ?? null,
+            "LastName"  => $oAuthResponse->last_name ?? null,
+            "Email"     => $oAuthResponse->email ?? null,
+            "Picture"   => $oAuthResponse->picture->data->url ?? null,
           ]
         ]);
       }
@@ -233,7 +259,7 @@ class AuthController{
     $recaptchaToken = $data['RecaptchaToken'] ?? null;
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
-    if ((empty($idToken) && empty($code)) || empty($recaptchaToken)) {
+    if(($idToken === null && $code === null) || $rawNonce === null || $recaptchaToken === null) {
       return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "INVALID_PARAMETERS",
@@ -243,7 +269,7 @@ class AuthController{
     }
 
     try{
-      $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
+      $result = $this->_validateReCaptcha($recaptchaToken, $clientIp);
       if ($result->http_code !== 200) {
         return $response->withStatus($result->http_code)->withJson($result);
       }
@@ -251,15 +277,12 @@ class AuthController{
       // Si no vino id_token, hacer exchange con code
       if (empty($idToken) && !empty($code)) {
         $idToken = $this->_appleExchangeCodeForIdToken($code);
-        if (!$idToken) {
-          return (object)[
-            "http_code" => 401,
-            "error" => [
-              "code" => "SSO_INVALID_CODE",
-              "desc" => "Invalid Apple authorization code"
-            ]
-          ];
-        }
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "SSO_INVALID_CODE",
+            "desc" => "Invalid Apple authorization code"
+          ]
+        ]);
       }
 
       /* Se valida contra el AUC (nuestro client ID) y el nonce recibido del front
@@ -277,16 +300,15 @@ class AuthController{
       $oAuthID = $oAuthResponse -> sub;
       $user = $this->user->getUserByOAuthID($oAuthID, "apple");
       if(!$user){
-        return (object)[
-          "http_code" => 404,
+        return $response->withStatus(404)->withJson([
           "error" => [
             "code" => "USER_NOT_FOUND",
             "desc" => "No user associated with the specified Apple account was found"
           ],
           "data" => [
-            "Email" => $response['email'] ?? null
+            "Email" => $oAuthResponse -> email ?? null
           ]
-        ];
+        ]);
       }
       # El resto del login es generico para todos los tipos de login
       return $this->_loginGeneric($response, $request, $user, $mfaID, $mfaCode, $clientIp);
@@ -298,6 +320,31 @@ class AuthController{
         ]
       ]);
     }
+  }
+
+  public function appleLoginCallback(Request $request, Response $response, array $args) {
+    $parsed   = $request->getParsedBody() ?? [];
+    $code     = $parsed['code']     ?? null;
+    $id_token = $parsed['id_token'] ?? null;
+    $state    = isset($parsed['state']) ? @json_decode($parsed['state']) : null;
+    $error    = $parsed['error']    ?? null;
+
+    if (!$state) {
+      $html = '<!doctype html><html><body><script>(function(){window.close()})();</script></body></html>';
+    } else {
+      $html = '<!doctype html><html><body><script>(function(){var p=' .
+      json_encode([
+        'provider' => 'apple',
+        'code'     => $code,
+        'id_token' => $id_token,
+        'uuid'     => $state->uuid,
+        'error'    => $error,
+      ]) .
+      ';try{window.opener&&window.opener.postMessage(p,"https://' . $state->origin . '")}catch(e){}window.close()})();</script></body></html>';
+    }
+
+    $response->getBody()->write($html);
+    return $response->withHeader('Content-Type', 'text/html; charset=UTF-8');
   }
 
   private function _loginGeneric(Response $response, Request $request, $user, $mfaID, $mfaCode, $clientIp) {
@@ -372,153 +419,26 @@ class AuthController{
     ]);
   }
 
-  # Valida un token generado por el login SSO o reCaptcha
-  private function _validateToken($url){
-    $ch = curl_init();
-
-    # Configuración de cURL
-    curl_setopt($ch, CURLOPT_URL, $url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_HEADER, false);
-
-    $response = curl_exec($ch);
-
-    # Verifica si hubo un error en la solicitud
-    if(curl_errno($ch) || curl_getinfo($ch, CURLINFO_HTTP_CODE) != 200){
-      return false;
-    }
-    curl_close($ch);
-    return json_decode($response);
-  }
-
-
-  /**
-  * Valida firma y claims del id_token de Apple y devuelve claims normalizados.
-  *
-  * @param    $idToken
-  * @param    $expectedAud  p.ej. 'com.onesoul.app.web'
-  * @param    $rawNonce, enviado por el front y se compara contra el token
-  * @return array|false
-  */
-  private function _validateAppleToken($idToken, $expectedAud, $rawNonce) {
-    try {
-      // Tolerancia por drift de reloj
-      JWT::$leeway = 120;
-
-      // Descargar JWKS
-      $jwksJson = @file_get_contents('https://appleid.apple.com/auth/keys');
-      if ($jwksJson === false) {
-        return false;
-      }
-
-      // Extraigo las keys
-      $jwks = json_decode($jwksJson, true);
-      if (!isset($jwks['keys'])) {
-        return false;
-      }
-
-      // Decodifico token
-      $keys = JWK::parseKeySet($jwks);
-      $decoded = JWT::decode($idToken, $keys, ['RS256']);
-
-      // Validaciones de claims
-      $iss = $decoded->iss ?? null;
-      if ($iss !== 'https://appleid.apple.com') {
-        return false;
-      }
-
-      // Valido AUD
-      if ($decoded->aud !== $expectedAud) {
-        return false;
-      }
-
-      // Valido nonce
-      if ($decoded->nonce !== hash('sha256',$rawNonce)) {
-        return false;
-      }
-
-      // Normalizar salida
-      $emailVerifiedRaw = $decoded->email_verified ?? null;
-      $emailVerified = ($emailVerifiedRaw === true || $emailVerifiedRaw === 'true');
-
-      return (object)[
-        'sub'            => $decoded->sub ?? null,
-        'email'          => $decoded->email ?? null,
-        'email_verified' => $emailVerified,
-        'nonce'          => $decoded->nonce ?? null,
-        'auth_time'      => $decoded->auth_time ?? null,
-        'iat'            => $decoded->iat ?? null,
-        'exp'            => $decoded->exp ?? null
-      ];
-    } catch (\Throwable $e) {
-      file_put_contents(ROOT."/debug.log", json_encode($e), FILE_APPEND);
-      return false;
-    }
-  }
-
-  /**
-  * Intercambia un CODE por un IDToken en la API de apple
-  *
-  * @param    $idToken
-  * @param    $expectedAud  p.ej. 'com.onesoul.app.web'
-  * @param    $rawNonce, enviado por el front y se compara contra el token
-  * @return array|false
-  */
-  private function _appleExchangeCodeForIdToken($code) {
-    $client_id = $GLOBALS['config']['apple']['client_id'];
-    $team_id = $GLOBALS['config']['apple']['team_id'];
-    $key_id = $GLOBALS['config']['apple']['key_id'];
-    $private_key = base64_decode($GLOBALS['config']['apple']['private_key_b64']);
-    //$redirect_uri = $GLOBALS['config']['apple']['redirect_url'];
-
-    // Generar client_secret como JWT
-    $header = ['alg' => 'ES256', 'kid' => $key_id];
-    $claims = [
-      'iss' => $team_id,
-      'iat' => time(),
-      'exp' => time() + 3600,
-      'aud' => 'https://appleid.apple.com',
-      'sub' => $client_id
-    ];
-
-    $client_secret = \Firebase\JWT\JWT::encode($claims, $private_key, 'ES256', $key_id, $header);
-
-    $params = [
-      'client_id' => $client_id,
-      'client_secret' => $client_secret,
-      'code' => $code,
-      'grant_type' => 'authorization_code'
-    ];
-
-    $ch = curl_init('https://appleid.apple.com/auth/token');
-    curl_setopt_array($ch, [
-      CURLOPT_POST           => true,
-      CURLOPT_POSTFIELDS     => http_build_query($params),
-      CURLOPT_HTTPHEADER     => ['Content-Type: application/x-www-form-urlencoded'],
-      CURLOPT_RETURNTRANSFER => true,
-      CURLOPT_TIMEOUT        => 15,
-    ]);
-    $result = curl_exec($ch);
-    curl_close($ch);
-
-    $json = json_decode($result, true);
-    return $json['id_token'] ?? null;
-  }
-
   /*
   * Registro usuario
   */
   public function register(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
-    $email = $data['Email'] ?? '';
-    $username = $data['UserName'] ?? '';
-    $password = $data['Password'] ?? '';
-    $recaptchaToken = $data['RecaptchaToken'] ?? '';
-    $clientIp = $request->getServerParams()['REMOTE_ADDR'];
-    $referralCode = $data['ReferralCode'] ?? null;
-    $receiveNewsletters = $data['ReceiveNewsletters'] ?? null;
+    $email = $data['Email'] ?? null;
+    $userName = $data['UserName'] ?? null;
+    $password = $data['Password'] ?? null;
 
-    if(empty($email) || empty($username) || empty($password) || empty($recaptchaToken) || !isset($data['ReceiveNewsletters'])){
+    $recaptchaToken = $data['RecaptchaToken'] ?? null;
+    $referralCode = $data['ReferralCode'] ?? null;
+    $receiveNewsletters = $data['ReceiveNewsletters'] ?? false;
+    $acceptedTerms = $data['AcceptedTerms'] ?? null;
+    $acceptedPrivacy = $data['AcceptedPrivacyPolicy'] ?? null;
+    $tycVersion = $data['TyCVersion'] ?? null;
+    $privacyVersion = $data['PrivacyPolicyVersion'] ?? null;
+    $clientIp = $request->getServerParams()['REMOTE_ADDR'];
+    $userAgent = $request->getHeader('User-Agent')[0] ?? '';
+
+    if(empty($email) || empty($userName) || empty($password) || empty($recaptchaToken) || $receiveNewsletters === null){
       return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "INVALID_PARAMETERS",
@@ -527,67 +447,107 @@ class AuthController{
       ]);
     }
 
-    $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
-    if ($result->http_code !== 200) {
-      return $response->withStatus($result->http_code)->withJson($result);
-    }
-
     try {
-      $result = $this->auth->register($this->user, $email, $username, $password, $clientIp, $request, $referralCode, $receiveNewsletters);
-
-      switch($result->http_code) {
-        case 200: # Logueo correcto o usuario existente
-          $jwt = $this -> JWTgen($result -> data);
-          $userID = $result->data['UserID'] ?? null;
-
-          if (!empty($referralCode)) {
-            $referrerResult = $this->user->getUserByRefCode($referralCode);
-
-            if ($referrerResult->http_code !== 200 || empty($referrerResult->data['UserID'])) {
-              return $response->withStatus(400)->withJson([
-                "error" => [
-                  "code" => "INVALID_REFERRAL_CODE",
-                  "desc" => "The provided referral code is not valid"
-                ]
-              ]);
-            }
-
-            $referrerUserID = $referrerResult->data['UserID'];
-
-            if ($referrerUserID) {
-              $referralResult = $this->auth->handleReferralReward($referrerUserID, $userID);
-
-              if ($referralResult['RewardTriggered']) {
-                $subscription = $this->subscription->getSubscriptionByUser($referrerUserID);
-                $platformSubscriptionID = $subscription['PlatformSubscriptionID'] ?? null;
-                $currentPlanID = $subscription['PlanDetails']['StripeID'] ?? null;
-
-                $planStripe = $this->subscription->getSubscriptionPlanByStripeID($currentPlanID);
-                $newPlanID = $planStripe['PlanID'];
-                if ($platformSubscriptionID && $newPlanID) {
-                  \Stripe\Stripe::setApiKey($GLOBALS['config']['stripe']['STRIPE_SECRET_KEY']);
-                  \Stripe\Subscription::update($platformSubscriptionID, [
-                    'discounts' => [
-                      ['coupon' => '1MONTHFREE']
-                    ]
-                  ]);
-                }
-              }
-              return $response->withStatus(200)->withJson($referralResult);
-            }
-          }
-
-          return $response->withStatus(200)->withJson([
-            'Token' => $jwt,
-            'UserData' => $result -> data,
-            'UserPlan' => null
-          ]);
-
-        default: #errores
-
-        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
-
+      $result = $this->_validateReCaptcha($recaptchaToken, $clientIp);
+      if ($result->http_code !== 200) {
+        return $response->withStatus($result->http_code)->withJson($result);
       }
+
+      $otpJson = $this->redis->get("otp:{$email}");
+      // Decodificar JSON
+      $otpData = @json_decode($otpJson);
+      if (!$otpData || !$otpData -> validated) {
+        return $response->withStatus(422)->withJson([
+          "error" => [
+            "code" => "EMAIL_NOT_VALIDATED",
+            "desc" => "The email address is not validated."
+          ]
+        ]);
+      }
+
+      # Validación de fortaleza de contraseña
+      if(!$this->_passwordComplexity($password)) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "WEAK_PASSWORD",
+            "desc" => "Password doesn't meet complexity requirements"
+          ]
+        ]);
+      }
+
+      // Validar que AcceptedTerms y AcceptedPrivacyPolicy esten aceptados
+      if ($acceptedTerms !== 1 || $acceptedPrivacy !== 1) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "CONSENT_REQUIRED",
+            "desc" => "AcceptedTerms and AcceptedPrivacyPolicy must both be accepted."
+          ]
+        ]);
+      }
+
+      # Validacion de referidos
+      $referrerUserID = null;
+      if (!empty($referralCode)) {
+        $result = $this->user->getUserByRefCode($referralCode);
+        if (!$result) {
+          return $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "INVALID_REFERRAL_CODE",
+              "desc" => "The provided referral code is not valid"
+            ]
+          ]);
+        }
+        $referrerUserID = $result->data['UserID'];
+      }
+
+      # Verifico que usuario e email no existan
+      if($this->user->getUserByEmail($email)){
+        return $response->withStatus(409)->withJson([
+          "error" => [
+            "code" => "DUPLICATED_EMAIL",
+            "desc" => "A user with the specified email address already exists"
+          ]
+        ]);
+      }
+      if($this->user->getUserByUserName($userName)){
+        return $response->withStatus(409)->withJson([
+          "error" => [
+            "code" => "DUPLICATED_USERNAME",
+            "desc" => "A user with the specified username already exists"
+          ]
+        ]);
+      }
+
+      # Busco si las versiones de tyc y privacy son correctas
+      $result = $this->auth->checkLegalDocuments($tycVersion, $privacyVersion);
+      if ((int)$result['total'] < 2) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "INVALID_LEGAL_DOCUMENT_VERSION",
+            "desc" => "One or both legal document versions are invalid."
+          ]
+        ]);
+      }
+
+      $passwordHash = password_hash($password,PASSWORD_BCRYPT); #El password se guarda hasheado (obvio!)
+
+      # Registro al usuario
+      $userID = $this->auth->register($email, $userName, $passwordHash, $tycVersion,
+        $privacyVersion, $receiveNewsletters, $clientIp, $userAgent);
+      $user = $this->user->getUserById($userID);
+
+      $jwt = $this -> JWTgen($user);
+      $this->redis->del("otp:{$email}");
+
+      if($referrerUserID){
+        $this-> _handleReferralReward($referrerUserID, $userID);
+      }
+
+      return $response->withStatus(200)->withJson([
+        'Token' => $jwt,
+        'UserData' => $user,
+        'UserPlan' => null
+      ]);
     } catch (\Exception $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -600,15 +560,24 @@ class AuthController{
 
   public function registerGoogle(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
-    $token = $data['Token'] ?? '';
-    $username = $data['UserName'] ?? '';
-    $recaptchaToken = $data['RecaptchaToken'] ?? '';
-    $clientIp = $request->getServerParams()['REMOTE_ADDR'];
+    $altEmail = $data['AltEmail'] ?? null; // Opcional cuando el SSO no comparte el correo
+    $token = $data['Token'] ?? null;
+    $userName = $data['UserName'] ?? null;
+
+    $recaptchaToken = $data['RecaptchaToken'] ?? null;
     $referralCode = $data['ReferralCode'] ?? null;
     $receiveNewsletters = $data['ReceiveNewsletters'] ?? null;
-    $altEmail = $data['Email'] ?? null; // Opcional cuando el SSO no comparte el correo
+    $acceptedTerms = $data['AcceptedTerms'] ?? null;
+    $acceptedPrivacy = $data['AcceptedPrivacyPolicy'] ?? null;
+    $tycVersion = $data['TyCVersion'] ?? null;
+    $privacyVersion = $data['PrivacyPolicyVersion'] ?? null;
+    $clientIp = $request->getServerParams()['REMOTE_ADDR'];
+    $userAgent = $request->getHeader('User-Agent')[0] ?? '';
 
-    if(empty($token) || empty($username) || empty($recaptchaToken) || !isset($data['ReceiveNewsletters'])){
+    if($token === null || $userName === null || $recaptchaToken === null ||
+      $receiveNewsletters === null || $acceptedTerms === null || $acceptedPrivacy === null ||
+      $tycVersion === null || $privacyVersion === null
+    ){
       return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "INVALID_PARAMETERS",
@@ -617,66 +586,36 @@ class AuthController{
       ]);
     }
 
-    $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
-    if ($result->http_code !== 200) {
-      return $response->withStatus($result->http_code)->withJson($result);
-    }
-
     try {
-      $result = $this->auth->registerGoogle(
-        $this->user, $token, $username, $clientIp, $request, $referralCode, $receiveNewsletters, $altEmail
-      );
-      switch($result->http_code) {
-        case 200: # Logueo correcto o usuario existente
-          $jwt = $this -> JWTgen($result -> data);
-          $userID = $result->data['UserID'] ?? null;
-          $userPlan = $this->subscription->getSubscriptionByUser($userID);
-
-          if (!empty($referralCode)) {
-            $referrerResult = $this->user->getUserByRefCode($referralCode);
-
-            if ($referrerResult->http_code !== 200 || empty($referrerResult->data['UserID'])) {
-              return $response->withStatus(400)->withJson([
-                "error" => [
-                  "code" => "INVALID_REFERRAL_CODE",
-                  "desc" => "The provided referral code is not valid"
-                ]
-              ]);
-            }
-
-            $referrerUserID = $referrerResult->data['UserID'];
-
-            if ($referrerUserID) {
-              $referralResult = $this->auth->handleReferralReward($referrerUserID, $userID);
-
-              if ($referralResult['RewardTriggered']) {
-                $subscription = $this->subscription->getSubscriptionByUser($referrerUserID);
-                $platformSubscriptionID = $subscription['PlatformSubscriptionID'] ?? null;
-                $currentPlanID = $subscription['PlanDetails']['StripeID'] ?? null;
-
-                $planStripe = $this->subscription->getSubscriptionPlanByStripeID($currentPlanID);
-                $newPlanID = $planStripe['PlanID'];
-                if ($platformSubscriptionID && $newPlanID) {
-                  \Stripe\Stripe::setApiKey($GLOBALS['config']['stripe']['STRIPE_SECRET_KEY']);
-                  \Stripe\Subscription::update($platformSubscriptionID, [
-                    'discounts' => [
-                      ['coupon' => '1MONTHFREE']
-                    ]
-                  ]);
-                }
-              }
-              return $response->withStatus(200)->withJson($referralResult);
-            }
-          }
-
-          return $response->withStatus(200)->withJson([
-            'Token' => $jwt,
-            'UserData' => $result -> data,
-            'UserPlan' => $userPlan
-          ]);
-        default: # Otros, ejemplo Token inválido
-          return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+      $result = $this->_validateReCaptcha($recaptchaToken, $clientIp);
+      if ($result->http_code !== 200) {
+        return $response->withStatus($result->http_code)->withJson($result);
       }
+
+      // Validar el token de Google
+      $oAuthResponse = $this -> _validateToken("https://oauth2.googleapis.com/tokeninfo?id_token=$token");
+      if($oAuthResponse === false || !$oAuthResponse -> sub){
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "SSO_INVALID_TOKEN",
+            "desc" => "Invalid Google token"
+          ]
+        ]);
+      }
+      $oAuthID = $oAuthResponse -> sub;
+
+      # Me traigo los datos del SSO
+      $email = $oAuthResponse -> email ?? null;
+      $firstName = $oAuthResponse -> given_name ?? null;
+      $lastName = $oAuthResponse -> family_name ?? null;
+      $picture = $oAuthResponse -> picture ?? null;
+
+      return $this->_registerGenericSSO(
+        $response, $oAuthID, 'google', $email, $altEmail, $userName,
+        $acceptedTerms, $acceptedPrivacy, $tycVersion, $privacyVersion,
+        $receiveNewsletters, $referralCode, $clientIp, $userAgent,
+        $firstName, $lastName, $picture
+      );
     } catch (\Exception $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -689,17 +628,26 @@ class AuthController{
 
   public function registerFacebook(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
-    $isJwt = $data['Jwt'] ?? false; // true = Native, false = Web
-    $user_id = $data['UserID'] ?? '';
-    $token = $data['Token'] ?? '';
-    $username = $data['UserName'] ?? '';
-    $recaptchaToken = $data['RecaptchaToken'] ?? '';
-    $clientIp = $request->getServerParams()['REMOTE_ADDR'];
+    $altEmail = $data['AltEmail'] ?? null; // Opcional cuando el SSO no comparte el correo
+    $token = $data['Token'] ?? null;
+    $oAuthID = $data['UserID'] ?? null;
+    $jwtToken = $data['JwtToken'] ?? null; // null = web, not null = native
+    $userName = $data['UserName'] ?? null;
+
+    $recaptchaToken = $data['RecaptchaToken'] ?? null;
     $referralCode = $data['ReferralCode'] ?? null;
     $receiveNewsletters = $data['ReceiveNewsletters'] ?? null;
-    $altEmail = $data['Email'] ?? null; // Opcional cuando el SSO no comparte el correo
+    $acceptedTerms = $data['AcceptedTerms'] ?? null;
+    $acceptedPrivacy = $data['AcceptedPrivacyPolicy'] ?? null;
+    $tycVersion = $data['TyCVersion'] ?? null;
+    $privacyVersion = $data['PrivacyPolicyVersion'] ?? null;
+    $clientIp = $request->getServerParams()['REMOTE_ADDR'];
+    $userAgent = $request->getHeader('User-Agent')[0] ?? '';
 
-    if(empty($user_id) || empty($token) || empty($username) || empty($recaptchaToken) || !isset($receiveNewsletters)){
+    if(($jwtToken === null && ($token === null || $oAuthID === null)) || $userName === null || $recaptchaToken === null ||
+      $receiveNewsletters === null || $acceptedTerms === null || $acceptedPrivacy === null ||
+      $tycVersion === null || $privacyVersion === null
+    ){
       return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "INVALID_PARAMETERS",
@@ -708,97 +656,52 @@ class AuthController{
       ]);
     }
 
-    $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
-    if ($result->http_code !== 200) {
-      return $response->withStatus($result->http_code)->withJson($result);
-    }
-
     try{
-      if ($isJwt) {
-        // Flujo Nativo (JWT)
-        $jwtToken = $data['JwtToken'] ?? '';
-        if (empty($jwtToken)) {
-          return $response->withStatus(400)->withJson([
+      $result = $this->_validateReCaptcha($recaptchaToken, $clientIp);
+      if ($result->http_code !== 200) {
+        return $response->withStatus($result->http_code)->withJson($result);
+      }
+
+      // NATIVE
+      if($jwtToken){
+        // 1. Validar JWT contra las claves públicas de Facebook
+        $decoded = $this->_validateFacebookJWT($jwtToken);
+        if ($decoded === false) {
+          return (object)[
+            "http_code" => 401,
             "error" => [
-              "code" => "INVALID_PARAMETERS",
-              "desc" => "JwtToken is required when Jwt=true"
+              "code" => "SSO_INVALID_TOKEN",
+              "desc" => "Invalid Facebook JWT token"
+            ]
+          ];
+        }
+
+        # Me traigo el ID de facebook
+        $oAuthID = $decoded->sub ?? null;
+      }else{ // WEB
+        $oAuthResponse = $this -> _validateToken("https://graph.facebook.com/$oAuthID?fields=id,first_name,last_name,email,picture.width(640)&access_token=$token");
+        if($oAuthResponse === false){
+          return $response->withStatus(401)->withJson([
+            "error" => [
+              "code" => "SSO_INVALID_TOKEN",
+              "desc" => "Invalid Facebook token"
             ]
           ]);
         }
-        $result = $this->auth->registerFacebookNative(
-          $this->user, $jwtToken, $username, $clientIp, $request, $referralCode, $receiveNewsletters, $altEmail
-        );
-      } else {
-        // Flujo Web (Graph API)
-        $user_id = $data['UserID'] ?? '';
-        $token = $data['Token'] ?? '';
-        if (empty($user_id) || empty($token)) {
-          return $response->withStatus(400)->withJson([
-            "error" => [
-              "code" => "INVALID_PARAMETERS",
-              "desc" => "UserID and Token are required when Jwt=false"
-            ]
-          ]);
-        }
-
-        $result = $this->auth->registerFacebook(
-          $this->user, $user_id, $token, $username, $clientIp, $request, $referralCode, $receiveNewsletters, $altEmail
-        );
       }
 
-      switch($result->http_code) {
-        case 200: # Logueo correcto o usuario existente
-          $jwt = $this -> JWTgen($result -> data);
-          $userData = $this->user->getUserById($result -> data['UserID']);
-          $userID = $result->data['UserID'] ?? null;
-          $userPlan = $this->subscription->getSubscriptionByUser($userID);
+      # Me traigo los datos del SSO
+      $email = $oAuthResponse -> email ?? null;
+      $firstName = $oAuthResponse -> first_name ?? null;
+      $lastName = $oAuthResponse -> last_name ?? null;
+      $picture = $oAuthResponse -> picture -> data -> url ?? null;
 
-          if (!empty($referralCode)) {
-            $referrerResult = $this->user->getUserByRefCode($referralCode);
-
-            if ($referrerResult->http_code !== 200 || empty($referrerResult->data['UserID'])) {
-              return $response->withStatus(400)->withJson([
-                "error" => [
-                  "code" => "INVALID_REFERRAL_CODE",
-                  "desc" => "The provided referral code is not valid"
-                ]
-              ]);
-            }
-
-            $referrerUserID = $referrerResult->data['UserID'];
-
-            if ($referrerUserID) {
-              $referralResult = $this->auth->handleReferralReward($referrerUserID, $userID);
-
-              if ($referralResult['RewardTriggered']) {
-                $subscription = $this->subscription->getSubscriptionByUser($referrerUserID);
-                $platformSubscriptionID = $subscription['PlatformSubscriptionID'] ?? null;
-                $currentPlanID = $subscription['PlanDetails']['StripeID'] ?? null;
-
-                $planStripe = $this->subscription->getSubscriptionPlanByStripeID($currentPlanID);
-                $newPlanID = $planStripe['PlanID'];
-                if ($platformSubscriptionID && $newPlanID) {
-                  \Stripe\Stripe::setApiKey($GLOBALS['config']['stripe']['STRIPE_SECRET_KEY']);
-                  \Stripe\Subscription::update($platformSubscriptionID, [
-                    'discounts' => [
-                      ['coupon' => '1MONTHFREE']
-                    ]
-                  ]);
-                }
-              }
-              return $response->withStatus(200)->withJson($referralResult);
-            }
-          }
-
-          return $response->withStatus(200)->withJson([
-            'Token' => $jwt,
-            'UserData' => $result -> data,
-            'UserPlan' => $userPlan
-          ]);
-        default: # errores
-          return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
-      }
-
+      return $this->_registerGenericSSO(
+        $response, $oAuthID, 'facebook', $email, $altEmail, $userName,
+        $acceptedTerms, $acceptedPrivacy, $tycVersion, $privacyVersion,
+        $receiveNewsletters, $referralCode, $clientIp, $userAgent,
+        $firstName, $lastName, $picture
+      );
     } catch (\Exception $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -811,17 +714,26 @@ class AuthController{
 
   public function registerApple(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
-    $code = $data['Code'] ?? '';
-    $idToken = $data['IdToken'] ?? '';
-    $rawNonce = $data['RawNonce'] ?? '';
-    $username = $data['UserName'] ?? '';
-    $referralCode = $data['ReferralCode'] ?? null;
-    $receiveNewsletters = $data['ReceiveNewsletters'] ?? null;
-    $recaptchaToken = $data['RecaptchaToken'] ?? '';
-    $clientIp = $request->getServerParams()['REMOTE_ADDR'];
-    $altEmail = $data['Email'] ?? null; // Opcional cuando el SSO no comparte el correo
+    $altEmail = $data['AltEmail'] ?? null; // Opcional cuando el SSO no comparte el correo
+    $code = $data['Code'] ?? null;
+    $idToken = $data['IdToken'] ?? null;
+    $rawNonce = $data['RawNonce'] ?? null;
+    $userName = $data['UserName'] ?? null;
 
-    if((empty($id_token) && empty($code)) || empty($username) || empty($recaptchaToken) || !isset($data['ReceiveNewsletters'])){
+    $recaptchaToken = $data['RecaptchaToken'] ?? null;
+    $referralCode = $data['ReferralCode'] ?? null;
+    $receiveNewsletters = $data['ReceiveNewsletters'] ?? false;
+    $acceptedTerms = $data['AcceptedTerms'] ?? null;
+    $acceptedPrivacy = $data['AcceptedPrivacyPolicy'] ?? null;
+    $tycVersion = $data['TyCVersion'] ?? null;
+    $privacyVersion = $data['PrivacyPolicyVersion'] ?? null;
+    $clientIp = $request->getServerParams()['REMOTE_ADDR'];
+    $userAgent = $request->getHeader('User-Agent')[0] ?? '';
+
+    if(($idToken === null && $code === null) || $rawNonce === null || $userName === null ||
+      $recaptchaToken === null || $receiveNewsletters === null || $acceptedTerms === null ||
+      $acceptedPrivacy === null || $tycVersion === null || $privacyVersion === null
+    ){
       return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "INVALID_PARAMETERS",
@@ -830,49 +742,45 @@ class AuthController{
       ]);
     }
 
-    $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
-    if ($result->http_code !== 200) {
-      return $response->withStatus($result->http_code)->withJson($result);
-    }
-
-    try {
-      $result = $this->auth->registerApple(
-        $this->user, $code, $idToken, $rawNonce, $username, $clientIp, $request, $referralCode, $receiveNewsletters, $altEmail
-      );
-      switch($result->http_code) {
-        case 200: # Usuario registrado o ya existente
-          $jwt = $this -> JWTgen($result -> data);
-          $userID = $result->data['UserID'] ?? null;
-          $userPlan = $this->subscription->getSubscriptionByUser($userID);
-
-          if (!empty($referralCode)) {
-            $referrerResult = $this->user->getUserByRefCode($referralCode);
-
-            if ($referrerResult->http_code !== 200 || empty($referrerResult->data['UserID'])) {
-              return $response->withStatus(400)->withJson([
-                "error" => [
-                  "code" => "INVALID_REFERRAL_CODE",
-                  "desc" => "The provided referral code is not valid"
-                ]
-              ]);
-            }
-
-            $referrerUserID = $referrerResult->data['UserID'];
-
-            if ($referrerUserID) {
-              $referralResult = $this->auth->handleReferralReward($referrerUserID, $userID);
-              return $response->withStatus(200)->withJson($referralResult);
-            }
-          }
-
-          return $response->withStatus(200)->withJson([
-            "Token" => $jwt,
-            "UserData" => $result -> data,
-            "UserPlan" => $userPlan
-          ]);
-        default: # Token inválido u otros errores
-          return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+    try{
+      $result = $this->_validateReCaptcha($recaptchaToken, $clientIp);
+      if ($result->http_code !== 200) {
+        return $response->withStatus($result->http_code)->withJson($result);
       }
+
+      // Si no vino id_token, hacer exchange con code
+      if (empty($idToken) && !empty($code)) {
+        $idToken = $this->_appleExchangeCodeForIdToken($code);
+        if (!$idToken) {
+          $response->withStatus(401)->withJson([
+            "error" => [
+              "code" => "SSO_INVALID_CODE",
+              "desc" => "Invalid Apple authorization code"
+            ]
+          ]);
+        }
+      }
+
+      /* Se valida contra el AUC (nuestro client ID) y el nonce recibido del front
+        vs el hasheado recibido en el token */
+      $expectedAud = $GLOBALS['config']['apple']['client_id'];
+      $oAuthResponse = $this->_validateAppleToken($idToken, $expectedAud, $rawNonce);
+      if ($oAuthResponse === false) {
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "SSO_INVALID_TOKEN",
+            "desc" => "Invalid Apple token"
+          ]
+        ]);
+      }
+      $oAuthID = $oAuthResponse -> sub;
+      $email = $oAuthResponse -> email ?? null;
+
+      return $this->_registerGenericSSO(
+        $response, $oAuthID, 'apple', $email, $altEmail, $userName,
+        $acceptedTerms, $acceptedPrivacy, $tycVersion, $privacyVersion,
+        $receiveNewsletters, $referralCode, $clientIp, $userAgent
+      );
     } catch (\Exception $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -883,29 +791,134 @@ class AuthController{
     }
   }
 
-  public function callback(Request $request, Response $response, array $args) {
-    $parsed   = $request->getParsedBody() ?? [];
-    $code     = $parsed['code']     ?? null;
-    $id_token = $parsed['id_token'] ?? null;
-    $state    = isset($parsed['state']) ? @json_decode($parsed['state']) : null;
-    $error    = $parsed['error']    ?? null;
+  private function _registerGenericSSO(Response $response, $oAuthID, $provider,
+    $email, $altEmail, $userName, $acceptedTerms, $acceptedPrivacy, $tycVersion,
+    $privacyVersion, $receiveNewsletters, $referralCode, $clientIp, $userAgent,
+    $firstName = null, $lastName = null, $picture = null
+  ) {
+    try {
+      // Verificar si el usuario ya existe
+      $user = $this->user->getUserByOAuthID($oAuthID, $provider);
+      if($user){
+        return $response->withStatus(409)->withJson([
+          "error" => [
+            "code" => "USER_ALREADY_EXISTS",
+            "desc" => "User already registered with this " . ucfirst($provider) . " account"
+          ]
+        ]);
+      }
 
-    if (!$state) {
-      $html = '<!doctype html><html><body><script>(function(){window.close()})();</script></body></html>';
-    } else {
-      $html = '<!doctype html><html><body><script>(function(){var p=' .
-      json_encode([
-        'provider' => 'apple',
-        'code'     => $code,
-        'id_token' => $id_token,
-        'uuid'     => $state->uuid,
-        'error'    => $error,
-      ]) .
-      ';try{window.opener&&window.opener.postMessage(p,"https://' . $state->origin . '")}catch(e){}window.close()})();</script></body></html>';
+      // Si el SSO no trajo email usar el recibido desde el front
+      if(!$email){
+        if(!$altEmail){
+          return $response->withStatus(401)->withJson([
+            "error" => [
+              "code" => "EMAIL_NOT_PROVIDED",
+              "desc" => "You must provide an email because the SSO service does not provide one"
+            ]
+          ]);
+        }
+        // Verificar que el email alternativo esté validado
+        $otpJson = $this->redis->get("otp:{$altEmail}");
+        $otpData = @json_decode($otpJson);
+        if (!$otpData || !$otpData->validated) {
+          return $response->withStatus(422)->withJson([
+            "error" => [
+              "code" => "EMAIL_NOT_VALIDATED",
+              "desc" => "The email address is not validated."
+            ]
+          ]);
+        }
+        $email = $altEmail;
+      }
+
+      // Validar consentimientos
+      if ($acceptedTerms !== 1 || $acceptedPrivacy !== 1) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "CONSENT_REQUIRED",
+            "desc" => "AcceptedTerms and AcceptedPrivacyPolicy must both be accepted."
+          ]
+        ]);
+      }
+
+      // Validar referral code si existe
+      $referrerUserID = null;
+      if (!empty($referralCode)) {
+        $result = $this->user->getUserByRefCode($referralCode);
+        if (!$result) {
+          return $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "INVALID_REFERRAL_CODE",
+              "desc" => "The provided referral code is not valid"
+            ]
+          ]);
+        }
+        $referrerUserID = $result->data['UserID'];
+      }
+
+      // Verificar que email y username no existan
+      if($this->user->getUserByEmail($email)){
+        return $response->withStatus(409)->withJson([
+          "error" => [
+            "code" => "DUPLICATED_EMAIL",
+            "desc" => "A user with the specified email address already exists"
+          ]
+        ]);
+      }
+      if($this->user->getUserByUserName($userName)){
+        return $response->withStatus(409)->withJson([
+          "error" => [
+            "code" => "DUPLICATED_USERNAME",
+            "desc" => "A user with the specified username already exists"
+          ]
+        ]);
+      }
+
+      // Validar versiones de documentos legales
+      $result = $this->auth->checkLegalDocuments($tycVersion, $privacyVersion);
+      if ((int)$result['total'] < 2) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "INVALID_LEGAL_DOCUMENT_VERSION",
+            "desc" => "One or both legal document versions are invalid."
+          ]
+        ]);
+      }
+
+      // Registrar usuario SSO
+      $userID = $this->auth->registerSSO($oAuthID, $provider, $email,
+        $firstName, $lastName, $picture, $userName, $tycVersion, $privacyVersion,
+        $receiveNewsletters, $clientIp, $userAgent
+      );
+
+      $user = $this->user->getUserById($userID);
+      $jwt = $this->JWTgen($user);
+
+      // Limpiar OTP de Redis si existe
+      if($altEmail && $this->redis->get("otp:{$altEmail}")){
+        $this->redis->del("otp:{$altEmail}");
+      }
+
+      // Manejar recompensa de referral
+      if($referrerUserID){
+        $this->_handleReferralReward($referrerUserID, $userID);
+      }
+
+      return $response->withStatus(200)->withJson([
+        'Token' => $jwt,
+        'UserData' => $user,
+        'UserPlan' => null
+      ]);
+
+    } catch (\Exception $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
     }
-
-    $response->getBody()->write($html);
-    return $response->withHeader('Content-Type', 'text/html; charset=UTF-8');
   }
 
   public function sendOtpMail(Request $request, Response $response, $args) {
@@ -914,7 +927,7 @@ class AuthController{
     $email = filter_var($data['Email'] ?? '', FILTER_VALIDATE_EMAIL);
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
-    $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
+    $result = $this->_validateReCaptcha($recaptchaToken, $clientIp);
     if ($result->http_code !== 200) {
       return $response->withStatus($result->http_code)->withJson($result);
     }
@@ -953,7 +966,6 @@ class AuthController{
     }
   }
 
-
   public function validateOTP(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
     $otpCode = $data['OTPCode'] ?? '';
@@ -970,7 +982,7 @@ class AuthController{
       ]);
     }
 
-    $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
+    $result = $this->_validateReCaptcha($recaptchaToken, $clientIp);
     if ($result->http_code !== 200) {
       return $response->withStatus($result->http_code)->withJson($result);
     }
@@ -1023,11 +1035,15 @@ class AuthController{
 
     $userID = $jwt['data'] -> UserID;
     $userData = $this->user->getUserById($userID);
-    $userPlan = $this->subscription->getSubscriptionByUser($userID);
-
-    if ($userData->http_code !== 200) {
-      return $response->withStatus($result->http_code)->withJson($result);
+    if(!$userData){
+      return $response->withStatus(404)->withJson([
+        "error" => [
+          "code" => "USER_NOT_FOUND",
+          "desc" => "No user associated with the specified id was found"
+        ]
+      ]);
     }
+    $userPlan = $this->subscription->getSubscriptionByUser($userID);
 
     $token = $this->JWTgen($userData -> data);
     return $response->withStatus(200)->withJson([
@@ -1051,7 +1067,7 @@ class AuthController{
       ]);
     }
 
-    $validation = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
+    $validation = $this->_validateReCaptcha($recaptchaToken, $clientIp);
     return $response->withStatus($validation->http_code)->withJson($validation->data);
   }
 
@@ -1059,11 +1075,11 @@ class AuthController{
   public function requestPasswordReset(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
     $email = $data['Email'] ?? '';
-    $username = $data['UserName'] ?? '';
+    $userName = $data['UserName'] ?? '';
     $recaptchaToken = $data['RecaptchaToken'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
-    if((empty($email) && empty($username)) || empty($recaptchaToken)){
+    if((empty($email) && empty($userName)) || empty($recaptchaToken)){
       return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "INVALID_PARAMETERS",
@@ -1071,7 +1087,7 @@ class AuthController{
         ]
       ]);
     }
-    $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
+    $result = $this->_validateReCaptcha($recaptchaToken, $clientIp);
     if ($result->http_code !== 200) {
       return $response->withStatus($result->http_code)->withJson($result);
     }
@@ -1079,7 +1095,7 @@ class AuthController{
     try {
       #Busco por mail o username
       $result = !empty($email) ?
-        $this->user->getUserByEmail($email) : $this->user->getUserByUserName($username);
+        $this->user->getUserByEmail($email) : $this->user->getUserByUserName($userName);
       if($result->http_code != 200){
         return $response->withStatus($result->http_code)->withJson($result);
       }
@@ -1107,18 +1123,18 @@ class AuthController{
   public function resetPassword(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
     $email = $data['Email'] ?? '';
-    $username = $data['UserName'] ?? '';
+    $userName = $data['UserName'] ?? '';
     $password = $data['Password'] ?? '';
     $otpCode = $data['OTPCode'] ?? '';
     $recaptchaToken = $data['RecaptchaToken'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
-    $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
+    $result = $this->_validateReCaptcha($recaptchaToken, $clientIp);
     if ($result->http_code !== 200) {
       return $response->withStatus($result->http_code)->withJson($result);
     }
 
-    if ((empty($email) && empty($username)) || empty($recaptchaToken) || empty($password) || empty($otpCode)) {
+    if ((empty($email) && empty($userName)) || empty($recaptchaToken) || empty($password) || empty($otpCode)) {
       return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "INVALID_PARAMETERS",
@@ -1130,7 +1146,7 @@ class AuthController{
     try {
       #Busco por mail o username
       $result = !empty($email) ?
-        $this->user->getUserByEmail($email) : $this->user->getUserByUserName($username);
+        $this->user->getUserByEmail($email) : $this->user->getUserByUserName($userName);
       if($result->http_code != 200){
         return $response->withStatus($result->http_code)->withJson($result);
       }
@@ -1433,12 +1449,13 @@ class AuthController{
       ]);
     }
   }
+
+
   public function legalDocuments(Request $request, Response $response, $args) {
     try {
       $documents = $this->auth->legalDocuments();
 
       return $response->withStatus(200)->withJson($documents);
-
     } catch (\Exception $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -1446,6 +1463,277 @@ class AuthController{
           "desc" => $e->getMessage()
         ]
       ]);
+    }
+  }
+
+  private function _validateReCaptcha($recaptchaToken, $clientIp) {
+    # Si esta el modo debug no se valida esto
+    if(!empty($GLOBALS['config']['debug_mode']) && $GLOBALS['config']['debug_mode']){
+      return (object)["http_code" => 200, "data" => []];
+    }
+
+    $secret = $GLOBALS['config']['recaptcha']['secret'];
+    $minScore = $GLOBALS['config']['recaptcha']['min_score'];
+    $url = "https://www.google.com/recaptcha/api/siteverify?secret=$secret&response=$recaptchaToken&remoteip=$clientIp";
+
+    # Hacer la petición a la API de reCAPTCHA
+    $response = $this -> _validateToken($url);
+    if($response === false || empty($response -> success)){
+      return (object)["http_code" => 401,
+        "error" => [
+          "code" => "INVALID_RECAPTCHA_TOKEN",
+          "desc" => "Invalid reCaptcha token"
+        ]
+      ];
+    }
+
+    # Si el score es muy bajo
+    if ($response -> score < $minScore) {
+      return (object)["http_code" => 401,
+        "error" => [
+          "code" => "RECAPTCHA_LOW_SCORE",
+          "desc" => "reCaptcha score is too low"
+        ]
+      ];
+    }
+
+    # Validación exitosa
+    return (object)["http_code" => 200, "data" => []];
+  }
+
+
+  # Valida un token generado por el login SSO o reCaptcha
+  private function _validateToken($url){
+    $ch = curl_init();
+
+    # Configuración de cURL
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HEADER, false);
+
+    $response = curl_exec($ch);
+
+    # Verifica si hubo un error en la solicitud
+    if(curl_errno($ch) || curl_getinfo($ch, CURLINFO_HTTP_CODE) != 200){
+      return false;
+    }
+    curl_close($ch);
+    return json_decode($response);
+  }
+
+
+  /**
+  * Valida firma y claims del id_token de Apple y devuelve claims normalizados.
+  *
+  * @param    $idToken
+  * @param    $expectedAud  p.ej. 'com.onesoul.app.web'
+  * @param    $rawNonce, enviado por el front y se compara contra el token
+  * @return array|false
+  */
+  private function _validateAppleToken($idToken, $expectedAud, $rawNonce) {
+    try {
+      // Tolerancia por drift de reloj
+      JWT::$leeway = 120;
+
+      // Descargar JWKS
+      $jwksJson = @file_get_contents('https://appleid.apple.com/auth/keys');
+      if ($jwksJson === false) {
+        return false;
+      }
+
+      // Extraigo las keys
+      $jwks = json_decode($jwksJson, true);
+      if (!isset($jwks['keys'])) {
+        return false;
+      }
+
+      // Decodifico token
+      $keys = JWK::parseKeySet($jwks);
+      $decoded = JWT::decode($idToken, $keys, ['RS256']);
+
+      // Validaciones de claims
+      $iss = $decoded->iss ?? null;
+      if ($iss !== 'https://appleid.apple.com') {
+        return false;
+      }
+
+      // Valido AUD
+      if ($decoded->aud !== $expectedAud) {
+        return false;
+      }
+
+      // Valido nonce
+      if ($decoded->nonce !== hash('sha256',$rawNonce)) {
+        return false;
+      }
+
+      // Normalizar salida
+      $emailVerifiedRaw = $decoded->email_verified ?? null;
+      $emailVerified = ($emailVerifiedRaw === true || $emailVerifiedRaw === 'true');
+
+      return (object)[
+        'sub'            => $decoded->sub ?? null,
+        'email'          => $decoded->email ?? null,
+        'email_verified' => $emailVerified,
+        'nonce'          => $decoded->nonce ?? null,
+        'auth_time'      => $decoded->auth_time ?? null,
+        'iat'            => $decoded->iat ?? null,
+        'exp'            => $decoded->exp ?? null
+      ];
+    } catch (\Throwable $e) {
+      file_put_contents(ROOT."/debug.log", json_encode($e), FILE_APPEND);
+      return false;
+    }
+  }
+
+  /**
+  * Intercambia un CODE por un IDToken en la API de apple
+  *
+  * @param    $idToken
+  * @param    $expectedAud  p.ej. 'com.onesoul.app.web'
+  * @param    $rawNonce, enviado por el front y se compara contra el token
+  * @return array|false
+  */
+  private function _appleExchangeCodeForIdToken($code) {
+    $client_id = $GLOBALS['config']['apple']['client_id'];
+    $team_id = $GLOBALS['config']['apple']['team_id'];
+    $key_id = $GLOBALS['config']['apple']['key_id'];
+    $private_key = base64_decode($GLOBALS['config']['apple']['private_key_b64']);
+    //$redirect_uri = $GLOBALS['config']['apple']['redirect_url'];
+
+    // Generar client_secret como JWT
+    $header = ['alg' => 'ES256', 'kid' => $key_id];
+    $claims = [
+      'iss' => $team_id,
+      'iat' => time(),
+      'exp' => time() + 3600,
+      'aud' => 'https://appleid.apple.com',
+      'sub' => $client_id
+    ];
+
+    $client_secret = \Firebase\JWT\JWT::encode($claims, $private_key, 'ES256', $key_id, $header);
+
+    $params = [
+      'client_id' => $client_id,
+      'client_secret' => $client_secret,
+      'code' => $code,
+      'grant_type' => 'authorization_code'
+    ];
+
+    $ch = curl_init('https://appleid.apple.com/auth/token');
+    curl_setopt_array($ch, [
+      CURLOPT_POST           => true,
+      CURLOPT_POSTFIELDS     => http_build_query($params),
+      CURLOPT_HTTPHEADER     => ['Content-Type: application/x-www-form-urlencoded'],
+      CURLOPT_RETURNTRANSFER => true,
+      CURLOPT_TIMEOUT        => 15,
+    ]);
+    $result = curl_exec($ch);
+    curl_close($ch);
+
+    $json = json_decode($result, true);
+    return $json['id_token'] ?? null;
+  }
+
+  private function _validateFacebookJWT($jwtToken) {
+    try {
+      // Obtener JWKS de Facebook
+      $jwksUrl = "https://www.facebook.com/.well-known/oauth/openid/jwks/";
+      $jwks = json_decode(file_get_contents($jwksUrl), true);
+
+      // Decodificar encabezado para obtener el kid
+      $header = json_decode(base64_decode(str_replace(['-', '_'], ['+', '/'], explode('.', $jwtToken)[0])), true);
+      $kid = $header['kid'] ?? null;
+
+      if (!$kid) return false;
+
+      // Buscar clave pública que coincida
+      $keyData = null;
+      foreach ($jwks['keys'] as $key) {
+        if ($key['kid'] === $kid) {
+          $keyData = $key;
+          break;
+        }
+      }
+      if (!$keyData) return false;
+
+      // Convertir a clave pública
+      $publicKey = $this->_convertJWKToPEM($keyData);
+
+      // Usar Firebase JWT para verificar
+      $decoded = \Firebase\JWT\JWT::decode(
+        $jwtToken,
+        new \Firebase\JWT\Key($publicKey, $keyData['alg'])
+      );
+
+      // Validaciones adicionales
+      $expectedIssuer = 'https://www.facebook.com';
+      $expectedAudience = $GLOBALS['config']['facebook']['APP_ID'];
+
+      if (($decoded->iss ?? '') !== $expectedIssuer) {
+        throw new \Exception("Invalid issuer");
+      }
+
+      if (($decoded->aud ?? '') !== $expectedAudience) {
+        throw new \Exception("Invalid audience");
+      }
+
+      if (isset($decoded->exp) && $decoded->exp < time()) {
+        throw new \Exception("Token expired");
+      }
+
+      return $decoded;
+
+    } catch (\Exception $e) {
+      error_log("Facebook JWT validation failed: " . $e->getMessage());
+      return false;
+    }
+  }
+
+  private function _convertJWKToPEM($jwk) {
+    $modulus = $this->_base64UrlDecode($jwk['n']);
+    $exponent = $this->_base64UrlDecode($jwk['e']);
+    $rsa = new \phpseclib3\Crypt\RSA();
+    $rsa = $rsa->loadKey(['n' => $modulus, 'e' => $exponent]);
+    return $rsa->getPublicKey();
+  }
+
+  private function _base64UrlDecode($input) {
+    $remainder = strlen($input) % 4;
+    if ($remainder) {
+      $padlen = 4 - $remainder;
+      $input .= str_repeat('=', $padlen);
+    }
+    return base64_decode(strtr($input, '-_', '+/'));
+  }
+
+  private function _passwordComplexity($newPassword) {
+    $password = trim($newPassword);
+
+    return strlen($password) >= 8 &&
+      preg_match('/[A-Z]/', $password) &&   // Debe tener al menos una mayúscula
+      preg_match('/[a-z]/', $password) &&   // Debe tener al menos una minúscula
+      (preg_match('/[0-9]/', $password) || preg_match('/\W/', $password));  // Debe tener un número O un símbolo
+  }
+
+  private function _handleReferralReward($referrerUserID, $userID) {
+    # Genero los rewards si corresponde
+    $referralResult = $this->auth->handleReferralReward($referrerUserID, $userID);
+    if ($referralResult['RewardTriggered']) {
+      $subscription = $this->subscription->getSubscriptionByUser($referrerUserID);
+      $platformSubscriptionID = $subscription['PlatformSubscriptionID'] ?? null;
+      $currentPlanID = $subscription['PlanDetails']['StripeID'] ?? null;
+
+      $planStripe = $this->subscription->getSubscriptionPlanByStripeID($currentPlanID);
+      $newPlanID = $planStripe['PlanID'];
+      if ($platformSubscriptionID && $newPlanID) {
+        \Stripe\Stripe::setApiKey($GLOBALS['config']['stripe']['STRIPE_SECRET_KEY']);
+        \Stripe\Subscription::update($platformSubscriptionID, [
+          'discounts' => [
+            ['coupon' => '1MONTHFREE']
+          ]
+        ]);
+      }
     }
   }
 }

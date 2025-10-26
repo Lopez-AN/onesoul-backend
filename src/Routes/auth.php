@@ -22,7 +22,7 @@ return function (App $app) {
   $user = new User($pdo);
   $auth = new Auth($pdo, $redis);
   $subscription = new Subscription($pdo);
-  $authController = new AuthController($user, $auth, $subscription, $redis);
+  $authController = new AuthController($auth, $user, $subscription, $redis);
 
   $app->post('/login', [$authController, 'login']);
   $app->post('/login/facebook', [$authController, 'loginFacebook']);
@@ -42,7 +42,7 @@ return function (App $app) {
   $app->get('/auth/mfa_check/{code}', [$authController, 'mfaCheck'])->add($jwtMiddleware);
   $app->post('/legal', [$authController, 'uploadLegalDocuments'])->add($jwtMiddleware);
   $app->get('/legal', [$authController, 'legalDocuments']);
-  $app->post('/auth/apple/callback', [$authController, 'callback']);
+  $app->post('/auth/apple/callback', [$authController, 'appleLoginCallback']);
   $app->post('/register/apple', [$authController, 'registerApple']);
   $app->post('/login/apple', [$authController, 'loginApple']);
   $app->post('/test/apple', [$authController, 'validate']);

@@ -95,11 +95,11 @@ class CalendlyController{
         ]
       ]);
     }
-    $userId = $jwt['data']->UserID;
+    $userID = $jwt['data']->UserID;
 
     // Lo busco en la base
     try{
-      $user = $this->calendly->getCalendlyUser($userId);
+      $user = $this->calendly->getCalendlyUser($userID);
       if(!$user){
         return $response->withStatus(404)->withJson([
           "error" => [
@@ -216,11 +216,11 @@ class CalendlyController{
   * @param array    $args      Argumentos de la ruta definidos en el enrutador.
   **/
   public function checkUser(Request $request, Response $response, array $args) {
-    $userId = $args['id'];
+    $userID = $args['id'];
 
     // Lo busco en la base
     try{
-      $user = $this->calendly->getCalendlyUser($userId);
+      $user = $this->calendly->getCalendlyUser($userID);
       if(!$user){
         return $response->withStatus(404)->withJson([
           "error" => [
@@ -422,7 +422,7 @@ class CalendlyController{
       ]);
     }
 
-    $userId = $payload->uid; // ID del usuario onesoul
+    $userID = $payload->uid; // ID del usuario onesoul
     $redirect = $payload->redirect; // url del frontend a donde debe redirigir luego de autenticar
 
     // 1) Solicito el access_token y refresh_token
@@ -468,7 +468,7 @@ class CalendlyController{
 
     // Guardo el usuario calendly en la base
     try {
-      $this->calendly->saveCalendlyUser($userId, $accessToken, $refreshToken, $tokenExpiresAt, $result->data->resource);
+      $this->calendly->saveCalendlyUser($userID, $accessToken, $refreshToken, $tokenExpiresAt, $result->data->resource);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [

@@ -1524,8 +1524,8 @@ class StripeController{
       }
 
       // Validación: que la sesión corresponda al usuario logueado
-      $userIdFromSession = $sessionData['metadata']['userID'] ?? null;
-      if ($userIdFromSession && $userIdFromSession != $userID) {
+      $userIDFromSession = $sessionData['metadata']['userID'] ?? null;
+      if ($userIDFromSession && $userIDFromSession != $userID) {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "INVALID_STRIPE_SESSION",
