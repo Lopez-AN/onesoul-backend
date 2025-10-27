@@ -11,75 +11,102 @@ use App\Exceptions\ValidationException;
 
 require_once(ROOT . '/src/Utils/Paginator.php');
 
-class CategoryController
-{
+class CategoryController {
   protected $category;
 
-  public function __construct(Category $category)
-  {
+  public function __construct(Category $category) {
     $this->category = $category;
   }
 
-  public function getCategories(Request $request, Response $response, $args)
-  {
+  public function getCategories(Request $request, Response $response, $args) {
     $paginator = paginator($request);
 
     try {
       $categories = $this->category->getCategories($paginator);
-      $response->getBody()->write(json_encode($categories));
-    } catch (DatabaseException $e) {
-      $response = $response->withStatus(500);
-      $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
+      return $response->withStatus(200)->withJson($categories);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
     }
-    return $response->withHeader('Content-Type', 'application/json');
   }
 
-  public function getCategoryById(Request $request, Response $response, $args)
-  {
-    $paginator = paginator($request);
+  public function getCategoryById(Request $request, Response $response, $args) {
     $id = $args['id'];
+
     try {
-      $category = $this->category->getCategoryById($paginator, $id);
-      if ($category) {
-        $response->getBody()->write(json_encode($category));
-      } else {
-        throw new NotFoundException('Category not found');
+      $category = $this->category->getCategoryById($id);
+      if (!$category) {
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "CATEGORY_NOT_FOUND",
+            "desc" => "No category associated with the specified id was found"
+          ]
+        ]);
       }
-    } catch (NotFoundException $e) {
-      $response = $response->withStatus(404);
-      $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
-    } catch (DatabaseException $e) {
-      $response = $response->withStatus(500);
-      $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
+      return $response->withStatus(200)->withJson($category);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
     }
-    return $response->withHeader('Content-Type', 'application/json');
   }
 
-  public function getCategoryByParentId(Request $request, Response $response, $args)
-  {
-    $paginator = paginator($request);
+  public function getCategoryByParentId(Request $request, Response $response, $args) {
     $id = $args['id'] == -1 ? null : $args['id'];
+    $paginator = paginator($request);
+
     try {
       $categories = $this->category->getCategoryByParentId($paginator, $id);
-      if ($categories) {
-        $response->getBody()->write(json_encode($categories));
-      } else {
-        throw new NotFoundException('Categories not found for the given parent ID');
-      }
-    } catch (NotFoundException $e) {
-      $response = $response->withStatus(404);
-      $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
-    } catch (DatabaseException $e) {
-      $response = $response->withStatus(500);
-      $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
+      return $response->withStatus(200)->withJson($categories);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
     }
-    return $response->withHeader('Content-Type', 'application/json');
   }
 
-  public function createCategory(Request $request, Response $response, $args)
-  {
+  public function createCategory(Request $request, Response $response, $args) {
+    $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
-    # Verificar si el usuario autenticado es el mismo que el que se intenta modificar, o si es un administrador
+
+    // Verificar si es un array/object válido
+    if (!is_array($data) && !is_object($data)) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_JSON",
+          "desc" => "Request body must be valid JSON"
+        ]
+      ]);
+    }
+
+    $parentCategoryID = $data['ParentCategoryID'] ?? null;
+    $name = $data['Name'] ?? null;
+    $description = $data['Description'] ?? null;
+    $creationDate = $data['CreationDate'] ?? null;
+    $modificationDate = $data['ModificationDate'] ?? null;
+    $isActive = $data['IsActive'] ?? null;
+
+    if(!array_key_exists('ParentCategoryID', $data) || empty($name) || empty($description)
+      || empty($creationDate) || empty($modificationDate) || $isActive === null
+    ){
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_PARAMETERS",
+          "desc" => "Parameters are missing or invalid"
+        ]
+      ]);
+    }
+
     if ($jwt['data']->UserType != 'Admin') {
       return $response->withStatus(401)->withJson([
         "error" => [
@@ -89,30 +116,54 @@ class CategoryController
       ]);
     }
 
-    $data = $request->getParsedBody();
     try {
-      $category = $this->category->createCategory($data);
-      $response = $response->withStatus(200);
-      $message = [
-        'message' => "Category created successfully",
-        'category' => $category
-      ];
-      $response->getBody()->write(json_encode($message));
-    } catch (ValidationException $e) {
-      $response = $response->withStatus(422);
-      $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
-    } catch (DatabaseException $e) {
-      $response = $response->withStatus(500);
-      $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
+      $this->category->createCategory(
+        $parentCategoryID, $name, $description, $creationDate, $modificationDate, $isActive);
+      return $response->withStatus(200)->withJson("Category created successfully");
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
     }
-    return $response->withHeader('Content-Type', 'application/json');
   }
 
-  public function updateCategory(Request $request, Response $response, $args)
-  {
+  public function updateCategory(Request $request, Response $response, $args) {
+    $id = $args['id'];
+    $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
-    # Verificar si el usuario autenticado es el mismo que el que se intenta modificar, o si es un administrador
-    if ($jwt['data']->UserType != 'Admin') {
+
+    // Verificar si es un array/object válido
+    if (!is_array($data) && !is_object($data)) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_JSON",
+          "desc" => "Request body must be valid JSON"
+        ]
+      ]);
+    }
+
+    $parentCategoryID = $data['ParentCategoryID'] ?? null;
+    $name = $data['Name'] ?? null;
+    $description = $data['Description'] ?? null;
+    $creationDate = $data['CreationDate'] ?? null;
+    $modificationDate = $data['ModificationDate'] ?? null;
+    $isActive = $data['IsActive'] ?? null;
+
+    if(!array_key_exists('ParentCategoryID', $data) || empty($name) || empty($description)
+      || empty($creationDate) || empty($modificationDate) || $isActive === null
+    ){
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_PARAMETERS",
+          "desc" => "Parameters are missing or invalid"
+        ]
+      ]);
+    }
+
+    if ($jwt['data']->IsAdmin) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
@@ -121,35 +172,25 @@ class CategoryController
       ]);
     }
 
-    $id = $args['id'];
-    $data = $request->getParsedBody();
     try {
-      $category = $this->category->updateCategory($id, $data);
-      $response = $response->withStatus(200);
-      $message = [
-        'message' => "Category updated successfully",
-        'category' => $category
-      ];
-      $response->getBody()->write(json_encode($message));
-    } catch (ValidationException $e) {
-      $response = $response->withStatus(422);
-      $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
-    } catch (NotFoundException $e) {
-      $response = $response->withStatus(404);
-      $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
-    } catch (DatabaseException $e) {
-      $response = $response->withStatus(500);
-      $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
+      $this->category->updateCategory($id, $parentCategoryID, $name, $description, $creationDate, $modificationDate, $isActive);
+      return $response->withStatus(200)->withJson("Category updated successfully");
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
     }
-    return $response->withHeader('Content-Type', 'application/json');
   }
 
-  public function deleteCategory(Request $request, Response $response, $args)
-  {
+  public function deleteCategory(Request $request, Response $response, $args) {
+    $id = $args['id'];
     $jwt = $request->getAttribute('jwt');
-    # Verificar si el usuario autenticado es el mismo que el que se intenta modificar, o si es un administrador
+
     if ($jwt['data']->UserType != 'Admin') {
-      return $response->withStatus(401)->withJson([
+      return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
           "desc" => "You do not have permission to delete categories"
@@ -157,21 +198,16 @@ class CategoryController
       ]);
     }
 
-    $id = $args['id'];
     try {
       $this->category->deleteCategory($id);
-      $response = $response->withStatus(200);
-      $message = [
-        'message' => "Category deleted successfully"
-      ];
-      $response->getBody()->write(json_encode($message));
-    } catch (NotFoundException $e) {
-      $response = $response->withStatus(404);
-      $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
-    } catch (DatabaseException $e) {
-      $response = $response->withStatus(500);
-      $response->getBody()->write(json_encode(['message' => $e->getMessage()]));
+      return $response->withStatus(200)->withJson("Category deleted successfully");
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
     }
-    return $response->withHeader('Content-Type', 'application/json');
   }
 }

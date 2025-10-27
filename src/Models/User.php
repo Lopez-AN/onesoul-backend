@@ -926,7 +926,7 @@ class User
    * @return void
    * @throws DatabaseException
    **/
-  public function updateUser($userID, $fields, $data) {
+  public function updateUser($userID, $currentEmail, $fields, $data) {
     try {
       // Construir la consulta SQL para la actualización
       $sql = "UPDATE Users SET " . implode(", ", $fields) . " WHERE UserID = :UserID";
@@ -943,11 +943,10 @@ class User
 
       // Si cambio el mail se marca el email como no validado
       if (isset($data['Email'])) {
-        if ($data['Email'] != $resp->data['Email']) {
-          $stmt = $this->db->prepare("UPDATE Users SET ValidatedEmail = 0 WHERE UserID = :UserID");
+        if ($data['Email'] !== $currentEmail) {
+          $stmt2 = $this->db->prepare("UPDATE Users SET ValidatedEmail = 0 WHERE UserID = ?");
           // Vincular el ID del usuario
-          $stmt->bindValue(':UserID', $userID, PDO::PARAM_INT);
-          $stmt->execute(); // Ejecutar la consulta
+          $stmt2->execute([$userID]); // Ejecutar la consulta
         }
       }
     } catch (\PDOException $e) {
@@ -963,7 +962,7 @@ class User
    **/
   public function disableUser($userID) {
     try {
-      $stmt = $this->db->prepare("UPDATE Users SET DeactivationDate = ? WHERE UserID = :id");
+      $stmt = $this->db->prepare("UPDATE Users SET DeactivationDate = ? WHERE UserID = ?");
       $stmt->execute([date('Y-m-d H:i:s'), $userID]);
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
@@ -979,43 +978,45 @@ class User
    * @throws DatabaseException
    **/
   public function updateProfilePhoto($userID, $fileURL, $filePath) {
-    try {      # Busco al usuario y si tenia imagen antes
-      $stmt = $this->db->prepare("SELECT u.UserID,m.MediaID,m.Path FROM Users AS u
-        LEFT JOIN Media AS m ON u.UserID = m.UserID WHERE u.UserID = ?");
+    try {
+      // Buscar si ya existe foto de perfil
+      $stmt = $this->db->prepare("SELECT MediaID, Path FROM Media WHERE UserID = ? LIMIT 1");
       $stmt->execute([$userID]);
-      $profilePhoto = $stmt->fetch(PDO::FETCH_ASSOC);
+      $oldMedia = $stmt->fetch(PDO::FETCH_ASSOC);
 
       // Iniciar transacción
       $this->db->beginTransaction();
 
-      if (!empty($profilePhoto)) {
-        $stmt2 = $this->db->prepare("UPDATE Media SET `URL` = ?, `Path` = ?
-          WHERE `UserID` = ?");
+      if ($oldMedia) {
+        // ACTUALIZAR media existente
+        $stmt2 = $this->db->prepare("UPDATE Media SET `URL` = ?, `Path` = ? WHERE UserID = ?");
         $stmt2->execute([$fileURL, $filePath, $userID]);
 
-        # Borro la imagen anterior si existe en el sistema de archivos
-        if (file_exists($filePath)) {
-          unlink($filePath);
+        // Borrar archivo anterior si existe
+        $oldPath = $oldMedia['Path'];
+        if (!empty($oldPath) && file_exists($oldPath)) {
+          unlink($oldPath);
         }
       } else {
-        $stmt2 = $this->db->prepare("INSERT INTO Media (`URL`,`Path`,`UserID`)
-          VALUES (?,?,?)");
+        // INSERTAR nuevo media
+        $stmt2 = $this->db->prepare("INSERT INTO Media (`URL`, `Path`, `UserID`) VALUES (?, ?, ?)");
         $stmt2->execute([$fileURL, $filePath, $userID]);
       }
-
-      // Confirmo transacción
       $this->db->commit();
       return true;
     } catch (\PDOException $e) {
-      $this->db->rollBack(); // Revierto en caso de error
-      # Si hubo algun error de DB y se llego a grabar el archivo en el FS borrarlo
-      if ($fileWritten && file_exists($rs[0]['Path'])) {
+      $this->db->rollBack();
+      // Borrar archivo si la transacción falla
+      if (!empty($filePath) && file_exists($filePath)) {
         unlink($filePath);
       }
-      throw new DatabaseException($e->getMessage());
-    } catch (Exception $e) {
-      $this->db->rollBack(); // Revierto en caso de error
-      throw new Exception($e->getMessage());
+      throw new DatabaseException("Error updating profile photo: " . $e->getMessage());
+    } catch (\Exception $e) {
+      $this->db->rollBack();
+      if (!empty($filePath) && file_exists($filePath)) {
+        unlink($filePath);
+      }
+      throw new Exception("Error updating profile photo: " . $e->getMessage());
     }
   }
 
@@ -1040,12 +1041,12 @@ class User
       $this->db->beginTransaction();
 
       # Eliminar la entrada en la tabla Media
-      $stmt = $this->db->prepare("DELETE FROM Media WHERE MediaID = ?");
-      $stmt->execute([$profilePhoto]);
+      $stmt2 = $this->db->prepare("DELETE FROM Media WHERE MediaID = ?");
+      $stmt2->execute([$profilePhoto['MediaID']]);
 
       # Si existe el archivo local lo borro
-      if (!is_null($rs[0]['Path']) && file_exists($rs[0]['Path'])) {
-        unlink($rs[0]['Path']); // Eliminar el archivo del sistema
+      if (!is_null($profilePhoto['Path']) && file_exists($profilePhoto['Path'])) {
+        unlink($profilePhoto['Path']); // Eliminar el archivo del sistema
       }
 
       // Confirmo transacción

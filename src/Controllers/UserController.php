@@ -6,6 +6,7 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use App\Models\User;
 use App\Models\Auth;
+use App\Models\Category;
 use App\Models\Subscription;
 
 require_once(ROOT . '/src/Utils/Paginator.php');
@@ -16,11 +17,13 @@ require_once(ROOT . '/src/Utils/AWSRekognition.php');
 class UserController{
   protected $user;
   protected $auth;
+  protected $category;
   protected $subscription;
 
-  public function __construct(User $user, Auth $auth, Subscription $subscription){
+  public function __construct(User $user, Auth $auth, Category $category, Subscription $subscription){
     $this->user = $user;
     $this->auth = $auth;
+    $this->category = $category;
     $this->subscription = $subscription;
   }
 
@@ -403,6 +406,16 @@ class UserController{
     $subDomain = $data['SubDomain'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
+    // Verificar si es un array/object válido
+    if (!is_array($data) && !is_object($data)) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_JSON",
+          "desc" => "Request body must be valid JSON"
+        ]
+      ]);
+    }
+
     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
       return $response->withStatus(401)->withJson([
         "error" => [
@@ -414,7 +427,7 @@ class UserController{
 
     // Validación de parámetros
     if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL) || empty($recaptchaToken)) {
-      return $response->withStatus(401)->withJson([
+      return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "INVALID_PARAMETERS",
           "desc" => "Parameters are missing or invalid"
@@ -488,8 +501,18 @@ class UserController{
   public function updateUser(Request $request, Response $response, $args) {
     $userID = $args['id'];
     $data = $request->getParsedBody();
-
     $jwt = $request->getAttribute('jwt');
+
+    // Verificar si es un array/object válido
+    if (!is_array($data) && !is_object($data)) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_JSON",
+          "desc" => "Request body must be valid JSON"
+        ]
+      ]);
+    }
+
     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
       return $response->withStatus(401)->withJson([
         "error" => [
@@ -511,13 +534,12 @@ class UserController{
 
     $user = $this->user->getUserById($userID);
     if (empty($user)) {
-      return (object) [
-        "http_code" => 404,
+      return $response->withStatus(404)->withJson([
         "error" => [
           "code" => "USER_NOT_FOUND",
           "desc" => "No user was found with the specified ID"
         ]
-      ];
+      ]);
     }
 
     // Lista de campos permitidos para actualizar
@@ -548,15 +570,27 @@ class UserController{
     $fields = [];
     foreach ($data AS $key => $value) {
       if (!in_array($key, $allowedFields)) {
-        return (object) [
-          "http_code" => 400,
+        return $response->withStatus(400)->withJson([
           "error" => [
             "code" => "INVALID_UPDATE_KEY",
             "desc" => "Key '$key' present in the JSON is not supported"
           ]
-        ];
+        ]);
       }
       $fields[] = "$key = :$key";
+    }
+
+    // Valido que no se repita el email
+    if(!empty($data['Email'])){
+      $user = $this->user->getUserByEmail($data['Email']);
+      if($user && $user['UserID'] != $userID){
+        return $response->withStatus(409)->withJson([
+          "error" => [
+            "code" => "DUPLICATED_EMAIL",
+            "desc" => "A user with the specified email already exists"
+          ]
+        ]);
+      }
     }
 
     try {
@@ -575,7 +609,7 @@ class UserController{
         ]);
       }
 
-      $this->user->updateUser($userID, $fields, $data);
+      $this->user->updateUser($userID, $user['Email'], $fields, $data);
       // Devolver los datos actualizados del usuario
       $user = $this->user->getUserById($userID);
 
@@ -676,13 +710,20 @@ class UserController{
       # Ver si estan las propiedades del token jwt
       $user = $this->user->getUserById($userID);
       if (empty($user)) {
-        return (object) [
-          "http_code" => 404,
+        return $response->withStatus(404)->withJson([
           "error" => [
             "code" => "USER_NOT_FOUND",
             "desc" => "No user was found with the specified ID"
           ]
-        ];
+        ]);
+      }
+      if ($user['DeactivationDate'] !== null) {
+        return $response->withStatus(410)->withJson([
+          "error" => [
+            "code" => "USER_ALREADY_DISABLED",
+            "desc" => "this user was disabled at ".$user['DeactivationDate']
+          ]
+        ]);
       }
 
       $this->user->disableUser($userID);
@@ -713,6 +754,7 @@ class UserController{
   public function updateProfilePhoto(Request $request, Response $response, $args) {
     $userID = $args['id'];
     $jwt = $request->getAttribute('jwt');
+
     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
       return $response->withStatus(401)->withJson([
         "error" => [
@@ -722,7 +764,6 @@ class UserController{
       ]);
     }
 
-    # Verificar si el usuario autenticado es el mismo que el que se intenta modificar, o si es un administrador
     if ($jwt['data']->UserID != $userID && $jwt['data']->UserType != 'Admin') {
       return $response->withStatus(403)->withJson([
         "error" => [
@@ -743,9 +784,8 @@ class UserController{
     }
 
     try {
-      # Obtengo el archivo del body del request
       $uploadedFiles = $request->getUploadedFiles();
-      $uploadedFile = $uploadedFiles['profilePhoto'] ?? null;
+      $uploadedFile = $uploadedFiles['ProfilePhoto'] ?? null;
 
       if (!$uploadedFile || $uploadedFile->getError() !== UPLOAD_ERR_OK) {
         return $response->withStatus(400)->withJson([
@@ -756,44 +796,77 @@ class UserController{
         ]);
       }
 
-      # Extraigo el nombre del archivo y su extension
+      // Validar tipo de archivo
+      $allowedExtensions = ['jpg', 'jpeg', 'png', 'gif'];
       $fileName = $uploadedFile->getClientFilename();
-      $fileExtension = pathinfo($fileName, PATHINFO_EXTENSION);
-      $imgID = uniqid(); #Le doy un ID unico a la imagen
+      $fileExtension = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
 
-      # Directorio destino
+      if (!in_array($fileExtension, $allowedExtensions)) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "INVALID_FILE_TYPE",
+            "desc" => "Only JPG, PNG, and GIF files are allowed"
+          ]
+        ]);
+      }
+
+      $imgID = uniqid();
       $uploadDirectory = $GLOBALS['config']['media_folder']['path'];
 
-      # El archivo destino se guarda con ID unico
-      $filePath = $uploadDirectory . "/user/" . $imgID . "." . $fileExtension;
+      // Crear directorio si no existe
+      if (!is_dir($uploadDirectory . "/user")) {
+        mkdir($uploadDirectory . "/user", 0755, true);
+      }
 
-      #Grabo el archivo en el FS
-      $uploadedFile->moveTo($filePath);
+      // Ruta temporal
+      $tempFilePath = $uploadDirectory . "/user/" . $imgID . "." . $fileExtension;
+
+      // Grabar archivo
+      $uploadedFile->moveTo($tempFilePath);
 
       // Validar con Amazon Rekognition
       if(empty($GLOBALS['config']['debug_mode']) || !$GLOBALS['config']['debug_mode']){
-        $rekognitionResult = analyzeImageWithRekognition($filePath);
+        $rekognitionResult = analyzeImageWithRekognition($tempFilePath);
         if ($rekognitionResult['error']) {
-          unlink($filePath); // Borrar la imagen si es inapropiada
+          if (file_exists($tempFilePath)) {
+            unlink($tempFilePath);
+          }
           return $response->withStatus(400)->withJson([
             "error" => [
               "code" => "INAPPROPRIATE_CONTENT",
-              "desc" => $rekognitionResult['reASon']
+              "desc" => $rekognitionResult['reason'] // CORREGIDO: era 'reASon'
             ]
           ]);
         }
       }
 
-      // Aquí optimizamos la imagen usando la función optimizeImage
-      $optimizedPath = optimizeImage($filePath);
-      unlink($filePath);
-      $filePath = $optimizedPath;
+      // Optimizar imagen - retorna la ruta final (webp)
+      $optimizedPath = optimizeImage($tempFilePath);
 
-      # Genero la URL del archivo
+      // Si optimization falla, borrar archivo temporal
+      if (!$optimizedPath || !file_exists($optimizedPath)) {
+        if (file_exists($tempFilePath)) {
+          unlink($tempFilePath);
+        }
+        return $response->withStatus(500)->withJson([
+          "error" => [
+            "code" => "IMAGE_OPTIMIZATION_FAILED",
+            "desc" => "Could not optimize the image"
+          ]
+        ]);
+      }
+
+      // Borrar archivo temporal si optimizeImage ya lo hace
+      if (file_exists($tempFilePath) && $tempFilePath !== $optimizedPath) {
+        unlink($tempFilePath);
+      }
+
+      // Generar URL - IMPORTANTE: debe coincidir con la ruta guardada
       $fileURL = $GLOBALS['config']['media_folder']['url'] . "/user/" . $imgID . ".webp";
 
-      $this->user->updateProfilePhoto($userID, $fileURL, $filePath);
-      # Retornar el usuario actualizado
+      // Pasar los datos al modelo
+      $this->user->updateProfilePhoto($userID, $fileURL, $optimizedPath);
+
       $updatedUser = $this->user->getUserById($userID);
       if (!$updatedUser) {
         return $response->withStatus(500)->withJson([
@@ -803,6 +876,7 @@ class UserController{
           ]
         ]);
       }
+
       return $response->withStatus(200)->withJson($updatedUser);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
@@ -884,9 +958,28 @@ class UserController{
    **/
   public function updateUserCategories(Request $request, Response $response, $args) {
     $userID = $args['id'];
-    $jwt = $request->getAttribute('jwt');
     $data = $request->getParsedBody();
+    $jwt = $request->getAttribute('jwt');
     $categories = $data['Categories'] ?? [];
+
+    // Verificar si es un array/object válido
+    if (!is_array($data) && !is_object($data)) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_JSON",
+          "desc" => "Request body must be valid JSON"
+        ]
+      ]);
+    }
+
+    if (!is_array($data['Categories'])) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_REQUEST",
+          "desc" => "Categories must be an array"
+        ]
+      ]);
+    }
 
     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
       return $response->withStatus(401)->withJson([
@@ -917,6 +1010,22 @@ class UserController{
     }
 
     try {
+      // Obtener todas las categorías válidas de una sola vez
+      $validCategories = $this->category->getCategoriesByIds($data['Categories']);
+
+      // Comparar cantidad: si no coinciden, hay IDs inválidos
+      if (count($validCategories) !== count($data['Categories'])) {
+        $validIds = array_column($validCategories, 'CategoryID');
+        $invalidIds = array_diff($data['Categories'], $validIds);
+
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "INVALID_CATEGORIES",
+            "desc" => "The following categories don't exist: " . implode(', ', $invalidIds)
+          ]
+        ]);
+      }
+
       # Obtener las categorías actuales del usuario
       $existingCategories = $this->user->getUserCategories($userID);
       $existingCategoryIds = array_column($existingCategories, 'CategoryID');
@@ -965,7 +1074,18 @@ class UserController{
    **/
   public function updateUserSocialAccounts(Request $request, Response $response, $args) {
     $userID = $args['id'];
+    $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
+
+    // Verificar si es un array/object válido
+    if (!is_array($data) && !is_object($data)) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_JSON",
+          "desc" => "Request body must be valid JSON"
+        ]
+      ]);
+    }
 
     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
       return $response->withStatus(401)->withJson([
@@ -981,16 +1101,6 @@ class UserController{
         "error" => [
           "code" => "UNAUTHORIZED",
           "desc" => "You don't have permission to modify this user's social accounts"
-        ]
-      ]);
-    }
-
-    $data = $request->getParsedBody();
-    if (!is_array($data)) {
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "INVALID_DATA",
-          "desc" => "SocialAccounts should be an array"
         ]
       ]);
     }

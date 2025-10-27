@@ -246,8 +246,10 @@ class BookingController
     }
   }
 
-  public function createBooking(Request $request, Response $response, $args)
-  {
+  public function createBooking(Request $request, Response $response, $args) {
+    $userID = $jwt['data']->UserID;
+    $data = $request->getParsedBody();
+
     $jwt = $request->getAttribute('jwt');
     if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
       return $response->withStatus(401)->withJson([
@@ -258,11 +260,9 @@ class BookingController
       ]);
     }
 
-    $userID = $jwt['data']->UserID;
-    $data = $request->getParsedBody();
     $message = $data['Message'] ?? null;
-    $subDomain = $data['SubDomain'] ?? '';
-    $assocUUID = $data['AssocUUID'] ?? '';
+    $subDomain = $data['SubDomain'] ?? null;
+    $assocUUID = $data['AssocUUID'] ?? null;
     $coupon = $data['Coupon'] ?? null;
     $userInfo = $this->user->getUserById($userID);
     if(!$userInfo){

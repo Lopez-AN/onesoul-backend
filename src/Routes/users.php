@@ -4,6 +4,7 @@ use Slim\App;
 use App\Controllers\UserController;
 use App\Models\User;
 use App\Models\Auth;
+use App\Models\Category;
 use App\Models\Subscription;
 use Tuupola\Middleware\JwtAuthentication;
 
@@ -17,9 +18,10 @@ return function (App $app) {
   $pdo = $app->getContainer()->get('pdo');
   $redis = $app->getContainer()->get('redis'); # Base de datos en RAM
   $user = new User($pdo);
+  $category = new Category($pdo);
   $auth = new Auth($pdo, $redis);
   $subscription = new Subscription($pdo);
-  $userController = new UserController($user, $auth, $subscription);
+  $userController = new UserController($user, $auth, $category, $subscription);
 
   $app->get('/users', [$userController, 'getUsers']);
   $app->get('/users/{id}', [$userController, 'getUserById']);
