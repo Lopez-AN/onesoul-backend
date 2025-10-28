@@ -5,7 +5,6 @@ namespace App\Models;
 use PDO;
 use App\Exceptions\DatabaseException;
 use PHPMailer\PHPMailer\PHPMailer;
-use PHPMailer\PHPMailer\Exception;
 
 class User
 {
@@ -20,10 +19,435 @@ class User
    * Obtiene todos los usuarios con paginación
    * @param  object $paginator: objeto con limit y offset
    * @return object: { data: [], rows: { total: int, fetched: int } }
-   * @throws DatabaseException
    **/
   public function getUsers($paginator) {
-    try {
+    $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName,
+    u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
+    u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
+    u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth, u.UserType,
+    u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
+    u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
+      ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
+    u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
+    s.PlanID, s.StartDate, sp.Name, sp.Description,
+    -- Subconsulta para reviews
+    (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
+      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
+    (SELECT COUNT(DISTINCT r.ReviewID)
+      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
+    FROM Users AS u
+    LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
+    LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
+    LEFT JOIN Media AS m ON u.UserID = m.UserID
+    LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
+    LEFT JOIN SubscriptionPlans AS sp ON s.PlanID = sp.PlanID
+    LEFT JOIN (
+      SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
+      MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
+      MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
+      FROM Offerings AS o
+      INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
+      WHERE o.Status = 'Active'
+      GROUP BY o.UserID
+    ) AS sub ON sub.UserID = u.UserID
+    GROUP BY u.UserID
+    ORDER BY u.UserID
+    LIMIT ? OFFSET ?");
+
+    $stmt->execute([$paginator->limit, $paginator->offset]);
+    $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $stmt = $this->db->query("SELECT FOUND_ROWS() AS total");
+    $total = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    $rs = array_map(function ($e) {
+      $e['Floor'] = is_null($e['Floor']) ? null : (int)$e['Floor'];
+      $e['UserLevel'] = !$e['UserLevel'] ? 1 : (int)$e['UserLevel'];
+      $e['ValidatedEmail'] = (bool)$e['ValidatedEmail'];
+      $e['ValidatedPhone'] = (bool)$e['ValidatedPhone'];
+      $e['TwoFactorAuth'] = (bool)$e['TwoFactorAuth'];
+      $e['Categories'] = is_null($e['Categories']) ? [] : array_map(
+        function ($a) {
+          $a = explode(":", $a);
+          return ["Id" => intval($a[0]), "Name" => $a[1]];
+        },
+        explode(",", $e['Categories'])
+      );
+
+      // Agregar sessionType con valores booleanos
+      $e['SessionType'] = [
+        "Virtual" => $e['hasVirtual'] == 1,
+        "InPerson" => $e['hasInPerson'] == 1
+      ];
+
+      unset($e['hasVirtual'], $e['hasInPerson']);
+
+      // Agregar información de suscripción
+      $e['Subscription'] = is_null($e['PlanID']) ? null : [
+        "PlanID" => (int)$e['PlanID'],
+        "StartDate" => $e['StartDate'],
+        "Name" => $e['Name'],
+        "Description" => $e['Description']
+      ];
+      unset(
+        $e['PlanID'],
+        $e['StartDate'],
+        $e['Name'],
+        $e['Description']
+      );
+
+      return $e;
+    }, $rs);
+
+    return (object) [
+      "data" => $rs,
+      "rows" => [
+        "total" => $total['total'],
+        "fetched" => count($rs)
+      ]
+    ];
+  }
+
+  /**
+   * Obtiene un usuario por su ID
+   * @param  int $userID: ID del usuario
+   * @return array|false: datos del usuario o false si no existe
+   **/
+  public function getUserById($userID) {
+    $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
+    u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
+    u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
+    u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth, u.UserType,
+    u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
+    u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
+      ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
+    u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
+    s.PlanID, s.StartDate, s.EndDate, s.Status,
+    -- Subconsulta para reviews
+    (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
+      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
+    (SELECT COUNT(DISTINCT r.ReviewID)
+      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
+    FROM Users AS u
+    LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
+    LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
+    LEFT JOIN Media AS m ON u.UserID = m.UserID
+    LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
+    LEFT JOIN (
+      SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
+      MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
+      MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
+      FROM Offerings AS o
+      INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
+      WHERE o.Status = 'Active'
+      GROUP BY o.UserID
+    ) AS sub ON sub.UserID = u.UserID
+    WHERE u.UserID = ?
+    GROUP BY u.UserID
+    ORDER BY u.UserID");
+
+    $stmt->execute([$userID]);
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (empty($user)) {
+      return false;
+    }
+
+    $user['Floor'] = is_null($user['Floor']) ? null : (int)$user['Floor'];
+    $user['UserLevel'] = !$user['UserLevel'] ? 1 : (int)$user['UserLevel'];
+    $user['ValidatedEmail'] = (bool)$user['ValidatedEmail'];
+    $user['ValidatedPhone'] = (bool)$user['ValidatedPhone'];
+    $user['TwoFactorAuth'] = (bool)$user['TwoFactorAuth'];
+    $user['Categories'] = is_null($user['Categories']) ? [] : array_map(
+      function ($a) {
+        $a = explode(":", $a);
+        return ["Id" => intval($a[0]), "Name" => $a[1]];
+      },
+      explode(",", $user['Categories'])
+    );
+
+    // Agregar sessionType con valores booleanos
+    $user['SessionType'] = [
+      "Virtual" => $user['hasVirtual'] == 1,
+      "InPerson" => $user['hasInPerson'] == 1
+    ];
+    unset($user['hasVirtual'], $user['hasInPerson']);
+
+    // Agregar información histórica de suscripción
+    $user['HistorySubscription'] = is_null($user['PlanID']) ? null : [
+      "LatestPlanID" => (int)$user['PlanID'],
+      "StartDate" => $user['StartDate'],
+      "EndDate" => $user['EndDate'],
+      "Status" => $user['Status'],
+      "UsedTrial" => 'True'
+    ];
+    unset(
+      $user['PlanID'],
+      $user['StartDate'],
+      $user['EndDate'],
+      $user['Status']
+    );
+
+    return $user;
+  }
+
+  /**
+   * Obtiene un usuario por username
+   * @param  string $username: nombre de usuario
+   * @return array|false: datos del usuario o false si no existe
+   **/
+  public function getUserByUserName($userName) {
+    $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
+    u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
+    u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
+    u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth, u.UserType,
+    u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
+    u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
+      ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
+    u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
+    s.PlanID, s.StartDate, s.EndDate, s.Status,
+    -- Subconsulta para reviews
+    (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
+      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
+    (SELECT COUNT(DISTINCT r.ReviewID)
+      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
+    FROM Users AS u
+    LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
+    LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
+    LEFT JOIN Media AS m ON u.UserID = m.UserID
+    LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
+    LEFT JOIN (
+      SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
+      MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
+      MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
+      FROM Offerings AS o
+      INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
+      WHERE o.Status = 'Active'
+      GROUP BY o.UserID
+    ) AS sub ON sub.UserID = u.UserID
+    WHERE u.UserName = ?
+    GROUP BY u.UserID
+    ORDER BY u.UserID");
+
+    $stmt->execute([$userName]);
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (empty($user)) {
+      return false;
+    }
+
+    $user['Floor'] = is_null($user['Floor']) ? null : (int)$user['Floor'];
+    $user['UserLevel'] = !$user['UserLevel'] ? 1 : (int)$user['UserLevel'];
+    $user['ValidatedEmail'] = (bool)$user['ValidatedEmail'];
+    $user['ValidatedPhone'] = (bool)$user['ValidatedPhone'];
+    $user['TwoFactorAuth'] = (bool)$user['TwoFactorAuth'];
+    $user['Categories'] = is_null($user['Categories']) ? [] : array_map(
+      function ($a) {
+        $a = explode(":", $a);
+        return ["Id" => intval($a[0]), "Name" => $a[1]];
+      },
+      explode(",", $user['Categories'])
+    );
+
+    // Agregar sessionType con valores booleanos
+    $user['SessionType'] = [
+      "Virtual" => $user['hasVirtual'] == 1,
+      "InPerson" => $user['hasInPerson'] == 1
+    ];
+    unset($user['hasVirtual'], $user['hasInPerson']);
+
+    // Agregar información histórica de suscripción
+    $user['HistorySubscription'] = is_null($user['PlanID']) ? null : [
+      "LatestPlanID" => (int)$user['PlanID'],
+      "StartDate" => $user['StartDate'],
+      "EndDate" => $user['EndDate'],
+      "Status" => $user['Status'],
+    "UsedTrial" => 'True'
+    ];
+    unset(
+      $user['PlanID'],
+      $user['StartDate'],
+      $user['EndDate'],
+      $user['Status']
+    );
+
+    return $user;
+  }
+
+  /**
+   * Obtiene un usuario por email
+   * @param  string $email: email del usuario
+   * @return array|false: datos del usuario o false si no existe
+   **/
+  public function getUserByEmail($email) {
+    $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
+    u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
+    u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
+    u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth, u.UserType,
+    u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
+    u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
+      ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
+    u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
+    s.PlanID, s.StartDate, s.EndDate, s.Status,
+    -- Subconsulta para reviews
+    (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
+      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
+    (SELECT COUNT(DISTINCT r.ReviewID)
+      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
+    FROM Users AS u
+    LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
+    LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
+    LEFT JOIN Media AS m ON u.UserID = m.UserID
+    LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
+    LEFT JOIN (
+      SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
+      MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
+      MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
+      FROM Offerings AS o
+      INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
+      WHERE o.Status = 'Active'
+      GROUP BY o.UserID
+    ) AS sub ON sub.UserID = u.UserID
+    WHERE u.Email = ?
+    GROUP BY u.UserID
+    ORDER BY u.UserID");
+
+    $stmt->execute([$email]);
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (empty($user)) {
+      return false;
+    }
+
+    $user['Floor'] = is_null($user['Floor']) ? null : (int)$user['Floor'];
+    $user['UserLevel'] = !$user['UserLevel'] ? 1 : (int)$user['UserLevel'];
+    $user['ValidatedEmail'] = (bool)$user['ValidatedEmail'];
+    $user['ValidatedPhone'] = (bool)$user['ValidatedPhone'];
+    $user['TwoFactorAuth'] = (bool)$user['TwoFactorAuth'];
+    $user['Categories'] = is_null($user['Categories']) ? [] : array_map(
+      function ($a) {
+        $a = explode(":", $a);
+        return ["Id" => intval($a[0]), "Name" => $a[1]];
+      },
+      explode(",", $user['Categories'])
+    );
+
+    // Agregar sessionType con valores booleanos
+    $user['SessionType'] = [
+      "Virtual" => $user['hasVirtual'] == 1,
+      "InPerson" => $user['hasInPerson'] == 1
+    ];
+    unset($user['hasVirtual'], $user['hasInPerson']);
+
+    // Agregar información histórica de suscripción
+    $user['HistorySubscription'] = is_null($user['PlanID']) ? null : [
+      "LatestPlanID" => (int)$user['PlanID'],
+      "StartDate" => $user['StartDate'],
+      "EndDate" => $user['EndDate'],
+      "Status" => $user['Status'],
+    "UsedTrial" => 'True'
+    ];
+    unset(
+      $user['PlanID'],
+      $user['StartDate'],
+      $user['EndDate'],
+      $user['Status']
+    );
+
+    return $user;
+  }
+
+  /**
+   * Obtiene un usuario por OAuth ID
+   * @param  string $oAuthID: ID del OAuth
+   * @param  string $oAuthService: servicio OAuth (Google, Facebook, etc)
+   * @return array|false: datos del usuario o false si no existe
+   **/
+  public function getUserByOAuthID($oAuthID, $oAuthService) {
+    $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
+    u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
+    u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
+    u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth, u.UserType,
+    u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
+    u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
+      ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
+    u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
+    s.PlanID, s.StartDate, s.EndDate, s.Status,
+    -- Subconsulta para reviews
+    (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
+      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
+    (SELECT COUNT(DISTINCT r.ReviewID)
+      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
+    FROM Users AS u
+    LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
+    LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
+    LEFT JOIN Media AS m ON u.UserID = m.UserID
+    LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
+    LEFT JOIN (
+      SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
+      MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
+      MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
+      FROM Offerings AS o
+      INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
+      WHERE o.Status = 'Active'
+      GROUP BY o.UserID
+    ) AS sub ON sub.UserID = u.UserID
+    WHERE u.Oauth2ID = ? AND u.Oauth2Service = ?
+    GROUP BY u.UserID
+    ORDER BY u.UserID");
+
+    $stmt->execute([$oAuthID, $oAuthService]);
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (empty($user)) {
+      return false;
+    }
+
+    $user['Floor'] = is_null($user['Floor']) ? null : (int)$user['Floor'];
+    $user['UserLevel'] = !$user['UserLevel'] ? 1 : (int)$user['UserLevel'];
+    $user['ValidatedEmail'] = (bool)$user['ValidatedEmail'];
+    $user['ValidatedPhone'] = (bool)$user['ValidatedPhone'];
+    $user['TwoFactorAuth'] = (bool)$user['TwoFactorAuth'];
+    $user['Categories'] = is_null($user['Categories']) ? [] : array_map(
+      function ($a) {
+        $a = explode(":", $a);
+        return ["Id" => intval($a[0]), "Name" => $a[1]];
+      },
+      explode(",", $user['Categories'])
+    );
+
+    // Agregar sessionType con valores booleanos
+    $user['SessionType'] = [
+      "Virtual" => $user['hasVirtual'] == 1,
+      "InPerson" => $user['hasInPerson'] == 1
+    ];
+    unset($user['hasVirtual'], $user['hasInPerson']);
+
+    // Agregar información histórica de suscripción
+    $user['HistorySubscription'] = is_null($user['PlanID']) ? null : [
+      "LatestPlanID" => (int)$user['PlanID'],
+      "StartDate" => $user['StartDate'],
+      "EndDate" => $user['EndDate'],
+      "Status" => $user['Status'],
+      "UsedTrial" => 'True'
+    ];
+    unset(
+      $user['PlanID'],
+      $user['StartDate'],
+      $user['EndDate'],
+      $user['Status']
+    );
+
+    return $user;
+  }
+
+  /**
+   * Obtiene usuarios filtrados por tipo con paginación
+   * @param  object $paginator: objeto con limit y offset
+   * @param  string $userType: tipo de usuario (Guide, Seeker, Admin)
+   * @return object: { data: [], rows: { total: int, fetched: int } }
+   **/
+  public function getUsersByType($paginator, $userType) {
+    if ($userType == 'Guide') {
       $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName,
       u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
       u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
@@ -32,18 +456,17 @@ class User
       u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
         ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
       u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-      s.PlanID, s.StartDate, sp.Name, sp.Description,
+      s.PlanID, s.StartDate, s.EndDate, s.Status,
       -- Subconsulta para reviews
       (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
         FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
       (SELECT COUNT(DISTINCT r.ReviewID)
         FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
       FROM Users AS u
-      LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
+      LEFT JOIN UsersCategories AS uc ON uc.UserID = u.UserID
       LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
       LEFT JOIN Media AS m ON u.UserID = m.UserID
       LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
-      LEFT JOIN SubscriptionPlans AS sp ON s.PlanID = sp.PlanID
       LEFT JOIN (
         SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
         MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
@@ -53,561 +476,98 @@ class User
         WHERE o.Status = 'Active'
         GROUP BY o.UserID
       ) AS sub ON sub.UserID = u.UserID
+      ORDER BY u.UserID
+      LIMIT ? OFFSET ?");
+
+      $stmt->execute([$paginator->limit, $paginator->offset]);
+    } else {
+      $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName,
+      u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
+      u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
+      u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth, u.UserType,
+      u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
+      u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
+        ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
+      u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
+      s.PlanID, s.StartDate, s.EndDate, s.Status,
+      -- Subconsulta para reviews
+      (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
+        FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
+      (SELECT COUNT(DISTINCT r.ReviewID)
+        FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
+      FROM Users AS u
+      LEFT JOIN UsersCategories AS uc ON uc.UserID = u.UserID
+      LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
+      LEFT JOIN Media AS m ON u.UserID = m.UserID
+      LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
+      LEFT JOIN (
+        SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
+        MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
+        MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
+        FROM Offerings AS o
+        INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
+        WHERE o.Status = 'Active'
+        GROUP BY o.UserID
+      ) AS sub ON sub.UserID = u.UserID
+      WHERE u.UserType = ?
       GROUP BY u.UserID
       ORDER BY u.UserID
-      LIMIT :_limit OFFSET :_offset");
+      LIMIT ? OFFSET ?");
 
-      $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
-      $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
-      $stmt->execute();
+      $stmt->execute([$userType, $paginator->limit, $paginator->offset]);
+    };
 
-      $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
-      $stmt = $this->db->query("SELECT FOUND_ROWS() AS total");
-      $total = $stmt->fetch(PDO::FETCH_ASSOC);
+    $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $stmt = $this->db->query("SELECT FOUND_ROWS() AS total");
+    $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
-      $rs = array_map(function ($e) {
-        $e['Floor'] = is_null($e['Floor']) ? null : (int)$e['Floor'];
-        $e['UserLevel'] = !$e['UserLevel'] ? 1 : (int)$e['UserLevel'];
-        $e['ValidatedEmail'] = (bool)$e['ValidatedEmail'];
-        $e['ValidatedPhone'] = (bool)$e['ValidatedPhone'];
-        $e['TwoFactorAuth'] = (bool)$e['TwoFactorAuth'];
-        $e['Categories'] = is_null($e['Categories']) ? [] : array_map(
-          function ($a) {
-            $a = explode(":", $a);
-            return ["Id" => intval($a[0]), "Name" => $a[1]];
-          },
-          explode(",", $e['Categories'])
-        );
-
-        // Agregar sessionType con valores booleanos
-        $e['SessionType'] = [
-          "Virtual" => $e['hasVirtual'] == 1,
-          "InPerson" => $e['hasInPerson'] == 1
-        ];
-
-        unset($e['hasVirtual'], $e['hasInPerson']);
-
-        // Agregar información de suscripción
-        $e['Subscription'] = is_null($e['PlanID']) ? null : [
-          "PlanID" => (int)$e['PlanID'],
-          "StartDate" => $e['StartDate'],
-          "Name" => $e['Name'],
-          "Description" => $e['Description']
-        ];
-        unset(
-          $e['PlanID'],
-          $e['StartDate'],
-          $e['Name'],
-          $e['Description']
-        );
-
-        return $e;
-      }, $rs);
-
-      return (object) [
-        "data" => $rs,
-        "rows" => [
-          "total" => $total['total'],
-          "fetched" => count($rs)
-        ]
-      ];
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
-  }
-
-  /**
-   * Obtiene un usuario por su ID
-   * @param  int $id: ID del usuario
-   * @return array|null: datos del usuario o null si no existe
-   * @throws DatabaseException
-   **/
-  public function getUserById($id) {
-    try {
-      $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
-      u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
-      u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
-      u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth, u.UserType,
-      u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
-      u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
-        ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
-      u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-      s.PlanID, s.StartDate, s.EndDate, s.Status,
-      -- Subconsulta para reviews
-      (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-        FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
-      (SELECT COUNT(DISTINCT r.ReviewID)
-        FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
-      FROM Users AS u
-      LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
-      LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
-      LEFT JOIN Media AS m ON u.UserID = m.UserID
-      LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
-      LEFT JOIN (
-        SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
-        MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
-        MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
-        FROM Offerings AS o
-        INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
-        WHERE o.Status = 'Active'
-        GROUP BY o.UserID
-      ) AS sub ON sub.UserID = u.UserID
-      WHERE u.UserID = :id
-      GROUP BY u.UserID
-      ORDER BY u.UserID");
-
-      $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-      $stmt->execute();
-      $user = $stmt->fetch(PDO::FETCH_ASSOC);
-
-      if (empty($user)) {
-        return null;
-      }
-
-      $user['Floor'] = is_null($user['Floor']) ? null : (int)$user['Floor'];
-      $user['UserLevel'] = !$user['UserLevel'] ? 1 : (int)$user['UserLevel'];
-      $user['ValidatedEmail'] = (bool)$user['ValidatedEmail'];
-      $user['ValidatedPhone'] = (bool)$user['ValidatedPhone'];
-      $user['TwoFactorAuth'] = (bool)$user['TwoFactorAuth'];
-      $user['Categories'] = is_null($user['Categories']) ? [] : array_map(
+    $rs = array_map(function ($e) {
+      $e['Floor'] = is_null($e['Floor']) ? null : (int)$e['Floor'];
+      $e['UserLevel'] = !$e['UserLevel'] ? 1 : (int)$e['UserLevel'];
+      $e['ValidatedEmail'] = (bool)$e['ValidatedEmail'];
+      $e['ValidatedPhone'] = (bool)$e['ValidatedPhone'];
+      $e['TwoFactorAuth'] = (bool)$e['TwoFactorAuth'];
+      $e['Categories'] = is_null($e['Categories']) ? [] : array_map(
         function ($a) {
           $a = explode(":", $a);
           return ["Id" => intval($a[0]), "Name" => $a[1]];
         },
-        explode(",", $user['Categories'])
+        explode(",", $e['Categories'])
       );
 
       // Agregar sessionType con valores booleanos
-      $user['SessionType'] = [
-        "Virtual" => $user['hasVirtual'] == 1,
-        "InPerson" => $user['hasInPerson'] == 1
+      $e['SessionType'] = [
+        "Virtual" => $e['hasVirtual'] == 1,
+        "InPerson" => $e['hasInPerson'] == 1
       ];
-      unset($user['hasVirtual'], $user['hasInPerson']);
+
+      unset($e['hasVirtual'], $e['hasInPerson']);
 
       // Agregar información histórica de suscripción
-      $user['HistorySubscription'] = is_null($user['PlanID']) ? null : [
-        "LatestPlanID" => (int)$user['PlanID'],
-        "StartDate" => $user['StartDate'],
-        "EndDate" => $user['EndDate'],
-        "Status" => $user['Status'],
-        "UsedTrial" => 'True'
-      ];
-      unset(
-        $user['PlanID'],
-        $user['StartDate'],
-        $user['EndDate'],
-        $user['Status']
-      );
-
-      return $user;
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
-  }
-
-  /**
-   * Obtiene un usuario por username
-   * @param  string $username: nombre de usuario
-   * @return array|null: datos del usuario o null si no existe
-   * @throws DatabaseException
-   **/
-  public function getUserByUserName($username) {
-    try {
-      $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
-      u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
-      u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
-      u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth, u.UserType,
-      u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
-      u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
-        ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
-      u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-      s.PlanID, s.StartDate, s.EndDate, s.Status,
-      -- Subconsulta para reviews
-      (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-        FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
-      (SELECT COUNT(DISTINCT r.ReviewID)
-        FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
-      FROM Users AS u
-      LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
-      LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
-      LEFT JOIN Media AS m ON u.UserID = m.UserID
-      LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
-      LEFT JOIN (
-        SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
-        MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
-        MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
-        FROM Offerings AS o
-        INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
-        WHERE o.Status = 'Active'
-        GROUP BY o.UserID
-      ) AS sub ON sub.UserID = u.UserID
-      WHERE u.UserName = :username
-      GROUP BY u.UserID
-      ORDER BY u.UserID");
-
-      $stmt->bindParam(':username', $username, PDO::PARAM_STR);
-      $stmt->execute();
-
-      $user = $stmt->fetch(PDO::FETCH_ASSOC);
-      if (empty($user)) {
-        return null;
-      }
-
-      $user['Floor'] = is_null($user['Floor']) ? null : (int)$user['Floor'];
-      $user['UserLevel'] = !$user['UserLevel'] ? 1 : (int)$user['UserLevel'];
-      $user['ValidatedEmail'] = (bool)$user['ValidatedEmail'];
-      $user['ValidatedPhone'] = (bool)$user['ValidatedPhone'];
-      $user['TwoFactorAuth'] = (bool)$user['TwoFactorAuth'];
-      $user['Categories'] = is_null($user['Categories']) ? [] : array_map(
-        function ($a) {
-          $a = explode(":", $a);
-          return ["Id" => intval($a[0]), "Name" => $a[1]];
-        },
-        explode(",", $user['Categories'])
-      );
-
-      // Agregar sessionType con valores booleanos
-      $user['SessionType'] = [
-        "Virtual" => $user['hasVirtual'] == 1,
-        "InPerson" => $user['hasInPerson'] == 1
-      ];
-      unset($user['hasVirtual'], $user['hasInPerson']);
-
-      // Agregar información histórica de suscripción
-      $user['HistorySubscription'] = is_null($user['PlanID']) ? null : [
-        "LatestPlanID" => (int)$user['PlanID'],
-        "StartDate" => $user['StartDate'],
-        "EndDate" => $user['EndDate'],
-        "Status" => $user['Status'],
+      $user['HistorySubscription'] = is_null($e['PlanID']) ? null : [
+        "LatestPlanID" => (int)$e['PlanID'],
+        "StartDate" => $e['StartDate'],
+        "EndDate" => $e['EndDate'],
+        "Status" => $e['Status'],
       "UsedTrial" => 'True'
       ];
       unset(
-        $user['PlanID'],
-        $user['StartDate'],
-        $user['EndDate'],
-        $user['Status']
+        $e['PlanID'],
+        $e['StartDate'],
+        $e['EndDate'],
+        $e['Status']
       );
 
-      return $user;
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
-  }
+      return $e;
+    }, $rs);
 
-  /**
-   * Obtiene un usuario por email
-   * @param  string $email: email del usuario
-   * @return array|null: datos del usuario o null si no existe
-   * @throws DatabaseException
-   **/
-  public function getUserByEmail($email) {
-    try {
-      $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
-      u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
-      u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
-      u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth, u.UserType,
-      u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
-      u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
-        ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
-      u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-      s.PlanID, s.StartDate, s.EndDate, s.Status,
-      -- Subconsulta para reviews
-      (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-        FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
-      (SELECT COUNT(DISTINCT r.ReviewID)
-        FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
-      FROM Users AS u
-      LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
-      LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
-      LEFT JOIN Media AS m ON u.UserID = m.UserID
-      LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
-      LEFT JOIN (
-        SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
-        MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
-        MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
-        FROM Offerings AS o
-        INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
-        WHERE o.Status = 'Active'
-        GROUP BY o.UserID
-      ) AS sub ON sub.UserID = u.UserID
-      WHERE u.Email = :email
-      GROUP BY u.UserID
-      ORDER BY u.UserID");
-
-      $stmt->bindParam(':email', $email, PDO::PARAM_STR);
-      $stmt->execute();
-
-      $user = $stmt->fetch(PDO::FETCH_ASSOC);
-      if (empty($user)) {
-        return null;
-      }
-
-      $user['Floor'] = is_null($user['Floor']) ? null : (int)$user['Floor'];
-      $user['UserLevel'] = !$user['UserLevel'] ? 1 : (int)$user['UserLevel'];
-      $user['ValidatedEmail'] = (bool)$user['ValidatedEmail'];
-      $user['ValidatedPhone'] = (bool)$user['ValidatedPhone'];
-      $user['TwoFactorAuth'] = (bool)$user['TwoFactorAuth'];
-      $user['Categories'] = is_null($user['Categories']) ? [] : array_map(
-        function ($a) {
-          $a = explode(":", $a);
-          return ["Id" => intval($a[0]), "Name" => $a[1]];
-        },
-        explode(",", $user['Categories'])
-      );
-
-      // Agregar sessionType con valores booleanos
-      $user['SessionType'] = [
-        "Virtual" => $user['hasVirtual'] == 1,
-        "InPerson" => $user['hasInPerson'] == 1
-      ];
-      unset($user['hasVirtual'], $user['hasInPerson']);
-
-      // Agregar información histórica de suscripción
-      $user['HistorySubscription'] = is_null($user['PlanID']) ? null : [
-        "LatestPlanID" => (int)$user['PlanID'],
-        "StartDate" => $user['StartDate'],
-        "EndDate" => $user['EndDate'],
-        "Status" => $user['Status'],
-      "UsedTrial" => 'True'
-      ];
-      unset(
-        $user['PlanID'],
-        $user['StartDate'],
-        $user['EndDate'],
-        $user['Status']
-      );
-
-      return $user;
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
-  }
-
-  /**
-   * Obtiene un usuario por OAuth ID
-   * @param  string $oAuthID: ID del OAuth
-   * @param  string $oAuthService: servicio OAuth (Google, Facebook, etc)
-   * @return array|null: datos del usuario o null si no existe
-   * @throws DatabaseException
-   **/
-  public function getUserByOAuthID($oAuthID, $oAuthService) {
-    try {
-      $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
-      u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
-      u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
-      u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth, u.UserType,
-      u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
-      u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
-        ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
-      u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-      s.PlanID, s.StartDate, s.EndDate, s.Status,
-      -- Subconsulta para reviews
-      (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-        FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
-      (SELECT COUNT(DISTINCT r.ReviewID)
-        FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
-      FROM Users AS u
-      LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
-      LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
-      LEFT JOIN Media AS m ON u.UserID = m.UserID
-      LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
-      LEFT JOIN (
-        SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
-        MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
-        MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
-        FROM Offerings AS o
-        INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
-        WHERE o.Status = 'Active'
-        GROUP BY o.UserID
-      ) AS sub ON sub.UserID = u.UserID
-      WHERE u.Oauth2ID = :oAuthID AND u.Oauth2Service = :oAuthService
-      GROUP BY u.UserID
-      ORDER BY u.UserID");
-
-      $stmt->bindParam(':oAuthID', $oAuthID, PDO::PARAM_STR);
-      $stmt->bindParam(':oAuthService', $oAuthService, PDO::PARAM_STR);
-      $stmt->execute();
-
-      $user = $stmt->fetch(PDO::FETCH_ASSOC);
-      if (empty($user)) {
-        return null;
-      }
-
-      $user['Floor'] = is_null($user['Floor']) ? null : (int)$user['Floor'];
-      $user['UserLevel'] = !$user['UserLevel'] ? 1 : (int)$user['UserLevel'];
-      $user['ValidatedEmail'] = (bool)$user['ValidatedEmail'];
-      $user['ValidatedPhone'] = (bool)$user['ValidatedPhone'];
-      $user['TwoFactorAuth'] = (bool)$user['TwoFactorAuth'];
-      $user['Categories'] = is_null($user['Categories']) ? [] : array_map(
-        function ($a) {
-          $a = explode(":", $a);
-          return ["Id" => intval($a[0]), "Name" => $a[1]];
-        },
-        explode(",", $user['Categories'])
-      );
-
-      // Agregar sessionType con valores booleanos
-      $user['SessionType'] = [
-        "Virtual" => $user['hasVirtual'] == 1,
-        "InPerson" => $user['hasInPerson'] == 1
-      ];
-      unset($user['hasVirtual'], $user['hasInPerson']);
-
-      // Agregar información histórica de suscripción
-      $user['HistorySubscription'] = is_null($user['PlanID']) ? null : [
-        "LatestPlanID" => (int)$user['PlanID'],
-        "StartDate" => $user['StartDate'],
-        "EndDate" => $user['EndDate'],
-        "Status" => $user['Status'],
-        "UsedTrial" => 'True'
-      ];
-      unset(
-        $user['PlanID'],
-        $user['StartDate'],
-        $user['EndDate'],
-        $user['Status']
-      );
-
-      return $user;
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
-  }
-
-  /**
-   * Obtiene usuarios filtrados por tipo con paginación
-   * @param  object $paginator: objeto con limit y offset
-   * @param  string $userType: tipo de usuario (Guide, Seeker, Admin)
-   * @return object: { data: [], rows: { total: int, fetched: int } }
-   * @throws DatabaseException
-   **/
-  public function getUsersByType($paginator, $userType) {
-    try {
-      if ($userType == 'Guide') {
-        $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName,
-        u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
-        u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
-        u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth, u.UserType,
-        u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
-        u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
-          ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
-        u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-        s.PlanID, s.StartDate, s.EndDate, s.Status,
-        -- Subconsulta para reviews
-        (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-          FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
-        (SELECT COUNT(DISTINCT r.ReviewID)
-          FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
-        FROM Users AS u
-        LEFT JOIN UsersCategories AS uc ON uc.UserID = u.UserID
-        LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
-        LEFT JOIN Media AS m ON u.UserID = m.UserID
-        LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
-        LEFT JOIN (
-          SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
-          MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
-          MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
-          FROM Offerings AS o
-          INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
-          WHERE o.Status = 'Active'
-          GROUP BY o.UserID
-        ) AS sub ON sub.UserID = u.UserID
-        ORDER BY u.UserID
-        LIMIT :_limit OFFSET :_offset");
-      } else {
-        $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName,
-        u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
-        u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
-        u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth, u.UserType,
-        u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
-        u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
-          ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
-        u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-        s.PlanID, s.StartDate, s.EndDate, s.Status,
-        -- Subconsulta para reviews
-        (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-          FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
-        (SELECT COUNT(DISTINCT r.ReviewID)
-          FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
-        FROM Users AS u
-        LEFT JOIN UsersCategories AS uc ON uc.UserID = u.UserID
-        LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
-        LEFT JOIN Media AS m ON u.UserID = m.UserID
-        LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
-        LEFT JOIN (
-          SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
-          MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
-          MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
-          FROM Offerings AS o
-          INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
-          WHERE o.Status = 'Active'
-          GROUP BY o.UserID
-        ) AS sub ON sub.UserID = u.UserID
-        WHERE u.UserType = :userType
-        GROUP BY u.UserID
-        ORDER BY u.UserID
-        LIMIT :_limit OFFSET :_offset");
-        $stmt->bindParam(':userType', $userType, PDO::PARAM_STR);
-      }
-
-      $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
-      $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
-      $stmt->execute();
-
-      $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
-      $stmt = $this->db->query("SELECT FOUND_ROWS() AS total");
-      $total = $stmt->fetch(PDO::FETCH_ASSOC);
-
-      $rs = array_map(function ($e) {
-        $e['Floor'] = is_null($e['Floor']) ? null : (int)$e['Floor'];
-        $e['UserLevel'] = !$e['UserLevel'] ? 1 : (int)$e['UserLevel'];
-        $e['ValidatedEmail'] = (bool)$e['ValidatedEmail'];
-        $e['ValidatedPhone'] = (bool)$e['ValidatedPhone'];
-        $e['TwoFactorAuth'] = (bool)$e['TwoFactorAuth'];
-        $e['Categories'] = is_null($e['Categories']) ? [] : array_map(
-          function ($a) {
-            $a = explode(":", $a);
-            return ["Id" => intval($a[0]), "Name" => $a[1]];
-          },
-          explode(",", $e['Categories'])
-        );
-
-        // Agregar sessionType con valores booleanos
-        $e['SessionType'] = [
-          "Virtual" => $e['hasVirtual'] == 1,
-          "InPerson" => $e['hasInPerson'] == 1
-        ];
-
-        unset($e['hasVirtual'], $e['hasInPerson']);
-
-        // Agregar información histórica de suscripción
-        $user['HistorySubscription'] = is_null($e['PlanID']) ? null : [
-          "LatestPlanID" => (int)$e['PlanID'],
-          "StartDate" => $e['StartDate'],
-          "EndDate" => $e['EndDate'],
-          "Status" => $e['Status'],
-        "UsedTrial" => 'True'
-        ];
-        unset(
-          $e['PlanID'],
-          $e['StartDate'],
-          $e['EndDate'],
-          $e['Status']
-        );
-
-        return $e;
-      }, $rs);
-
-      return (object) [
-        "data" => $rs,
-        "rows" => [
-          "total" => $total['total'],
-          "fetched" => count($rs)
-        ]
-      ];
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
+    return (object) [
+      "data" => $rs,
+      "rows" => [
+        "total" => $total['total'],
+        "fetched" => count($rs)
+      ]
+    ];
   }
 
   /**
@@ -615,256 +575,216 @@ class User
    * @param  object $paginator: objeto con limit y offset
    * @param  int $categoryID: ID de la categoría
    * @return object: { data: [], rows: { total: int, fetched: int } }
-   * @throws DatabaseException
    **/
   public function getUsersByCategory($paginator, $categoryID) {
-    try {
-      $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
-      u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
-      u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
-      u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth, u.UserType,
-      u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
-      u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
-        ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
-      u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-      s.PlanID, s.StartDate, s.EndDate, s.Status,
-      -- Subconsulta para reviews
-      (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-        FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
-      (SELECT COUNT(DISTINCT r.ReviewID)
-        FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
-      FROM Users AS u
-      LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
-      LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
-      LEFT JOIN Media AS m ON u.UserID = m.UserID
-      LEFT JOIN Reviews AS r ON u.UserID = r.GuideID OR u.UserID = r.SeekerID
-      LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
-      LEFT JOIN (
-        SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
-        MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
-        MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
-        FROM Offerings AS o
-        INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
-        WHERE o.Status = 'Active'
-        GROUP BY o.UserID
-      ) AS sub ON sub.UserID = u.UserID
-      WHERE uc.CategoryID = :categoryID AND u.DeactivationDate is null
-      GROUP BY u.UserID
-      ORDER BY u.UserID
-      LIMIT :_limit OFFSET :_offset");
+    $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
+    u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
+    u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
+    u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth, u.UserType,
+    u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
+    u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
+      ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
+    u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
+    s.PlanID, s.StartDate, s.EndDate, s.Status,
+    -- Subconsulta para reviews
+    (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
+      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
+    (SELECT COUNT(DISTINCT r.ReviewID)
+      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
+    FROM Users AS u
+    LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
+    LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
+    LEFT JOIN Media AS m ON u.UserID = m.UserID
+    LEFT JOIN Reviews AS r ON u.UserID = r.GuideID OR u.UserID = r.SeekerID
+    LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
+    LEFT JOIN (
+      SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
+      MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
+      MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
+      FROM Offerings AS o
+      INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
+      WHERE o.Status = 'Active'
+      GROUP BY o.UserID
+    ) AS sub ON sub.UserID = u.UserID
+    WHERE uc.CategoryID = ? AND u.DeactivationDate is null
+    GROUP BY u.UserID
+    ORDER BY u.UserID
+    LIMIT ? OFFSET ?");
 
-      $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
-      $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
-      $stmt->bindParam(':categoryID', $categoryID, PDO::PARAM_INT);
-      $stmt->execute();
+    $stmt->execute([$categoryID, $paginator->limit, $paginator->offset]);
+    $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $stmt = $this->db->query("SELECT FOUND_ROWS() AS total");
+    $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
-      $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
-      $stmt = $this->db->query("SELECT FOUND_ROWS() AS total");
-      $total = $stmt->fetch(PDO::FETCH_ASSOC);
+    $rs = array_map(function ($e) {
+      $e['Floor'] = is_null($e['Floor']) ? null : (int)$e['Floor'];
+      $e['UserLevel'] = !$e['UserLevel'] ? 1 : (int)$e['UserLevel'];
+      $e['ValidatedEmail'] = (bool)$e['ValidatedEmail'];
+      $e['ValidatedPhone'] = (bool)$e['ValidatedPhone'];
+      $e['TwoFactorAuth'] = (bool)$e['TwoFactorAuth'];
+      $e['Categories'] = is_null($e['Categories']) ? [] : array_map(
+        function ($a) {
+          $a = explode(":", $a);
+          return ["Id" => intval($a[0]), "Name" => $a[1]];
+        },
+        explode(",", $e['Categories'])
+      );
 
-      $rs = array_map(function ($e) {
-        $e['Floor'] = is_null($e['Floor']) ? null : (int)$e['Floor'];
-        $e['UserLevel'] = !$e['UserLevel'] ? 1 : (int)$e['UserLevel'];
-        $e['ValidatedEmail'] = (bool)$e['ValidatedEmail'];
-        $e['ValidatedPhone'] = (bool)$e['ValidatedPhone'];
-        $e['TwoFactorAuth'] = (bool)$e['TwoFactorAuth'];
-        $e['Categories'] = is_null($e['Categories']) ? [] : array_map(
-          function ($a) {
-            $a = explode(":", $a);
-            return ["Id" => intval($a[0]), "Name" => $a[1]];
-          },
-          explode(",", $e['Categories'])
-        );
-
-        // Agregar sessionType con valores booleanos
-        $e['SessionType'] = [
-          "Virtual" => $e['hasVirtual'] == 1,
-          "InPerson" => $e['hasInPerson'] == 1
-        ];
-
-        unset($e['hasVirtual'], $e['hasInPerson']);
-
-        // Agregar información histórica de suscripción
-        $user['HistorySubscription'] = is_null($e['PlanID']) ? null : [
-          "LatestPlanID" => (int)$e['PlanID'],
-          "StartDate" => $e['StartDate'],
-          "EndDate" => $e['EndDate'],
-          "Status" => $e['Status'],
-        "UsedTrial" => 'True'
-        ];
-        unset(
-          $e['PlanID'],
-          $e['StartDate'],
-          $e['EndDate'],
-          $e['Status']
-        );
-
-        return $e;
-      }, $rs);
-
-      return (object) [
-        "data" => $rs,
-        "rows" => [
-          "total" => $total['total'],
-          "fetched" => count($rs)
-        ]
+      // Agregar sessionType con valores booleanos
+      $e['SessionType'] = [
+        "Virtual" => $e['hasVirtual'] == 1,
+        "InPerson" => $e['hasInPerson'] == 1
       ];
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
+
+      unset($e['hasVirtual'], $e['hasInPerson']);
+
+      // Agregar información histórica de suscripción
+      $user['HistorySubscription'] = is_null($e['PlanID']) ? null : [
+        "LatestPlanID" => (int)$e['PlanID'],
+        "StartDate" => $e['StartDate'],
+        "EndDate" => $e['EndDate'],
+        "Status" => $e['Status'],
+      "UsedTrial" => 'True'
+      ];
+      unset(
+        $e['PlanID'],
+        $e['StartDate'],
+        $e['EndDate'],
+        $e['Status']
+      );
+
+      return $e;
+    }, $rs);
+
+    return (object) [
+      "data" => $rs,
+      "rows" => [
+        "total" => $total['total'],
+        "fetched" => count($rs)
+      ]
+    ];
   }
 
   /**
    * Obtiene un usuario por su código de referencia
    * @param  string $referralCode: código de referencia
-   * @return array|null: datos del usuario o null si no existe
-   * @throws DatabaseException
+   * @return array|false: datos del usuario o false si no existe
    **/
   public function getUserByRefCode($referralCode) {
-    try {
-      $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
-      u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
-      u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
-      u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth, u.UserType,
-      u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
-      u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
-        ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
-      u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-      s.PlanID, s.StartDate, s.EndDate, s.Status,
-      -- Subconsulta para reviews
-      (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-        FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
-      (SELECT COUNT(DISTINCT r.ReviewID)
-        FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
-      FROM Users AS u
-      LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
-      LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
-      LEFT JOIN Media AS m ON u.UserID = m.UserID
-      LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
-      LEFT JOIN (
-        SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
-        MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
-        MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
-        FROM Offerings AS o
-        INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
-        WHERE o.Status = 'Active'
-        GROUP BY o.UserID
-      ) AS sub ON sub.UserID = u.UserID
-      WHERE u.ReferralCode = :referralCode
-      GROUP BY u.UserID
-      ORDER BY u.UserID");
+    $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
+    u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
+    u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
+    u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth, u.UserType,
+    u.RegistrationDate, u.LastLogin, u.DeactivationDate, u.UserLevel, u.LockedUntil,
+    u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
+      ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
+    u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
+    s.PlanID, s.StartDate, s.EndDate, s.Status,
+    -- Subconsulta para reviews
+    (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
+      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
+    (SELECT COUNT(DISTINCT r.ReviewID)
+      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
+    FROM Users AS u
+    LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
+    LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
+    LEFT JOIN Media AS m ON u.UserID = m.UserID
+    LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
+    LEFT JOIN (
+      SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
+      MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
+      MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
+      FROM Offerings AS o
+      INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
+      WHERE o.Status = 'Active'
+      GROUP BY o.UserID
+    ) AS sub ON sub.UserID = u.UserID
+    WHERE u.ReferralCode = ?
+    GROUP BY u.UserID
+    ORDER BY u.UserID");
 
-      $stmt->bindParam(':referralCode', $referralCode, PDO::PARAM_INT);
-      $stmt->execute();
+    $stmt->execute([$referralCode]);
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-      $user = $stmt->fetch(PDO::FETCH_ASSOC);
-      if (empty($user)) {
-        return null;
-      }
-
-      $user['Floor'] = is_null($user['Floor']) ? null : (int)$user['Floor'];
-      $user['UserLevel'] = !$user['UserLevel'] ? 1 : (int)$user['UserLevel'];
-      $user['ValidatedEmail'] = (bool)$user['ValidatedEmail'];
-      $user['ValidatedPhone'] = (bool)$user['ValidatedPhone'];
-      $user['TwoFactorAuth'] = (bool)$user['TwoFactorAuth'];
-      $user['Categories'] = is_null($user['Categories']) ? [] : array_map(
-        function ($a) {
-          $a = explode(":", $a);
-          return ["Id" => intval($a[0]), "Name" => $a[1]];
-        },
-        explode(",", $user['Categories'])
-      );
-
-      // Agregar sessionType con valores booleanos
-      $user['SessionType'] = [
-        "Virtual" => $user['hasVirtual'] == 1,
-        "InPerson" => $user['hasInPerson'] == 1
-      ];
-      unset($user['hasVirtual'], $user['hasInPerson']);
-
-      // Agregar información histórica de suscripción
-      $user['HistorySubscription'] = is_null($user['PlanID']) ? null : [
-        "LatestPlanID" => (int)$user['PlanID'],
-        "StartDate" => $user['StartDate'],
-        "EndDate" => $user['EndDate'],
-        "Status" => $user['Status'],
-      "UsedTrial" => 'True'
-      ];
-      unset(
-        $user['PlanID'],
-        $user['StartDate'],
-        $user['EndDate'],
-        $user['Status']
-      );
-
-      return $user;
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
+    if (empty($user)) {
+      return false;
     }
+
+    $user['Floor'] = is_null($user['Floor']) ? null : (int)$user['Floor'];
+    $user['UserLevel'] = !$user['UserLevel'] ? 1 : (int)$user['UserLevel'];
+    $user['ValidatedEmail'] = (bool)$user['ValidatedEmail'];
+    $user['ValidatedPhone'] = (bool)$user['ValidatedPhone'];
+    $user['TwoFactorAuth'] = (bool)$user['TwoFactorAuth'];
+    $user['Categories'] = is_null($user['Categories']) ? [] : array_map(
+      function ($a) {
+        $a = explode(":", $a);
+        return ["Id" => intval($a[0]), "Name" => $a[1]];
+      },
+      explode(",", $user['Categories'])
+    );
+
+    // Agregar sessionType con valores booleanos
+    $user['SessionType'] = [
+      "Virtual" => $user['hasVirtual'] == 1,
+      "InPerson" => $user['hasInPerson'] == 1
+    ];
+    unset($user['hasVirtual'], $user['hasInPerson']);
+
+    // Agregar información histórica de suscripción
+    $user['HistorySubscription'] = is_null($user['PlanID']) ? null : [
+      "LatestPlanID" => (int)$user['PlanID'],
+      "StartDate" => $user['StartDate'],
+      "EndDate" => $user['EndDate'],
+      "Status" => $user['Status'],
+    "UsedTrial" => 'True'
+    ];
+    unset(
+      $user['PlanID'],
+      $user['StartDate'],
+      $user['EndDate'],
+      $user['Status']
+    );
+
+    return $user;
   }
 
   /**
    * Obtiene el consentimiento legal más reciente del usuario
    * @param  int $userID: ID del usuario
-   * @return array|null: datos del consentimiento o null
-   * @throws DatabaseException
+   * @return array|false: datos del consentimiento
    **/
   public function latestConsentByUser($userID) {
-    try {
-      $stmt = $this->db->prepare("SELECT * FROM UserLegalConsents
-        WHERE UserID = ?
-        ORDER BY ConsentDate DESC
-        LIMIT 1");
-      $stmt->execute([$userID]);
-
-      return $stmt->fetch(PDO::FETCH_ASSOC);
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
+    $stmt = $this->db->prepare("SELECT * FROM UserLegalConsents
+      WHERE UserID = ? ORDER BY ConsentDate DESC LIMIT 1");
+    return $stmt->execute([$userID]);
   }
 
   /**
    * Obtiene los referidos de un usuario
-   * @param  int $id: ID del usuario
+   * @param  int $userID: ID del usuario
    * @return array: lista de usuarios referidos
-   * @throws DatabaseException
    **/
-  public function referralsByUser ($id) {
-    try {
-      $stmt = $this->db->prepare("SELECT u.UserID, u.DisplayName, u.FirstName, u.LastName, u.RegistrationDate,
-        m.URL AS ProfilePhoto, r.ReferralStatus
-        FROM Referrals AS r
-        LEFT JOIN Users AS u ON u.UserID = r.ReferredUserID
-        LEFT JOIN Media AS m ON u.UserID = m.UserID
-        WHERE r.UserID = :id
-        ORDER BY u.RegistrationDate DESC");
-      $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-      $stmt->execute();
-
-      return $stmt->fetchAll(\PDO::FETCH_ASSOC);
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
+  public function referralsByUser ($userID) {
+    $stmt = $this->db->prepare("SELECT u.UserID, u.DisplayName, u.FirstName,
+      u.LastName, u.RegistrationDate, m.URL AS ProfilePhoto, r.ReferralStatus
+      FROM Referrals AS r
+      LEFT JOIN Users AS u ON u.UserID = r.ReferredUserID
+      LEFT JOIN Media AS m ON u.UserID = m.UserID
+      WHERE r.UserID = ?
+      ORDER BY u.RegistrationDate DESC");
+    $stmt->execute([$userID]);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
   }
 
   /**
    * Obtiene las recompensas de referencia de un usuario
-   * @param  int $id: ID del usuario
+   * @param  int $userID: ID del usuario
    * @return array: lista de recompensas
-   * @throws DatabaseException
    **/
-  public function rewardsByUser($id) {
-    try {
-      $stmt = $this->db->prepare("SELECT * FROM ReferralRewards
-        WHERE UserID = :id");
-      $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-      $stmt->execute();
-
-      return $stmt->fetchAll(\PDO::FETCH_ASSOC);
-
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
+  public function rewardsByUser($userID) {
+    $stmt = $this->db->prepare("SELECT * FROM ReferralRewards WHERE UserID = ?");
+    $stmt->execute([$userID]);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
   }
 
   /**
@@ -873,7 +793,7 @@ class User
    * @param  string $referralCode: código de referencia
    * @param  string $email: email a invitar
    * @param  string $subDomain: subdominio opcional de onesoul.app
-   * @return bool: true si se envió exitosamente, false en caso contrario
+   * @return bool: true si se envió exitosamente, false en caso de excepcion
    **/
   public function inviteByEmail ($userName, $referralCode, $subDomain) {
     // Construir enlace de referido
@@ -911,9 +831,8 @@ class User
       $mail->addEmbeddedImage(ROOT."/src/templates/logo2.png", 'logo');
 
       # Enviar el correo
-      $mail->send();
-      return true;
-    } catch (Exception $e) {
+      return $mail->send();
+    } catch (\Exception $e) {
       return false;
     }
   }
@@ -923,11 +842,13 @@ class User
    * @param  int $userID: ID del usuario a actualizar
    * @param  array $fields: campos a actualizar en formato ["campo = ?", ...]
    * @param  array $data: valores correspondientes a los campos
-   * @return void
+   * @return array: array con datos del usuario actualizado
    * @throws DatabaseException
    **/
   public function updateUser($userID, $currentEmail, $fields, $data) {
     try {
+      $this->db->beginTransaction(); // Iniciar transacción
+
       // Construir la consulta SQL para la actualización
       $sql = "UPDATE Users SET " . implode(", ", $fields) . " WHERE UserID = :UserID";
       $stmt = $this->db->prepare($sql);
@@ -944,12 +865,17 @@ class User
       // Si cambio el mail se marca el email como no validado
       if (isset($data['Email'])) {
         if ($data['Email'] !== $currentEmail) {
-          $stmt2 = $this->db->prepare("UPDATE Users SET ValidatedEmail = 0 WHERE UserID = ?");
+          $stmt = $this->db->prepare("UPDATE Users SET ValidatedEmail = 0 WHERE UserID = ?");
           // Vincular el ID del usuario
-          $stmt2->execute([$userID]); // Ejecutar la consulta
+          $stmt->execute([$userID]); // Ejecutar la consulta
         }
       }
-    } catch (\PDOException $e) {
+      $user = $this->getUserById($userID);
+
+      $this->db->commit(); // Confirmo transacción
+      return $user;
+    } catch (PDOException $e) {
+      $this->db->rollBack(); // Revierto en caso de error
       throw new DatabaseException($e->getMessage());
     }
   }
@@ -957,16 +883,10 @@ class User
   /**
    * Desactiva un usuario estableciendo fecha de desactivación
    * @param  int $userID: ID del usuario a desactivar
-   * @return void
-   * @throws DatabaseException
    **/
   public function disableUser($userID) {
-    try {
-      $stmt = $this->db->prepare("UPDATE Users SET DeactivationDate = ? WHERE UserID = ?");
-      $stmt->execute([date('Y-m-d H:i:s'), $userID]);
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
+    $stmt = $this->db->prepare("UPDATE Users SET DeactivationDate = ? WHERE UserID = ?");
+    $stmt->execute([date('Y-m-d H:i:s'), $userID]);
   }
 
   /**
@@ -974,23 +894,24 @@ class User
    * @param  int $userID: ID del usuario
    * @param  string $fileURL: URL de la imagen optimizada
    * @param  string $filePath: ruta local del archivo
-   * @return bool: true si se actualizó exitosamente
-   * @throws DatabaseException
+   * @return array: array con datos del usuario actualizado
+   * @throws Exception
    **/
   public function updateProfilePhoto($userID, $fileURL, $filePath) {
     try {
       // Buscar si ya existe foto de perfil
       $stmt = $this->db->prepare("SELECT MediaID, Path FROM Media WHERE UserID = ? LIMIT 1");
+
       $stmt->execute([$userID]);
       $oldMedia = $stmt->fetch(PDO::FETCH_ASSOC);
+      $stmt->closeCursor();
 
-      // Iniciar transacción
-      $this->db->beginTransaction();
+      $this->db->beginTransaction(); // Iniciar transacción
 
       if ($oldMedia) {
         // ACTUALIZAR media existente
-        $stmt2 = $this->db->prepare("UPDATE Media SET `URL` = ?, `Path` = ? WHERE UserID = ?");
-        $stmt2->execute([$fileURL, $filePath, $userID]);
+        $stmt = $this->db->prepare("UPDATE Media SET `URL` = ?, `Path` = ? WHERE UserID = ?");
+        $stmt->execute([$fileURL, $filePath, $userID]);
 
         // Borrar archivo anterior si existe
         $oldPath = $oldMedia['Path'];
@@ -999,62 +920,60 @@ class User
         }
       } else {
         // INSERTAR nuevo media
-        $stmt2 = $this->db->prepare("INSERT INTO Media (`URL`, `Path`, `UserID`) VALUES (?, ?, ?)");
-        $stmt2->execute([$fileURL, $filePath, $userID]);
+        $stmt = $this->db->prepare("INSERT INTO Media (`URL`, `Path`, `UserID`) VALUES (?, ?, ?)");
+        $stmt->execute([$fileURL, $filePath, $userID]);
       }
-      $this->db->commit();
-      return true;
-    } catch (\PDOException $e) {
-      $this->db->rollBack();
-      // Borrar archivo si la transacción falla
-      if (!empty($filePath) && file_exists($filePath)) {
-        unlink($filePath);
-      }
-      throw new DatabaseException("Error updating profile photo: " . $e->getMessage());
+      $user = $this->getUserById($userID);
+
+      $this->db->commit(); // Confirmo transacción
+      return $user;
     } catch (\Exception $e) {
-      $this->db->rollBack();
+      $this->db->rollBack(); // Revierto en caso de error
       if (!empty($filePath) && file_exists($filePath)) {
         unlink($filePath);
       }
-      throw new Exception("Error updating profile photo: " . $e->getMessage());
+      throw new \Exception($e->getMessage());
     }
   }
 
   /**
    * Elimina la foto de perfil de un usuario
    * @param  int $userID: ID del usuario
-   * @return bool: true si se eliminó exitosamente, false si no existe foto
+   * @return array: array con datos del usuario actualizado
+   * @return bool: false si no existe foto
    * @throws Exception
    **/
   public function deleteProfilePhoto($userID) {
     try {
       # Seleccionar el MediaID para eliminar la entrada
-      $stmt = $this->db->prepare("SELECT m.MediaID, m.URL, m.Path FROM Media AS m WHERE m.UserID = ?");
+      $stmt = $this->db->prepare("SELECT m.MediaID, m.URL, m.Path
+        FROM Media AS m WHERE m.UserID = ?");
+
       $stmt->execute([$userID]);
       $profilePhoto = $stmt->fetch(PDO::FETCH_ASSOC);
+      $mediaID = $profilePhoto['MediaID'];
 
-      if (empty($profilePhoto['MediaID'])) {
+      if (empty($mediaID)) {
         return false;
       }
 
-      // Iniciar transacción
-      $this->db->beginTransaction();
+      $this->db->beginTransaction(); // Iniciar transacción
 
       # Eliminar la entrada en la tabla Media
-      $stmt2 = $this->db->prepare("DELETE FROM Media WHERE MediaID = ?");
-      $stmt2->execute([$profilePhoto['MediaID']]);
+      $stmt = $this->db->prepare("DELETE FROM Media WHERE MediaID = ?");
+      $stmt->execute([$mediaID]);
 
       # Si existe el archivo local lo borro
       if (!is_null($profilePhoto['Path']) && file_exists($profilePhoto['Path'])) {
         unlink($profilePhoto['Path']); // Eliminar el archivo del sistema
       }
+      $user = $this->getUserById($userID);
 
-      // Confirmo transacción
-      $this->db->commit();
-      return true;
-    } catch (Exception $e) {
+      $this->db->commit(); // Confirmo transacción
+      return $user;
+    } catch (\Exception $e) {
       $this->db->rollBack(); // Revierto en caso de error
-      throw new Exception($e->getMessage());
+      throw new \Exception($e->getMessage());
     }
   }
 
@@ -1064,39 +983,29 @@ class User
    * @return array: lista de CategoryIDs
    **/
   public function getUserCategories($userID) {
-    $query = "SELECT CategoryID FROM UsersCategories WHERE UserID = :userId";
-    $stmt = $this->db->prepare($query);
-    $stmt->bindParam(':userId', $userID, PDO::PARAM_INT);
-    $stmt->execute();
-    return $stmt->fetchAll(\PDO::FETCH_ASSOC);
+    $stmt = $this->db->prepare("SELECT CategoryID FROM UsersCategories WHERE UserID = ?");
+    $stmt->execute([$userID]);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
   }
 
   /**
    * Agrega una categoría a un usuario
    * @param  int $userID: ID del usuario
-   * @param  int $categoryId: ID de la categoría
-   * @return void
+   * @param  int $categoryID: ID de la categoría
    **/
-  public function addUserCategory($userID, $categoryId) {
-    $query = "INSERT INTO UsersCategories (UserID, CategoryID) VALUES (:userId, :categoryId)";
-    $stmt = $this->db->prepare($query);
-    $stmt->bindParam(':userId', $userID, PDO::PARAM_INT);
-    $stmt->bindParam(':categoryId', $categoryId, PDO::PARAM_INT);
-    $stmt->execute();
+  public function addUserCategory($userID, $categoryID) {
+    $stmt = $this->db->prepare("INSERT INTO UsersCategories (UserID, CategoryID) VALUES (?, ?)");
+    $stmt->execute([$userID, $categoryID]);
   }
 
   /**
    * Elimina una categoría de un usuario
    * @param  int $userID: ID del usuario
-   * @param  int $categoryId: ID de la categoría
-   * @return void
+   * @param  int $categoryID: ID de la categoría
    **/
-  public function deleteUserCategory($userID, $categoryId) {
-    $query = "DELETE FROM UsersCategories WHERE UserID = :userId AND CategoryID = :categoryId";
-    $stmt = $this->db->prepare($query);
-    $stmt->bindParam(':userId', $userID, PDO::PARAM_INT);
-    $stmt->bindParam(':categoryId', $categoryId, PDO::PARAM_INT);
-    $stmt->execute();
+  public function deleteUserCategory($userID, $categoryID) {
+    $stmt = $this->db->prepare("DELETE FROM UsersCategories WHERE UserID = ? AND CategoryID = ?");
+    $stmt->execute([$userID, $categoryID]);
   }
 
   /**
@@ -1105,8 +1014,9 @@ class User
    **/
   public function getActiveSocialAccountsTypes() {
     $stmt = $this->db->prepare("SELECT SocialAccountTypeID, Name FROM SocialAccountsTypes WHERE IsActive = 1");
+
     $stmt->execute();
-    $result = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+    $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     $types = [];
     foreach ($result as $row) {
@@ -1125,15 +1035,15 @@ class User
    * @return array: lista de cuentas sociales con SocialAccountID, SocialAccountTypeID, Name, AccountName
    **/
   public function getUserSocialAccounts($userID) {
-    $query = "SELECT sma.SocialAccountID, sma.SocialAccountTypeID, LOWER(TRIM(smt.Name)) as Name, sma.AccountName
+    $stmt = $this->db->prepare("SELECT sma.SocialAccountID, sma.SocialAccountTypeID,
+      LOWER(TRIM(smt.Name)) as Name, sma.AccountName
       FROM SocialAccounts AS sma
       INNER JOIN SocialAccountsTypes AS smt
-        ON sma.SocialAccountTypeID = smt.SocialAccountTypeID
-      WHERE sma.UserID = ? AND sma.IsActive = 1";
+      ON sma.SocialAccountTypeID = smt.SocialAccountTypeID
+      WHERE sma.UserID = ? AND sma.IsActive = 1");
 
-    $stmt = $this->db->prepare($query);
     $stmt->execute([$userID]);
-    return $stmt->fetchAll(\PDO::FETCH_ASSOC);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
   }
 
   /**
@@ -1141,16 +1051,11 @@ class User
    * @param  int $userID: ID del usuario
    * @param  int $typeID: ID del tipo de red social
    * @param  string $accountName: URL o nombre de cuenta de la red social
-   * @return void
    **/
   public function addUserSocialAccount($userID, $typeID, $accountName) {
-  $query = "INSERT INTO SocialAccounts (UserID, SocialAccountTypeID, AccountName, IsActive)
-            VALUES (:userID, :typeID, :accountName, 1)";
-    $stmt = $this->db->prepare($query);
-    $stmt->bindParam(':userID', $userID, PDO::PARAM_INT);
-    $stmt->bindParam(':typeID', $typeID, PDO::PARAM_INT);
-    $stmt->bindParam(':accountName', $accountName, PDO::PARAM_STR);
-    $stmt->execute();
+    $stmt = $this->db->prepare("INSERT INTO SocialAccounts (UserID, SocialAccountTypeID, AccountName, IsActive)
+      VALUES (?, ?, ?, 1)");
+    $stmt->execute([$userID, $typeID, $accountName]);
   }
 
   /**
@@ -1158,12 +1063,10 @@ class User
    * @param  int $userID: ID del usuario
    * @param  int $typeID: ID del tipo de red social
    * @param  string $accountName: nuevo URL o nombre de cuenta
-   * @return void
    **/
   public function updateUserSocialAccount($userID, $typeID, $accountName) {
-    $query = "UPDATE SocialAccounts SET AccountName = ?
-      WHERE UserID = ? AND SocialAccountTypeID = ?";
-    $stmt = $this->db->prepare($query);
+    $stmt = $this->db->prepare("UPDATE SocialAccounts SET AccountName = ?
+      WHERE UserID = ? AND SocialAccountTypeID = ?");
     $stmt->execute([$accountName, $userID, $typeID]);
   }
 
@@ -1171,12 +1074,10 @@ class User
    * Elimina una cuenta social de un usuario
    * @param  int $userID: ID del usuario
    * @param  int $typeID: ID del tipo de red social
-   * @return void
    **/
   public function deleteUserSocialAccount($userID, $typeID) {
-    $query = "DELETE FROM SocialAccounts
-      WHERE UserID = ? AND SocialAccountTypeID = ?";
-    $stmt = $this->db->prepare($query);
+    $stmt = $this->db->prepare("DELETE FROM SocialAccounts
+      WHERE UserID = ? AND SocialAccountTypeID = ?");
     $stmt->execute([$userID, $typeID]);
   }
 
@@ -1185,14 +1086,11 @@ class User
    * @param  string $name: nombre de la red social (twitter, instagram, etc)
    * @param  string $url: URL o username a formatear
    * @return string: URL formateada correctamente
-   * @throws Exception si el tipo de red social no es válido
    **/
   public function formatSocialUrl($name, $url) {
-    $query = "SELECT * FROM SocialAccountsTypes
-              WHERE Name = :name";
-    $stmt = $this->db->prepare($query);
-    $stmt->bindParam(':name', $name, PDO::PARAM_STR);
-    $stmt->execute();
+    $stmt = $this->db->prepare("SELECT * FROM SocialAccountsTypes WHERE Name = ?");
+
+    $stmt->execute([$name]);
     $socialurl = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$socialurl) {

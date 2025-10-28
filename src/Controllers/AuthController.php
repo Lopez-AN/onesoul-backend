@@ -35,6 +35,7 @@ class AuthController{
   */
   public function login(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
+
     $email = $data['Email'] ?? null;
     $userName = $data['UserName'] ?? null;
     $password = $data['Password'] ?? null;
@@ -42,6 +43,16 @@ class AuthController{
     $mfaCode = $data['MfaCode'] ?? null;
     $recaptchaToken = $data['RecaptchaToken'] ?? null;
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
+
+    // Verificar si es un array/object válido
+    if (!is_array($data) && !is_object($data)) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_JSON",
+          "desc" => "Request body must be valid JSON"
+        ]
+      ]);
+    }
 
     // Validar credenciales básicas
     if(($email === null && $userName === null) || $password === null || $recaptchaToken === null){
@@ -192,13 +203,12 @@ class AuthController{
         // 1. Validar JWT contra las claves públicas de Facebook
         $oAuthResponse = $this->_validateFacebookJWT($jwtToken);
         if ($oAuthResponse === false) {
-          return (object)[
-            "http_code" => 401,
+          return $response->withStatus(403)->withJson([
             "error" => [
               "code" => "SSO_INVALID_TOKEN",
               "desc" => "Invalid Facebook JWT token"
             ]
-          ];
+          ]);
         }
 
         # Me traigo el ID de facebook
@@ -668,13 +678,12 @@ class AuthController{
         // 1. Validar JWT contra las claves públicas de Facebook
         $decoded = $this->_validateFacebookJWT($jwtToken);
         if ($decoded === false) {
-          return (object)[
-            "http_code" => 401,
+          return $response->withStatus(401)->withJson([
             "error" => [
               "code" => "SSO_INVALID_TOKEN",
               "desc" => "Invalid Facebook JWT token"
             ]
-          ];
+          ]);
         }
 
         # Me traigo el ID de facebook
@@ -1087,22 +1096,20 @@ class AuthController{
       $this->redis->setex("otp:{$email}", 86400, json_encode($otpData));
       return $response->withStatus(200)->withJson("OTP code validated successfully");
     } catch (\Throwable $e) {
-      return (object)[
-        "http_code" => 500,
+      return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
           "desc" => $e->getMessage()
         ]
-      ];
+      ]);
     }
   }
 
   /* Validacion OTP email contra la base para usuarios registrados */
   private function _validateOTP($response, $userID, $otpCode) {
     $validation = $this->_validateOtpCode($response, $userID, $otpCode);
-
-    if (!$validation['valid']) {
-      return $validation['response'];
+    if (!$validation->valid) {
+      return $validation->response;
     }
 
     $this->auth->clearUserOtp($userID);
@@ -1153,8 +1160,8 @@ class AuthController{
 
       // Validar OTP - si falla, retorna el error
       $validation = $this->_validateOtpCode($response, $userID, $otpCode);
-      if (!$validation['valid']) {
-        return $validation['response'];
+      if (!$validation->valid) {
+        return $validation->response;
       }
 
       // Si llegamos aquí, el OTP es válido
@@ -1170,7 +1177,7 @@ class AuthController{
 
   /**
    * Valida un código OTP genérico
-   * Retorna un array con ['valid' => bool, 'response' => Response|null]
+   * Retorna un objeto con ['valid' => bool, 'response' => Response|null]
    * Si es válido, retorna ['valid' => true, 'response' => null]
    * Si es inválido, retorna ['valid' => false, 'response' => Response con error]
    */
@@ -1180,9 +1187,9 @@ class AuthController{
       $user = $this->auth->getUserOtp($userID);
 
       if (empty($user)) {
-        return [
-          'valid' => false,
-          'response' => $response->withStatus(404)->withJson([
+        return (object)[
+          "valid" => false,
+          "response" => $response->withStatus(404)->withJson([
             "error" => [
               "code" => "USER_NOT_FOUND",
               "desc" => "No user was found with the specified Id."
@@ -1192,9 +1199,9 @@ class AuthController{
       }
 
       if (is_null($user['OTPCode'])) {
-        return [
-          'valid' => false,
-          'response' => $response->withStatus(400)->withJson([
+        return (object)[
+          "valid" => false,
+          "response" => $response->withStatus(400)->withJson([
             "error" => [
               "code" => "OTP_CODE_NOT_FOUND",
               "desc" => "OTP code is not set. Please request a new OTP."
@@ -1210,9 +1217,9 @@ class AuthController{
 
       if ($interval_in_seconds > $otpExptime) {
         $this->auth->clearUserOtp($userID);
-        return [
-          'valid' => false,
-          'response' => $response->withStatus(400)->withJson([
+        return (object)[
+          "valid" => false,
+          "response" => $response->withStatus(400)->withJson([
             "error" => [
               "code" => "EXPIRED_OTP",
               "desc" => "OTP has expired. Please request a new OTP."
@@ -1228,9 +1235,9 @@ class AuthController{
         // Verificar si ya ha alcanzado el límite de intentos fallidos
         if ($this->auth->getUserOtpAttempts($userID) > 3) {
           $this->auth->clearUserOtp($userID);
-          return [
-            'valid' => false,
-            'response' => $response->withStatus(401)->withJson([
+          return (object)[
+            "valid" => false,
+            "response" => $response->withStatus(401)->withJson([
               "error" => [
                 "code" => "OTP_MAX_ATTEMPTS",
                 "desc" => "Maximum OTP attempts reached. Please request a new OTP."
@@ -1239,9 +1246,9 @@ class AuthController{
           ];
         }
 
-        return [
-          'valid' => false,
-          'response' => $response->withStatus(401)->withJson([
+        return (object)[
+          "valid" => false,
+          "response" => $response->withStatus(401)->withJson([
             "error" => [
               "code" => "OTP_CODE_INVALID",
               "desc" => "Invalid OTP code"
@@ -1250,8 +1257,7 @@ class AuthController{
         ];
       }
 
-      return ['valid' => true, 'response' => null];
-
+      return (object)["valid" => true, "response" => null];
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
@@ -1544,7 +1550,9 @@ class AuthController{
   }
 
   public function mfaCheck(Request $request, Response $response, $args){
+    $code = $args['code'];
     $jwt = $request->getAttribute('jwt');
+
     if(!isset($jwt['data']) || !property_exists($jwt['data'],'UserID')){
       return $response->withStatus(400)->withJson([
         "error" => [
@@ -1553,9 +1561,7 @@ class AuthController{
         ]
       ]);
     }
-
     $userID = $jwt['data'] -> UserID;
-    $code = $args['code'];
 
     if(empty($code) || !is_numeric($code)){
       return $response->withStatus(400)->withJson([
@@ -1567,13 +1573,20 @@ class AuthController{
     }
 
     try{
+      $mfa = $this->auth->getMfa($userID);
+      if($mfa){
+        // Verifico el OTP
+        $validation = $this -> _mfaCheck($mfa);
+        if(!$validation->valid){
+          return $validation->response;
+        }
+      }
+
       $result = $this->auth->mfaCheck($userID, $code);
       if($result -> http_code != 200){
         return $response->withStatus($result->http_code)->withJson($result);
       }
-      return $response->withStatus(200)->withJson([
-        "Message" => "MFA Verified"
-      ]);
+      return $response->withStatus(200)->withJson("MFA Verified");
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -1583,6 +1596,47 @@ class AuthController{
       ]);
     }
   }
+
+  private function _mfaCheck($response, $mfa){
+    $secret = $mfa['MfaSecret'];
+    $g2fa = new \PragmaRX\Google2FA\Google2FA();
+
+    if (!$g2fa->verifyKey($secret, $code)) {
+      // Incrementar intentos fallidos y actualizar bloqueo si es necesario
+      $failedAttempts = $mfa['FailedLoginAttempts'] + 1;
+      $lockTime = $this->auth->calculateLockTime($failedAttempts);
+
+      $this->auth->updateFailedLogin($userID, $failedAttempts, $lockTime);
+
+      if ($lockTime !== null) {
+        return (object)[
+          "valid" => false,
+          "response" => $response->withStatus(403)->withJson([
+            "error" => [
+              "code" => "MFA_MAX_ATTEMPTS",
+              "desc" => "Maximum MFA attempts reached. Account is now locked."
+            ]
+          ])
+        ];
+      }
+
+      return (object)[
+        "valid" => false,
+        "response" => $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "INVALID_MFA_CODE",
+            "desc" => "Cannot verify provided MFA code"
+          ]
+        ])
+      ];
+    }
+
+    // MFA verificado, resetear intentos fallidos y bloqueo
+    $this->auth->updateFailedLogin($userID, 0, null);
+
+    return (object)["valid" => true, "response" => null];
+  }
+
 
   # Generador de token JWT
   private function JWTgen($user){
@@ -1603,7 +1657,18 @@ class AuthController{
   }
 
   public function uploadLegalDocuments(Request $request, Response $response, $args) {
+    $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
+
+    // Verificar si es un array/object válido
+    if (!is_array($data) && !is_object($data)) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_JSON",
+          "desc" => "Request body must be valid JSON"
+        ]
+      ]);
+    }
 
     if(!isset($jwt['data']) || !property_exists($jwt['data'],'UserID')){
       return $response->withStatus(400)->withJson([
@@ -1614,7 +1679,6 @@ class AuthController{
       ]);
     }
 
-    $data = $request->getParsedBody();
     $userType = $jwt['data']->UserType;
 
     // Validar permisos
@@ -1643,11 +1707,8 @@ class AuthController{
     $content = is_array($data['Content']) ? json_encode($data['Content'], JSON_UNESCAPED_UNICODE) : $data['Content'];
 
     try {
-
       $consent = $this->auth->uploadLegalDocuments($type, $version, $releaseDate, $content);
-
       return $response->withStatus(200)->withJson($consent);
-
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [

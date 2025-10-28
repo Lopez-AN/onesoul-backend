@@ -617,7 +617,7 @@ class Subscription {
   */
   public function applyScheduledChange($changeId, $effectiveDate = null) {
     try {
-      $this->db->beginTransaction();
+      $this->db->beginTransaction(); // Iniciar transacción
 
       // bloquear y leer el cambio
       $stmt = $this->db->prepare("SELECT * FROM SubscriptionChanges WHERE id = :id FOR UPDATE");
@@ -668,7 +668,7 @@ class Subscription {
       }
 
       // aplicar ahora (comportamiento previo) + registrar en SubscriptionChanges como APPLIED
-      $this->db->beginTransaction();
+      $this->db->beginTransaction(); // Iniciar transacción
 
       // obtener suscripción actual para oldPlanID
       $current = $this->getUserSubscriptionByPlatformSubID($platformSubscriptionID);
@@ -705,7 +705,7 @@ class Subscription {
         ]);
       }
 
-      $this->db->commit();
+      $this->db->commit(); // Confirmo transacción
 
       if ($affected === 0) {
         error_log("Warning: updateSubscriptionByUser no afectó filas para PlatformSubscriptionID={$platformSubscriptionID}.
@@ -715,7 +715,7 @@ class Subscription {
       $subscription = $this->getUserSubscriptionByPlatformSubID($platformSubscriptionID);
       return ['Subscription' => $subscription];
     } catch (\PDOException $e) {
-      $this->db->rollBack();
+      $this->db->rollBack(); // Revierto en caso de error
       throw new DatabaseException($e->getMessage());
     }
   }

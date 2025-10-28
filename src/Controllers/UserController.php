@@ -63,10 +63,10 @@ class UserController{
    * @statusCode 500: error del servidor
    **/
   public function getUserById(Request $request, Response $response, $args) {
-    $id = $args['id'];
+    $userID = $args['id'];
 
     try {
-      $result = $this->user->getUserById($id);
+      $result = $this->user->getUserById($userID);
       if(!$result){
         return $response->withStatus(404)->withJson([
           "error" => [
@@ -249,9 +249,9 @@ class UserController{
    * @statusCode 500: error del servidor
    **/
   public function latestConsentByUser(Request $request, Response $response, $args) {
-    $id = $args['id'];
+    $userID = $args['id'];
     try {
-      $result = $this->user->latestConsentByUser($id);
+      $result = $this->user->latestConsentByUser($userID);
 
       if (!$result) {
         return $response->withStatus(404)->withJson([
@@ -286,10 +286,10 @@ class UserController{
    * @statusCode 500: error del servidor
    **/
   public function referralsByUser(Request $request, Response $response, $args) {
-    $id = $args['id'];
+    $userID = $args['id'];
     $jwt = $request->getAttribute('jwt');
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'IsAdmin')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -299,7 +299,7 @@ class UserController{
     }
 
     # Verificar si el usuario autenticado es el mismo o si es un administrador
-    if ($jwt['data']->UserID != $id && $jwt['data']->UserType != 'Admin') {
+    if ($jwt['data']->UserID != $userID && !$jwt['data']->IsAdmin) {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
@@ -309,7 +309,7 @@ class UserController{
     }
 
     try {
-      $result = $this->user->referralsByUser($id);
+      $result = $this->user->referralsByUser($userID);
       if (empty($result)) {
         return $response->withStatus(404)->withJson([
           "error" => [
@@ -343,10 +343,10 @@ class UserController{
    * @statusCode 500: error del servidor
    **/
   public function rewardsByUser(Request $request, Response $response, $args) {
-    $id = $args['id'];
+    $userID = $args['id'];
     $jwt = $request->getAttribute('jwt');
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'IsAdmin')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -356,7 +356,7 @@ class UserController{
     }
 
     # Verificar si el usuario autenticado es el mismo o si es un administrador
-    if ($jwt['data']->UserID != $id && $jwt['data']->UserType != 'Admin') {
+    if ($jwt['data']->UserID != $userID && !$jwt['data']->IsAdmin) {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
@@ -366,7 +366,7 @@ class UserController{
     }
 
     try {
-      $result = $this->user->rewardsByUser($id);
+      $result = $this->user->rewardsByUser($userID);
       if (empty($result)) {
         return $response->withStatus(404)->withJson([
           "error" => [
@@ -401,10 +401,6 @@ class UserController{
   public function inviteByEmail(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
-    $email = $data['Email'] ?? null;
-    $recaptchaToken = $data['RecaptchaToken'] ?? null;
-    $subDomain = $data['SubDomain'] ?? '';
-    $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
     // Verificar si es un array/object válido
     if (!is_array($data) && !is_object($data)) {
@@ -416,7 +412,7 @@ class UserController{
       ]);
     }
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -424,6 +420,11 @@ class UserController{
         ]
       ]);
     }
+
+    $email = $data['Email'] ?? null;
+    $recaptchaToken = $data['RecaptchaToken'] ?? null;
+    $subDomain = $data['SubDomain'] ?? '';
+    $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
     // Validación de parámetros
     if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL) || empty($recaptchaToken)) {
@@ -474,7 +475,6 @@ class UserController{
         ]);
       }
       return $response->withStatus(200)->withJson("Invite email sent successfully");
-
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -513,7 +513,7 @@ class UserController{
       ]);
     }
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'IsAdmin')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -523,7 +523,7 @@ class UserController{
     }
 
     # Verificar si el usuario autenticado es el mismo que el que se intenta modificar, o si es un administrador
-    if ($jwt['data']->UserID != $userID && $jwt['data']->UserType != 'Admin') {
+    if ($jwt['data']->UserID != $userID && !$jwt['data']->IsAdmin) {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
@@ -531,6 +531,10 @@ class UserController{
         ]
       ]);
     }
+
+    $email = $data['Email'] ?? null;
+    $biography = $data['Biography'] ?? null;
+    $shortDescription = $data['ShortDescription'] ?? null;
 
     $user = $this->user->getUserById($userID);
     if (empty($user)) {
@@ -581,8 +585,8 @@ class UserController{
     }
 
     // Valido que no se repita el email
-    if(!empty($data['Email'])){
-      $user = $this->user->getUserByEmail($data['Email']);
+    if(!empty($email)){
+      $user = $this->user->getUserByEmail($email);
       if($user && $user['UserID'] != $userID){
         return $response->withStatus(409)->withJson([
           "error" => [
@@ -595,23 +599,21 @@ class UserController{
 
     try {
       // Valida contenido con Perspective API
-      if(!empty($data['Biography']) && $this->_containsInappropriateContent($data['Biography'])) {
+      if(!empty($biography) && $this->_containsInappropriateContent($biography)) {
         return $response->withStatus(400)->withJson([
           "code" => "INAPPROPRIATE_CONTENT",
             "desc" => "Please remove inappropriate content and try again."
         ]);
       }
 
-      if (!empty($data['ShortDescription']) && $this->_containsInappropriateContent($data['ShortDescription'])) {
+      if (!empty($shortDescription) && $this->_containsInappropriateContent($shortDescription)) {
         return $response->withStatus(400)->withJson([
           "code" => "INAPPROPRIATE_CONTENT",
             "desc" => "Please remove inappropriate content and try again."
         ]);
       }
 
-      $this->user->updateUser($userID, $user['Email'], $fields, $data);
-      // Devolver los datos actualizados del usuario
-      $user = $this->user->getUserById($userID);
+      $user = $this->user->updateUser($userID, $user['Email'], $fields, $data);
 
       # --- Sincronizar con Stripe si corresponde ---
       $subscription = $this->subscription->getSubscriptionByUser($userID);
@@ -687,7 +689,7 @@ class UserController{
     $userID = $args['id'];
     $jwt = $request->getAttribute('jwt');
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'IsAdmin')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -697,7 +699,7 @@ class UserController{
     }
 
     # Verificar si el usuario autenticado es el mismo que el que se intenta modificar, o si es un administrador
-    if ($jwt['data']->UserID != $userID && $jwt['data']->UserType != 'Admin') {
+    if ($jwt['data']->UserID != $userID && !$jwt['data']->IsAdmin) {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
@@ -755,7 +757,7 @@ class UserController{
     $userID = $args['id'];
     $jwt = $request->getAttribute('jwt');
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'IsAdmin')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -764,7 +766,7 @@ class UserController{
       ]);
     }
 
-    if ($jwt['data']->UserID != $userID && $jwt['data']->UserType != 'Admin') {
+    if ($jwt['data']->UserID != $userID && !$jwt['data']->IsAdmin) {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
@@ -865,9 +867,7 @@ class UserController{
       $fileURL = $GLOBALS['config']['media_folder']['url'] . "/user/" . $imgID . ".webp";
 
       // Pasar los datos al modelo
-      $this->user->updateProfilePhoto($userID, $fileURL, $optimizedPath);
-
-      $updatedUser = $this->user->getUserById($userID);
+      $updatedUser = $this->user->updateProfilePhoto($userID, $fileURL, $optimizedPath);
       if (!$updatedUser) {
         return $response->withStatus(500)->withJson([
           "error" => [
@@ -904,7 +904,7 @@ class UserController{
     $userID = $args['id'];
     $jwt = $request->getAttribute('jwt');
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'IsAdmin')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -914,7 +914,7 @@ class UserController{
     }
 
     # Verificar si el usuario autenticado es el mismo que el que se intenta modificar, o si es un administrador
-    if ($jwt['data']->UserID != $userID && $jwt['data']->UserType != 'Admin') {
+    if ($jwt['data']->UserID != $userID && !$jwt['data']->IsAdmin) {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
@@ -933,7 +933,7 @@ class UserController{
           ]
         ]);
       }
-      return $response->withStatus(200)->withJson("Profile photo deleted");
+      return $response->withStatus(200)->withJson($result);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -960,7 +960,6 @@ class UserController{
     $userID = $args['id'];
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
-    $categories = $data['Categories'] ?? [];
 
     // Verificar si es un array/object válido
     if (!is_array($data) && !is_object($data)) {
@@ -972,16 +971,7 @@ class UserController{
       ]);
     }
 
-    if (!is_array($data['Categories'])) {
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "INVALID_REQUEST",
-          "desc" => "Categories must be an array"
-        ]
-      ]);
-    }
-
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'IsAdmin')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -991,7 +981,7 @@ class UserController{
     }
 
     # Verificar si el usuario autenticado es el mismo que el que se intenta modificar, o si es un administrador
-    if ($jwt['data']->UserID != $userID && $jwt['data']->UserType != 'Admin') {
+    if ($jwt['data']->UserID != $userID && !$jwt['data']->IsAdmin) {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
@@ -1000,6 +990,7 @@ class UserController{
       ]);
     }
 
+    $categories = $data['Categories'] ?? null;
     if (!is_array($categories)) {
       return $response->withStatus(400)->withJson([
         "error" => [
@@ -1011,12 +1002,12 @@ class UserController{
 
     try {
       // Obtener todas las categorías válidas de una sola vez
-      $validCategories = $this->category->getCategoriesByIds($data['Categories']);
+      $validCategories = $this->category->getCategoriesByIds($categories);
 
       // Comparar cantidad: si no coinciden, hay IDs inválidos
-      if (count($validCategories) !== count($data['Categories'])) {
+      if (count($validCategories) !== count($categories)) {
         $validIds = array_column($validCategories, 'CategoryID');
-        $invalidIds = array_diff($data['Categories'], $validIds);
+        $invalidIds = array_diff($categories, $validIds);
 
         return $response->withStatus(400)->withJson([
           "error" => [
@@ -1087,7 +1078,7 @@ class UserController{
       ]);
     }
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'IsAdmin')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -1096,7 +1087,7 @@ class UserController{
       ]);
     }
 
-    if ($jwt['data']->UserID != $userID && $jwt['data']->UserType != 'Admin') {
+    if ($jwt['data']->UserID != $userID && !$jwt['data']->IsAdmin) {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
