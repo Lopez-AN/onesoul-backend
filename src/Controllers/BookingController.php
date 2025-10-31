@@ -2,6 +2,8 @@
 
 namespace App\Controllers;
 
+use Exception;
+use Throwable;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use App\Models\Booking;
@@ -9,7 +11,7 @@ use App\Models\Offering;
 use App\Models\Notification;
 use App\Models\User;
 use App\Utils\EmailHelper;
-use \DateTime;
+use DateTime;
 use Firebase\JWT\JWT;
 
 require_once(ROOT . '/src/Utils/PerspectiveText.php');

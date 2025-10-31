@@ -2,6 +2,8 @@
 
 namespace App\Controllers;
 
+use Exception;
+use Throwable;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use App\Models\Donation;
@@ -9,13 +11,11 @@ use App\Models\Offering;
 
 require_once(ROOT . '/src/Utils/Paginator.php');
 
-class DonationController
-{
+class DonationController {
   protected $donation;
   protected $offering;
 
-  public function __construct(Donation $donation, Offering $offering)
-  {
+  public function __construct(Donation $donation, Offering $offering) {
     $this->donation = $donation;
     $this->offering = $offering;
   }
@@ -26,9 +26,18 @@ class DonationController
     $jwt = $request->getAttribute('jwt');
     $paginator = paginator($request);
 
-    # Verificar si el usuario autenticado es el mismo que el que consulta o un administrador
-    if ($jwt['data']->UserID != $userID && $jwt['data']->UserType != 'Admin') {
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'IsAdmin')) {
       return $response->withStatus(401)->withJson([
+        "error" => [
+          "code" => "INVALID_TOKEN",
+          "desc" => "Invalid JWT token"
+        ]
+      ]);
+    }
+
+    # Verificar si el usuario autenticado es el mismo o si es un administrador
+    if ($jwt['data']->UserID != $userID && !$jwt['data']->IsAdmin) {
+      return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
           "desc" => "You do not have permission to access other guide donations"
@@ -55,9 +64,19 @@ class DonationController
     $jwt = $request->getAttribute('jwt');
     $paginator = paginator($request);
 
-    # Verificar si el usuario autenticado es el mismo que el que consulta o un administrador
-    if ($jwt['data']->UserID != $userID && $jwt['data']->UserType != 'Admin') {
+
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'IsAdmin')) {
       return $response->withStatus(401)->withJson([
+        "error" => [
+          "code" => "INVALID_TOKEN",
+          "desc" => "Invalid JWT token"
+        ]
+      ]);
+    }
+
+    # Verificar si el usuario autenticado es el mismo que el que consulta o un administrador
+    if ($jwt['data']->UserID != $userID && !$jwt['data']->IsAdmin) {
+      return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
           "desc" => "You do not have permission to access other guide donations"
@@ -84,7 +103,7 @@ class DonationController
     $jwt = $request->getAttribute('jwt');
 
     $userID = $jwt['data']->UserID;
-    $isAdmin = $jwt['data']->UserType === 'Admin';
+    $isAdmin = $jwt['data']->IsAdmin;
 
     try {
       $donation = $this->donation->getDonationById($voucherID, $userID, $isAdmin);
@@ -114,7 +133,6 @@ class DonationController
       ]);
     }
   }
-
 
   # Obtiene una donacion por redeemCode
   public function validateCoupon(Request $request, Response $response, $args) {
@@ -176,7 +194,19 @@ class DonationController
   # Crea una o varias donaciones
   public function createDonation(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
+    $jwt = $request->getAttribute('jwt');
     $paginator = paginator($request);
+
+    // Verificar si el body es un array/object válido
+    if (!is_array($data) && !is_object($data)) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_JSON",
+          "desc" => "Request body must be valid JSON"
+        ]
+      ]);
+    }
+
 
     $offeringID = $data['OfferingID'] ?? null;
     $quantity = $data['Quantity'] ?? null;
@@ -189,7 +219,6 @@ class DonationController
       ]);
     }
 
-    $jwt = $request->getAttribute('jwt');
     # Solo los guias pueden crear donaciones
     if ($jwt['data']->UserType != 'Guide') {
       return $response->withStatus(401)->withJson([
@@ -267,7 +296,7 @@ class DonationController
       ]);
     }
     $userID = $jwt['data']->UserID;
-    $isAdmin = $jwt['data']->UserType === 'Admin';
+    $isAdmin = $jwt['data']->IsAdmin;
 
     # Ahora busco si no supero el límite de donaciones
     try {
@@ -312,26 +341,37 @@ class DonationController
   # Cancela una donacion
   public function raffleCoupons(Request $request, Response $response, $args) {
     $quantity = $args['quantity'];
-    try{
-      $jwt = $request->getAttribute('jwt');
-      # Solo los administradores pueden sortear crear donaciones
-      // if ($jwt['data']->UserType != 'Admin') { // DEBUG (comentado por ahora)
-      //   return $response->withStatus(401)->withJson([
-      //     "error" => [
-      //       "code" => "UNAUTHORIZED",
-      //       "desc" => "Only administrators can raffle coupons"
-      //     ]
-      //   ]);
-      // }
-      if($quantity < 1 || $quantity > 1000){
-        return $response->withStatus(400)->withJson([
-          "error" => [
-            "code" => "INVALID_RAFFLE_QUANTITY",
-            "desc" => "Quantity must be in 1-1000 range"
-          ]
-        ]);
-      }
+    $jwt = $request->getAttribute('jwt');
 
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'IsAdmin')) {
+      return $response->withStatus(401)->withJson([
+        "error" => [
+          "code" => "INVALID_TOKEN",
+          "desc" => "Invalid JWT token"
+        ]
+      ]);
+    }
+
+    # Verificar si el usuario autenticado es el mismo o si es un administrador
+    if ($jwt['data']->UserID != $userID && !$jwt['data']->IsAdmin) {
+      return $response->withStatus(403)->withJson([
+        "error" => [
+          "code" => "UNAUTHORIZED",
+          "desc" => "You do not have permission to view the referrals of this user."
+        ]
+      ]);
+    }
+
+    if($quantity < 1 || $quantity > 1000){
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_RAFFLE_QUANTITY",
+          "desc" => "Quantity must be in 1-1000 range"
+        ]
+      ]);
+    }
+
+    try{
       $result = $this->donation->raffleCoupons($quantity);
       return $response->withJson($result);
     } catch (\Throwable $e) {

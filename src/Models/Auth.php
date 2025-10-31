@@ -3,9 +3,10 @@
 namespace App\Models;
 
 use PDO;
+use PDOException;
 use App\Exceptions\DatabaseException;
+use Exception;
 use PHPMailer\PHPMailer\PHPMailer;
-use \DateTime;
 use Predis\Client as RedisClient;
 
 class Auth{
@@ -45,7 +46,7 @@ class Auth{
    * @return array: ['total' => cantidad de documentos encontrados]
    **/
   public function checkLegalDocuments($tycVersion, $privacyVersion){
-    // Verificar que las versiones legales existan en la base de datos
+    # Verificar que las versiones legales existan en la base de datos
     $stmt = $this->db->prepare("SELECT COUNT(*) as total FROM LegalDocuments
       WHERE (DocumentType = 'TermsAndConditions' AND Version = ?)
         OR (DocumentType = 'PrivacyPolicy' AND Version = ?)");
@@ -70,21 +71,21 @@ class Auth{
     $tycVersion, $privacyVersion, $receiveNewsletters, $clientIp, $userAgent
   ){
     try {
-      $this->db->beginTransaction(); // Iniciar transacción
+      $this->db->beginTransaction(); # Iniciar transacción
 
       # Creo el usuario con los datos basicos
       $stmt = $this->db->prepare("INSERT INTO Users (Email, UserName, PasswordHash, RegistrationDate, ValidatedEmail)
       VALUES (?,?,?,?,1)");
       $stmt->execute([$email, $userName, $passwordHash, date('YmdHis')]);
 
-      // Obtener el ID del usuario creado
+      # Obtener el ID del usuario creado
       $userID = $this->db->lastInsertId();
 
-      // Insertar recibir novedades si eligio esta opcion
+      # Insertar recibir novedades si eligio esta opcion
       $stmt = $this->db->prepare("INSERT INTO UserSettings (UserID, ReceiveNewsletters) VALUES (?, ?)");
       $stmt->execute([$userID, $receiveNewsletters]);
 
-      // Insertar consentimiento
+      # Insertar consentimiento
       $stmt = $this->db->prepare("INSERT INTO UserLegalConsents
         (UserID, UserIP, UserAgent, Version, DocumentType, Accepted)
         VALUES (?, ?, ?, ?, 'TermsAndConditions', 1)");
@@ -95,11 +96,11 @@ class Auth{
         VALUES (?, ?, ?, ?, 'PrivacyPolicy', 1)");
       $stmt->execute([$userID, $clientIp, $userAgent, $privacyVersion]);
 
-      $this->db->commit(); // Confirmo transacción
+      $this->db->commit(); # Confirmo transacción
 
       return $userID;
-    } catch (\PDOException $e) {
-      $this->db->rollBack(); // Revierto en caso de error
+    } catch (PDOException $e) {
+      $this->db->rollBack(); # Revierto en caso de error
       throw new DatabaseException($e->getMessage());
     }
   }
@@ -125,7 +126,7 @@ class Auth{
     $tycVersion, $privacyVersion, $receiveNewsletters, $clientIp, $userAgent
   ){
     try {
-      $this->db->beginTransaction(); // Iniciar transacción
+      $this->db->beginTransaction(); # Iniciar transacción
 
       # Creo el usuario con los datos basicos
       $stmt = $this->db->prepare("INSERT INTO Users (Email, FirstName, LastName, UserName,
@@ -133,13 +134,13 @@ class Auth{
       VALUES (?,?,?,?,?,?,?,1)");
       $stmt->execute([$email, $firstName, $lastName, $userName, date('YmdHis'), $oAuthID, $oAuthService]);
 
-      $userID = $this->db->lastInsertId(); // Obtener el ID del usuario creado
+      $userID = $this->db->lastInsertId(); # Obtener el ID del usuario creado
 
-      // Insertar recibir novedades si eligio esta opcion
+      # Insertar recibir novedades si eligio esta opcion
       $stmt = $this->db->prepare("INSERT INTO UserSettings (UserID, ReceiveNewsletters) VALUES (?, ?)");
       $stmt->execute([$userID, $receiveNewsletters]);
 
-      // Insertar consentimiento
+      # Insertar consentimiento
       $stmt = $this->db->prepare("INSERT INTO UserLegalConsents
         (UserID, UserIP, UserAgent, Version, DocumentType, Accepted)
         VALUES (?, ?, ?, ?, 'TermsAndConditions', 1)");
@@ -156,11 +157,11 @@ class Auth{
         $stmt->execute([$userID, $picture]);
       }
 
-      $this->db->commit(); // Confirmo transacción
+      $this->db->commit(); # Confirmo transacción
 
       return $userID;
-    } catch (\PDOException $e) {
-      $this->db->rollBack(); // Revierto en caso de error
+    } catch (PDOException $e) {
+      $this->db->rollBack(); # Revierto en caso de error
       throw new DatabaseException($e->getMessage());
     }
   }
@@ -196,14 +197,14 @@ class Auth{
    **/
   public function handleReferralReward($referrerUserID, $newUserID) {
     try {
-      $this->db->beginTransaction(); // Iniciar transacción
+      $this->db->beginTransaction(); # Iniciar transacción
 
-      // Insertar el referral como pendiente
+      # Insertar el referral como pendiente
       $stmt = $this->db->prepare("INSERT INTO Referrals (UserID, ReferredUserID, ReferralStatus)
         VALUES (?, ?, 'Pending')");
       $stmt->execute([$referrerUserID, $newUserID]);
 
-      // Contar la cantidad de referidos pendientes + usados
+      # Contar la cantidad de referidos pendientes + usados
       $countStmt = $this->db->prepare("SELECT COUNT(*) as total
         FROM Referrals
         WHERE UserID = ?");
@@ -213,14 +214,14 @@ class Auth{
       $rewardTriggered = false;
 
       if ($count >= 5) {
-        // Marcar 5 referidos como usados
+        # Marcar 5 referidos como usados
         $updateStmt = $this->db->prepare("UPDATE Referrals
           SET UpdatedAt = NOW(), ReferralStatus = 'Redeemed'
           WHERE UserID = ? AND ReferralStatus = 'Pending'
           LIMIT 5");
         $updateStmt->execute([$referrerUserID]);
 
-        // Insertar recompensa
+        # Insertar recompensa
         $rewardStmt = $this->db->prepare("INSERT INTO ReferralRewards (UserID, RewardType, RewardAmount)
           VALUES (?, 'SubscriptionMonth', 1)");
         $rewardStmt->execute([$referrerUserID]);
@@ -228,10 +229,10 @@ class Auth{
         $rewardTriggered = true;
       }
 
-      $this->db->commit(); // Confirmo transacción
+      $this->db->commit(); # Confirmo transacción
       return $rewardTriggered;
-    } catch (\PDOException $e) {
-      $this->db->rollBack(); // Revierto en caso de error
+    } catch (PDOException $e) {
+      $this->db->rollBack(); # Revierto en caso de error
       throw new DatabaseException($e->getMessage());
     }
   }
@@ -303,11 +304,11 @@ class Auth{
    * @param  string $clientIp: IP del cliente
    **/
   public function storeBrowserData($userID, $request, $newMfaId, $clientIp) {
-    // Obtener información del navegador desde el encabezado User-Agent
+    # Obtener información del navegador desde el encabezado User-Agent
     $userAgent = $request->getHeader('User-Agent')[0];
     $parser = new \WhichBrowser\Parser($userAgent);
 
-    // Detalles del navegador y del dispositivo
+    # Detalles del navegador y del dispositivo
     $browser = $parser->browser->getName();
     $version = $parser->browser->getVersion();
     $os = $parser->os->getName();
@@ -315,7 +316,7 @@ class Auth{
     $ip = $clientIp;
     $expiry = date('Y-m-d H:i:s', strtotime('+90 days'));
 
-    // Insertar los datos del navegador en la tabla UserBrowser
+    # Insertar los datos del navegador en la tabla UserBrowser
     $stmt = $this->db->prepare("
       INSERT INTO UserBrowser (UserID, MfaID, Browser, Version, Os, Device, IP, Expiry)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -414,17 +415,53 @@ class Auth{
     $otpCode = rand(100000, 999999); # Codigo que se enviara por mail
     $hashedOtp = password_hash((string)$otpCode, PASSWORD_BCRYPT); # Hasheo el OTP code
 
-    // Json que guardo en redis
+    # Json que guardo en redis
     $otpData = [
       'otp_hash' => $hashedOtp,
-      'attempts' => 0, // Contador de intentos
-      'validated' => false, // Indica si ya se valido el email
+      'attempts' => 0, # Contador de intentos
+      'validated' => false, # Indica si ya se valido el email
       'created_at' => time(),
-      'expires_at' => time() + $GLOBALS['config']['otp_exptime'] // Expiracion
+      'expires_at' => time() + $GLOBALS['config']['otp_exptime'] # Expiracion
     ];
 
     $this->redis->setex("otp:{$email}", 86400, json_encode($otpData));
     return $this -> _sendOtpMail($email, $otpCode);
+  }
+
+  /**
+   * Incrementa el contador de intentos fallidos de validación OTP
+   * @param  int $userID: ID del usuario
+   **/
+  public function incrementUserOtpAttempts($userID) {
+    # Incrementar el contador de intentos fallidos
+    $stmt = $this->db->prepare("UPDATE Users SET OTPAttemps = IFNULL(OTPAttemps, 0) + 1
+      WHERE UserID = ?");
+    $stmt->execute([$userID]);
+  }
+
+  /**
+   * Obtiene el número de intentos fallidos de validación OTP
+   * @param  int $userID: ID del usuario
+   * @return int: cantidad de intentos fallidos (0 si no hay)
+   **/
+  public function getUserOtpAttempts($userID) {
+    # Obtener el número de intentos fallidos
+    $stmt = $this->db->prepare("SELECT OTPAttemps FROM Users WHERE UserID = ?");
+    $stmt->execute([$userID]);
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    return $user ? ($user['OTPAttemps'] ?? 0) : 0;
+  }
+
+  /**
+   * Limpia datos OTP de un usuario
+   * @param  int $userID: ID del usuario
+   **/
+  public function clearUserOtp($userID) {
+    # Resetear el OTP y el contador de intentos fallidos
+    $stmt = $this->db->prepare("UPDATE Users SET OTPCode = NULL, OTPDate = NULL, OTPAttemps = NULL
+    WHERE UserID = ?");
+    $stmt->execute([$userID]);
   }
 
   /**
@@ -473,45 +510,9 @@ class Auth{
       # Enviar el correo
       $mail->send();
       return true;
-    } catch (\Exception $e) {
+    } catch (Exception $e) {
       return false;
     }
-  }
-
-  /**
-   * Incrementa el contador de intentos fallidos de validación OTP
-   * @param  int $userID: ID del usuario
-   **/
-  public function incrementUserOtpAttempts($userID) {
-    # Incrementar el contador de intentos fallidos
-    $stmt = $this->db->prepare("UPDATE Users SET OTPAttemps = IFNULL(OTPAttemps, 0) + 1
-      WHERE UserID = ?");
-    $stmt->execute([$userID]);
-  }
-
-  /**
-   * Obtiene el número de intentos fallidos de validación OTP
-   * @param  int $userID: ID del usuario
-   * @return int: cantidad de intentos fallidos (0 si no hay)
-   **/
-  public function getUserOtpAttempts($userID) {
-    # Obtener el número de intentos fallidos
-    $stmt = $this->db->prepare("SELECT OTPAttemps FROM Users WHERE UserID = ?");
-    $stmt->execute([$userID]);
-    $user = $stmt->fetch(PDO::FETCH_ASSOC);
-
-    return $user ? ($user['OTPAttemps'] ?? 0) : 0;
-  }
-
-  /**
-   * Limpia datos OTP de un usuario
-   * @param  int $userID: ID del usuario
-   **/
-  public function clearUserOtp($userID) {
-    # Resetear el OTP y el contador de intentos fallidos
-    $stmt = $this->db->prepare("UPDATE Users SET OTPCode = NULL, OTPDate = NULL, OTPAttemps = NULL
-    WHERE UserID = ?");
-    $stmt->execute([$userID]);
   }
 }
 

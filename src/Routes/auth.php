@@ -16,7 +16,7 @@ return function (App $app) {
 
   $optionalJwtMiddleware = new OptionalJwtMiddleware($jwtMiddleware);
 
-  // Obtener PDO del contenedor DI
+  # Obtener PDO del contenedor DI
   $pdo = $app->getContainer()->get('pdo');
   $redis = $app->getContainer()->get('redis'); # Base de datos en RAM
   $user = new User($pdo);
@@ -27,9 +27,12 @@ return function (App $app) {
   $app->post('/login', [$authController, 'login']);
   $app->post('/login/facebook', [$authController, 'loginFacebook']);
   $app->post('/login/google', [$authController, 'loginGoogle']);
+  $app->post('/login/apple', [$authController, 'loginApple']);
+  $app->post('/auth/apple/callback', [$authController, 'appleLoginCallback']);
   $app->post('/register', [$authController, 'register']);
   $app->post('/register/facebook', [$authController, 'registerFacebook']);
   $app->post('/register/google', [$authController, 'registerGoogle']);
+  $app->post('/register/apple', [$authController, 'registerApple']);
   $app->post('/register/otp', [$authController, 'validateOTP'])->add($optionalJwtMiddleware);
   $app->post('/register/send_otp_mail', [$authController, 'sendOtpMail'])->add($optionalJwtMiddleware);
   $app->post('/recaptcha', [$authController, 'validateReCaptcha']);
@@ -42,8 +45,4 @@ return function (App $app) {
   $app->get('/auth/mfa_check/{code}', [$authController, 'mfaCheck'])->add($jwtMiddleware);
   $app->post('/legal', [$authController, 'uploadLegalDocuments'])->add($jwtMiddleware);
   $app->get('/legal', [$authController, 'legalDocuments']);
-  $app->post('/auth/apple/callback', [$authController, 'appleLoginCallback']);
-  $app->post('/register/apple', [$authController, 'registerApple']);
-  $app->post('/login/apple', [$authController, 'loginApple']);
-  $app->post('/test/apple', [$authController, 'validate']);
 };

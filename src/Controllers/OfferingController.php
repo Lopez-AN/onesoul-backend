@@ -127,9 +127,21 @@ class OfferingController {
   }
 
   public function createOffering(Request $request, Response $response, $args)  {
+    $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+    // Verificar si el body es un array/object válido
+    if (!is_array($data) && !is_object($data)) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_JSON",
+          "desc" => "Request body must be valid JSON"
+        ]
+      ]);
+    }
+
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')
+      || !property_exists($jwt['data'], 'UserType')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -138,9 +150,16 @@ class OfferingController {
       ]);
     }
 
+    # Verificar si el usuario autenticado es un Guia o un administrador
+    if ($jwt['data']->UserType != 'Guide') {
+      return $response->withStatus(403)->withJson([
+        "error" => [
+          "code" => "UNAUTHORIZED",
+          "desc" => "You don't have permission to create offerings."
+        ]
+      ]);
+    }
     $userID = $jwt['data']->UserID;
-
-    $data = $request->getParsedBody();
 
     $data['UserID'] = $userID;
     $data['SKU'] = null;
@@ -148,16 +167,6 @@ class OfferingController {
     $data['ServiceType'] = 'Service';
 
     try {
-      # Verificar si el usuario autenticado es un Guia o un administrador
-      if ($jwt['data']->UserType != 'Guide' && $jwt['data']->UserType != 'Admin') {
-        return $response->withStatus(401)->withJson([
-          "error" => [
-            "code" => "UNAUTHORIZED",
-            "desc" => "You don't have permission to create offerings."
-          ]
-        ]);
-      }
-
       // Validación de contenido inapropiado
       if((!empty($data['Title']) && $this->containsInappropriateContent($data['Title'])) ||
         (!empty($data['Description']) && $this->containsInappropriateContent($data['Description'])) ||
@@ -210,7 +219,8 @@ class OfferingController {
     $id = $args['id'];
     $jwt = $request->getAttribute('jwt');
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')
+      || !property_exists($jwt['data'], 'IsAdmin')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -218,6 +228,17 @@ class OfferingController {
         ]
       ]);
     }
+
+    # Verificar que el usuario sea admin
+    if (!$jwt['data']->IsAdmin) {
+      return $response->withStatus(403)->withJson([
+        "error" => [
+          "code" => "UNAUTHORIZED",
+          "desc" => "You do not have permission to approve this offering"
+        ]
+      ]);
+    }
+
 
     try {
       $result = $this->offering->getOfferingById($id);
@@ -230,16 +251,6 @@ class OfferingController {
         ]);
       }
       $offeringData = $result->data;
-
-      // Verificar que el token contenga UserType y sea un administrador
-      if ($jwt['data']->UserType !== 'Admin') {
-        return $response->withStatus(401)->withJson([
-          "error" => [
-            "code" => "UNAUTHORIZED",
-            "desc" => "You do not have permission to approve this offering"
-          ]
-        ]);
-      }
 
       // Verificar que el offering no esté eliminado
       if ($offeringData['Status'] === 'Deleted') {
@@ -269,10 +280,22 @@ class OfferingController {
   }
 
   public function updateOffering(Request $request, Response $response, $args)  {
-    $jwt = $request->getAttribute('jwt');
     $id = $args['id'];
+    $data = $request->getParsedBody();
+    $jwt = $request->getAttribute('jwt');
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+    // Verificar si el body es un array/object válido
+    if (!is_array($data) && !is_object($data)) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_JSON",
+          "desc" => "Request body must be valid JSON"
+        ]
+      ]);
+    }
+
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')
+      || !property_exists($jwt['data'], 'IsAdmin')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -281,9 +304,16 @@ class OfferingController {
       ]);
     }
 
+    // Verificar si el usuario autenticado es el mismo que el que se intenta crear, o si es un administrador
+    if ($offeringData['UserID'] != $userID && !$jwt['data']->IsAdmin) {
+      return $response->withStatus(403)->withJson([
+        "error" => [
+          "code" => "UNAUTHORIZED",
+          "desc" => "You don't have permission to modify this offering."
+        ]
+      ]);
+    }
     $userID = $jwt['data']->UserID;
-
-    $data = $request->getParsedBody();
 
     try {
       $result = $this->offering->getOfferingById($id);
@@ -296,16 +326,6 @@ class OfferingController {
         ]);
       }
       $offeringData = $result->data;
-
-      // Verificar si el usuario autenticado es el mismo que el que se intenta crear, o si es un administrador
-      if ($offeringData['UserID'] != $userID && $jwt['data']->UserType != 'Admin') {
-        return $response->withStatus(401)->withJson([
-          "error" => [
-            "code" => "UNAUTHORIZED",
-            "desc" => "You don't have permission to modify this offering."
-          ]
-        ]);
-      }
 
       // Validación de contenido inapropiado
       if((!empty($data['Title']) && $this->containsInappropriateContent($data['Title'])) ||
@@ -363,7 +383,8 @@ class OfferingController {
     $id = $args['id'];
     $jwt = $request->getAttribute('jwt');
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')
+      || !property_exists($jwt['data'], 'IsAdmin')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -372,27 +393,24 @@ class OfferingController {
       ]);
     }
 
+    // Verificar si el usuario autenticado es el mismo que creo el offering o un admin
+    if ($offeringData['UserID'] != $userID && !$jwt['data']->IsAdmin) {
+      return $response->withStatus(403)->withJson([
+        "error" => [
+          "code" => "UNAUTHORIZED",
+          "desc" => "You don't have permission to modify this offering."
+        ]
+      ]);
+    }
     $userID = $jwt['data']->UserID;
-    $data = $request->getParsedBody();
 
     try {
-      $result = $this->offering->getOfferingById($id);
-      if ($result->http_code != 200) {
+      $offeringData = $this->offering->getOfferingById($id);
+      if (!$offeringData) {
         return $response->withStatus(404)->WithJson([
           "error" => [
             "code" => "OFFERING_NOT_FOUND",
             "desc"=> "No Offering found for this specific ID."
-          ]
-        ]);
-      }
-      $offeringData = $result->data;
-
-      // Verificar si el usuario autenticado es el mismo que el que se intenta crear, o si es un administrador
-      if ($offeringData['UserID'] != $userID && $jwt['data']->UserType != 'Admin') {
-        return $response->withStatus(401)->withJson([
-          "error" => [
-            "code" => "UNAUTHORIZED",
-            "desc" => "You don't have permission to modify this offering."
           ]
         ]);
       }
@@ -426,11 +444,20 @@ class OfferingController {
   {
     $id = $args['id']; // ID de offering
     $position = $args['position']; // Posicion del archivo multimedia
-
+    $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
-    $userID = $jwt['data']->UserID;
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+    // Verificar si el body es un array/object válido
+    if (!is_array($data) && !is_object($data)) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_JSON",
+          "desc" => "Request body must be valid JSON"
+        ]
+      ]);
+    }
+
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -438,6 +465,7 @@ class OfferingController {
         ]
       ]);
     }
+    $userID = $jwt['data']->UserID;
 
     try {
       // Verificar que el offering existe
@@ -453,8 +481,8 @@ class OfferingController {
       $offeringData = $result->data;
 
       // Verificar permisos
-      if ($offeringData['UserID'] != $userID && $jwt['data']->UserType != 'Admin') {
-        return $response->withStatus(401)->withJson([
+      if ($offeringData['UserID'] != $userID) {
+        return $response->withStatus(403)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
             "desc" => "You do not have permission to modify this offering"
@@ -508,8 +536,6 @@ class OfferingController {
         ]);
       }
 
-      // Obtener datos del cuerpo de la petición
-      $data = $request->getParsedBody();
       $title = $data['Title'];
       $description = $data['Description'] ?? null;
 
@@ -570,11 +596,20 @@ class OfferingController {
     $id = $args['id']; // ID de offering
     $mediaID = $args['mediaID']; // ID del archivo de medios
     $position = $args['position']; // Posicion del archivo multimedia
-
+    $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
-    $userID = $jwt['data']->UserID;
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+    // Verificar si el body es un array/object válido
+    if (!is_array($data) && !is_object($data)) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_JSON",
+          "desc" => "Request body must be valid JSON"
+        ]
+      ]);
+    }
+
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -582,6 +617,7 @@ class OfferingController {
         ]
       ]);
     }
+    $userID = $jwt['data']->UserID;
 
     try {
       // Verificar que el offering existe
@@ -598,7 +634,7 @@ class OfferingController {
       $offeringData = $result->data;
 
       // Verificar permisos
-      if ($offeringData['UserID'] != $userID && $jwt['data']->UserType != 'Admin') {
+      if ($offeringData['UserID'] != $userID) {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
@@ -640,8 +676,6 @@ class OfferingController {
         }
       }
 
-      // Obtener datos del cuerpo de la petición
-      $data = $request->getParsedBody();
       $title = $data['Title'];
       $description = $data['Description'] ?? null;
 
@@ -783,7 +817,8 @@ class OfferingController {
     $jwt = $request->getAttribute('jwt');
     $userID = $jwt['data']->UserID;
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')
+      || !property_exists($jwt['data'], 'IsAdmin')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -804,9 +839,9 @@ class OfferingController {
       }
       $offeringData = $result->data;
 
-      // Verificar si el usuario autenticado es el mismo que el que se intenta crear, o si es un administrador
-      if ($offeringData['UserID'] != $userID && $jwt['data']->UserType != 'Admin') {
-        return $response->withStatus(401)->withJson([
+      // Verificar si el usuario autenticado es el mismo que creo el offering o un admin
+      if ($offeringData['UserID'] != $userID && !$jwt['data']->IsAdmin) {
+        return $response->withStatus(403)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
             "desc" => "You do not have permission to modify this user"

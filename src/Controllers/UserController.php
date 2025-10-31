@@ -2,6 +2,8 @@
 
 namespace App\Controllers;
 
+use Exception;
+use Throwable;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use App\Models\User;
@@ -42,7 +44,7 @@ class UserController{
     try {
       $users = $this->user->getUsers($paginator);
       return $response->withStatus(200)->withJson($users);
-    } catch (\Throwable $e) {
+    } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
@@ -76,7 +78,7 @@ class UserController{
         ]);
       }
       return $response->withStatus(200)->withJson($result);
-    } catch (\Throwable $e) {
+    } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
@@ -109,7 +111,7 @@ class UserController{
         ]);
       }
       return $response->withStatus(200)->withJson($result);
-    } catch (\Throwable $e) {
+    } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
@@ -142,7 +144,7 @@ class UserController{
         ]);
       }
       return $response->withStatus(200)->withJson($result);
-    } catch (\Throwable $e) {
+    } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
@@ -168,7 +170,7 @@ class UserController{
     try {
       $users = $this->user->getUsersByType($paginator, $type);
       return $response->withStatus(200)->withJson($users);
-    } catch (\Throwable $e) {
+    } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
@@ -194,7 +196,7 @@ class UserController{
     try {
       $result = $this->user->getUsersByCategory($paginator, $categoryID);
       return $response->withStatus(200)->withJson($result);
-    } catch (\Throwable $e) {
+    } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
@@ -228,7 +230,7 @@ class UserController{
         ]);
       }
       return $response->withStatus(200)->withJson($result);
-    } catch (\Throwable $e) {
+    } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
@@ -263,7 +265,7 @@ class UserController{
       }
 
       return $response->withStatus(200)->withJson($result);
-    } catch (\Throwable $e) {
+    } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
@@ -320,7 +322,7 @@ class UserController{
       }
 
       return $response->withStatus(200)->withJson($result);
-    } catch (\Throwable $e) {
+    } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
@@ -377,7 +379,7 @@ class UserController{
       }
 
       return $response->withStatus(200)->withJson($result);
-    } catch (\Throwable $e) {
+    } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
@@ -402,7 +404,7 @@ class UserController{
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
 
-    // Verificar si es un array/object válido
+    // Verificar si el body es un array/object válido
     if (!is_array($data) && !is_object($data)) {
       return $response->withStatus(400)->withJson([
         "error" => [
@@ -475,7 +477,7 @@ class UserController{
         ]);
       }
       return $response->withStatus(200)->withJson("Invite email sent successfully");
-    } catch (\Throwable $e) {
+    } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
@@ -503,7 +505,7 @@ class UserController{
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
 
-    // Verificar si es un array/object válido
+    // Verificar si el body es un array/object válido
     if (!is_array($data) && !is_object($data)) {
       return $response->withStatus(400)->withJson([
         "error" => [
@@ -655,7 +657,7 @@ class UserController{
               $updateData
             );
           }
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
           // Loguear pero no romper la actualización del usuario en DB
           error_log("Error actualizando usuario en Stripe: " . $e->getMessage());
         }
@@ -663,7 +665,7 @@ class UserController{
 
       # Retornar el usuario actualizado
       return $response->withStatus(200)->withJson($user);
-    } catch (\Throwable $e) {
+    } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
@@ -730,7 +732,7 @@ class UserController{
 
       $this->user->disableUser($userID);
       return $response->withStatus(200)->withJson("User disabled");
-    } catch (\Throwable $e) {
+    } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
@@ -878,7 +880,7 @@ class UserController{
       }
 
       return $response->withStatus(200)->withJson($updatedUser);
-    } catch (\Throwable $e) {
+    } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
@@ -934,7 +936,7 @@ class UserController{
         ]);
       }
       return $response->withStatus(200)->withJson($result);
-    } catch (\Throwable $e) {
+    } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
@@ -961,7 +963,7 @@ class UserController{
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
 
-    // Verificar si es un array/object válido
+    // Verificar si el body es un array/object válido
     if (!is_array($data) && !is_object($data)) {
       return $response->withStatus(400)->withJson([
         "error" => [
@@ -1041,7 +1043,7 @@ class UserController{
 
       $user = $this->user->getUserById($userID);
       return $response->withStatus(200)->withJson($user);
-    } catch (\Throwable $e) {
+    } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
@@ -1068,7 +1070,7 @@ class UserController{
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
 
-    // Verificar si es un array/object válido
+    // Verificar si el body es un array/object válido
     if (!is_array($data) && !is_object($data)) {
       return $response->withStatus(400)->withJson([
         "error" => [
@@ -1179,7 +1181,7 @@ class UserController{
 
       return $response->withStatus(200)->withJson($accounts);
 
-    } catch (\Throwable $e) {
+    } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
@@ -1223,7 +1225,7 @@ class UserController{
       }
 
       return $response->withStatus(200)->withJson($accounts);
-    } catch (\Throwable $e) {
+    } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",

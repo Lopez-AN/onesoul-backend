@@ -3,15 +3,15 @@
 namespace App\Models;
 
 use PDO;
+use PDOException;
 use App\Exceptions\DatabaseException;
+use Exception;
 use PHPMailer\PHPMailer\PHPMailer;
 
-class User
-{
+class User {
   protected $db;
 
-  public function __construct(PDO $db)
-  {
+  public function __construct(PDO $db) {
     $this->db = $db;
   }
 
@@ -65,6 +65,7 @@ class User
       $e['ValidatedEmail'] = (bool)$e['ValidatedEmail'];
       $e['ValidatedPhone'] = (bool)$e['ValidatedPhone'];
       $e['TwoFactorAuth'] = (bool)$e['TwoFactorAuth'];
+      $e['IsAdmin'] = (bool)$e['IsAdmin'];
       $e['Categories'] = is_null($e['Categories']) ? [] : array_map(
         function ($a) {
           $a = explode(":", $a);
@@ -121,7 +122,7 @@ class User
     u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
       ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
     u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-    s.PlanID, s.StartDate, s.EndDate, s.Status,
+    s.PlanID, s.StartDate, s.EndDate, s.Status, u.IsAdmin,
     -- Subconsulta para reviews
     (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
       FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
@@ -157,6 +158,7 @@ class User
     $user['ValidatedEmail'] = (bool)$user['ValidatedEmail'];
     $user['ValidatedPhone'] = (bool)$user['ValidatedPhone'];
     $user['TwoFactorAuth'] = (bool)$user['TwoFactorAuth'];
+    $user['IsAdmin'] = (bool)$user['IsAdmin'];
     $user['Categories'] = is_null($user['Categories']) ? [] : array_map(
       function ($a) {
         $a = explode(":", $a);
@@ -204,7 +206,7 @@ class User
     u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
       ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
     u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-    s.PlanID, s.StartDate, s.EndDate, s.Status,
+    s.PlanID, s.StartDate, s.EndDate, s.Status, u.IsAdmin,
     -- Subconsulta para reviews
     (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
       FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
@@ -240,6 +242,7 @@ class User
     $user['ValidatedEmail'] = (bool)$user['ValidatedEmail'];
     $user['ValidatedPhone'] = (bool)$user['ValidatedPhone'];
     $user['TwoFactorAuth'] = (bool)$user['TwoFactorAuth'];
+    $user['IsAdmin'] = (bool)$user['IsAdmin'];
     $user['Categories'] = is_null($user['Categories']) ? [] : array_map(
       function ($a) {
         $a = explode(":", $a);
@@ -287,7 +290,7 @@ class User
     u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
       ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
     u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-    s.PlanID, s.StartDate, s.EndDate, s.Status,
+    s.PlanID, s.StartDate, s.EndDate, s.Status, u.IsAdmin,
     -- Subconsulta para reviews
     (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
       FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
@@ -323,6 +326,7 @@ class User
     $user['ValidatedEmail'] = (bool)$user['ValidatedEmail'];
     $user['ValidatedPhone'] = (bool)$user['ValidatedPhone'];
     $user['TwoFactorAuth'] = (bool)$user['TwoFactorAuth'];
+    $user['IsAdmin'] = (bool)$user['IsAdmin'];
     $user['Categories'] = is_null($user['Categories']) ? [] : array_map(
       function ($a) {
         $a = explode(":", $a);
@@ -371,7 +375,7 @@ class User
     u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
       ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
     u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-    s.PlanID, s.StartDate, s.EndDate, s.Status,
+    s.PlanID, s.StartDate, s.EndDate, s.Status, u.IsAdmin,
     -- Subconsulta para reviews
     (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
       FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
@@ -407,6 +411,7 @@ class User
     $user['ValidatedEmail'] = (bool)$user['ValidatedEmail'];
     $user['ValidatedPhone'] = (bool)$user['ValidatedPhone'];
     $user['TwoFactorAuth'] = (bool)$user['TwoFactorAuth'];
+    $user['IsAdmin'] = (bool)$user['IsAdmin'];
     $user['Categories'] = is_null($user['Categories']) ? [] : array_map(
       function ($a) {
         $a = explode(":", $a);
@@ -456,7 +461,7 @@ class User
       u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
         ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
       u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-      s.PlanID, s.StartDate, s.EndDate, s.Status,
+      s.PlanID, s.StartDate, s.EndDate, s.Status, u.IsAdmin,
       -- Subconsulta para reviews
       (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
         FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
@@ -489,7 +494,7 @@ class User
       u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
         ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
       u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-      s.PlanID, s.StartDate, s.EndDate, s.Status,
+      s.PlanID, s.StartDate, s.EndDate, s.Status, u.IsAdmin,
       -- Subconsulta para reviews
       (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
         FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
@@ -527,6 +532,7 @@ class User
       $e['ValidatedEmail'] = (bool)$e['ValidatedEmail'];
       $e['ValidatedPhone'] = (bool)$e['ValidatedPhone'];
       $e['TwoFactorAuth'] = (bool)$e['TwoFactorAuth'];
+      $e['IsAdmin'] = (bool)$e['IsAdmin'];
       $e['Categories'] = is_null($e['Categories']) ? [] : array_map(
         function ($a) {
           $a = explode(":", $a);
@@ -585,7 +591,7 @@ class User
     u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
       ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
     u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-    s.PlanID, s.StartDate, s.EndDate, s.Status,
+    s.PlanID, s.StartDate, s.EndDate, s.Status, u.IsAdmin,
     -- Subconsulta para reviews
     (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
       FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
@@ -622,6 +628,7 @@ class User
       $e['ValidatedEmail'] = (bool)$e['ValidatedEmail'];
       $e['ValidatedPhone'] = (bool)$e['ValidatedPhone'];
       $e['TwoFactorAuth'] = (bool)$e['TwoFactorAuth'];
+      $e['IsAdmin'] = (bool)$e['IsAdmin'];
       $e['Categories'] = is_null($e['Categories']) ? [] : array_map(
         function ($a) {
           $a = explode(":", $a);
@@ -679,7 +686,7 @@ class User
     u.SignedContract, u.ReferralCode, GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
       ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories, u.LegalDocuments,
     u.ShortDescription, sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-    s.PlanID, s.StartDate, s.EndDate, s.Status,
+    s.PlanID, s.StartDate, s.EndDate, s.Status, u.IsAdmin,
     -- Subconsulta para reviews
     (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
       FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
@@ -715,6 +722,7 @@ class User
     $user['ValidatedEmail'] = (bool)$user['ValidatedEmail'];
     $user['ValidatedPhone'] = (bool)$user['ValidatedPhone'];
     $user['TwoFactorAuth'] = (bool)$user['TwoFactorAuth'];
+    $user['IsAdmin'] = (bool)$user['IsAdmin'];
     $user['Categories'] = is_null($user['Categories']) ? [] : array_map(
       function ($a) {
         $a = explode(":", $a);
@@ -832,7 +840,7 @@ class User
 
       # Enviar el correo
       return $mail->send();
-    } catch (\Exception $e) {
+    } catch (Exception $e) {
       return false;
     }
   }
@@ -927,12 +935,12 @@ class User
 
       $this->db->commit(); // Confirmo transacción
       return $user;
-    } catch (\Exception $e) {
+    } catch (Exception $e) {
       $this->db->rollBack(); // Revierto en caso de error
       if (!empty($filePath) && file_exists($filePath)) {
         unlink($filePath);
       }
-      throw new \Exception($e->getMessage());
+      throw new Exception($e->getMessage());
     }
   }
 
@@ -971,9 +979,9 @@ class User
 
       $this->db->commit(); // Confirmo transacción
       return $user;
-    } catch (\Exception $e) {
+    } catch (Exception $e) {
       $this->db->rollBack(); // Revierto en caso de error
-      throw new \Exception($e->getMessage());
+      throw new Exception($e->getMessage());
     }
   }
 
@@ -1094,7 +1102,7 @@ class User
     $socialurl = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$socialurl) {
-      throw new \Exception("Tipo de red social inválido: {$name}");
+      throw new Exception("Tipo de red social inválido: {$name}");
     }
 
     $formatName = $socialurl['FormatName'];
