@@ -218,7 +218,7 @@ class Donation{
 
   public function createDonation($userID, $offeringID, $quantity){
     for($x = 0; $x < $quantity; $x++){
-      // Evita que pueda llegar a repetirse un rafflecode o redeemcode
+      # Evita que pueda llegar a repetirse un rafflecode o redeemcode
       $raffleCode = "";
       $redeemCode = "";
       $redeemCodeMasked = "";
@@ -311,9 +311,9 @@ class Donation{
   */
   public function createAgency($userID, $offeringID, $quantity){
     try{
-      $this->db->beginTransaction(); // Iniciar transacción
+      $this->db->beginTransaction(); # Iniciar transacción
       for($x = 0; $x < $quantity; $x++){
-        // Evita que pueda llegar a repetirse un rafflecode o redeemcode
+        # Evita que pueda llegar a repetirse un rafflecode o redeemcode
         $raffleCode = "";
         $redeemCode = "";
         $redeemCodeMasked = "";
@@ -344,9 +344,9 @@ class Donation{
 
         $stmt->execute();
       }
-      $this->db->commit(); // Confirmo transacción
+      $this->db->commit(); # Confirmo transacción
     } catch (PDOException $e) {
-      $this->db->rollBack(); // Revierto en caso de error
+      $this->db->rollBack(); # Revierto en caso de error
       throw new DatabaseException($e->getMessage());
     }
   }
@@ -378,12 +378,12 @@ class Donation{
    * Formato: XXXX-XXXX-XXX (3 bloques de 4 caracteres con guion)
    */
   private function _generateRedeemCode() {
-    $chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // Sin caracteres ambiguos
+    $chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; # Sin caracteres ambiguos
     $code = '';
 
     for ($i = 0; $i < 12; $i++) {
       $code .= $chars[random_int(0, strlen($chars) - 1)];
-      // Agregar guion en el medio
+      # Agregar guion en el medio
       if ($i === 3 || $i === 7) {
         $code .= '-';
       }

@@ -8,6 +8,7 @@ use App\Exceptions\DatabaseException;
 use Exception;
 use PHPMailer\PHPMailer\PHPMailer;
 use Predis\Client as RedisClient;
+use App\Enums\UserAccessScope;
 
 class Auth{
   protected $db;
@@ -269,7 +270,7 @@ class Auth{
    **/
   public function getMfa($userID){
     $stmt = $this->db->prepare("SELECT MfaSecret, FailedLoginAttempts, LockedUntil
-      FROM Users WHERE UserID = ? AND MfaSecret IS NOT NULL");
+      FROM Users WHERE UserID = ? AND MfaSecret IS NOT NULL AND TwoFactorAuth = 1");
     $stmt->execute([$userID]);
     return $stmt->fetch(PDO::FETCH_ASSOC);
   }

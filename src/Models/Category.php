@@ -62,7 +62,7 @@ class Category {
    * @return array: array de categorías encontradas
    **/
   public function getCategoriesByIds($categories) {
-    // Usar placeholders dinámicos para la query
+    # Usar placeholders dinámicos para la query
     $placeholders = implode(',', array_fill(0, count($categories), '?'));
     $query = "SELECT CategoryID FROM Categories WHERE CategoryID IN ($placeholders)";
     $stmt = $this->db->prepare($query);
@@ -111,17 +111,17 @@ class Category {
    **/
   public function createCategory($parentCategoryID, $name, $description, $isActive) {
     try {
-      $this->db->beginTransaction(); // Iniciar transacción
+      $this->db->beginTransaction(); # Iniciar transacción
 
       $stmt = $this->db->prepare("INSERT INTO Categories (ParentCategoryID, Name, Description, CreationDate, IsActive)
         VALUES (?, ?, ?, ?, ?)");
       $stmt->execute([$parentCategoryID, $name, $description, date('Y-m-d H:i:s'), $isActive]);
       $category = $this->getCategoryById($this->db->lastInsertId());
 
-      $this->db->commit(); // Confirmo transacción
+      $this->db->commit(); # Confirmo transacción
       return $category;
     } catch (\PDOException $e) {
-      $this->db->rollBack(); // Revierto en caso de error
+      $this->db->rollBack(); # Revierto en caso de error
       throw new DatabaseException($e->getMessage());
     }
   }
@@ -138,17 +138,17 @@ class Category {
    **/
   public function updateCategory($categoryID, $parentCategoryID, $name, $description, $isActive) {
     try{
-      $this->db->beginTransaction(); // Iniciar transacción
+      $this->db->beginTransaction(); # Iniciar transacción
 
       $stmt = $this->db->prepare("UPDATE Categories SET ParentCategoryID = ?, Name = ?, Description = ?,
         ModificationDate = ?, IsActive = ? WHERE CategoryID = ?");
       $stmt->execute([$parentCategoryID, $name, $description, date('Y-m-d H:i:s'), $isActive]);
       $category = $this->getCategoryById($categoryID);
 
-      $this->db->commit(); // Confirmo transacción
+      $this->db->commit(); # Confirmo transacción
       return $category;
     } catch (\PDOException $e) {
-      $this->db->rollBack(); // Revierto en caso de error
+      $this->db->rollBack(); # Revierto en caso de error
       throw new DatabaseException($e->getMessage());
     }
   }

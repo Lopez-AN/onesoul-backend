@@ -14,6 +14,8 @@ return function (App $app) {
     "attribute" => "jwt"
   ]);
 
+  $optionalJwtMiddleware = new OptionalJwtMiddleware($jwtMiddleware);
+
   // Obtener PDO del contenedor DI
   $pdo = $app->getContainer()->get('pdo');
   $redis = $app->getContainer()->get('redis'); # Base de datos en RAM
@@ -23,13 +25,13 @@ return function (App $app) {
   $subscription = new Subscription($pdo);
   $userController = new UserController($user, $auth, $category, $subscription);
 
-  $app->get('/users', [$userController, 'getUsers']);
-  $app->get('/users/{id}', [$userController, 'getUserById']);
-  $app->get('/users/type/{type}', [$userController, 'getUsersByType']);
-  $app->get('/users/email/{email}', [$userController, 'getUserByEmail']);
-  $app->get('/users/username/{username}', [$userController, 'getUserByUserName']);
-  $app->get('/users/category/{id}', [$userController, 'getUsersByCategory']);
-  $app->get('/users/referred/{referralCode}', [$userController, 'getUserByRefCode']);
+  $app->get('/users', [$userController, 'getUsers'])->add($optionalJwtMiddleware);
+  $app->get('/users/{id}', [$userController, 'getUserById'])->add($optionalJwtMiddleware);
+  $app->get('/users/type/{type}', [$userController, 'getUsersByType'])->add($optionalJwtMiddleware);
+  $app->get('/users/email/{email}', [$userController, 'getUserByEmail'])->add($optionalJwtMiddleware);
+  $app->get('/users/username/{username}', [$userController, 'getUserByUserName'])->add($optionalJwtMiddleware);
+  $app->get('/users/category/{id}', [$userController, 'getUsersByCategory'])->add($optionalJwtMiddleware);
+  $app->get('/users/referred/{referralCode}', [$userController, 'getUserByRefCode'])->add($optionalJwtMiddleware);
   $app->get('/users/consent/{id}', [$userController, 'latestConsentByUser']);
   $app->get('/users/{id}/referrals', [$userController, 'referralsByUser'])->add($jwtMiddleware);
   $app->get('/users/{id}/rewards', [$userController, 'rewardsByUser'])->add($jwtMiddleware);

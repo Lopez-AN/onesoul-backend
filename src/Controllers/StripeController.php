@@ -37,7 +37,7 @@ class StripeController{
     }
 
     $userID = $jwt['data']->UserID;
-    $result = $this->user->getUserById($userID);
+    $result = $this->user->getUserById($userID, UserAccessScope::ADMIN);
     if (empty($result['Email'])) {
       return $response->withStatus(400)->withJson([
         "error" => [
@@ -1013,7 +1013,7 @@ class StripeController{
 
 
           // Obtener datos del usuario
-          $userResult = $this->user->getUserById($userID);
+          $userResult = $this->user->getUserById($userID, UserAccessScope::ADMIN);
           $userData = [];
 
           if ($userResult && !empty($userResult['UserName']) && !empty($userResult['Email'])) {

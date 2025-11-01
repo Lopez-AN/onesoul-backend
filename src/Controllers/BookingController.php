@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Utils\EmailHelper;
 use DateTime;
 use Firebase\JWT\JWT;
+use App\Enums\UserAccessScope;
 
 require_once(ROOT . '/src/Utils/PerspectiveText.php');
 require_once(ROOT . '/src/Utils/Paginator.php');
@@ -266,7 +267,7 @@ class BookingController
     $subDomain = $data['SubDomain'] ?? null;
     $assocUUID = $data['AssocUUID'] ?? null;
     $coupon = $data['Coupon'] ?? null;
-    $userInfo = $this->user->getUserById($userID);
+    $userInfo = $this->user->getUserById($userID, UserAccessScope::ADMIN);
     if(!$userInfo){
       return $response->withStatus(404)->withJson([
         "error" => [
@@ -494,7 +495,7 @@ class BookingController
       $origin = $subDomain ? "https://{$subDomain}.onesoul.app" : "https://onesoul.app";
 
       $guideID = $offering['UserID'] ?? null;
-      $guideInfo = $this->user->getUserById($guideID);
+      $guideInfo = $this->user->getUserById($guideID, UserAccessScope::ADMIN);
       if(!$guideInfo){
         return $response->withStatus(404)->withJson([
           "error" => [
@@ -782,7 +783,7 @@ class BookingController
       $origin = $subDomain ? "https://{$subDomain}.onesoul.app" : "https://onesoul.app";
 
       // Obtener datos del usuario que hizo la reserva
-      $userInfo = $this->user->getUserById($booking['UserID']);
+      $userInfo = $this->user->getUserById($booking['UserID'], UserAccessScope::ADMIN);
       if ($userInfo) {
         $user = $userInfo;
         $username = $user['UserName'] ?? $user['DisplayName'] ?? 'Usuario';
@@ -818,7 +819,7 @@ class BookingController
           $searcherName = $userInfo['FirstName'] . ' ' . $userInfo['LastName'];
 
           if ($guideID) {
-            $guideInfo = $this->user->getUserById($guideID);
+            $guideInfo = $this->user->getUserById($guideID, UserAccessScope::ADMIN);
             if ($guideInfo) {
               $guideName = $guideInfo['UserName'] ?? 'Guía';
               $guideEmail = $guideInfo['Email'] ?? null;
@@ -962,7 +963,7 @@ class BookingController
       $origin = $subDomain ? "https://{$subDomain}.onesoul.app" : "https://onesoul.app";
 
       // Obtener datos del usuario que hizo la reserva
-      $userInfo = $this->user->getUserById($booking['UserID']);
+      $userInfo = $this->user->getUserById($booking['UserID'], UserAccessScope::ADMIN);
       if ($userInfo) {
         $user = $userInfo;
         $username = $user['UserName'] ?? $user['DisplayName'] ?? 'Usuario';
@@ -997,7 +998,7 @@ class BookingController
           $searcherName = $userInfo['FirstName'] . ' ' . $userInfo['LastName'];
 
           if ($guideID) {
-            $guideInfo = $this->user->getUserById($guideID);
+            $guideInfo = $this->user->getUserById($guideID, UserAccessScope::ADMIN);
             if ($guideInfo) {
               $guideName = $guideInfo['UserName'] ?? 'Guía';
               $guideEmail = $guideInfo['Email'] ?? null;
@@ -1130,7 +1131,7 @@ class BookingController
       $origin = $subDomain ? "https://{$subDomain}.onesoul.app" : "https://onesoul.app";
 
       // Obtener datos del usuario que hizo la reserva
-      $userInfo = $this->user->getUserById($booking['UserID']);
+      $userInfo = $this->user->getUserById($booking['UserID'], UserAccessScope::ADMIN);
       if ($userInfo) {
         $user = $userInfo;
         $username = $user['UserName'] ?? $user['DisplayName'] ?? 'Usuario';
@@ -1167,7 +1168,7 @@ class BookingController
           $searcherName = $userInfo['FirstName'] . ' ' . $userInfo['LastName'];
 
           if ($guideID) {
-            $guideInfo = $this->user->getUserById($guideID);
+            $guideInfo = $this->user->getUserById($guideID, UserAccessScope::ADMIN);
             if ($guideInfo) {
               $guideName = $guideInfo['UserName'] ?? 'Guía';
               $guideEmail = $guideInfo['Email'] ?? null;

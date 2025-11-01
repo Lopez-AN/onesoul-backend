@@ -14,6 +14,7 @@ use Firebase\JWT\JWK;
 use Stripe\Stripe;
 use DateTime;
 use Predis\Client as RedisClient;
+use App\Enums\UserAccessScope;
 
 # Definir zona horaria
 date_default_timezone_set('America/Argentina/Buenos_Aires');
@@ -75,13 +76,13 @@ class AuthController{
       ]);
     }
 
-    # Valido recaptcha
-    $validation = $this->_validateReCaptcha($response,  $recaptchaToken, $clientIp);
-    if (!$validation->valid) {
-      return $validation->response;
-    }
-
     try {
+      # Valido recaptcha
+      $validation = $this->_validateReCaptcha($response,  $recaptchaToken, $clientIp);
+      if (!$validation->valid) {
+        return $validation->response;
+      }
+
       # Busco por mail o username
       $user = !empty($email) ?
         $this->user->getUserByEmail($email) : $this->user->getUserByUserName($username);
@@ -141,7 +142,7 @@ class AuthController{
       # Traigo el resto de los datos del usuario
       $user = $this->user->getUserById($userAuth['UserID']);
       # El resto del login es generico para todos los tipos de login
-      return $this->_loginGeneric($response, $request, $user, $mfaId, $mfaCode, $clientIp);
+      return $this->_loginGeneric($response, $request, $user, $clientIp);
     } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -212,7 +213,7 @@ class AuthController{
       $oAuthID = $oAuthResponse -> sub;
 
       # Traigo el resto de los datos del usuario
-      $user = $this->user->getUserByOAuthID($oAuthID, 'google');
+      $user = $this->user->getUserByOAuthID($oAuthID, 'google', UserAccessScope::ADMIN);
       if(!$user){
         return $response->withStatus(404)->withJson([
           "error" => [
@@ -229,7 +230,7 @@ class AuthController{
       }
 
       # El resto del login es generico para todos los tipos de login
-      return $this->_loginGeneric($response, $request, $user, $mfaID, $mfaCode, $clientIp);
+      return $this->_loginGeneric($response, $request, $user, $clientIp);
     } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -323,7 +324,7 @@ class AuthController{
       $picture = $oAuthResponse -> picture -> data -> url ?? null;
 
       # Traigo el resto de los datos del usuario
-      $user = $this->user->getUserByOAuthID($oAuthID, "facebook");
+      $user = $this->user->getUserByOAuthID($oAuthID, "facebook", UserAccessScope::ADMIN);
       if(!$user){
         return $response->withStatus(404)->withJson([
           "error" => [
@@ -424,7 +425,7 @@ class AuthController{
         ]);
       }
       $oAuthID = $oAuthResponse -> sub;
-      $user = $this->user->getUserByOAuthID($oAuthID, "apple");
+      $user = $this->user->getUserByOAuthID($oAuthID, "apple", UserAccessScope::ADMIN);
       if(!$user){
         return $response->withStatus(404)->withJson([
           "error" => [
@@ -495,7 +496,7 @@ class AuthController{
    * @statusCode 403: usuario bloqueado o deshabilitado
    * @statusCode 500: error del servidor
    **/
-  private function _loginGeneric(Response $response, Request $request, $user, $mfaID, $mfaCode, $clientIp) {
+  private function _loginGeneric(Response $response, Request $request, $user, $clientIp) {
     # Verificar si el usuario esta bloqueado
     if (!is_null($user['LockedUntil']) && strtotime($user['LockedUntil']) > time()) {
       return $response->withStatus(403)->withJson([
@@ -515,11 +516,13 @@ class AuthController{
       ]);
     }
 
-    # Manejar MFA si está habilitado
+    # USUARIO TIENE MFA ACTIVAOD
     $newMfaId = null;
-    if ($user['TwoFactorAuth'] == 1) {
-      if (!empty($mfa_id)) {
-        if (!$this->auth->validateMfaId($user['UserID'], $mfa_id)) {
+    if ($user['TwoFactorAuth'] == 1 && !is_null($user['MfaSecret'])) {
+      # USUARIO PROPORCIONO UN ID DE NAVEGADOR
+      if (!empty($mfaID)) {
+        # Valido el ID de navegador
+        if (!$this->auth->validateMfaId($user['UserID'], $mfaID)) {
           return $response->withStatus(401)->withJson([
             "error" => [
               "code" => "INVALID_MFA_ID",
@@ -527,10 +530,11 @@ class AuthController{
             ]
           ]);
         }
-      } elseif (!empty($mfa_code)) {
-        $result = $this->auth->mfaCheck($user['UserID'], $mfa_code);
-        if ($result->http_code != 200) {
-          return $response->withStatus($result->http_code)->withJson($result);
+      # USUARIO PROPORCIONO CODIGO MFA
+      } elseif (!empty($mfaCode)) {
+        $validation = $this->auth->_mfaCheck($response, $user['UserID'], $mfaCode, $user['MfaSecret'], $user['FailedLoginAttempts'], $user['LockedUntil']);
+        if(!$validation->valid){
+          return $validation->response;
         }
       } else {
         return $response->withStatus(400)->withJson([
@@ -1065,7 +1069,7 @@ class AuthController{
   ) {
     try {
       # Verificar si el usuario ya existe
-      $user = $this->user->getUserByOAuthID($oAuthID, $provider);
+      $user = $this->user->getUserByOAuthID($oAuthID, $provider, UserAccessScope::ADMIN);
       if($user){
         return $response->withStatus(409)->withJson([
           "error" => [
@@ -1309,11 +1313,11 @@ class AuthController{
     }
 
     try {
-    # Valido recaptcha
-    $validation = $this->_validateReCaptcha($response,  $recaptchaToken, $clientIp);
-    if (!$validation->valid) {
-      return $validation->response;
-    }
+      # Valido recaptcha
+      $validation = $this->_validateReCaptcha($response,  $recaptchaToken, $clientIp);
+      if (!$validation->valid) {
+        return $validation->response;
+      }
 
       # MODO SIN TOKEN (usa redis, para usuarios no existentes)
       if(!isset($jwt['data']) || !property_exists($jwt['data'],'UserID')){
@@ -1972,28 +1976,28 @@ class AuthController{
         ]
       ]);
     }
-
     $userID = $jwt['data'] -> UserID;
-    $user = $this->user->getUserById($userID);
-    if(!$user){
-      return $response->withStatus(404)->withJson([
-        "error" => [
-          "code" => "USER_NOT_FOUND",
-          "desc" => "No user associated with the specified id was found"
-        ]
-      ]);
-    }
-
-    if(!$user['TwoFactorAuth']){
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "MFA_NOT_SET",
-          "desc" => "The user does not have mfa configured"
-        ]
-      ]);
-    }
 
     try{
+      $user = $this->user->getUserById($userID);
+      if(!$user){
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "USER_NOT_FOUND",
+            "desc" => "No user associated with the specified id was found"
+          ]
+        ]);
+      }
+
+      if(!$user['TwoFactorAuth']){
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "MFA_NOT_SET",
+            "desc" => "The user does not have mfa configured"
+          ]
+        ]);
+      }
+
       $this->auth->mfaDel($userID);
       return $response->withStatus(200)->withJson([
         "Message" => "MFA unset"
@@ -2045,17 +2049,19 @@ class AuthController{
 
     try{
       $mfa = $this->auth->getMfa($userID);
-      if($mfa){
-        # Verifico el OTP
-        $validation = $this -> _mfaCheck($mfa);
-        if(!$validation->valid){
-          return $validation->response;
-        }
+      if(!$mfa){
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "MFA_NOT_SET",
+            "desc" => "The user does not have mfa configured"
+          ]
+        ]);
       }
 
-      $result = $this->auth->mfaCheck($userID, $code);
-      if($result -> http_code != 200){
-        return $response->withStatus($result->http_code)->withJson($result);
+      # Verifico el OTP
+      $validation = $this -> _mfaCheck($response, $userID, $code, $mfa['MfaSecret'], $mfa['FailedLoginAttempts'], $mfa['LockedUntil']);
+      if(!$validation->valid){
+        return $validation->response;
       }
       return $response->withStatus(200)->withJson("MFA Verified");
     } catch (Throwable $e) {
@@ -2074,14 +2080,13 @@ class AuthController{
    * @param  array $mfa: datos de MFA del usuario
    * @return object: {valid: bool, response: Response|null}
    **/
-  private function _mfaCheck($response, $mfa){
+  private function _mfaCheck($response, $userID, $code, $secret, $failedLoginAttempt, $lockedUntil){
     try{
-      $secret = $mfa['MfaSecret'];
       $g2fa = new \PragmaRX\Google2FA\Google2FA();
 
       if (!$g2fa->verifyKey($secret, $code)) {
         # Incrementar intentos fallidos y actualizar bloqueo si es necesario
-        $failedAttempts = $mfa['FailedLoginAttempts'] + 1;
+        $failedAttempts = $failedLoginAttempt + 1;
         $lockTime = $this->auth->calculateLockTime($failedAttempts);
 
         $this->auth->updateFailedLogin($userID, $failedAttempts, $lockTime);

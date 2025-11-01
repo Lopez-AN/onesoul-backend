@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Models\Auth;
 use App\Models\Category;
 use App\Models\Subscription;
+use App\Enums\UserAccessScope;
 
 require_once(ROOT . '/src/Utils/Paginator.php');
 require_once(ROOT . '/src/Utils/OptimizeImg.php');
@@ -404,7 +405,7 @@ class UserController{
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
 
-    // Verificar si el body es un array/object válido
+    # Verificar si el body es un array/object válido
     if (!is_array($data) && !is_object($data)) {
       return $response->withStatus(400)->withJson([
         "error" => [
@@ -428,7 +429,7 @@ class UserController{
     $subDomain = $data['SubDomain'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
-    // Validación de parámetros
+    # Validación de parámetros
     if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL) || empty($recaptchaToken)) {
       return $response->withStatus(400)->withJson([
         "error" => [
@@ -438,7 +439,7 @@ class UserController{
       ]);
     }
 
-    // Validar formato de subdominio (solo letras A-Z, a-z)
+    # Validar formato de subdominio (solo letras A-Z, a-z)
     if (!empty($subDomain)) {
       if (!preg_match('/^[a-zA-Z]+$/', $subDomain)) {
         return $response->withStatus(400)->withJson([
@@ -505,7 +506,7 @@ class UserController{
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
 
-    // Verificar si el body es un array/object válido
+    # Verificar si el body es un array/object válido
     if (!is_array($data) && !is_object($data)) {
       return $response->withStatus(400)->withJson([
         "error" => [
@@ -548,7 +549,7 @@ class UserController{
       ]);
     }
 
-    // Lista de campos permitidos para actualizar
+    # Lista de campos permitidos para actualizar
     $allowedFields = [
       'FirstName',
       'LastName',
@@ -572,7 +573,7 @@ class UserController{
       'ShortDescription'
     ];
 
-    // Filtrar y preparar los campos a actualizar
+    # Filtrar y preparar los campos a actualizar
     $fields = [];
     foreach ($data AS $key => $value) {
       if (!in_array($key, $allowedFields)) {
@@ -586,7 +587,7 @@ class UserController{
       $fields[] = "$key = :$key";
     }
 
-    // Valido que no se repita el email
+    # Valido que no se repita el email
     if(!empty($email)){
       $user = $this->user->getUserByEmail($email);
       if($user && $user['UserID'] != $userID){
@@ -600,7 +601,7 @@ class UserController{
     }
 
     try {
-      // Valida contenido con Perspective API
+      # Valida contenido con Perspective API
       if(!empty($biography) && $this->_containsInappropriateContent($biography)) {
         return $response->withStatus(400)->withJson([
           "code" => "INAPPROPRIATE_CONTENT",
@@ -623,14 +624,14 @@ class UserController{
         try {
           \Stripe\Stripe::setApiKey($GLOBALS['config']['stripe']['STRIPE_SECRET_KEY']);
 
-          // Dirección
+          # Dirección
           $line1 = trim(($user['AddressName'] ?? '') . ' ' . ($user['AddressNumber'] ?? ''));
           $line2Parts = [];
           if (!empty($user['Floor'])) $line2Parts[] = "Piso " . $user['Floor'];
           if (!empty($user['Department'])) $line2Parts[] = "Depto " . $user['Department'];
           $line2 = !empty($line2Parts) ? implode(' - ', $line2Parts) : null;
 
-          // Datos permitidos
+          # Datos permitidos
           $updateData = [
             'name' => trim(($user['FirstName'] ?? '') . ' ' . ($user['LastName'] ?? '')),
             'email' => $user['Email'] ?? null,
@@ -645,7 +646,7 @@ class UserController{
             ]
           ];
 
-          // Limpiar nulls para no borrar datos en Stripe
+          # Limpiar nulls para no borrar datos en Stripe
           $updateData = array_filter($updateData, fn($v) => $v !== null && $v !== '');
           if (isset($updateData['address'])) {
             $updateData['address'] = array_filter($updateData['address'], fn($v) => $v !== null && $v !== '');
@@ -658,7 +659,7 @@ class UserController{
             );
           }
         } catch (Throwable $e) {
-          // Loguear pero no romper la actualización del usuario en DB
+          # Loguear pero no romper la actualización del usuario en DB
           error_log("Error actualizando usuario en Stripe: " . $e->getMessage());
         }
       }
@@ -800,7 +801,7 @@ class UserController{
         ]);
       }
 
-      // Validar tipo de archivo
+      # Validar tipo de archivo
       $allowedExtensions = ['jpg', 'jpeg', 'png', 'gif'];
       $fileName = $uploadedFile->getClientFilename();
       $fileExtension = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
@@ -817,18 +818,18 @@ class UserController{
       $imgID = uniqid();
       $uploadDirectory = $GLOBALS['config']['media_folder']['path'];
 
-      // Crear directorio si no existe
+      # Crear directorio si no existe
       if (!is_dir($uploadDirectory . "/user")) {
         mkdir($uploadDirectory . "/user", 0755, true);
       }
 
-      // Ruta temporal
+      # Ruta temporal
       $tempFilePath = $uploadDirectory . "/user/" . $imgID . "." . $fileExtension;
 
-      // Grabar archivo
+      # Grabar archivo
       $uploadedFile->moveTo($tempFilePath);
 
-      // Validar con Amazon Rekognition
+      # Validar con Amazon Rekognition
       if(empty($GLOBALS['config']['debug_mode']) || !$GLOBALS['config']['debug_mode']){
         $rekognitionResult = analyzeImageWithRekognition($tempFilePath);
         if ($rekognitionResult['error']) {
@@ -838,16 +839,16 @@ class UserController{
           return $response->withStatus(400)->withJson([
             "error" => [
               "code" => "INAPPROPRIATE_CONTENT",
-              "desc" => $rekognitionResult['reason'] // CORREGIDO: era 'reASon'
+              "desc" => $rekognitionResult['reason'] # CORREGIDO: era 'reASon'
             ]
           ]);
         }
       }
 
-      // Optimizar imagen - retorna la ruta final (webp)
+      # Optimizar imagen - retorna la ruta final (webp)
       $optimizedPath = optimizeImage($tempFilePath);
 
-      // Si optimization falla, borrar archivo temporal
+      # Si optimization falla, borrar archivo temporal
       if (!$optimizedPath || !file_exists($optimizedPath)) {
         if (file_exists($tempFilePath)) {
           unlink($tempFilePath);
@@ -860,15 +861,15 @@ class UserController{
         ]);
       }
 
-      // Borrar archivo temporal si optimizeImage ya lo hace
+      # Borrar archivo temporal si optimizeImage ya lo hace
       if (file_exists($tempFilePath) && $tempFilePath !== $optimizedPath) {
         unlink($tempFilePath);
       }
 
-      // Generar URL - IMPORTANTE: debe coincidir con la ruta guardada
+      # Generar URL - IMPORTANTE: debe coincidir con la ruta guardada
       $fileURL = $GLOBALS['config']['media_folder']['url'] . "/user/" . $imgID . ".webp";
 
-      // Pasar los datos al modelo
+      # Pasar los datos al modelo
       $updatedUser = $this->user->updateProfilePhoto($userID, $fileURL, $optimizedPath);
       if (!$updatedUser) {
         return $response->withStatus(500)->withJson([
@@ -963,7 +964,7 @@ class UserController{
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
 
-    // Verificar si el body es un array/object válido
+    # Verificar si el body es un array/object válido
     if (!is_array($data) && !is_object($data)) {
       return $response->withStatus(400)->withJson([
         "error" => [
@@ -1003,10 +1004,10 @@ class UserController{
     }
 
     try {
-      // Obtener todas las categorías válidas de una sola vez
+      # Obtener todas las categorías válidas de una sola vez
       $validCategories = $this->category->getCategoriesByIds($categories);
 
-      // Comparar cantidad: si no coinciden, hay IDs inválidos
+      # Comparar cantidad: si no coinciden, hay IDs inválidos
       if (count($validCategories) !== count($categories)) {
         $validIds = array_column($validCategories, 'CategoryID');
         $invalidIds = array_diff($categories, $validIds);
@@ -1070,7 +1071,7 @@ class UserController{
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
 
-    // Verificar si el body es un array/object válido
+    # Verificar si el body es un array/object válido
     if (!is_array($data) && !is_object($data)) {
       return $response->withStatus(400)->withJson([
         "error" => [
@@ -1133,7 +1134,7 @@ class UserController{
         ]);
       }
 
-      // Normalizar URL
+      # Normalizar URL
       $formattedUrl = $this->user->formatSocialUrl($name, $url);
 
       $newMap[$name] = [
@@ -1143,7 +1144,7 @@ class UserController{
     }
 
     try {
-      // Detectar cambios
+      # Detectar cambios
       $toAdd = array_diff_key($newMap, $currentMap);
       $toRemove = array_diff_key($currentMap, $newMap);
       $toUpdate = [];
@@ -1215,7 +1216,7 @@ class UserController{
         ]);
       }
 
-      // Simplificar salida
+      # Simplificar salida
       $accounts = [];
       foreach ($result as $acc) {
         $accounts[] = [

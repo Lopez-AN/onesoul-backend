@@ -234,7 +234,7 @@ class SubscriptionController {
       $newPlanID = $data['PlanID'] ?? null;
 
       // Obtener el email del usuario
-      $userResult = $this->user->getUserById($userID);
+      $userResult = $this->user->getUserById($userID, UserAccessScope::ADMIN);
       if (empty($userResult['Email'])) {
         return $response->withStatus(400)->withJson([
           "error" => [

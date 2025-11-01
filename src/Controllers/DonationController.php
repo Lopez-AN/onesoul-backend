@@ -197,7 +197,7 @@ class DonationController {
     $jwt = $request->getAttribute('jwt');
     $paginator = paginator($request);
 
-    // Verificar si el body es un array/object válido
+    # Verificar si el body es un array/object válido
     if (!is_array($data) && !is_object($data)) {
       return $response->withStatus(400)->withJson([
         "error" => [
@@ -206,7 +206,6 @@ class DonationController {
         ]
       ]);
     }
-
 
     $offeringID = $data['OfferingID'] ?? null;
     $quantity = $data['Quantity'] ?? null;
