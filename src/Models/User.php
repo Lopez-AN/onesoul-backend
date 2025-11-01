@@ -253,6 +253,9 @@ class User {
     GROUP BY u.UserID
     ORDER BY u.UserID");
 
+    $stmt->execute([$userID]);
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
     return $this -> _getUserGeneric($user, $scope);
   }
 
