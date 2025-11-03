@@ -3,30 +3,17 @@
 use Slim\App;
 use App\Controllers\OfferingController;
 use App\Models\Offering;
+use Tuupola\Middleware\JwtAuthentication;
+use App\Middleware\JwtTokenMiddleware;
+use App\Enums\JwtValidationMode;
 
 return function (App $app) {
-  # Proteccion de rutas
-  $app->add(new Tuupola\Middleware\JwtAuthentication([
+  $jwtMiddleware = new JwtAuthentication([
     "secret" => $GLOBALS['config']['jwt']['secret'],
-    "rules" => [
-      // Regla general para proteger todas las rutas excepto las que se especifican a continuación
-      new Tuupola\Middleware\JwtAuthentication\RequestPathRule([
-        "path" => [
-          "/offerings",
-          "/offerings/{id}",
-          "/offerings/{id}/media",
-          "/offerings/{id}/media/{mediaID}",
-          "/categories/{categoryID}/offerings",
-          "/users/{userID}/offerings",
-          "/offerings/approve/{id}"
-        ]
-      ]),
-      new Tuupola\Middleware\JwtAuthentication\RequestMethodRule([
-        "ignore" => ["OPTIONS", "GET"]
-      ])
-    ],
     "attribute" => "jwt"
-  ]));
+  ]);
+
+  $requiredJwt = new JwtTokenMiddleware($jwtMiddleware, JwtValidationMode::REQUIRED);
 
   // Obtener PDO del contenedor DI
   $pdo = $app->getContainer()->get('pdo');
@@ -34,14 +21,15 @@ return function (App $app) {
 	$offeringController = new OfferingController($offering);
 
   $app->get('/offerings', [$offeringController, 'getOfferings']);
-  $app->post('/offerings', [$offeringController, 'createOffering']);
-  $app->get('/offerings/{id}', [$offeringController, 'getOfferingById']);
-  $app->patch('/offerings/{id}', [$offeringController, 'updateOffering']);
-  $app->delete('/offerings/{id}', [$offeringController, 'deleteOffering']);
-  $app->post('/offerings/{id}/media/{position}', [$offeringController, 'createOfferingMedia']);
-  $app->post('/offerings/{id}/media/{mediaID}/{position}', [$offeringController, 'updateOfferingMedia']);
-  $app->delete('/offerings/{id}/media/{mediaID}', [$offeringController, 'deleteOfferingMedia']);
   $app->get('/categories/{categoryID}/offerings', [$offeringController, 'getOfferingsByCategoryId']);
   $app->get('/users/{userID}/offerings', [$offeringController, 'getOfferingsByUserId']);
-  $app->patch('/offerings/approve/{id}', [$offeringController, 'approveOffering']);
+  $app->get('/search/offerings', [$offeringController, 'searchOfferings']);
+  $app->get('/offerings/{id}', [$offeringController, 'getOfferingById']);
+  $app->post('/offerings', [$offeringController, 'createOffering'])->add($requiredJwt);
+  $app->patch('/offerings/{id}', [$offeringController, 'updateOffering'])->add($requiredJwt);
+  $app->delete('/offerings/{id}', [$offeringController, 'deleteOffering'])->add($requiredJwt);
+  $app->post('/offerings/{id}/media/{position}', [$offeringController, 'createOfferingMedia'])->add($requiredJwt);
+  $app->post('/offerings/{id}/media/{mediaID}/{position}', [$offeringController, 'updateOfferingMedia'])->add($requiredJwt);
+  $app->delete('/offerings/{id}/media/{mediaID}', [$offeringController, 'deleteOfferingMedia'])->add($requiredJwt);
+  $app->patch('/offerings/approve/{id}', [$offeringController, 'approveOffering'])->add($requiredJwt);
 };

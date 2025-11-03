@@ -13,7 +13,6 @@ use App\Models\User;
 use App\Utils\EmailHelper;
 use DateTime;
 use Firebase\JWT\JWT;
-use App\Enums\UserAccessScope;
 
 require_once(ROOT . '/src/Utils/PerspectiveText.php');
 require_once(ROOT . '/src/Utils/Paginator.php');
@@ -41,7 +40,7 @@ class BookingController
     $bookingID = $args['bookingID'];
 
     $jwt = $request->getAttribute('jwt');
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
+    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -50,7 +49,7 @@ class BookingController
       ]);
     }
 
-    $userID = $jwt['data']->UserID;
+    $userID = $jwt->data->UserID;
 
     try {
       $booking = $this->booking->getBookingByID($bookingID);
@@ -90,7 +89,7 @@ class BookingController
     $publicID = $args['publicID'];
 
     $jwt = $request->getAttribute('jwt');
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
+    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -99,7 +98,7 @@ class BookingController
       ]);
     }
 
-    $userID = $jwt['data']->UserID;
+    $userID = $jwt->data->UserID;
 
     try {
       $booking = $this->booking->getBookingByPublicID($publicID);
@@ -140,7 +139,7 @@ class BookingController
     $paginator = paginator($request);
     $jwt = $request->getAttribute('jwt');
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
+    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -149,8 +148,8 @@ class BookingController
       ]);
     }
 
-    $userJWT = $jwt['data']->UserID;
-    $userType = $jwt['data']->UserType;
+    $userJWT = $jwt->data->UserID;
+    $userType = $jwt->data->UserType;
 
     try {
       // Leer filtros desde query string
@@ -204,7 +203,7 @@ class BookingController
     $paginator = paginator($request);
     $jwt = $request->getAttribute('jwt');
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
+    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -213,8 +212,8 @@ class BookingController
       ]);
     }
 
-    $userJWT = $jwt['data']->UserID;
-    $userType = $jwt['data']->UserType;
+    $userJWT = $jwt->data->UserID;
+    $userType = $jwt->data->UserType;
 
     try {
       $bookings = $this->booking->getBookingsBySeeker($userID, $paginator);
@@ -250,11 +249,11 @@ class BookingController
   }
 
   public function createBooking(Request $request, Response $response, $args) {
-    $userID = $jwt['data']->UserID;
+    $userID = $jwt->data->UserID;
     $data = $request->getParsedBody();
 
     $jwt = $request->getAttribute('jwt');
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
+    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -267,7 +266,7 @@ class BookingController
     $subDomain = $data['SubDomain'] ?? null;
     $assocUUID = $data['AssocUUID'] ?? null;
     $coupon = $data['Coupon'] ?? null;
-    $userInfo = $this->user->getUserById($userID, UserAccessScope::ADMIN);
+    $userInfo = $this->user->getUserById($userID);
     if(!$userInfo){
       return $response->withStatus(404)->withJson([
         "error" => [
@@ -495,7 +494,7 @@ class BookingController
       $origin = $subDomain ? "https://{$subDomain}.onesoul.app" : "https://onesoul.app";
 
       $guideID = $offering['UserID'] ?? null;
-      $guideInfo = $this->user->getUserById($guideID, UserAccessScope::ADMIN);
+      $guideInfo = $this->user->getUserById($guideID);
       if(!$guideInfo){
         return $response->withStatus(404)->withJson([
           "error" => [
@@ -581,7 +580,7 @@ class BookingController
   public function updateBooking(Request $request, Response $response, $args)
   {
     $jwt = $request->getAttribute('jwt');
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
+    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -590,8 +589,8 @@ class BookingController
       ]);
     }
 
-    $userID = $jwt['data']->UserID;
-    $userType = $jwt['data']->UserType;
+    $userID = $jwt->data->UserID;
+    $userType = $jwt->data->UserType;
     $bookingID = $args['bookingID'];
     $data = $request->getParsedBody();
     $scheduledDate = $data['ScheduledDate'] ?? '2025-11-20 12:00:00';  // null;   // DEBUG!!!
@@ -783,7 +782,7 @@ class BookingController
       $origin = $subDomain ? "https://{$subDomain}.onesoul.app" : "https://onesoul.app";
 
       // Obtener datos del usuario que hizo la reserva
-      $userInfo = $this->user->getUserById($booking['UserID'], UserAccessScope::ADMIN);
+      $userInfo = $this->user->getUserById($booking['UserID']);
       if ($userInfo) {
         $user = $userInfo;
         $username = $user['UserName'] ?? $user['DisplayName'] ?? 'Usuario';
@@ -819,7 +818,7 @@ class BookingController
           $searcherName = $userInfo['FirstName'] . ' ' . $userInfo['LastName'];
 
           if ($guideID) {
-            $guideInfo = $this->user->getUserById($guideID, UserAccessScope::ADMIN);
+            $guideInfo = $this->user->getUserById($guideID);
             if ($guideInfo) {
               $guideName = $guideInfo['UserName'] ?? 'Guía';
               $guideEmail = $guideInfo['Email'] ?? null;
@@ -864,7 +863,7 @@ class BookingController
   public function cancelBooking(Request $request, Response $response, $args)
   {
     $jwt = $request->getAttribute('jwt');
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
+    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -874,8 +873,8 @@ class BookingController
     }
 
     $data = $request->getParsedBody();
-    $userID = $jwt['data']->UserID;
-    $userType = $jwt['data']->UserType;
+    $userID = $jwt->data->UserID;
+    $userType = $jwt->data->UserType;
     $bookingID = $args['bookingID'];
     $message = $data['Message'] ?? null;
 
@@ -963,7 +962,7 @@ class BookingController
       $origin = $subDomain ? "https://{$subDomain}.onesoul.app" : "https://onesoul.app";
 
       // Obtener datos del usuario que hizo la reserva
-      $userInfo = $this->user->getUserById($booking['UserID'], UserAccessScope::ADMIN);
+      $userInfo = $this->user->getUserById($booking['UserID']);
       if ($userInfo) {
         $user = $userInfo;
         $username = $user['UserName'] ?? $user['DisplayName'] ?? 'Usuario';
@@ -998,7 +997,7 @@ class BookingController
           $searcherName = $userInfo['FirstName'] . ' ' . $userInfo['LastName'];
 
           if ($guideID) {
-            $guideInfo = $this->user->getUserById($guideID, UserAccessScope::ADMIN);
+            $guideInfo = $this->user->getUserById($guideID);
             if ($guideInfo) {
               $guideName = $guideInfo['UserName'] ?? 'Guía';
               $guideEmail = $guideInfo['Email'] ?? null;
@@ -1042,7 +1041,7 @@ class BookingController
   public function confirmBooking(Request $request, Response $response, $args)
   {
     $jwt = $request->getAttribute('jwt');
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
+    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -1052,8 +1051,8 @@ class BookingController
     }
 
     $data = $request->getParsedBody();
-    $userID = $jwt['data']->UserID;
-    $userType = $jwt['data']->UserType;
+    $userID = $jwt->data->UserID;
+    $userType = $jwt->data->UserType;
     $bookingID = $args['bookingID'];
     $message = $data['Message'] ?? null;
 
@@ -1131,7 +1130,7 @@ class BookingController
       $origin = $subDomain ? "https://{$subDomain}.onesoul.app" : "https://onesoul.app";
 
       // Obtener datos del usuario que hizo la reserva
-      $userInfo = $this->user->getUserById($booking['UserID'], UserAccessScope::ADMIN);
+      $userInfo = $this->user->getUserById($booking['UserID']);
       if ($userInfo) {
         $user = $userInfo;
         $username = $user['UserName'] ?? $user['DisplayName'] ?? 'Usuario';
@@ -1168,7 +1167,7 @@ class BookingController
           $searcherName = $userInfo['FirstName'] . ' ' . $userInfo['LastName'];
 
           if ($guideID) {
-            $guideInfo = $this->user->getUserById($guideID, UserAccessScope::ADMIN);
+            $guideInfo = $this->user->getUserById($guideID);
             if ($guideInfo) {
               $guideName = $guideInfo['UserName'] ?? 'Guía';
               $guideEmail = $guideInfo['Email'] ?? null;
@@ -1214,7 +1213,7 @@ class BookingController
   public function completeBooking(Request $request, Response $response, $args)
   {
     $jwt = $request->getAttribute('jwt');
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
+    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -1224,8 +1223,8 @@ class BookingController
     }
 
     $data = $request->getParsedBody();
-    $userID = $jwt['data']->UserID;
-    $userType = $jwt['data']->UserType;
+    $userID = $jwt->data->UserID;
+    $userType = $jwt->data->UserType;
     $bookingID = $args['bookingID'];
     $message = $data['Message'] ?? null;
     $rating = $data['Rating'] ?? null;
@@ -1332,7 +1331,7 @@ class BookingController
   public function rateBooking(Request $request, Response $response, $args)
   {
     $jwt = $request->getAttribute('jwt');
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
+    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -1342,8 +1341,8 @@ class BookingController
     }
 
     $data = $request->getParsedBody();
-    $userID = $jwt['data']->UserID;
-    $userType = $jwt['data']->UserType;
+    $userID = $jwt->data->UserID;
+    $userType = $jwt->data->UserType;
     $bookingID = $args['bookingID'];
     $message = $data['Message'] ?? null;
     $rating = $data['Rating'] ?? null;

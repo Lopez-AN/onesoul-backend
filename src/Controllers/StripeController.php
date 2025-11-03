@@ -27,7 +27,7 @@ class StripeController{
     $subDomain = $data['SubDomain'] ?? '';
     $jwt = $request->getAttribute('jwt');
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID') || !property_exists($jwt->data, 'UserType')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -36,8 +36,8 @@ class StripeController{
       ]);
     }
 
-    $userID = $jwt['data']->UserID;
-    $result = $this->user->getUserById($userID, UserAccessScope::ADMIN);
+    $userID = $jwt->data->UserID;
+    $result = $this->user->getUserById($userID);
     if (empty($result['Email'])) {
       return $response->withStatus(400)->withJson([
         "error" => [
@@ -72,7 +72,7 @@ class StripeController{
 
     try {
       # Verificar si el usuario autenticado es un guía
-      if ($jwt['data']->UserType != 'Guide') {
+      if ($jwt->data->UserType != 'Guide') {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
@@ -137,7 +137,7 @@ class StripeController{
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID') || !property_exists($jwt->data, 'UserType')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -147,7 +147,7 @@ class StripeController{
     }
 
     try {
-      $userID = $jwt['data']->UserID;
+      $userID = $jwt->data->UserID;
       $subscription = $this->subscription->getSubscriptionByUser($userID);
 
       if (!$subscription || empty($subscription['PlatformSubscriptionID'])) {
@@ -272,7 +272,7 @@ class StripeController{
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID') || !property_exists($jwt->data, 'UserType')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -282,7 +282,7 @@ class StripeController{
     }
 
     try {
-      $userID = $jwt['data']->UserID;
+      $userID = $jwt->data->UserID;
       $subscription = $this->subscription->getSubscriptionByUser($userID);
 
       if (!$subscription || empty($subscription['PlatformSubscriptionID'])) {
@@ -401,7 +401,7 @@ class StripeController{
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID') || !property_exists($jwt->data, 'UserType')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -411,7 +411,7 @@ class StripeController{
     }
 
     try {
-      $userID = $jwt['data']->UserID;
+      $userID = $jwt->data->UserID;
       $subscription = $this->subscription->getSubscriptionByUser($userID);
 
       if (!$subscription || empty($subscription['PlatformSubscriptionID'])) {
@@ -554,7 +554,7 @@ class StripeController{
   public function downgradeCancel(Request $request, Response $response, array $args) {
     $jwt = $request->getAttribute('jwt');
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID') || !property_exists($jwt->data, 'UserType')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -564,7 +564,7 @@ class StripeController{
     }
 
     try {
-      $userID = $jwt['data']->UserID;
+      $userID = $jwt->data->UserID;
       $subscription = $this->subscription->getSubscriptionByUser($userID);
 
       if (!$subscription || empty($subscription['PlatformSubscriptionID'])) {
@@ -631,7 +631,7 @@ class StripeController{
   public function cancelSubscription(Request $request, Response $response, array $args) {
     $jwt = $request->getAttribute('jwt');
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
+    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -641,7 +641,7 @@ class StripeController{
     }
 
     try {
-      $userID = $jwt['data']->UserID;
+      $userID = $jwt->data->UserID;
       $subscription = $this->subscription->getSubscriptionByUser($userID);
 
       if (!$subscription || empty($subscription['PlatformSubscriptionID'])) {
@@ -718,7 +718,7 @@ class StripeController{
   public function resumeSubscription(Request $request, Response $response, array $args) {
     $jwt = $request->getAttribute('jwt');
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
+    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -728,7 +728,7 @@ class StripeController{
     }
 
     try {
-      $userID = $jwt['data']->UserID;
+      $userID = $jwt->data->UserID;
       $subscription = $this->subscription->getSubscriptionByUser($userID);
 
       if (!$subscription || empty($subscription['PlatformSubscriptionID'])) {
@@ -813,7 +813,7 @@ class StripeController{
   public function getUserPaymentMethod(Request $request, Response $response, array $args) {
     $jwt = $request->getAttribute('jwt');
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
+    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -822,7 +822,7 @@ class StripeController{
       ]);
     }
 
-    $userID = $jwt['data']->UserID;
+    $userID = $jwt->data->UserID;
 
     // buscar el customer de Stripe
     $sub = $this->subscription->getSubscriptionByUser($userID);
@@ -854,7 +854,7 @@ class StripeController{
   public function createSetupIntent(Request $request, Response $response, array $args) {
     $jwt = $request->getAttribute('jwt');
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
+    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -863,7 +863,7 @@ class StripeController{
       ]);
     }
 
-    $userID = $jwt['data']->UserID;
+    $userID = $jwt->data->UserID;
 
     // buscar el customer de Stripe
     $sub = $this->subscription->getSubscriptionByUser($userID);
@@ -923,7 +923,7 @@ class StripeController{
       ]);
     }
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
+    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -932,7 +932,7 @@ class StripeController{
       ]);
     }
 
-    $userID = $jwt['data']->UserID;
+    $userID = $jwt->data->UserID;
 
     $sub = $this->subscription->getSubscriptionByUser($userID);
     $platformCustomerID = $sub['PlatformCustomerID'] ?? null;
@@ -1013,7 +1013,7 @@ class StripeController{
 
 
           // Obtener datos del usuario
-          $userResult = $this->user->getUserById($userID, UserAccessScope::ADMIN);
+          $userResult = $this->user->getUserById($userID);
           $userData = [];
 
           if ($userResult && !empty($userResult['UserName']) && !empty($userResult['Email'])) {
@@ -1489,9 +1489,9 @@ class StripeController{
   public function getStripeSession(Request $request, Response $response, $args)
   {
     $jwt = $request->getAttribute('jwt');
-    $userID = $jwt['data']->UserID ?? null;
+    $userID = $jwt->data->UserID ?? null;
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
+    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",

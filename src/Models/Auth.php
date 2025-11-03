@@ -8,7 +8,6 @@ use App\Exceptions\DatabaseException;
 use Exception;
 use PHPMailer\PHPMailer\PHPMailer;
 use Predis\Client as RedisClient;
-use App\Enums\UserAccessScope;
 
 class Auth{
   protected $db;
@@ -363,9 +362,27 @@ class Auth{
    * @param  string $content: contenido del documento
    **/
   public function uploadLegalDocuments($type, $version, $releaseDate, $content){
-    $stmt = $this->db->prepare("INSERT INTO LegalDocuments (DocumentType, Version, ReleaseDate, Content)
-      VALUES (?,?,?,?)");
-    $stmt->execute([$type, $version, $releaseDate, $content]);
+    try {
+      $this->db->beginTransaction(); # Iniciar transacción
+      $stmt = $this->db->prepare("INSERT INTO LegalDocuments (DocumentType, Version, ReleaseDate, Content)
+        VALUES (?,?,?,?)");
+      $stmt->execute([$type, $version, $releaseDate, $content]);
+
+      # Obtener el ID del documento creado
+      $documentID = $this->db->lastInsertId();
+
+      # SELECT dentro de la transacción
+      $stmt = $this->db->prepare("SELECT * FROM LegalDocuments WHERE DocumentID = ?");
+      $stmt->execute([$documentID]);
+      $result = $stmt->fetch(PDO::FETCH_ASSOC);
+
+      $this->db->commit(); # Confirmar DESPUÉS del SELECT
+
+      return $result;
+    } catch (PDOException $e) {
+      $this->db->rollBack(); # Revierto en caso de error
+      throw new DatabaseException($e->getMessage());
+    }
   }
 
   /**

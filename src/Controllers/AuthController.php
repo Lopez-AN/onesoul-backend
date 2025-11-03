@@ -14,7 +14,9 @@ use Firebase\JWT\JWK;
 use Stripe\Stripe;
 use DateTime;
 use Predis\Client as RedisClient;
-use App\Enums\UserAccessScope;
+
+require_once ROOT . '/src/Utils/validateToken.php';
+require_once ROOT . '/src/Utils/validateReCaptcha.php';
 
 # Definir zona horaria
 date_default_timezone_set('America/Argentina/Buenos_Aires');
@@ -61,7 +63,7 @@ class AuthController{
     $email = $data['Email'] ?? null;
     $userName = $data['UserName'] ?? null;
     $password = $data['Password'] ?? null;
-    $mfaId = $data['MfaID'] ?? null;
+    $mfaID = $data['MfaID'] ?? null;
     $mfaCode = $data['MfaCode'] ?? null;
     $recaptchaToken = $data['RecaptchaToken'] ?? null;
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
@@ -78,7 +80,7 @@ class AuthController{
 
     try {
       # Valido recaptcha
-      $validation = $this->_validateReCaptcha($response,  $recaptchaToken, $clientIp);
+      $validation = validateReCaptcha($response,  $recaptchaToken, $clientIp);
       if (!$validation->valid) {
         return $validation->response;
       }
@@ -139,10 +141,8 @@ class AuthController{
           ]
         ]);
       }
-      # Traigo el resto de los datos del usuario
-      $user = $this->user->getUserById($userAuth['UserID']);
       # El resto del login es generico para todos los tipos de login
-      return $this->_loginGeneric($response, $request, $user, $clientIp);
+      return $this->_loginGeneric($response, $request, $user, $mfaID, $mfaCode, $clientIp);
     } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -195,13 +195,13 @@ class AuthController{
 
     try {
       # Valido recaptcha
-      $validation = $this->_validateReCaptcha($response,  $recaptchaToken, $clientIp);
+      $validation = validateReCaptcha($response,  $recaptchaToken, $clientIp);
       if (!$validation->valid) {
         return $validation->response;
       }
 
       # Validar el token de Google
-      $oAuthResponse = $this -> _validateToken("https://oauth2.googleapis.com/tokeninfo?id_token=$token");
+      $oAuthResponse = validateToken("https://oauth2.googleapis.com/tokeninfo?id_token=$token");
       if($oAuthResponse === false || !$oAuthResponse -> sub){
         return $response->withStatus(401)->withJson([
           "error" => [
@@ -213,7 +213,7 @@ class AuthController{
       $oAuthID = $oAuthResponse -> sub;
 
       # Traigo el resto de los datos del usuario
-      $user = $this->user->getUserByOAuthID($oAuthID, 'google', UserAccessScope::ADMIN);
+      $user = $this->user->getUserByOAuthID($oAuthID, 'google');
       if(!$user){
         return $response->withStatus(404)->withJson([
           "error" => [
@@ -223,14 +223,14 @@ class AuthController{
           "data" => [
             "FirstName" => $oAuthResponse->given_name ?? null,
             "LastName"  => $oAuthResponse->family_name ?? null,
-            "Email"     => $oAuthResponse->email ?? null,
+            "Email"     => null, //$oAuthResponse->email ?? null,
             "Picture"   => $oAuthResponse->picture ?? null,
           ]
         ]);
       }
 
       # El resto del login es generico para todos los tipos de login
-      return $this->_loginGeneric($response, $request, $user, $clientIp);
+      return $this->_loginGeneric($response, $request, $user, $mfaID, $mfaCode, $clientIp);
     } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -285,7 +285,7 @@ class AuthController{
 
     try {
       # Valido recaptcha
-      $validation = $this->_validateReCaptcha($response,  $recaptchaToken, $clientIp);
+      $validation = validateReCaptcha($response,  $recaptchaToken, $clientIp);
       if (!$validation->valid) {
         return $validation->response;
       }
@@ -306,7 +306,7 @@ class AuthController{
         # Me traigo el ID de facebook
         $oAuthID = $oAuthResponse->sub ?? null;
       }else{ # WEB
-        $oAuthResponse = $this -> _validateToken("https://graph.facebook.com/$oAuthID?fields=id,first_name,last_name,email,picture.width(640)&access_token=$token");
+        $oAuthResponse = validateToken("https://graph.facebook.com/$oAuthID?fields=id,first_name,last_name,email,picture.width(640)&access_token=$token");
         if($oAuthResponse === false){
           return $response->withStatus(401)->withJson([
             "error" => [
@@ -324,7 +324,7 @@ class AuthController{
       $picture = $oAuthResponse -> picture -> data -> url ?? null;
 
       # Traigo el resto de los datos del usuario
-      $user = $this->user->getUserByOAuthID($oAuthID, "facebook", UserAccessScope::ADMIN);
+      $user = $this->user->getUserByOAuthID($oAuthID, "facebook");
       if(!$user){
         return $response->withStatus(404)->withJson([
           "error" => [
@@ -334,7 +334,7 @@ class AuthController{
           "data" => [
             "FirstName" => $oAuthResponse->first_name ?? null,
             "LastName"  => $oAuthResponse->last_name ?? null,
-            "Email"     => $oAuthResponse->email ?? null,
+            "Email"     => null, //$oAuthResponse->email ?? null,
             "Picture"   => $oAuthResponse->picture->data->url ?? null,
           ]
         ]);
@@ -396,7 +396,7 @@ class AuthController{
 
     try{
       # Valido recaptcha
-      $validation = $this->_validateReCaptcha($response,  $recaptchaToken, $clientIp);
+      $validation = validateReCaptcha($response,  $recaptchaToken, $clientIp);
       if (!$validation->valid) {
         return $validation->response;
       }
@@ -425,7 +425,7 @@ class AuthController{
         ]);
       }
       $oAuthID = $oAuthResponse -> sub;
-      $user = $this->user->getUserByOAuthID($oAuthID, "apple", UserAccessScope::ADMIN);
+      $user = $this->user->getUserByOAuthID($oAuthID, "apple");
       if(!$user){
         return $response->withStatus(404)->withJson([
           "error" => [
@@ -433,7 +433,7 @@ class AuthController{
             "desc" => "No user associated with the specified Apple account was found"
           ],
           "data" => [
-            "Email" => $oAuthResponse -> email ?? null
+            "Email" => null, //$oAuthResponse->email ?? null,
           ]
         ]);
       }
@@ -486,7 +486,7 @@ class AuthController{
    * @param  Response $response: objeto de response HTTP
    * @param  Request $request: objeto de request HTTP
    * @param  array $user: datos del usuario
-   * @param  string $mfaId: ID de MFA si está disponible
+   * @param  string $mfaID: ID de MFA si está disponible
    * @param  string $mfaCode: código MFA si está disponible
    * @param  string $clientIp: IP del cliente
    * @return Response: JSON con token JWT y datos del usuario o error
@@ -496,7 +496,7 @@ class AuthController{
    * @statusCode 403: usuario bloqueado o deshabilitado
    * @statusCode 500: error del servidor
    **/
-  private function _loginGeneric(Response $response, Request $request, $user, $clientIp) {
+  private function _loginGeneric(Response $response, Request $request, $user, $mfaID, $mfaCode, $clientIp) {
     # Verificar si el usuario esta bloqueado
     if (!is_null($user['LockedUntil']) && strtotime($user['LockedUntil']) > time()) {
       return $response->withStatus(403)->withJson([
@@ -532,7 +532,7 @@ class AuthController{
         }
       # USUARIO PROPORCIONO CODIGO MFA
       } elseif (!empty($mfaCode)) {
-        $validation = $this->auth->_mfaCheck($response, $user['UserID'], $mfaCode, $user['MfaSecret'], $user['FailedLoginAttempts'], $user['LockedUntil']);
+        $validation = $this->_mfaCheck($response, $user['UserID'], $mfaCode, $user['MfaSecret'], $user['FailedLoginAttempts'], $user['LockedUntil']);
         if(!$validation->valid){
           return $validation->response;
         }
@@ -545,7 +545,7 @@ class AuthController{
         ]);
       }
 
-      if (empty($mfa_id)) {
+      if (empty($mfaID)) {
         $newMfaId = uniqid();
       }
     }
@@ -620,7 +620,7 @@ class AuthController{
 
     try {
       # Valido recaptcha
-      $validation = $this->_validateReCaptcha($response,  $recaptchaToken, $clientIp);
+      $validation = validateReCaptcha($response,  $recaptchaToken, $clientIp);
       if (!$validation->valid) {
         return $validation->response;
       }
@@ -784,13 +784,13 @@ class AuthController{
 
     try {
       # Valido recaptcha
-      $validation = $this->_validateReCaptcha($response,  $recaptchaToken, $clientIp);
+      $validation = validateReCaptcha($response,  $recaptchaToken, $clientIp);
       if (!$validation->valid) {
         return $validation->response;
       }
 
       # Validar el token de Google
-      $oAuthResponse = $this -> _validateToken("https://oauth2.googleapis.com/tokeninfo?id_token=$token");
+      $oAuthResponse = validateToken("https://oauth2.googleapis.com/tokeninfo?id_token=$token");
       if($oAuthResponse === false || !$oAuthResponse -> sub){
         return $response->withStatus(401)->withJson([
           "error" => [
@@ -878,7 +878,7 @@ class AuthController{
 
     try{
       # Valido recaptcha
-      $validation = $this->_validateReCaptcha($response,  $recaptchaToken, $clientIp);
+      $validation = validateReCaptcha($response,  $recaptchaToken, $clientIp);
       if (!$validation->valid) {
         return $validation->response;
       }
@@ -899,7 +899,7 @@ class AuthController{
         # Me traigo el ID de facebook
         $oAuthID = $decoded->sub ?? null;
       }else{ # WEB
-        $oAuthResponse = $this -> _validateToken("https://graph.facebook.com/$oAuthID?fields=id,first_name,last_name,email,picture.width(640)&access_token=$token");
+        $oAuthResponse = validateToken("https://graph.facebook.com/$oAuthID?fields=id,first_name,last_name,email,picture.width(640)&access_token=$token");
         if($oAuthResponse === false){
           return $response->withStatus(401)->withJson([
             "error" => [
@@ -987,7 +987,7 @@ class AuthController{
 
     try{
       # Valido recaptcha
-      $validation = $this->_validateReCaptcha($response,  $recaptchaToken, $clientIp);
+      $validation = validateReCaptcha($response,  $recaptchaToken, $clientIp);
       if (!$validation->valid) {
         return $validation->response;
       }
@@ -1069,7 +1069,7 @@ class AuthController{
   ) {
     try {
       # Verificar si el usuario ya existe
-      $user = $this->user->getUserByOAuthID($oAuthID, $provider, UserAccessScope::ADMIN);
+      $user = $this->user->getUserByOAuthID($oAuthID, $provider);
       if($user){
         return $response->withStatus(409)->withJson([
           "error" => [
@@ -1224,13 +1224,13 @@ class AuthController{
 
     try {
       # Valido recaptcha
-      $validation = $this->_validateReCaptcha($response,  $recaptchaToken, $clientIp);
+      $validation = validateReCaptcha($response,  $recaptchaToken, $clientIp);
       if (!$validation->valid) {
         return $validation->response;
       }
 
       # MODO SIN TOKEN (usa redis, para usuarios no existentes)
-      if(!isset($jwt['data']) || !property_exists($jwt['data'],'UserID')){
+      if(!$jwt){
         if(!$email){ # Si no hay token tiene que haber email
           return $response->withStatus(401)->withJson([
             "error" => [
@@ -1241,7 +1241,7 @@ class AuthController{
         }
         $result = $this->auth->sendOtpMailNoUser($email);
       }else{ # MODO CON TOKEN (usa la base, para usuarios existentes)
-        $user = $this->user->getUserById($jwt['data'] -> UserID);
+        $user = $this->user->getUserById($jwt->data -> UserID);
         if(empty($user)){
           return $response->withStatus(404)->withJson([
             "error" => [
@@ -1314,13 +1314,13 @@ class AuthController{
 
     try {
       # Valido recaptcha
-      $validation = $this->_validateReCaptcha($response,  $recaptchaToken, $clientIp);
+      $validation = validateReCaptcha($response,  $recaptchaToken, $clientIp);
       if (!$validation->valid) {
         return $validation->response;
       }
 
       # MODO SIN TOKEN (usa redis, para usuarios no existentes)
-      if(!isset($jwt['data']) || !property_exists($jwt['data'],'UserID')){
+      if(!$jwt){
         if(!$email){ # Si no hay token tiene que haber email
           return $response->withStatus(401)->withJson([
             "error" => [
@@ -1332,7 +1332,7 @@ class AuthController{
         return $this->_validateOTPRedis($response, $email, $otpCode);
       }
       # MODO CON TOKEN (usa la base, para usuarios existentes)
-      return $this->_validateOTP($response, $jwt['data']->UserID, $otpCode);
+      return $this->_validateOTP($response, $jwt->data->UserID, $otpCode);
     } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -1475,7 +1475,7 @@ class AuthController{
 
     try {
       # Valido recaptcha
-      $validation = $this->_validateReCaptcha($response,  $recaptchaToken, $clientIp);
+      $validation = validateReCaptcha($response,  $recaptchaToken, $clientIp);
       if (!$validation->valid) {
         return $validation->response;
       }
@@ -1627,17 +1627,9 @@ class AuthController{
    **/
   public function refreshToken(Request $request, Response $response, $args){
     $jwt = $request->getAttribute('jwt');
-    if(!isset($jwt['data']) || !property_exists($jwt['data'],'UserID')){
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
 
     try {
-      $userID = $jwt['data'] -> UserID;
+      $userID = $jwt->data -> UserID;
       $user = $this->user->getUserById($userID);
       if(!$user){
         return $response->withStatus(404)->withJson([
@@ -1702,8 +1694,8 @@ class AuthController{
     }
 
     try{
-      $validation = $this->_validateReCaptcha($response,  $recaptchaToken, $clientIp);
-      return $response->withStatus($validation->http_code)->withJson($validation->data);
+      $validation = validateReCaptcha($response, $recaptchaToken, $clientIp);
+      return $validation->response;
     } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -1755,7 +1747,7 @@ class AuthController{
 
     try {
       # Valido recaptcha
-      $validation = $this->_validateReCaptcha($response,  $recaptchaToken, $clientIp);
+      $validation = validateReCaptcha($response,  $recaptchaToken, $clientIp);
       if (!$validation->valid) {
         return $validation->response;
       }
@@ -1809,15 +1801,8 @@ class AuthController{
    **/
   public function mfaReq(Request $request, Response $response, $args){
     $jwt = $request->getAttribute('jwt');
-    if(!isset($jwt['data']) || !property_exists($jwt['data'],'UserID')){
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
-    $userID = $jwt['data'] -> UserID;
+
+    $userID = $jwt->data -> UserID;
 
     try{
       $user = $this->user->getUserById($userID);
@@ -1882,16 +1867,7 @@ class AuthController{
       ]);
     }
 
-    if(!isset($jwt['data']) || !property_exists($jwt['data'],'UserID')){
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
-
-    $userID = $jwt['data'] -> UserID;
+    $userID = $jwt->data -> UserID;
     $user = $this->user->getUserById($userID);
     if(!$user){
       return $response->withStatus(404)->withJson([
@@ -1968,15 +1944,7 @@ class AuthController{
   public function mfaDel(Request $request, Response $response, $args){
     $jwt = $request->getAttribute('jwt');
 
-    if(!isset($jwt['data']) || !property_exists($jwt['data'],'UserID')){
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
-    $userID = $jwt['data'] -> UserID;
+    $userID = $jwt->data -> UserID;
 
     try{
       $user = $this->user->getUserById($userID);
@@ -2028,15 +1996,7 @@ class AuthController{
     $code = $args['code'];
     $jwt = $request->getAttribute('jwt');
 
-    if(!isset($jwt['data']) || !property_exists($jwt['data'],'UserID')){
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
-    $userID = $jwt['data'] -> UserID;
+    $userID = $jwt->data -> UserID;
 
     if(empty($code) || !is_numeric($code)){
       return $response->withStatus(400)->withJson([
@@ -2157,17 +2117,8 @@ class AuthController{
       ]);
     }
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'IsAdmin')) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
-
-    # Verificar si el usuario autenticado es el mismo o si es un administrador
-    if ($jwt['data']->UserID != $userID && !$jwt['data']->IsAdmin) {
+    # Verificar si el usuario autenticado es un administrador
+    if (!$jwt->data->IsAdmin) {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
@@ -2177,7 +2128,7 @@ class AuthController{
     }
 
     # Validación de campos requeridos
-    if (!isset($data['Type']) || !isset($data['Version'])) {
+    if (!isset($data['Type']) || !isset($data['Version']) || !isset($data['ReleaseDate'])) {
       return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "VALIDATION_ERROR",
@@ -2241,87 +2192,15 @@ class AuthController{
         'UserName' => $user['UserName'],
         'UserType' => $user['UserType'],
         'UserLevel' => $user['UserLevel'],
-        'ValidatedEmail' => $user['ValidatedEmail'],
-        'TwoFactorAuth' => $user['TwoFactorAuth'],
-        'IsAdmin' => $user['IsAdmin']
+        'ValidatedEmail' => (bool)$user['ValidatedEmail'],
+        'ValidatedPhone' => (bool)$user['ValidatedPhone'],
+        'TwoFactorAuth' => (bool)$user['TwoFactorAuth'],
+        'IsAdmin' => (bool)$user['IsAdmin']
       ]
     ];
     $secret = $GLOBALS['config']['jwt']['secret'];
     return JWT::encode($payload, $secret, 'HS256');
   }
-
-  /**
-   * Valida un token reCaptcha con score mínimo
-   * @param  Response $response: objeto de response HTTP
-   * @param  string $recaptchaToken: token de reCaptcha a validar
-   * @param  string $clientIp: IP del cliente
-   * @return object: {valid: bool, response: Response|null}
-   **/
-  private function _validateReCaptcha($response, $recaptchaToken, $clientIp) {
-    # Si esta el modo debug no se valida esto
-    if(!empty($GLOBALS['config']['debug_mode']) && $GLOBALS['config']['debug_mode']){
-      return (object)["valid" => true, "response" => null];
-    }
-
-    $secret = $GLOBALS['config']['recaptcha']['secret'];
-    $minScore = $GLOBALS['config']['recaptcha']['min_score'];
-    $url = "https://www.google.com/recaptcha/api/siteverify?secret=$secret&response=$recaptchaToken&remoteip=$clientIp";
-
-    # Hacer la petición a la API de reCAPTCHA
-    $recaptcha = $this -> _validateToken($url);
-    if($recaptcha === false || empty($recaptcha -> success)){
-      return (object)[
-        "valid" => false,
-        "response" => $response->withStatus(401)->withJson([
-          "error" => [
-            "code" => "INVALID_RECAPTCHA_TOKEN",
-            "desc" => "Invalid reCaptcha token"
-          ]
-        ])
-      ];
-    }
-
-    # Si el score es muy bajo
-    if ($recaptcha -> score < $minScore) {
-      return (object)[
-        "valid" => false,
-        "response" => $response->withStatus(401)->withJson([
-          "error" => [
-            "code" => "RECAPTCHA_LOW_SCORE",
-            "desc" => "reCaptcha score is too low"
-          ]
-        ])
-      ];
-    }
-
-    # Validación exitosa
-    return (object)["valid" => true, "response" => null];
-  }
-
-
-  /**
-   * Valida un token externo (Google, Facebook, reCaptcha)
-   * @param  string $url: URL con parámetros para validar el token
-   * @return object|false: datos decodificados o false si falla
-   **/
-  private function _validateToken($url){
-    $ch = curl_init();
-
-    # Configuración de cURL
-    curl_setopt($ch, CURLOPT_URL, $url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_HEADER, false);
-
-    $response = curl_exec($ch);
-
-    # Verifica si hubo un error en la solicitud
-    if(curl_errno($ch) || curl_getinfo($ch, CURLINFO_HTTP_CODE) != 200){
-      return false;
-    }
-    curl_close($ch);
-    return json_decode($response);
-  }
-
 
   /**
    * Valida firma y claims del ID token de Apple

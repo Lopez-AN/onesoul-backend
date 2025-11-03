@@ -6,17 +6,14 @@ use PDO;
 use App\Exceptions\DatabaseException;
 use App\Exceptions\ValidationException;
 
-class Offering
-{
+class Offering {
   protected $db;
 
-  public function __construct(PDO $db)
-  {
+  public function __construct(PDO $db) {
     $this->db = $db;
   }
 
-  public function getOfferings($paginator)
-  {
+  public function getOfferings($paginator) {
     try {
       $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*,
         u.UserID AS author_UserID,
@@ -96,6 +93,174 @@ class Offering
       $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
       $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
+      $total = $stmt->fetch(PDO::FETCH_ASSOC);
+
+      // Desagrupo los json traidos por MYSQL para armar el JSON anidado de respuesta
+      $rs = array_map(function ($e) {
+        $e['Media'] = [
+          'Images' => [],
+          'Videos' => []
+        ];
+
+        $images = @json_decode($e['media_images'], true);
+        if($images){
+          $e['Media']['Images'] = $images;
+        }
+        unset($e['media_images']);
+
+        $videos = @json_decode($e['media_videos'], true);
+        if($videos){
+          $e['Media']['Videos'] = $videos;
+        }
+        unset($e['media_videos']);
+
+        $faqs = @json_decode($e['Faqs'], true);
+        if($faqs){
+          $e['Faqs'] = $faqs;
+        }
+
+        $packages = @json_decode($e['Packages'], true);
+        if($packages){
+          $e['Packages'] = $packages;
+        }
+
+        $locations = @json_decode($e['Locations'], true);
+        if($locations){
+          $e['Locations'] = $locations;
+        }
+
+        $e['Author'] = [
+          "UserID" => $e['author_UserID'],
+          "DisplayName" => $e['author_DisplayName'],
+          "FirstName" => $e['author_FirstName'],
+          "LastName" => $e['author_LastName'],
+          "Rating" => floatVal($e['author_Rating']),
+          "TotalReviews" => intval($e['author_TotalReviews']),
+          "ImgURL" => $e['author_ImgURL']
+        ];
+
+        $e['AverageRating'] = floatVal($e['Rating']);
+
+        unset($e['Rating'],
+          $e['author_UserID'],
+          $e['author_DisplayName'],
+          $e['author_FirstName'],
+          $e['author_LastName'],
+          $e['author_UserName'],
+          $e['author_Rating'],
+          $e['author_TotalReviews'],
+          $e['author_ImgURL'],
+          $e['CountryCode'],
+          $e['City']);
+
+        return $e;
+      }, $rs);
+
+      return (object) [
+        "data" => $rs,
+        "rows" => [
+          "total" => $total['total'],
+          "fetched" => count($rs)
+        ]
+      ];
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  /**
+   * Busca publicaciones por término de búsqueda con paginación
+   *
+   * @param  object $paginator: objeto con limit y offset
+   * @param  string $query: término(s) de búsqueda
+   * @return object: { data: [], rows: { total: int, fetched: int } }
+   *
+   **/
+  public function searchOfferings($paginator, $query) {
+    try {
+      $searchQuery = "%$query%";
+      $stmt = $this->pdo->prepare("SELECT o.*,
+        u.UserID AS author_UserID,
+        u.DisplayName AS author_DisplayName,
+        u.FirstName AS author_FirstName,
+        u.LastName AS author_LastName,
+        u.UserName AS author_UserName,
+        round(avg(ru.Rating),2) AS author_Rating,
+        COUNT(DISTINCT ru.ReviewID) AS author_TotalReviews,
+        (SELECT URL FROM Media WHERE UserID = u.UserID LIMIT 1) AS author_ImgURL,
+        -- Subconsulta para media_images
+        (SELECT JSON_ARRAYAGG(
+          JSON_OBJECT(
+            'Id', m.MediaID,
+            'Url', m.URL,
+            'Title', m.Title,
+            'Description', m.Description,
+            'Position', m.Position
+          )
+        ) FROM Media m WHERE m.OfferingID = o.OfferingID AND m.MediaType = 'image') AS media_images,
+        -- Subconsulta para media_videos
+        (SELECT JSON_ARRAYAGG(
+          JSON_OBJECT(
+            'Id', m.MediaID,
+            'Url', m.URL,
+            'Title', m.Title,
+            'Description', m.Description,
+            'Position', m.Position
+          )
+        ) FROM Media m WHERE m.OfferingID = o.OfferingID AND m.MediaType = 'video') AS media_videos,
+        -- Subconsulta para faqs
+        (SELECT JSON_ARRAYAGG(
+          JSON_OBJECT(
+            'Position', f.Position,
+            'Question', f.Question,
+            'Answer', f.Answer
+          )
+        ) FROM OfferingsFaqs f WHERE f.OfferingID = o.OfferingID) AS Faqs,
+        -- Subconsulta para packages
+        (SELECT JSON_ARRAYAGG(
+          JSON_OBJECT(
+            'Package', p.Package,
+            'Price', p.Price,
+            'Description', p.Description,
+            'Conditions', p.Conditions,
+            'SessionType', p.SessionType
+          )
+        ) FROM OfferingsPackages p WHERE p.OfferingID = o.OfferingID) AS Packages,
+        -- Subconsulta para locations
+        (SELECT JSON_ARRAYAGG(
+          JSON_OBJECT(
+            'LocationID', l.LocationID,
+            'CountryCode', l.CountryCode,
+            'CountryName', c.CountryName,
+            'State', l.State,
+            'City', l.City
+          )
+        ) FROM OfferingLocations l WHERE l.OfferingID = o.OfferingID) AS Locations,
+        ROUND(AVG(r.Rating),2) as Rating
+        FROM Offerings AS o
+        INNER JOIN Users AS u ON u.UserID = o.UserID
+        LEFT JOIN Reviews as r ON o.OfferingID = r.OfferingID
+        LEFT JOIN Reviews as ru ON u.UserID = ru.SeekerID
+        LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
+        LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode
+        WHERE (o.Title LIKE :search1 OR o.Description LIKE :search2
+        OR o.ShortDescription LIKE :search3 OR o.Tags LIKE :search4)
+        AND o.Status = 'Active'
+        GROUP BY o.OfferingID
+        ORDER BY o.OfferingID
+        LIMIT :_limit OFFSET :_offset"
+      );
+
+      $stmt->bindParam(':search1', $searchQuery, PDO::PARAM_STR);
+      $stmt->bindParam(':search2', $searchQuery, PDO::PARAM_STR);
+      $stmt->bindParam(':search3', $searchQuery, PDO::PARAM_STR);
+      $stmt->bindParam(':search4', $searchQuery, PDO::PARAM_STR);
+      $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
+      $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
+      $stmt->execute();
+
+      $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+      $stmt = $this->pdo->query("SELECT FOUND_ROWS() AS total");
       $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
       // Desagrupo los json traidos por MYSQL para armar el JSON anidado de respuesta

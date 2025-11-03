@@ -7,7 +7,6 @@ use PDOException;
 use App\Exceptions\DatabaseException;
 use Exception;
 use PHPMailer\PHPMailer\PHPMailer;
-use App\Enums\UserAccessScope;
 
 class User {
   protected $db;
@@ -18,8 +17,14 @@ class User {
 
   /**
    * Obtiene todos los usuarios con paginación
+   *
+   * Retorna datos sin filtrar de campos sensibles. El controller es responsable
+   * de aplicar el scope de acceso antes de enviar la respuesta al cliente.
+   *
    * @param  object $paginator: objeto con limit y offset
    * @return object: { data: [], rows: { total: int, fetched: int } }
+   *
+   * @note El filtrado de datos según scope (PUBLIC, USER, ADMIN) debe realizarse en el controller
    **/
   public function getUsers($paginator) {
     $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
@@ -31,8 +36,7 @@ class User {
     u.OTPDate, u.OTPCode, u.OTPAttemps,
     u.Oauth2ID, u.Oauth2Service, u.FailedLoginAttempts,
     u.LockedUntil,u.ReferralCode,u.IsAdmin,
-    sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-    s.PlanID, s.StartDate, s.EndDate, s.Status, u.IsAdmin,
+    sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL, u.IsAdmin,
     GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
       ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
     -- Subconsulta para reviews y ratings
@@ -44,7 +48,6 @@ class User {
     LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
     LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
     LEFT JOIN Media AS m ON u.UserID = m.UserID
-    LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
     LEFT JOIN (
       SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
       MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
@@ -58,114 +61,27 @@ class User {
     ORDER BY u.UserID
     LIMIT ? OFFSET ?");
 
-    $stmt->execute([$categoryID, $paginator->limit, $paginator->offset]);
+    $stmt->execute([$paginator->limit, $paginator->offset]);
     $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $stmt = $this->db->query("SELECT FOUND_ROWS() AS total");
     $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    return $this -> _getUserGenericMulti($users, $total['total'], $scope);
+    return $this -> _getUserGenericMulti($users, $total['total']);
   }
 
   /**
    * Obtiene usuarios filtrados por tipo con paginación
+   *
+   * Retorna datos sin filtrar de campos sensibles. El controller es responsable
+   * de aplicar el scope de acceso antes de enviar la respuesta al cliente.
+   *
    * @param  object $paginator: objeto con limit y offset
    * @param  string $userType: tipo de usuario (Guide, Seeker, Admin)
    * @return object: { data: [], rows: { total: int, fetched: int } }
+   *
+   * @note El filtrado de datos según scope (PUBLIC, USER, ADMIN) debe realizarse en el controller
    **/
   public function getUsersByType($paginator, $userType) {
-    if ($userType == 'Guide') {
-      $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
-      u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
-      u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
-      u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth,
-      u.MfaSecret, u.UserType, u.RegistrationDate, u.LastLogin, u.DeactivationDate,
-      u.UserLevel, u.SignedContract, u.LegalDocuments, u.ShortDescription,
-      u.OTPDate, u.OTPCode, u.OTPAttemps,
-      u.Oauth2ID, u.Oauth2Service, u.FailedLoginAttempts,
-      u.LockedUntil,u.ReferralCode,u.IsAdmin,
-      sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-      s.PlanID, s.StartDate, s.EndDate, s.Status, u.IsAdmin,
-      GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
-        ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
-      -- Subconsulta para reviews y ratings
-      (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-        FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
-      (SELECT COUNT(DISTINCT r.ReviewID)
-        FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
-      FROM Users AS u
-      LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
-      LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
-      LEFT JOIN Media AS m ON u.UserID = m.UserID
-      LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
-      LEFT JOIN (
-        SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
-        MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
-        MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
-        FROM Offerings AS o
-        INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
-        WHERE o.Status = 'Active'
-        GROUP BY o.UserID
-      ) AS sub ON sub.UserID = u.UserID
-      ORDER BY u.UserID
-      LIMIT ? OFFSET ?");
-
-      $stmt->execute([$paginator->limit, $paginator->offset]);
-    } else {
-      $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
-      u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
-      u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
-      u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth,
-      u.MfaSecret, u.UserType, u.RegistrationDate, u.LastLogin, u.DeactivationDate,
-      u.UserLevel, u.SignedContract, u.LegalDocuments, u.ShortDescription,
-      u.OTPDate, u.OTPCode, u.OTPAttemps,
-      u.Oauth2ID, u.Oauth2Service, u.FailedLoginAttempts,
-      u.LockedUntil,u.ReferralCode,u.IsAdmin,
-      sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-      s.PlanID, s.StartDate, s.EndDate, s.Status, u.IsAdmin,
-      GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
-        ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
-      -- Subconsulta para reviews y ratings
-      (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-        FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
-      (SELECT COUNT(DISTINCT r.ReviewID)
-        FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
-      FROM Users AS u
-      LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
-      LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
-      LEFT JOIN Media AS m ON u.UserID = m.UserID
-      LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
-      LEFT JOIN (
-        SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
-        MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
-        MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
-        FROM Offerings AS o
-        INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
-        WHERE o.Status = 'Active'
-        GROUP BY o.UserID
-      ) AS sub ON sub.UserID = u.UserID
-      WHERE u.UserType = ?
-      GROUP BY u.UserID
-      ORDER BY u.UserID
-      LIMIT ? OFFSET ?");
-
-      $stmt->execute([$userType, $paginator->limit, $paginator->offset]);
-    };
-
-    $stmt->execute([$categoryID, $paginator->limit, $paginator->offset]);
-    $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    $stmt = $this->db->query("SELECT FOUND_ROWS() AS total");
-    $total = $stmt->fetch(PDO::FETCH_ASSOC);
-
-    return $this -> _getUserGenericMulti($users, $total['total'], $scope);
-  }
-
-  /**
-   * Obtiene usuarios por categoría con paginación
-   * @param  object $paginator: objeto con limit y offset
-   * @param  int $categoryID: ID de la categoría
-   * @return object: { data: [], rows: { total: int, fetched: int } }
-   **/
-  public function getUsersByCategory($paginator, $categoryID) {
     $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
     u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
     u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
@@ -175,8 +91,7 @@ class User {
     u.OTPDate, u.OTPCode, u.OTPAttemps,
     u.Oauth2ID, u.Oauth2Service, u.FailedLoginAttempts,
     u.LockedUntil,u.ReferralCode,u.IsAdmin,
-    sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-    s.PlanID, s.StartDate, s.EndDate, s.Status, u.IsAdmin,
+    sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL, u.IsAdmin,
     GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
       ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
     -- Subconsulta para reviews y ratings
@@ -188,7 +103,62 @@ class User {
     LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
     LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
     LEFT JOIN Media AS m ON u.UserID = m.UserID
-    LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
+    LEFT JOIN (
+      SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
+      MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
+      MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
+      FROM Offerings AS o
+      INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
+      WHERE o.Status = 'Active'
+      GROUP BY o.UserID
+    ) AS sub ON sub.UserID = u.UserID
+    WHERE u.UserType = ?
+    GROUP BY u.UserID
+    ORDER BY u.UserID
+    LIMIT ? OFFSET ?");
+
+    $stmt->execute([$userType, $paginator->limit, $paginator->offset]);
+    $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $stmt = $this->db->query("SELECT FOUND_ROWS() AS total");
+    $total = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    return $this -> _getUserGenericMulti($users, $total['total']);
+  }
+
+  /**
+   * Obtiene usuarios por categoría con paginación
+   *
+   * Retorna datos sin filtrar de campos sensibles. El controller es responsable
+   * de aplicar el scope de acceso antes de enviar la respuesta al cliente.
+   *
+   * @param  object $paginator: objeto con limit y offset
+   * @param  int $categoryID: ID de la categoría
+   * @return object: { data: [], rows: { total: int, fetched: int } }
+   *
+   * @note El filtrado de datos según scope (PUBLIC, USER, ADMIN) debe realizarse en el controller
+   **/
+  public function getUsersByCategory($paginator, $categoryID) {
+    $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
+    u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
+    u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
+    u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth,
+    u.MfaSecret, u.UserType, u.RegistrationDate, u.LastLogin, u.DeactivationDate,
+    u.UserLevel, u.SignedContract, u.LegalDocuments, u.ShortDescription,
+    u.OTPDate, u.OTPCode, u.OTPAttemps,
+    u.Oauth2ID, u.Oauth2Service, u.FailedLoginAttempts,
+    u.LockedUntil,u.ReferralCode,u.IsAdmin,
+    sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL, u.IsAdmin,
+    GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
+      ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
+    -- Subconsulta para reviews y ratings
+    (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
+      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
+    (SELECT COUNT(DISTINCT r.ReviewID)
+      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
+    FROM Users AS u
+    LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
+    LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
+    LEFT JOIN Media AS m ON u.UserID = m.UserID
     LEFT JOIN (
       SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
       MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
@@ -208,15 +178,28 @@ class User {
     $stmt = $this->db->query("SELECT FOUND_ROWS() AS total");
     $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    return $this -> _getUserGenericMulti($users, $total['total'], $scope);
+    return $this -> _getUserGenericMulti($users, $total['total']);
   }
 
-  /**
-   * Obtiene un usuario por su ID
-   * @param  int $userID: ID del usuario
-   * @return array|false: datos del usuario o false si no existe
+
+ /**
+   * Busca guías por término de búsqueda con paginación
+   *
+   * Retorna datos sin filtrar de campos sensibles. El controller es responsable
+   * de aplicar el scope de acceso antes de enviar la respuesta al cliente.
+   *
+   * @param  object $paginator: objeto con limit y offset
+   * @param  string $query: término(s) de búsqueda (busca en DisplayName, Biography, Categories, etc)
+   * @return object: { data: [], rows: { total: int, fetched: int } }
+   *
+   * @note El filtrado de datos según scope (PUBLIC, USER, ADMIN) debe realizarse en el controller
    **/
-  public function getUserById($userID, $scope = UserAccessScope::PUBLIC) {
+  public function searchGuides($paginator, $query) {
+    $query = is_string($query) ? explode(" ", $query) : [];
+    $query = array_map('trim', $query);
+    $query = implode(" ", $query);
+    $searchQuery = "%$query%";
+
     $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
     u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
     u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
@@ -226,8 +209,7 @@ class User {
     u.OTPDate, u.OTPCode, u.OTPAttemps,
     u.Oauth2ID, u.Oauth2Service, u.FailedLoginAttempts,
     u.LockedUntil,u.ReferralCode,u.IsAdmin,
-    sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-    s.PlanID, s.StartDate, s.EndDate, s.Status, u.IsAdmin,
+    sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL, u.IsAdmin,
     GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
       ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
     -- Subconsulta para reviews y ratings
@@ -239,7 +221,70 @@ class User {
     LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
     LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
     LEFT JOIN Media AS m ON u.UserID = m.UserID
-    LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
+    LEFT JOIN (
+      SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
+      MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
+      MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
+      FROM Offerings AS o
+      INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
+      WHERE o.Status = 'Active'
+      GROUP BY o.UserID
+    ) AS sub ON sub.UserID = u.UserID
+    WHERE u.UserType = 'Guide' AND (
+      u.UserName LIKE ? OR
+      u.DisplayName LIKE ? OR
+      u.Biography LIKE ? OR
+      u.ShortDescription LIKE ? OR
+      c.Name LIKE ?
+    )
+    AND u.DeactivationDate IS NULL
+    GROUP BY u.UserID
+    ORDER BY u.UserID
+    LIMIT ? OFFSET ?");
+
+    $stmt->execute([$searchQuery, $searchQuery, $searchQuery, $searchQuery, $searchQuery,
+      $paginator->limit, $paginator->offset]);
+
+    $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $stmt = $this->db->query("SELECT FOUND_ROWS() AS total");
+    $total = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    return $this -> _getUserGenericMulti($users, $total['total']);
+  }
+
+  /**
+   * Obtiene un usuario por su ID
+   *
+   * Retorna datos sin filtrar de campos sensibles. El controller es responsable
+   * de aplicar el scope de acceso antes de enviar la respuesta al cliente.
+   *
+   * @param  int $userID: ID del usuario
+   * @return array|false: datos del usuario o false si no existe
+   *
+   * @note El filtrado de datos según scope (PUBLIC, USER, ADMIN) debe realizarse en el controller
+   **/
+  public function getUserById($userID) {
+    $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
+    u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
+    u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
+    u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth,
+    u.MfaSecret, u.UserType, u.RegistrationDate, u.LastLogin, u.DeactivationDate,
+    u.UserLevel, u.SignedContract, u.LegalDocuments, u.ShortDescription,
+    u.OTPDate, u.OTPCode, u.OTPAttemps,
+    u.Oauth2ID, u.Oauth2Service, u.FailedLoginAttempts,
+    u.LockedUntil,u.ReferralCode,u.IsAdmin,
+    sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL, u.IsAdmin,
+    GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
+      ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
+    -- Subconsulta para reviews y ratings
+    (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
+      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
+    (SELECT COUNT(DISTINCT r.ReviewID)
+      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
+    FROM Users AS u
+    LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
+    LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
+    LEFT JOIN Media AS m ON u.UserID = m.UserID
     LEFT JOIN (
       SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
       MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
@@ -256,15 +301,21 @@ class User {
     $stmt->execute([$userID]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    return $this -> _getUserGeneric($user, $scope);
+    return $this -> _getUserGeneric($user);
   }
 
   /**
    * Obtiene un usuario por username
-   * @param  string $username: nombre de usuario
+   *
+   * Retorna datos sin filtrar de campos sensibles. El controller es responsable
+   * de aplicar el scope de acceso antes de enviar la respuesta al cliente.
+   *
+   * @param  string $userName: nombre de usuario
    * @return array|false: datos del usuario o false si no existe
+   *
+   * @note El filtrado de datos según scope (PUBLIC, USER, ADMIN) debe realizarse en el controller
    **/
-  public function getUserByUserName($userName, $scope = UserAccessScope::PUBLIC) {
+  public function getUserByUserName($userName) {
     $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
     u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
     u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
@@ -274,8 +325,7 @@ class User {
     u.OTPDate, u.OTPCode, u.OTPAttemps,
     u.Oauth2ID, u.Oauth2Service, u.FailedLoginAttempts,
     u.LockedUntil,u.ReferralCode,u.IsAdmin,
-    sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-    s.PlanID, s.StartDate, s.EndDate, s.Status, u.IsAdmin,
+    sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL, u.IsAdmin,
     GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
       ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
     -- Subconsulta para reviews y ratings
@@ -287,7 +337,6 @@ class User {
     LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
     LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
     LEFT JOIN Media AS m ON u.UserID = m.UserID
-    LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
     LEFT JOIN (
       SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
       MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
@@ -304,15 +353,21 @@ class User {
     $stmt->execute([$userName]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    return $this -> _getUserGeneric($user, $scope);
+    return $this -> _getUserGeneric($user);
   }
 
   /**
    * Obtiene un usuario por email
+   *
+   * Retorna datos sin filtrar de campos sensibles. El controller es responsable
+   * de aplicar el scope de acceso antes de enviar la respuesta al cliente.
+   *
    * @param  string $email: email del usuario
    * @return array|false: datos del usuario o false si no existe
+   *
+   * @note El filtrado de datos según scope (PUBLIC, USER, ADMIN) debe realizarse en el controller
    **/
-  public function getUserByEmail($email, $scope = UserAccessScope::PUBLIC) {
+  public function getUserByEmail($email) {
     $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
     u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
     u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
@@ -322,8 +377,7 @@ class User {
     u.OTPDate, u.OTPCode, u.OTPAttemps,
     u.Oauth2ID, u.Oauth2Service, u.FailedLoginAttempts,
     u.LockedUntil,u.ReferralCode,u.IsAdmin,
-    sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-    s.PlanID, s.StartDate, s.EndDate, s.Status, u.IsAdmin,
+    sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL, u.IsAdmin,
     GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
       ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
     -- Subconsulta para reviews y ratings
@@ -335,7 +389,6 @@ class User {
     LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
     LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
     LEFT JOIN Media AS m ON u.UserID = m.UserID
-    LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
     LEFT JOIN (
       SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
       MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
@@ -352,16 +405,22 @@ class User {
     $stmt->execute([$email]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    return $this -> _getUserGeneric($user, $scope);
+    return $this -> _getUserGeneric($user);
   }
 
   /**
    * Obtiene un usuario por OAuth ID
+   *
+   * Retorna datos sin filtrar de campos sensibles. El controller es responsable
+   * de aplicar el scope de acceso antes de enviar la respuesta al cliente.
+   *
    * @param  string $oAuthID: ID del OAuth
    * @param  string $oAuthService: servicio OAuth (Google, Facebook, etc)
    * @return array|false: datos del usuario o false si no existe
+   *
+   * @note El filtrado de datos según scope (PUBLIC, USER, ADMIN) debe realizarse en el controller
    **/
-  public function getUserByOAuthID($oAuthID, $oAuthService, $scope = UserAccessScope::PUBLIC) {
+  public function getUserByOAuthID($oAuthID, $oAuthService) {
     $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
     u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
     u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
@@ -371,8 +430,7 @@ class User {
     u.OTPDate, u.OTPCode, u.OTPAttemps,
     u.Oauth2ID, u.Oauth2Service, u.FailedLoginAttempts,
     u.LockedUntil,u.ReferralCode,u.IsAdmin,
-    sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-    s.PlanID, s.StartDate, s.EndDate, s.Status, u.IsAdmin,
+    sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL, u.IsAdmin,
     GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
       ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
     -- Subconsulta para reviews y ratings
@@ -384,7 +442,6 @@ class User {
     LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
     LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
     LEFT JOIN Media AS m ON u.UserID = m.UserID
-    LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
     LEFT JOIN (
       SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
       MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
@@ -401,15 +458,21 @@ class User {
     $stmt->execute([$oAuthID, $oAuthService]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    return $this -> _getUserGeneric($user, $scope);
+    return $this -> _getUserGeneric($user);
   }
 
   /**
    * Obtiene un usuario por su código de referencia
+   *
+   * Retorna datos sin filtrar de campos sensibles. El controller es responsable
+   * de aplicar el scope de acceso antes de enviar la respuesta al cliente.
+   *
    * @param  string $referralCode: código de referencia
    * @return array|false: datos del usuario o false si no existe
+   *
+   * @note El filtrado de datos según scope (PUBLIC, USER, ADMIN) debe realizarse en el controller
    **/
-  public function getUserByRefCode($referralCode, $scope = UserAccessScope::PUBLIC) {
+  public function getUserByRefCode($referralCode) {
     $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
     u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
     u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
@@ -419,8 +482,7 @@ class User {
     u.OTPDate, u.OTPCode, u.OTPAttemps,
     u.Oauth2ID, u.Oauth2Service, u.FailedLoginAttempts,
     u.LockedUntil,u.ReferralCode,u.IsAdmin,
-    sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-    s.PlanID, s.StartDate, s.EndDate, s.Status, u.IsAdmin,
+    sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL, u.IsAdmin,
     GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
       ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
     -- Subconsulta para reviews y ratings
@@ -432,7 +494,6 @@ class User {
     LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
     LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
     LEFT JOIN Media AS m ON u.UserID = m.UserID
-    LEFT JOIN Subscriptions AS s ON u.UserID = s.UserID
     LEFT JOIN (
       SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
       MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
@@ -449,39 +510,37 @@ class User {
     $stmt->execute([$referralCode]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    return $this -> _getUserGeneric($user, $scope);
+    return $this -> _getUserGeneric($user);
   }
 
   /**
-   * Procesa y filtra datos de un usuario según el nivel de acceso especificado
+   * Procesa y normaliza datos de un usuario individual
    *
-   * Realiza conversiones de tipos de datos, agrupación de información relacionada,
-   * y elimina campos sensibles según el scope de acceso del usuario.
+   * Realiza conversiones de tipos de datos y agrupa información relacionada
+   * sin eliminar campos sensibles. El filtrado de campos según nivel de acceso
+   * debe realizarse en el controller.
    *
    * @param  array|null $user: datos del usuario obtenidos de la base de datos o null
-   * @param  UserAccessScope $scope: nivel de acceso para filtrar campos (PUBLIC, USER, ADMIN)
-   * @return array|false: datos del usuario filtrados según scope o false si no existe
+   * @return array|false: datos del usuario normalizados o false si no existe
    *
    * @example
-   * $userData = $this->_getUserGeneric($rawUserData, UserAccessScope::PUBLIC);
-   * # Retorna solo datos públicos (DisplayName, Categories, Rating, etc)
+   * $userData = $this->_getUserGeneric($rawUserData);
+   * # Retorna datos con tipos convertidos (Floor, UserLevel a int, booleanos convertidos)
+   * # Categories transformadas a array de objetos {Id, Name}
+   * # SessionType agrupado en objeto estructurado
    *
-   * $adminData = $this->_getUserGeneric($rawUserData, UserAccessScope::ADMIN);
-   * # Retorna todos los datos incluyendo MFA, OTP, intentos fallidos
+   * Transformaciones realizadas:
+   * - Floor, UserLevel: conversión a entero
+   * - ValidatedEmail, ValidatedPhone, TwoFactorAuth, IsAdmin: conversión a booleano
+   * - Categories: transformación de string "id1:name1,id2:name2" a array de objetos {Id, Name}
+   * - SessionType: agrupación de hasVirtual e hasInPerson en objeto {Virtual, InPerson}
    *
-   * Campos removidos según scope:
-   * - ADMIN: acceso completo a todos los campos
-   * - USER: se ocultan MfaSecret, OTPCode, OTPDate, OTPAttemps, FailedLoginAttempts
-   * - PUBLIC: se ocultan todos los campos privados (FirstName, LastName, Email, Phone,
-   *   AddressName, AddressNumber, Floor, Department, Cp, DateOfBirth, Gender, etc)
+   * @note El filtrado de campos sensibles se realiza en el controller según scope de acceso
    **/
-  private function _getUserGeneric($user, $scope){
+  private function _getUserGeneric($user){
     if (empty($user)) {
       return false;
     }
-
-    $stmt->execute([$userID]);
-    $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
     $user['Floor'] = is_null($user['Floor']) ? null : (int)$user['Floor'];
     $user['UserLevel'] = !$user['UserLevel'] ? 1 : (int)$user['UserLevel'];
@@ -505,64 +564,36 @@ class User {
     unset($user['hasVirtual'],
     $user['hasInPerson']);
 
-    # Agregar información de suscripción
-    $user['HistorySubscription'] = is_null($user['PlanID']) ? null : [
-      "LatestPlanID" => (int)$user['PlanID'],
-      "StartDate" => $user['StartDate'],
-      "EndDate" => $user['EndDate'],
-      "Status" => $user['Status'],
-      "UsedTrial" => 'True'
-    ];
-    unset(
-      $user['PlanID'],
-      $user['StartDate'],
-      $user['EndDate'],
-      $user['Status']
-    );
-
-    # Si no es admin estos campos internos no los muestro
-    if($scope !== UserAccessScope::ADMIN){
-      unset($user['MfaSecret'],
-      $user['OTPDate'],
-      $user['OTPDate'],
-      $user['OTPCode'],
-      $user['OTPAttemps'],
-      $user['FailedLoginAttempts']);
-    }
-
-    # Si no es admin ni user no muestro campos privados
-    if(!in_array($scope, [UserAccessScope::ADMIN, UserAccessScope::USER])){
-      unset($user['FirstName'],
-      $user['LastName'],
-      $user['Email'],
-      $user['Phone'],
-      $user['AddressName'],
-      $user['AddressNumber'],
-      $user['Floor'],
-      $user['Department'],
-      $user['Cp'],
-      $user['DateOfBirth'],
-      $user['Gender'],
-      $user['ValidatedEmail'],
-      $user['ValidatedPhone'],
-      $user['TwoFactorAuth'],
-      $user['RegistrationDate'],
-      $user['LastLogin'],
-      $user['DeactivationDate'],
-      $user['SignedContract'],
-      $user['LegalDocuments'],
-      $user['LockedUntil'],
-      $user['ReferralCode'],
-      $user['HistorySubscription'],
-      $user['Oauth2ID'],
-      $user['Oauth2Service'],
-      $user['IsAdmin']);
-    }
     return $user;
   }
 
-  private function _getUserGenericMulti($users, $scope){
-    $users = array_map(function ($e) {
+  /**
+   * Procesa y normaliza múltiples registros de usuarios
+   *
+   * Realiza conversiones de tipos de datos y agrupa información relacionada
+   * para un conjunto de usuarios. Retorna datos en formato paginado sin eliminar
+   * campos sensibles. El filtrado de campos según nivel de acceso debe realizarse
+   * en el controller.
+   *
+   * @param  array $users: array de usuarios obtenidos de la base de datos
+   * @param  int $total: cantidad total de registros disponibles en la base de datos
+   * @return object: objeto con propiedades 'data' (array de usuarios normalizados) y 'rows' (información de paginación)
+   *
+   * @example
+   * $result = $this->_getUserGenericMulti($usersData, 150);
+   * # Retorna {data: [...], rows: {total: 150, fetched: 20}}
+   * # Con tipos convertidos y estructuras agrupadas
+   *
+   * Transformaciones realizadas:
+   * - Floor, UserLevel: conversión a entero
+   * - ValidatedEmail, ValidatedPhone, TwoFactorAuth, IsAdmin: conversión a booleano
+   * - Categories: transformación de string "id1:name1,id2:name2" a array de objetos {Id, Name}
+   * - SessionType: agrupación de hasVirtual e hasInPerson en objeto {Virtual, InPerson}
+   *
+   * @note El filtrado de campos sensibles se realiza en el controller según scope de acceso
+   **/
+  private function _getUserGenericMulti($users, $total){
+    $users = array_map(function ($e){
       $e['Floor'] = is_null($e['Floor']) ? null : (int)$e['Floor'];
       $e['UserLevel'] = !$e['UserLevel'] ? 1 : (int)$e['UserLevel'];
       $e['ValidatedEmail'] = (bool)$e['ValidatedEmail'];
@@ -585,55 +616,6 @@ class User {
 
       unset($e['hasVirtual'], $e['hasInPerson']);
 
-      # Agregar información de suscripción
-      $e['Subscription'] = is_null($e['PlanID']) ? null : [
-        "PlanID" => (int)$e['PlanID'],
-        "StartDate" => $e['StartDate'],
-        "Name" => $e['Name'],
-        "Description" => $e['Description']
-      ];
-      unset(
-        $e['PlanID'],
-        $e['StartDate'],
-        $e['Name'],
-        $e['Description']
-      );
-
-      # Si no es admin no muestro campos privados
-      if($scope !== UserAccessScope::ADMIN){
-        unset($e['MfaSecret'],
-        $e['OTPDate'],
-        $e['OTPDate'],
-        $e['OTPCode'],
-        $e['OTPAttemps'],
-        $e['FailedLoginAttempts'],
-        $e['FirstName'],
-        $e['LastName'],
-        $e['Email'],
-        $e['Phone'],
-        $e['AddressName'],
-        $e['AddressNumber'],
-        $e['Floor'],
-        $e['Department'],
-        $e['Cp'],
-        $e['DateOfBirth'],
-        $e['Gender'],
-        $e['ValidatedEmail'],
-        $e['ValidatedPhone'],
-        $e['TwoFactorAuth'],
-        $e['RegistrationDate'],
-        $e['LastLogin'],
-        $e['DeactivationDate'],
-        $e['SignedContract'],
-        $e['LegalDocuments'],
-        $e['LockedUntil'],
-        $e['ReferralCode'],
-        $e['HistorySubscription'],
-        $e['Oauth2ID'],
-        $e['Oauth2Service'],
-        $e['IsAdmin']);
-      }
-
       return $e;
     }, $users);
 
@@ -654,8 +636,9 @@ class User {
    **/
   public function latestConsentByUser($userID) {
     $stmt = $this->db->prepare("SELECT * FROM UserLegalConsents
-      WHERE UserID = ? ORDER BY ConsentDate DESC LIMIT 1");
-    return $stmt->execute([$userID]);
+      WHERE UserID = ? GROUP BY DocumentType ORDER BY ConsentDate DESC");
+    $stmt->execute([$userID]);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
   }
 
   /**
@@ -667,7 +650,7 @@ class User {
     $stmt = $this->db->prepare("SELECT u.UserID, u.DisplayName, u.FirstName,
       u.LastName, u.RegistrationDate, m.URL AS ProfilePhoto, r.ReferralStatus
       FROM Referrals AS r
-      LEFT JOIN Users AS u ON u.UserID = r.ReferredUserID
+      INNER JOIN Users AS u ON u.UserID = r.ReferredUserID
       LEFT JOIN Media AS m ON u.UserID = m.UserID
       WHERE r.UserID = ?
       ORDER BY u.RegistrationDate DESC");
@@ -694,7 +677,7 @@ class User {
    * @param  string $subDomain: subdominio opcional de onesoul.app
    * @return bool: true si se envió exitosamente, false en caso de excepcion
    **/
-  public function inviteByEmail ($userName, $referralCode, $subDomain) {
+  public function inviteByEmail($userName, $referralCode, $email, $subDomain) {
     # Construir enlace de referido
     $origin = $subDomain ? "https://{$subDomain}.onesoul.app" : "https://onesoul.app";
     $referralUrl = $origin ."/onboard/register?refid=" . urlencode($referralCode);
@@ -769,7 +752,7 @@ class User {
           $stmt->execute([$userID]); # Ejecutar la consulta
         }
       }
-      $user = $this->getUserById($userID, UserAccessScope::USER);
+      $user = $this->getUserById($userID);
 
       $this->db->commit(); # Confirmo transacción
       return $user;
@@ -822,7 +805,7 @@ class User {
         $stmt = $this->db->prepare("INSERT INTO Media (`URL`, `Path`, `UserID`) VALUES (?, ?, ?)");
         $stmt->execute([$fileURL, $filePath, $userID]);
       }
-      $user = $this->getUserById($userID, UserAccessScope::USER);
+      $user = $this->getUserById($userID);
 
       $this->db->commit(); # Confirmo transacción
       return $user;
@@ -866,7 +849,7 @@ class User {
       if (!is_null($profilePhoto['Path']) && file_exists($profilePhoto['Path'])) {
         unlink($profilePhoto['Path']); # Eliminar el archivo del sistema
       }
-      $user = $this->getUserById($userID, UserAccessScope::USER);
+      $user = $this->getUserById($userID);
 
       $this->db->commit(); # Confirmo transacción
       return $user;

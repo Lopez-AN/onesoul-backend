@@ -43,7 +43,7 @@ class CalendlyController{
       ]);
     }
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID') || !property_exists($jwt->data, 'UserType')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -57,7 +57,7 @@ class CalendlyController{
     $challenge = rtrim(strtr(base64_encode(hash('sha256', $verifier, true)), '+/','-_'), '=');
 
     $payload = [
-      'uid'   => $jwt['data'] -> UserID,
+      'uid'   => $jwt->data -> UserID,
       'exp'   => time()+600, // 5min expedicion
       'nonce' => bin2hex(random_bytes(8)),
       'redirect' => $redirect, // URL de redireccion (del frontend) luego de obtener los tokens
@@ -87,7 +87,7 @@ class CalendlyController{
   public function disconnect(Request $request, Response $response, array $args) {
     $jwt = $request->getAttribute('jwt');
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
+    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -95,7 +95,7 @@ class CalendlyController{
         ]
       ]);
     }
-    $userID = $jwt['data']->UserID;
+    $userID = $jwt->data->UserID;
 
     // Lo busco en la base
     try{

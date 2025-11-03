@@ -10,8 +10,8 @@ use App\Models\User;
 use App\Models\Auth;
 use App\Models\Category;
 use App\Models\Subscription;
-use App\Enums\UserAccessScope;
 
+require_once ROOT . '/src/Utils/validateReCaptcha.php';
 require_once(ROOT . '/src/Utils/Paginator.php');
 require_once(ROOT . '/src/Utils/OptimizeImg.php');
 require_once(ROOT . '/src/Utils/PerspectiveText.php');
@@ -41,110 +41,12 @@ class UserController{
    **/
   public function getUsers(Request $request, Response $response, $args) {
     $paginator = paginator($request);
+    $jwt = $request->getAttribute('jwt');
 
     try {
       $users = $this->user->getUsers($paginator);
+      $users->data = $this->_filterByScope($users->data, $jwt);
       return $response->withStatus(200)->withJson($users);
-    } catch (Throwable $e) {
-      return $response->withStatus(500)->withJson([
-        "error" => [
-          "code" => "INTERNAL_SERVER_ERROR",
-          "desc" => $e->getMessage()
-        ]
-      ]);
-    }
-  }
-
-  /**
-   * Obtiene un usuario por ID
-   * @param  Request $request: objeto de request HTTP
-   * @param  Response $response: objeto de response HTTP
-   * @param  array $args: argumentos de ruta (id)
-   * @return Response: JSON con datos del usuario o error
-   * @statusCode 200: éxito
-   * @statusCode 404: usuario no encontrado
-   * @statusCode 500: error del servidor
-   **/
-  public function getUserById(Request $request, Response $response, $args) {
-    $userID = $args['id'];
-
-    try {
-      $result = $this->user->getUserById($userID);
-      if(!$result){
-        return $response->withStatus(404)->withJson([
-          "error" => [
-            "code" => "USER_NOT_FOUND",
-            "desc" => "No user associated with the specified id was found"
-          ]
-        ]);
-      }
-      return $response->withStatus(200)->withJson($result);
-    } catch (Throwable $e) {
-      return $response->withStatus(500)->withJson([
-        "error" => [
-          "code" => "INTERNAL_SERVER_ERROR",
-          "desc" => $e->getMessage()
-        ]
-      ]);
-    }
-  }
-
-  /**
-   * Obtiene un usuario por email
-   * @param  Request $request: objeto de request HTTP
-   * @param  Response $response: objeto de response HTTP
-   * @param  array $args: argumentos de ruta (email)
-   * @return Response: JSON con datos del usuario o error
-   * @statusCode 200: éxito
-   * @statusCode 404: usuario no encontrado
-   * @statusCode 500: error del servidor
-   **/
-  public function getUserByEmail(Request $request, Response $response, $args) {
-    $email = $args['email'];
-    try {
-      $result = $this->user->getUserByEmail($email);
-      if(!$result){
-        return $response->withStatus(404)->withJson([
-          "error" => [
-            "code" => "USER_NOT_FOUND",
-            "desc" => "No user associated with the specified email account was found"
-          ]
-        ]);
-      }
-      return $response->withStatus(200)->withJson($result);
-    } catch (Throwable $e) {
-      return $response->withStatus(500)->withJson([
-        "error" => [
-          "code" => "INTERNAL_SERVER_ERROR",
-          "desc" => $e->getMessage()
-        ]
-      ]);
-    }
-  }
-
-  /**
-   * Obtiene un usuario por username
-   * @param  Request $request: objeto de request HTTP
-   * @param  Response $response: objeto de response HTTP
-   * @param  array $args: argumentos de ruta (username)
-   * @return Response: JSON con datos del usuario o error
-   * @statusCode 200: éxito
-   * @statusCode 404: usuario no encontrado
-   * @statusCode 500: error del servidor
-   **/
-  public function getUserByUserName(Request $request, Response $response, $args) {
-    $username = $args['username'];
-    try {
-      $result = $this->user->getUserByUserName($username);
-      if(!$result){
-        return $response->withStatus(404)->withJson([
-          "error" => [
-            "code" => "USER_NOT_FOUND",
-            "desc" => "No user associated with the specified username was found"
-          ]
-        ]);
-      }
-      return $response->withStatus(200)->withJson($result);
     } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -167,9 +69,11 @@ class UserController{
   public function getUsersByType(Request $request, Response $response, $args) {
     $paginator = paginator($request);
     $type = $args['type'];
+    $jwt = $request->getAttribute('jwt');
 
     try {
       $users = $this->user->getUsersByType($paginator, $type);
+      $users->data = $this->_filterByScope($users->data, $jwt);
       return $response->withStatus(200)->withJson($users);
     } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
@@ -193,10 +97,147 @@ class UserController{
   public function getUsersByCategory(Request $request, Response $response, $args) {
     $paginator = paginator($request);
     $categoryID = $args['id'];
+    $jwt = $request->getAttribute('jwt');
 
     try {
-      $result = $this->user->getUsersByCategory($paginator, $categoryID);
-      return $response->withStatus(200)->withJson($result);
+      $users = $this->user->getUsersByCategory($paginator, $categoryID);
+      $users->data = $this->_filterByScope($users->data, $jwt);
+      return $response->withStatus(200)->withJson($users);
+    } catch (Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  /**
+   * Busca guias usando un string
+   * @param  Request $request: objeto de request HTTP
+   * @param  Response $response: objeto de response HTTP
+   * @param  string ?query: texto a buscar
+   * @return Response: JSON con usuarios o error
+   * @statusCode 200: éxito
+   * @statusCode 500: error del servidor
+   **/
+  public function searchGuides(Request $request, Response $response, $args) {
+    $paginator = paginator($request);
+    $queryParams = $request->getQueryParams();
+    $query = $queryParams['query'] ?? '';
+
+    try {
+      $users = $this->user->searchGuides($paginator, $query);
+      return $response->withStatus(200)->withJson($users);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  /**
+   * Obtiene un usuario por ID
+   * @param  Request $request: objeto de request HTTP
+   * @param  Response $response: objeto de response HTTP
+   * @param  array $args: argumentos de ruta (id)
+   * @return Response: JSON con datos del usuario o error
+   * @statusCode 200: éxito
+   * @statusCode 404: usuario no encontrado
+   * @statusCode 500: error del servidor
+   **/
+  public function getUserById(Request $request, Response $response, $args) {
+    $userID = $args['id'];
+    $jwt = $request->getAttribute('jwt');
+
+    try {
+      $user = $this->user->getUserById($userID);
+      if(!$user){
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "USER_NOT_FOUND",
+            "desc" => "No user associated with the specified id was found"
+          ]
+        ]);
+      }
+      $user = $this->_filterByScope([$user], $jwt);
+      return $response->withStatus(200)->withJson($user[0]);
+    } catch (Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  /**
+   * Obtiene un usuario por email
+   * @param  Request $request: objeto de request HTTP
+   * @param  Response $response: objeto de response HTTP
+   * @param  array $args: argumentos de ruta (email)
+   * @return Response: JSON con datos del usuario o error
+   * @statusCode 200: éxito
+   * @statusCode 404: usuario no encontrado
+   * @statusCode 500: error del servidor
+   **/
+  public function getUserByEmail(Request $request, Response $response, $args) {
+    $email = $args['email'];
+    $jwt = $request->getAttribute('jwt');
+
+    try {
+      $user = $this->user->getUserByEmail($email);
+      if(!$user){
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "USER_NOT_FOUND",
+            "desc" => "No user associated with the specified email account was found"
+          ]
+        ]);
+      }
+      $user = $this->_filterByScope([$user], $jwt);
+      return $response->withStatus(200)->withJson($user[0]);
+    } catch (Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  /**
+   * Obtiene un usuario por username
+   * @param  Request $request: objeto de request HTTP
+   * @param  Response $response: objeto de response HTTP
+   * @param  array $args: argumentos de ruta (username)
+   * @return Response: JSON con datos del usuario o error
+   * @statusCode 200: éxito
+   * @statusCode 404: usuario no encontrado
+   * @statusCode 500: error del servidor
+   **/
+  public function getUserByUserName(Request $request, Response $response, $args) {
+    $userName = $args['userName'];
+    $jwt = $request->getAttribute('jwt');
+
+    try {
+      $user = $this->user->getUserByUserName($userName);
+      if(!$user){
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "USER_NOT_FOUND",
+            "desc" => "No user associated with the specified username was found"
+          ]
+        ]);
+      }
+      $user = $this->_filterByScope([$user], $jwt);
+      return $response->withStatus(200)->withJson($user[0]);
     } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -219,10 +260,11 @@ class UserController{
    **/
   public function getUserByRefCode(Request $request, Response $response, $args) {
     $referralCode = $args['referralCode'];
+    $jwt = $request->getAttribute('jwt');
 
     try {
-      $result = $this->user->getUserByRefCode($referralCode);
-      if(!$result){
+      $user = $this->user->getUserByRefCode($referralCode);
+      if(!$user){
         return $response->withStatus(404)->withJson([
           "error" => [
             "code" => "USER_NOT_FOUND",
@@ -230,7 +272,8 @@ class UserController{
           ]
         ]);
       }
-      return $response->withStatus(200)->withJson($result);
+      $user = $this->_filterByScope([$user], $jwt);
+      return $response->withStatus(200)->withJson($user[0]);
     } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -253,6 +296,8 @@ class UserController{
    **/
   public function latestConsentByUser(Request $request, Response $response, $args) {
     $userID = $args['id'];
+    $jwt = $request->getAttribute('jwt');
+
     try {
       $result = $this->user->latestConsentByUser($userID);
 
@@ -265,6 +310,15 @@ class UserController{
         ]);
       }
 
+      # Verificar si el usuario autenticado es el mismo o si es un administrador
+      if ($jwt->data->UserID != $userID && !$jwt->data->IsAdmin) {
+        return $response->withStatus(403)->withJson([
+          "error" => [
+            "code" => "UNAUTHORIZED",
+            "desc" => "You do not have permission to view the consents of this user."
+          ]
+        ]);
+      }
       return $response->withStatus(200)->withJson($result);
     } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
@@ -292,17 +346,8 @@ class UserController{
     $userID = $args['id'];
     $jwt = $request->getAttribute('jwt');
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'IsAdmin')) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
-
     # Verificar si el usuario autenticado es el mismo o si es un administrador
-    if ($jwt['data']->UserID != $userID && !$jwt['data']->IsAdmin) {
+    if ($jwt->data->UserID != $userID && !$jwt->data->IsAdmin) {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
@@ -349,17 +394,8 @@ class UserController{
     $userID = $args['id'];
     $jwt = $request->getAttribute('jwt');
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'IsAdmin')) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
-
     # Verificar si el usuario autenticado es el mismo o si es un administrador
-    if ($jwt['data']->UserID != $userID && !$jwt['data']->IsAdmin) {
+    if ($jwt->data->UserID != $userID && !$jwt->data->IsAdmin) {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
@@ -415,15 +451,6 @@ class UserController{
       ]);
     }
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
-
     $email = $data['Email'] ?? null;
     $recaptchaToken = $data['RecaptchaToken'] ?? null;
     $subDomain = $data['SubDomain'] ?? '';
@@ -452,12 +479,12 @@ class UserController{
     }
 
     try {
-      $result = $this->auth->validateReCaptcha($recaptchaToken, $clientIp);
-      if ($result->http_code !== 200) {
-        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+      $validation = validateReCaptcha($response, $recaptchaToken, $clientIp);
+      if (!$validation->valid) {
+        return $validation->response;
       }
 
-      $userID = $jwt['data'] -> UserID;
+      $userID = $jwt->data -> UserID;
       $user = $this->user->getUserById($userID);
       if (empty($user['ReferralCode'])) {
         return [
@@ -516,17 +543,8 @@ class UserController{
       ]);
     }
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'IsAdmin')) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
-
     # Verificar si el usuario autenticado es el mismo que el que se intenta modificar, o si es un administrador
-    if ($jwt['data']->UserID != $userID && !$jwt['data']->IsAdmin) {
+    if ($jwt->data->UserID != $userID && !$jwt->data->IsAdmin) {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
@@ -692,17 +710,8 @@ class UserController{
     $userID = $args['id'];
     $jwt = $request->getAttribute('jwt');
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'IsAdmin')) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
-
     # Verificar si el usuario autenticado es el mismo que el que se intenta modificar, o si es un administrador
-    if ($jwt['data']->UserID != $userID && !$jwt['data']->IsAdmin) {
+    if ($jwt->data->UserID != $userID && !$jwt->data->IsAdmin) {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
@@ -760,16 +769,7 @@ class UserController{
     $userID = $args['id'];
     $jwt = $request->getAttribute('jwt');
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'IsAdmin')) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
-
-    if ($jwt['data']->UserID != $userID && !$jwt['data']->IsAdmin) {
+    if ($jwt->data->UserID != $userID && !$jwt->data->IsAdmin) {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
@@ -907,17 +907,8 @@ class UserController{
     $userID = $args['id'];
     $jwt = $request->getAttribute('jwt');
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'IsAdmin')) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
-
     # Verificar si el usuario autenticado es el mismo que el que se intenta modificar, o si es un administrador
-    if ($jwt['data']->UserID != $userID && !$jwt['data']->IsAdmin) {
+    if ($jwt->data->UserID != $userID && !$jwt->data->IsAdmin) {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
@@ -974,17 +965,8 @@ class UserController{
       ]);
     }
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'IsAdmin')) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
-
     # Verificar si el usuario autenticado es el mismo que el que se intenta modificar, o si es un administrador
-    if ($jwt['data']->UserID != $userID && !$jwt['data']->IsAdmin) {
+    if ($jwt->data->UserID != $userID && !$jwt->data->IsAdmin) {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
@@ -1081,16 +1063,7 @@ class UserController{
       ]);
     }
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'IsAdmin')) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
-
-    if ($jwt['data']->UserID != $userID && !$jwt['data']->IsAdmin) {
+    if ($jwt->data->UserID != $userID && !$jwt->data->IsAdmin) {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
@@ -1234,6 +1207,56 @@ class UserController{
         ]
       ]);
     }
+  }
+
+  /**
+   * Filtra los usuarios segun si es un admin, o el mismo usuario,
+   * para mostrar o no campos privados o internos
+   * @param  array $users: usuarios a filtrar
+   * @param  object $jwt: token JWT decodificado
+   * @return array: usuarios con campos filtrados
+   **/
+  private function _filterByScope($users, $jwt) {
+    return array_map(function($e) use ($jwt){
+      # Si no es admin estos campos internos no los muestro
+      if(!$jwt || !$jwt->data->IsAdmin){
+        unset($e['MfaSecret'],
+        $e['OTPDate'],
+        $e['OTPDate'],
+        $e['OTPCode'],
+        $e['OTPAttemps'],
+        $e['FailedLoginAttempts']);
+      }
+
+      # Si no es admin ni el mismo user no muestro campos privados
+      if(!$jwt || (!$jwt->data->IsAdmin && $jwt->data->UserID !== $e['UserID'])){
+        unset($e['FirstName'],
+        $e['LastName'],
+        $e['Email'],
+        $e['Phone'],
+        $e['AddressName'],
+        $e['AddressNumber'],
+        $e['Floor'],
+        $e['Department'],
+        $e['Cp'],
+        $e['DateOfBirth'],
+        $e['Gender'],
+        $e['ValidatedEmail'],
+        $e['ValidatedPhone'],
+        $e['TwoFactorAuth'],
+        $e['RegistrationDate'],
+        $e['LastLogin'],
+        $e['DeactivationDate'],
+        $e['SignedContract'],
+        $e['LegalDocuments'],
+        $e['LockedUntil'],
+        $e['ReferralCode'],
+        $e['Oauth2ID'],
+        $e['Oauth2Service'],
+        $e['IsAdmin']);
+      }
+      return $e;
+    }, $users);
   }
 
   /**

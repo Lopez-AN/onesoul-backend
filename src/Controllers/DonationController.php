@@ -26,17 +26,8 @@ class DonationController {
     $jwt = $request->getAttribute('jwt');
     $paginator = paginator($request);
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'IsAdmin')) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
-
     # Verificar si el usuario autenticado es el mismo o si es un administrador
-    if ($jwt['data']->UserID != $userID && !$jwt['data']->IsAdmin) {
+    if ($jwt->data->UserID != $userID && !$jwt->data->IsAdmin) {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
@@ -64,18 +55,8 @@ class DonationController {
     $jwt = $request->getAttribute('jwt');
     $paginator = paginator($request);
 
-
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'IsAdmin')) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
-
     # Verificar si el usuario autenticado es el mismo que el que consulta o un administrador
-    if ($jwt['data']->UserID != $userID && !$jwt['data']->IsAdmin) {
+    if ($jwt->data->UserID != $userID && !$jwt->data->IsAdmin) {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
@@ -102,8 +83,8 @@ class DonationController {
     $voucherID = $args['voucherID'];
     $jwt = $request->getAttribute('jwt');
 
-    $userID = $jwt['data']->UserID;
-    $isAdmin = $jwt['data']->IsAdmin;
+    $userID = $jwt->data->UserID;
+    $isAdmin = $jwt->data->IsAdmin;
 
     try {
       $donation = $this->donation->getDonationById($voucherID, $userID, $isAdmin);
@@ -219,7 +200,7 @@ class DonationController {
     }
 
     # Solo los guias pueden crear donaciones
-    if ($jwt['data']->UserType != 'Guide') {
+    if ($jwt->data->UserType != 'Guide') {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
@@ -227,7 +208,7 @@ class DonationController {
         ]
       ]);
     }
-    $userID = $jwt['data']->UserID;
+    $userID = $jwt->data->UserID;
 
     # Ahora busco si no supero el límite de donaciones
     try {
@@ -286,7 +267,7 @@ class DonationController {
 
     $jwt = $request->getAttribute('jwt');
     # Solo los guias pueden crear donaciones
-    if ($jwt['data']->UserType != 'Guide') {
+    if ($jwt->data->UserType != 'Guide') {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
@@ -294,8 +275,8 @@ class DonationController {
         ]
       ]);
     }
-    $userID = $jwt['data']->UserID;
-    $isAdmin = $jwt['data']->IsAdmin;
+    $userID = $jwt->data->UserID;
+    $isAdmin = $jwt->data->IsAdmin;
 
     # Ahora busco si no supero el límite de donaciones
     try {
@@ -342,17 +323,8 @@ class DonationController {
     $quantity = $args['quantity'];
     $jwt = $request->getAttribute('jwt');
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'IsAdmin')) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
-
     # Verificar si el usuario autenticado es el mismo o si es un administrador
-    if ($jwt['data']->UserID != $userID && !$jwt['data']->IsAdmin) {
+    if ($jwt->data->UserID != $userID && !$jwt->data->IsAdmin) {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",

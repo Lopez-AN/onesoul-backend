@@ -100,7 +100,7 @@ class SubscriptionController {
     $userID = $args['userID'];
     $jwt = $request->getAttribute('jwt');
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID') || !property_exists($jwt->data, 'UserType')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -111,7 +111,7 @@ class SubscriptionController {
 
     try {
       # Verificar si el usuario autenticado es el mismo o un administrador
-      if ($jwt['data']->UserID != $userID && $jwt['data']->UserType != 'Admin') {
+      if ($jwt->data->UserID != $userID && $jwt->data->UserType != 'Admin') {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
@@ -145,7 +145,7 @@ class SubscriptionController {
     $platformSubscriptionID = $args['subId'];
     $jwt = $request->getAttribute('jwt');
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID') || !property_exists($jwt->data, 'UserType')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -169,7 +169,7 @@ class SubscriptionController {
       $userID = $subscription['UserID'];
 
       # Verificar si el usuario autenticado es un administrador
-      if ($jwt['data']->UserID != $userID && $jwt['data']->UserType != 'Admin') {
+      if ($jwt->data->UserID != $userID && $jwt->data->UserType != 'Admin') {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
@@ -193,14 +193,14 @@ class SubscriptionController {
   public function updateSubscriptionByUser(Request $request, Response $response,$args) {
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
-    $userID = $jwt['data'] -> UserID;
+    $userID = $jwt->data -> UserID;
     $subDomain = $data['SubDomain'] ?? '';
     $trial = $data['Trial'] ?? false;
 
     $trialFlag = filter_var($trial, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
     $trialDays = ($trialFlag === true) ? 90 : 0;
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID') || !property_exists($jwt->data, 'UserType')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -222,7 +222,7 @@ class SubscriptionController {
     }
 
     try {
-      if ($jwt['data']->UserID != $userID && $jwt['data']->UserType != 'Admin') {
+      if ($jwt->data->UserID != $userID && $jwt->data->UserType != 'Admin') {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
@@ -234,7 +234,7 @@ class SubscriptionController {
       $newPlanID = $data['PlanID'] ?? null;
 
       // Obtener el email del usuario
-      $userResult = $this->user->getUserById($userID, UserAccessScope::ADMIN);
+      $userResult = $this->user->getUserById($userID);
       if (empty($userResult['Email'])) {
         return $response->withStatus(400)->withJson([
           "error" => [
@@ -306,7 +306,7 @@ class SubscriptionController {
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID') || !property_exists($jwt->data, 'UserType')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -317,7 +317,7 @@ class SubscriptionController {
 
     try {
       # Verificar si el usuario autenticado es un administrador
-      if ($jwt['data']->UserType != 'Admin') {
+      if ($jwt->data->UserType != 'Admin') {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
@@ -345,7 +345,7 @@ class SubscriptionController {
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'UserType')) {
+    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID') || !property_exists($jwt->data, 'UserType')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -356,7 +356,7 @@ class SubscriptionController {
 
     try {
       # Verificar si el usuario autenticado es un administrador o el mismo usuario
-      if ($jwt['data']->UserType != 'Admin') {
+      if ($jwt->data->UserType != 'Admin') {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
@@ -395,7 +395,7 @@ class SubscriptionController {
     $paginator = paginator($request);
     $jwt = $request->getAttribute('jwt');
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
+    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN", 
@@ -404,8 +404,8 @@ class SubscriptionController {
       ]);
     }
 
-    $userJWT = $jwt['data']->UserID;
-    $userType = $jwt['data']->UserType;
+    $userJWT = $jwt->data->UserID;
+    $userType = $jwt->data->UserType;
 
     $subscription = $this->subscription->getSubscriptionByUser($userID);
 

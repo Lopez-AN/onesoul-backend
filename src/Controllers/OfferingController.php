@@ -49,6 +49,33 @@ class OfferingController {
     }
   }
 
+  /**
+   * Obtiene una categoría por su ID
+   * @param  Request $request: objeto de request HTTP
+   * @param  Response $response: objeto de response HTTP
+   * @param  string ?query: texto a buscar
+   * @return Response: JSON con publicaciones o error
+   * @statusCode 200: éxito
+   * @statusCode 500: error del servidor
+   **/
+  public function searchOfferings(Request $request, Response $response, $args) {
+    $paginator = paginator($request);
+    $queryParams = $request->getQueryParams();
+    $query = $queryParams['query'] ?? '';
+
+    try {
+      $offerings = $this->search->searchOfferings($paginator, $query);
+      return $response->withStatus(200)->withJson($offerings);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
   public function getOfferingById(Request $request, Response $response, $args)  {
     $id = $args['id'];
     try {
@@ -140,8 +167,8 @@ class OfferingController {
       ]);
     }
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')
-      || !property_exists($jwt['data'], 'UserType')) {
+    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')
+      || !property_exists($jwt->data, 'UserType')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -151,7 +178,7 @@ class OfferingController {
     }
 
     # Verificar si el usuario autenticado es un Guia o un administrador
-    if ($jwt['data']->UserType != 'Guide') {
+    if ($jwt->data->UserType != 'Guide') {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
@@ -159,7 +186,7 @@ class OfferingController {
         ]
       ]);
     }
-    $userID = $jwt['data']->UserID;
+    $userID = $jwt->data->UserID;
 
     $data['UserID'] = $userID;
     $data['SKU'] = null;
@@ -219,8 +246,8 @@ class OfferingController {
     $id = $args['id'];
     $jwt = $request->getAttribute('jwt');
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')
-      || !property_exists($jwt['data'], 'IsAdmin')) {
+    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')
+      || !property_exists($jwt->data, 'IsAdmin')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -230,7 +257,7 @@ class OfferingController {
     }
 
     # Verificar que el usuario sea admin
-    if (!$jwt['data']->IsAdmin) {
+    if (!$jwt->data->IsAdmin) {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
@@ -294,8 +321,8 @@ class OfferingController {
       ]);
     }
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')
-      || !property_exists($jwt['data'], 'IsAdmin')) {
+    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')
+      || !property_exists($jwt->data, 'IsAdmin')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -305,7 +332,7 @@ class OfferingController {
     }
 
     // Verificar si el usuario autenticado es el mismo que el que se intenta crear, o si es un administrador
-    if ($offeringData['UserID'] != $userID && !$jwt['data']->IsAdmin) {
+    if ($offeringData['UserID'] != $userID && !$jwt->data->IsAdmin) {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
@@ -313,7 +340,7 @@ class OfferingController {
         ]
       ]);
     }
-    $userID = $jwt['data']->UserID;
+    $userID = $jwt->data->UserID;
 
     try {
       $result = $this->offering->getOfferingById($id);
@@ -383,8 +410,8 @@ class OfferingController {
     $id = $args['id'];
     $jwt = $request->getAttribute('jwt');
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')
-      || !property_exists($jwt['data'], 'IsAdmin')) {
+    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')
+      || !property_exists($jwt->data, 'IsAdmin')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -394,7 +421,7 @@ class OfferingController {
     }
 
     // Verificar si el usuario autenticado es el mismo que creo el offering o un admin
-    if ($offeringData['UserID'] != $userID && !$jwt['data']->IsAdmin) {
+    if ($offeringData['UserID'] != $userID && !$jwt->data->IsAdmin) {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
@@ -402,7 +429,7 @@ class OfferingController {
         ]
       ]);
     }
-    $userID = $jwt['data']->UserID;
+    $userID = $jwt->data->UserID;
 
     try {
       $offeringData = $this->offering->getOfferingById($id);
@@ -457,7 +484,7 @@ class OfferingController {
       ]);
     }
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
+    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -465,7 +492,7 @@ class OfferingController {
         ]
       ]);
     }
-    $userID = $jwt['data']->UserID;
+    $userID = $jwt->data->UserID;
 
     try {
       // Verificar que el offering existe
@@ -609,7 +636,7 @@ class OfferingController {
       ]);
     }
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')) {
+    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -617,7 +644,7 @@ class OfferingController {
         ]
       ]);
     }
-    $userID = $jwt['data']->UserID;
+    $userID = $jwt->data->UserID;
 
     try {
       // Verificar que el offering existe
@@ -805,7 +832,7 @@ class OfferingController {
       "Extension" => $extension
     ];
   }
-  
+
   // Función para validar si el archivo es imagen
   private function _isImage($mimeType)  {
     return in_array($mimeType, ['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
@@ -815,10 +842,10 @@ class OfferingController {
     $id = $args['id'];
     $mediaID = $args['mediaID'];
     $jwt = $request->getAttribute('jwt');
-    $userID = $jwt['data']->UserID;
+    $userID = $jwt->data->UserID;
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID')
-      || !property_exists($jwt['data'], 'IsAdmin')) {
+    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')
+      || !property_exists($jwt->data, 'IsAdmin')) {
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "INVALID_TOKEN",
@@ -840,7 +867,7 @@ class OfferingController {
       $offeringData = $result->data;
 
       // Verificar si el usuario autenticado es el mismo que creo el offering o un admin
-      if ($offeringData['UserID'] != $userID && !$jwt['data']->IsAdmin) {
+      if ($offeringData['UserID'] != $userID && !$jwt->data->IsAdmin) {
         return $response->withStatus(403)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",

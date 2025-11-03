@@ -5,12 +5,6 @@ use App\Controllers\NotificationController;
 use App\Models\Notification;
 
 return function (App $app) {
-  # Proteccion de rutas
-  // $jwtMiddleware = new JwtAuthentication([
-  //   "secret" => $GLOBALS['config']['jwt']['secret'],
-  //   "attribute" => "jwt"
-  // ]);
-
   // Obtener PDO del contenedor DI
   $pdo = $app->getContainer()->get('pdo');
   $notification = new Notification($pdo);

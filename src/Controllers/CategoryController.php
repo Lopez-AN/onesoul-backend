@@ -47,6 +47,33 @@ class CategoryController {
    * Obtiene una categoría por su ID
    * @param  Request $request: objeto de request HTTP
    * @param  Response $response: objeto de response HTTP
+   * @param  string ?query: texto a buscar
+   * @return Response: JSON con categorias o error
+   * @statusCode 200: éxito
+   * @statusCode 500: error del servidor
+   **/
+  public function searchCategories(Request $request, Response $response, $args) {
+    $paginator = paginator($request);
+    $queryParams = $request->getQueryParams();
+    $query = $queryParams['query'] ?? '';
+
+    try {
+      $categories = $this->search->searchCategories($paginator, $query);
+      return $response->withStatus(200)->withJson($categories);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  /**
+   * Obtiene una categoría por su ID
+   * @param  Request $request: objeto de request HTTP
+   * @param  Response $response: objeto de response HTTP
    * @param  array $args: argumentos de ruta (id)
    * @return Response: JSON con datos de la categoría o error
    * @statusCode 200: éxito
@@ -128,16 +155,7 @@ class CategoryController {
       ]);
     }
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'IsAdmin')) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
-
-    if (!$jwt['data']->IsAdmin) {
+    if (!$jwt->data->IsAdmin) {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
@@ -199,16 +217,7 @@ class CategoryController {
       ]);
     }
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'IsAdmin')) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
-
-    if (!$jwt['data']->IsAdmin) {
+    if (!$jwt->data->IsAdmin) {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
@@ -259,16 +268,7 @@ class CategoryController {
     $categoryID = $args['id'];
     $jwt = $request->getAttribute('jwt');
 
-    if (!isset($jwt['data']) || !property_exists($jwt['data'], 'UserID') || !property_exists($jwt['data'], 'IsAdmin')) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
-
-    if (!$jwt['data']->IsAdmin) {
+    if (!$jwt->data->IsAdmin) {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",

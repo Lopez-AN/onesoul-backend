@@ -40,6 +40,47 @@ class Category {
     ];
   }
 
+
+  /**
+   * Busca categorías por término de búsqueda con paginación
+   *
+   * @param  object $paginator: objeto con limit y offset
+   * @param  string $query: término(s) de búsqueda
+   * @return object: { data: [], rows: { total: int, fetched: int } }
+   *
+   **/
+  public function searchCategories($paginator, $query) {
+    try {
+      $searchQuery = "%$query%";
+      $stmt = $this->pdo->prepare("SELECT SQL_CALC_FOUND_ROWS c.*,m.URL AS ImgURL
+            FROM Categories AS c
+            LEFT JOIN Media AS m ON c.CategoryID = m.CategoryID
+            WHERE (c.Name LIKE :search1 OR c.Description LIKE :search2) AND c.IsActive = 1
+            ORDER BY c.CategoryID
+            LIMIT :_limit OFFSET :_offset");
+
+      $stmt->bindParam(':search1', $searchQuery, PDO::PARAM_STR);
+      $stmt->bindParam(':search2', $searchQuery, PDO::PARAM_STR);
+      $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
+      $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
+      $stmt->execute();
+
+      $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+      $stmt = $this->pdo->query("SELECT FOUND_ROWS() AS total");
+      $total = $stmt->fetch(PDO::FETCH_ASSOC);
+
+      return (object) [
+        "data" => $rs,
+        "rows" => [
+          "total" => $total['total'],
+          "fetched" => count($rs)
+        ]
+      ];
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
   /**
    * Obtiene una categoría por su ID con imagen asociada
    * @param  int $categoryID: ID de la categoría
