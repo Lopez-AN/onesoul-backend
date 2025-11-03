@@ -111,7 +111,7 @@ class SubscriptionController {
 
     try {
       # Verificar si el usuario autenticado es el mismo o un administrador
-      if ($jwt->data->UserID != $userID && $jwt->data->UserType != 'Admin') {
+      if ($jwt->data->UserID != $userID && !$jwt->data->IsAdmin) {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
@@ -169,7 +169,7 @@ class SubscriptionController {
       $userID = $subscription['UserID'];
 
       # Verificar si el usuario autenticado es un administrador
-      if ($jwt->data->UserID != $userID && $jwt->data->UserType != 'Admin') {
+      if ($jwt->data->UserID != $userID && !$jwt->data->IsAdmin) {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
@@ -222,7 +222,7 @@ class SubscriptionController {
     }
 
     try {
-      if ($jwt->data->UserID != $userID && $jwt->data->UserType != 'Admin') {
+      if ($jwt->data->UserID != $userID && !$jwt->data->IsAdmin) {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
@@ -317,7 +317,7 @@ class SubscriptionController {
 
     try {
       # Verificar si el usuario autenticado es un administrador
-      if ($jwt->data->UserType != 'Admin') {
+      if (!$jwt->data->IsAdmin) {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
@@ -356,7 +356,7 @@ class SubscriptionController {
 
     try {
       # Verificar si el usuario autenticado es un administrador o el mismo usuario
-      if ($jwt->data->UserType != 'Admin') {
+      if (!$jwt->data->IsAdmin) {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
@@ -431,7 +431,7 @@ class SubscriptionController {
       }
 
       // Validar si el user es el cliente o el guía
-      if ($userJWT != $userID && $userType != 'Admin') {
+      if ($userJWT != $userID && !$jwt->data->IsAdmin) {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "FORBIDDEN",

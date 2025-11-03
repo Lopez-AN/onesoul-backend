@@ -833,11 +833,12 @@ class User {
 
       $stmt->execute([$userID]);
       $profilePhoto = $stmt->fetch(PDO::FETCH_ASSOC);
-      $mediaID = $profilePhoto['MediaID'];
 
-      if (empty($mediaID)) {
+      if (empty($profilePhoto)) {
         return false;
       }
+
+      $mediaID = $profilePhoto['MediaID'];
 
       $this->db->beginTransaction(); # Iniciar transacción
 

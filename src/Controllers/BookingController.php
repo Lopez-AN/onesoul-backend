@@ -177,7 +177,7 @@ class BookingController
       }
 
       // Validar si el user es el cliente o el guía
-      if ($userJWT != $userID && $userType != 'Admin') {
+      if ($userJWT != $userID && !$jwt->data->IsAdmin) {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "FORBIDDEN",
@@ -228,7 +228,7 @@ class BookingController
       }
 
       // Validar si el user es el cliente o el guía
-      if ($userJWT != $userID && $userType != 'Admin') {
+      if ($userJWT != $userID && !$jwt->data->IsAdmin) {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "FORBIDDEN",
@@ -643,7 +643,7 @@ class BookingController
       }
 
       // Validar si el user es el cliente o el guía o un administrador
-      if ($booking['UserID'] != $userID && $booking['Guide'] != $userID && $userType != 'Admin'){
+      if ($booking['UserID'] != $userID && $booking['Guide'] != $userID && !$jwt->data->IsAdmin){
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "FORBIDDEN",
@@ -934,7 +934,7 @@ class BookingController
       }
 
       // Validar si el user es el cliente o el guía o un administrador
-      if ($booking['UserID'] != $userID && $booking['Guide'] != $userID && $userType != 'Admin'){
+      if ($booking['UserID'] != $userID && $booking['Guide'] != $userID && !$jwt->data->IsAdmin){
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "FORBIDDEN",
@@ -1102,7 +1102,7 @@ class BookingController
       }
 
       // Validar si es el guía o un administrador
-      if ($booking['Guide'] != $userID && $userType != 'Admin'){
+      if ($booking['Guide'] != $userID && !$jwt->data->IsAdmin){
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "FORBIDDEN",
@@ -1288,7 +1288,7 @@ class BookingController
       }
 
       // Validar si es el guía o un administrador
-      if ($booking['Guide'] != $userID && $userType != 'Admin'){
+      if ($booking['Guide'] != $userID && !$jwt->data->IsAdmin){
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "FORBIDDEN",
@@ -1407,7 +1407,7 @@ class BookingController
       }
 
     // Validar si el user es el cliente  o un administrador
-    if ($booking['UserID'] != $userID && $userType != 'Admin'){
+    if ($booking['UserID'] != $userID && !$jwt->data->IsAdmin){
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "FORBIDDEN",
