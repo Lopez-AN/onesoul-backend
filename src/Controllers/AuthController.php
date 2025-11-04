@@ -223,8 +223,8 @@ class AuthController{
           "data" => [
             "FirstName" => $oAuthResponse->given_name ?? null,
             "LastName"  => $oAuthResponse->family_name ?? null,
-            "Email"     => null, //$oAuthResponse->email ?? null,
-            "Picture"   => $oAuthResponse->picture ?? null,
+            "Email"     => $oAuthResponse->email ?? null,
+            "Picture"   => $oAuthResponse->picture ?? null
           ]
         ]);
       }
@@ -334,8 +334,8 @@ class AuthController{
           "data" => [
             "FirstName" => $oAuthResponse->first_name ?? null,
             "LastName"  => $oAuthResponse->last_name ?? null,
-            "Email"     => null, //$oAuthResponse->email ?? null,
-            "Picture"   => $oAuthResponse->picture->data->url ?? null,
+            "Email"     => $oAuthResponse->email ?? null,
+            "Picture"   => $oAuthResponse->picture->data->url ?? null
           ]
         ]);
       }
@@ -433,7 +433,7 @@ class AuthController{
             "desc" => "No user associated with the specified Apple account was found"
           ],
           "data" => [
-            "Email" => null, //$oAuthResponse->email ?? null,
+            "Email" => $oAuthResponse->email ?? null
           ]
         ]);
       }
