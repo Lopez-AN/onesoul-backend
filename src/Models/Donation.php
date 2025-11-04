@@ -42,12 +42,11 @@ class Donation{
     LEFT JOIN Media AS m ON u.UserID = m.UserID
     WHERE u.UserID = d.WinnerUserID) AS Winner
     FROM DonationVouchers AS d
+    WHERE d.GuideID = ?
     ORDER BY d.CreatedAt DESC
-    LIMIT :_limit OFFSET :_offset");
+    LIMIT ? OFFSET ?");
 
-    $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
-    $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
-    $stmt->execute();
+    $stmt->execute([$userID, $paginator->limit, $paginator->offset]);
 
     $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $stmt = $this->db->query("SELECT FOUND_ROWS() AS total");
@@ -96,14 +95,13 @@ class Donation{
     LEFT JOIN Media AS m ON u.UserID = m.UserID
     WHERE u.UserID = d.WinnerUserID) AS Winner
     FROM DonationVouchers AS d
-    WHERE d.Status <> 'canceled' AND d.CreatedAt >= DATE_FORMAT(NOW(), '%Y-%m-01 00:00:00')
+    WHERE d.GuideID = ? AND d.Status <> 'canceled'
+    AND d.CreatedAt >= DATE_FORMAT(NOW(), '%Y-%m-01 00:00:00')
     AND d.CreatedAt < DATE_ADD(DATE_FORMAT(NOW(), '%Y-%m-01'), INTERVAL 1 MONTH)
     ORDER BY d.CreatedAt DESC
-    LIMIT :_limit OFFSET :_offset");
+    LIMIT ? OFFSET ?");
 
-    $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
-    $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
-    $stmt->execute();
+    $stmt->execute([$userID, $paginator->limit, $paginator->offset]);
 
     $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $stmt = $this->db->query("SELECT FOUND_ROWS() AS total");
@@ -152,18 +150,15 @@ class Donation{
     LEFT JOIN Media AS m ON u.UserID = m.UserID
     WHERE u.UserID = d.WinnerUserID) AS Winner
     FROM DonationVouchers AS d
-    WHERE d.VoucherID = :voucherID");
+    WHERE d.VoucherID = ?");
 
-    $stmt->bindValue(':voucherID', $voucherID, PDO::PARAM_INT);
-    $stmt->execute();
+    $stmt->execute([$voucherID]);
 
     $offering = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    if (empty($rs)) {
+    if (empty($offering)) {
       return false;
     }
-
-    $offering = $rs[0];
 
     $offering['Winner'] = @json_decode($offering['Winner'], true);
     $offering['Offering'] = @json_decode($offering['Offering'], true);
@@ -199,10 +194,9 @@ class Donation{
     LEFT JOIN Media AS m ON u.UserID = m.UserID
     WHERE u.UserID = d.WinnerUserID) AS Winner
     FROM DonationVouchers AS d
-    WHERE d.RedeemCode = :redeemCode");
+    WHERE d.RedeemCode = ?");
 
-    $stmt->bindValue(':redeemCode', $redeemCode, PDO::PARAM_STR);
-    $stmt->execute();
+    $stmt->execute([$redeemCode]);
 
     $offering = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -217,46 +211,46 @@ class Donation{
   }
 
   public function createDonation($userID, $offeringID, $quantity){
-    for($x = 0; $x < $quantity; $x++){
-      # Evita que pueda llegar a repetirse un rafflecode o redeemcode
-      $raffleCode = "";
-      $redeemCode = "";
-      $redeemCodeMasked = "";
-      do{
-        $raffleCode = $this -> _generateRaffleCode();
-        $redeemCode = $this -> _generateRedeemCode();
-        $aRedeemCode = explode("-", $redeemCode);
-        $redeemCodeMasked = "****-****-".$aRedeemCode[2];
+    try{
+      $this->db->beginTransaction(); # Iniciar transacción
 
-        $stmt = $this->db->prepare("SELECT VoucherID FROM DonationVouchers
-          WHERE RaffleCode = :raffleCode OR RedeemCode = :redeemCode");
-        $stmt->bindValue(':raffleCode', $raffleCode, PDO::PARAM_STR);
-        $stmt->bindValue(':redeemCode', $redeemCode, PDO::PARAM_STR);
-        $stmt->execute();
+      for($x = 0; $x < $quantity; $x++){
+        # Evita que pueda llegar a repetirse un rafflecode o redeemcode
+        $raffleCode = "";
+        $redeemCode = "";
+        $redeemCodeMasked = "";
+        do{
+          $raffleCode = $this -> _generateRaffleCode();
+          $redeemCode = $this -> _generateRedeemCode();
+          $aRedeemCode = explode("-", $redeemCode);
+          $redeemCodeMasked = "****-****-".$aRedeemCode[2];
 
-        $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
-      }while(!empty($rs));
+          $stmt = $this->db->prepare("SELECT VoucherID FROM DonationVouchers
+            WHERE RaffleCode = ? OR RedeemCode = ?");
 
-      $stmt = $this->db->prepare("INSERT INTO DonationVouchers
-        (GuideID, OfferingID, RaffleCode, RedeemCode, RedeemCodeMasked) VALUES
-        (:guideID, :offeringID, :raffleCode, :redeemCode, :redeemCodeMasked)");
+          $stmt->execute([$raffleCode, $redeemCode]);
 
-      $stmt->bindValue(':guideID', $userID, PDO::PARAM_INT);
-      $stmt->bindValue(':offeringID', $offeringID, PDO::PARAM_INT);
-      $stmt->bindValue(':raffleCode', $raffleCode, PDO::PARAM_STR);
-      $stmt->bindValue(':redeemCode', $redeemCode, PDO::PARAM_STR);
-      $stmt->bindValue(':redeemCodeMasked', $redeemCodeMasked, PDO::PARAM_STR);
+          $donation = $stmt->fetch(PDO::FETCH_ASSOC);
+        }while($donation);
 
-      $stmt->execute();
+        $stmt = $this->db->prepare("INSERT INTO DonationVouchers
+          (GuideID, OfferingID, RaffleCode, RedeemCode, RedeemCodeMasked)
+          VALUES (?, ?, ?, ?, ?)");
+
+        $stmt->execute([$userID, $offeringID, $raffleCode, $redeemCode, $redeemCodeMasked]);
+      }
+      $this->db->commit(); # Confirmo transacción
+    } catch (PDOException $e) {
+      $this->db->rollBack(); # Revierto en caso de error
+      throw new DatabaseException($e->getMessage());
     }
   }
 
   public function cancelDonation($voucherID){
     $stmt = $this->db->prepare("UPDATE DonationVouchers
-      SET Status = 'canceled' WHERE VoucherID = :voucherID");
+      SET Status = 'canceled' WHERE VoucherID = ?");
 
-    $stmt->bindValue(':voucherID', $voucherID, PDO::PARAM_INT);
-    $stmt->execute();
+    $stmt->execute([$voucherID]);
   }
 
   public function raffleCoupons($quantity) {
@@ -276,9 +270,9 @@ class Donation{
       WHERE o.OfferingID = d.OfferingID) AS Offering
       FROM DonationVouchers as d
       WHERE d.Status = 'draft'
-      ORDER BY RAND() LIMIT :quantity");
-    $stmt->bindValue(':quantity', $quantity, PDO::PARAM_INT);
-    $stmt->execute();
+      ORDER BY RAND() LIMIT ?");
+
+    $stmt->execute([$quantity]);
     $donations = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     # Si no hay cupones salir
@@ -305,60 +299,6 @@ class Donation{
 
     return $donations;
   }
-
-  /*
-   * --- AGENCIAS ---
-  */
-  public function createAgency($userID, $offeringID, $quantity){
-    try{
-      $this->db->beginTransaction(); # Iniciar transacción
-      for($x = 0; $x < $quantity; $x++){
-        # Evita que pueda llegar a repetirse un rafflecode o redeemcode
-        $raffleCode = "";
-        $redeemCode = "";
-        $redeemCodeMasked = "";
-        do{
-          $raffleCode = $this -> _generateRaffleCode();
-          $redeemCode = $this -> _generateRedeemCode();
-          $aRedeemCode = explode("-", $redeemCode);
-          $redeemCodeMasked = "****-****-".$aRedeemCode[2];
-
-          $stmt = $this->db->prepare("SELECT VoucherID FROM DonationVouchers
-            WHERE RaffleCode = :raffleCode OR RedeemCode = :redeemCode");
-          $stmt->bindValue(':raffleCode', $raffleCode, PDO::PARAM_STR);
-          $stmt->bindValue(':redeemCode', $redeemCode, PDO::PARAM_STR);
-          $stmt->execute();
-
-          $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        }while(!empty($rs));
-
-        $stmt = $this->db->prepare("INSERT INTO DonationVouchers
-          (GuideID, OfferingID, RaffleCode, RedeemCode, RedeemCodeMasked) VALUES
-          (:guideID, :offeringID, :raffleCode, :redeemCode, :redeemCodeMasked)");
-
-        $stmt->bindValue(':guideID', $userID, PDO::PARAM_INT);
-        $stmt->bindValue(':offeringID', $offeringID, PDO::PARAM_INT);
-        $stmt->bindValue(':raffleCode', $raffleCode, PDO::PARAM_STR);
-        $stmt->bindValue(':redeemCode', $redeemCode, PDO::PARAM_STR);
-        $stmt->bindValue(':redeemCodeMasked', $redeemCodeMasked, PDO::PARAM_STR);
-
-        $stmt->execute();
-      }
-      $this->db->commit(); # Confirmo transacción
-    } catch (PDOException $e) {
-      $this->db->rollBack(); # Revierto en caso de error
-      throw new DatabaseException($e->getMessage());
-    }
-  }
-
-  public function disableAgency($voucherID){
-    $stmt = $this->db->prepare("UPDATE DonationVouchers
-      SET Status = 'canceled' WHERE VoucherID = :voucherID");
-
-    $stmt->bindValue(':voucherID', $voucherID, PDO::PARAM_INT);
-    $stmt->execute();
-  }
-
 
   /**
    * Genera un RaffleCode - Código público de sorteo

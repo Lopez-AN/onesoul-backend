@@ -223,8 +223,8 @@ class DonationController {
       }
 
       # Compruebo que el offering exista
-      $result = $this->offering->getOfferingById($offeringID);
-      if ($result->http_code !== 200) {
+      $offering = $this->offering->getOfferingById($offeringID);
+      if (!$offering) {
         return $response->withStatus(404)->WithJson([
           "error" => [
             "code" => "OFFERING_NOT_FOUND",
@@ -232,7 +232,7 @@ class DonationController {
           ]
         ]);
       }
-      if($result->data['UserID'] != $userID){
+      if($offering['UserID'] != $userID){
         return $response->withStatus(401)->WithJson([
           "error" => [
             "code" => "UNAUTHORIZED",
@@ -240,7 +240,7 @@ class DonationController {
           ]
         ]);
       }
-      if($result->data['Status'] != 'Active'){
+      if($offering['Status'] != 'Active'){
         return $response->withStatus(400)->WithJson([
           "error" => [
             "code" => "OFFERING_NOT_ACTIVE",
@@ -248,7 +248,6 @@ class DonationController {
           ]
         ]);
       }
-
       $this->donation->createDonation($userID, $offeringID, $quantity);
       return $response->withJson("Donation added");
     } catch (\Throwable $e) {

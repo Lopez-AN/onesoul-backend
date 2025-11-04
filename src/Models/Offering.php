@@ -179,7 +179,7 @@ class Offering {
   public function searchOfferings($paginator, $query) {
     try {
       $searchQuery = "%$query%";
-      $stmt = $this->pdo->prepare("SELECT o.*,
+      $stmt = $this->db->prepare("SELECT o.*,
         u.UserID AS author_UserID,
         u.DisplayName AS author_DisplayName,
         u.FirstName AS author_FirstName,
@@ -260,7 +260,7 @@ class Offering {
       $stmt->execute();
 
       $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
-      $stmt = $this->pdo->query("SELECT FOUND_ROWS() AS total");
+      $stmt = $this->db->query("SELECT FOUND_ROWS() AS total");
       $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
       // Desagrupo los json traidos por MYSQL para armar el JSON anidado de respuesta
@@ -415,7 +415,7 @@ class Offering {
       $offering = $stmt->fetch(PDO::FETCH_ASSOC);
 
       if (empty($offering)) {
-        return null;
+        return false;
       }
 
       // Desagrupo los json traidos por MYSQL para armar el JSON anidado de respuesta

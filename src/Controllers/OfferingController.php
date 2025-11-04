@@ -64,7 +64,7 @@ class OfferingController {
     $query = $queryParams['query'] ?? '';
 
     try {
-      $offerings = $this->search->searchOfferings($paginator, $query);
+      $offerings = $this->offering->searchOfferings($paginator, $query);
       return $response->withStatus(200)->withJson($offerings);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
@@ -79,9 +79,8 @@ class OfferingController {
   public function getOfferingById(Request $request, Response $response, $args)  {
     $id = $args['id'];
     try {
-      $result = $this->offering->getOfferingById($id);
-
-      if ($result->http_code != 200) {
+      $offering = $this->offering->getOfferingById($id);
+      if (!$offering) {
         return $response->withStatus(400)->WithJson([
           "error" => [
             "code" => "INVALID_OFFERING",
@@ -90,7 +89,7 @@ class OfferingController {
         ]);
       }
 
-      return $response->withStatus(200)->withJson($result->data);
+      return $response->withStatus(200)->withJson($offering);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -231,7 +230,10 @@ class OfferingController {
       }
 
       $result = $this->offering->createOffering($data);
-      return $response->withStatus(200)->withJson($result->data);
+      if($result->http_code != 200){
+        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+      }
+      return $response->withStatus(200)->withJson($result);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -268,8 +270,8 @@ class OfferingController {
 
 
     try {
-      $result = $this->offering->getOfferingById($id);
-      if ($result->http_code != 200) {
+      $offering = $this->offering->getOfferingById($id);
+      if (!$offering) {
         return $response->withStatus(404)->WithJson([
           "error" => [
             "code" => "OFFERING_NOT_FOUND",
@@ -277,10 +279,9 @@ class OfferingController {
           ]
         ]);
       }
-      $offeringData = $result->data;
 
       // Verificar que el offering no esté eliminado
-      if ($offeringData['Status'] === 'Deleted') {
+      if ($offering['Status'] === 'Deleted') {
         return $response->withStatus(400)->withJson([
           "error" => [
             "code" => "OFFERING_DELETED",
@@ -292,9 +293,7 @@ class OfferingController {
       // Aprobar el offering (cambiar el estado a 'Active')
       $this->offering->approveOfferingById($id);
 
-      return $response->withStatus(200)->withJson([
-        "Message" => "Offering approved successfully"
-      ]);
+      return $response->withStatus(200)->withJson("Offering approved successfully");
 
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
@@ -331,20 +330,9 @@ class OfferingController {
       ]);
     }
 
-    // Verificar si el usuario autenticado es el mismo que el que se intenta crear, o si es un administrador
-    if ($offeringData['UserID'] != $userID && !$jwt->data->IsAdmin) {
-      return $response->withStatus(403)->withJson([
-        "error" => [
-          "code" => "UNAUTHORIZED",
-          "desc" => "You don't have permission to modify this offering."
-        ]
-      ]);
-    }
-    $userID = $jwt->data->UserID;
-
     try {
-      $result = $this->offering->getOfferingById($id);
-      if ($result->http_code != 200) {
+      $offering = $this->offering->getOfferingById($id);
+      if (!$offering) {
         return $response->withStatus(404)->WithJson([
           "error" => [
             "code" => "OFFERING_NOT_FOUND",
@@ -352,7 +340,17 @@ class OfferingController {
           ]
         ]);
       }
-      $offeringData = $result->data;
+
+      // Verificar si el usuario autenticado es el mismo que el que se intenta crear, o si es un administrador
+      if ($offering['UserID'] != $userID && !$jwt->data->IsAdmin) {
+        return $response->withStatus(403)->withJson([
+          "error" => [
+            "code" => "UNAUTHORIZED",
+            "desc" => "You don't have permission to modify this offering."
+          ]
+        ]);
+      }
+      $userID = $jwt->data->UserID;
 
       // Validación de contenido inapropiado
       if((!empty($data['Title']) && $this->containsInappropriateContent($data['Title'])) ||
@@ -395,7 +393,7 @@ class OfferingController {
       if($result->http_code != 200){
         return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
       }
-      return $response->withStatus(200)->withJson($result->data);
+      return $response->withStatus(200)->withJson($result);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -420,20 +418,9 @@ class OfferingController {
       ]);
     }
 
-    // Verificar si el usuario autenticado es el mismo que creo el offering o un admin
-    if ($offeringData['UserID'] != $userID && !$jwt->data->IsAdmin) {
-      return $response->withStatus(403)->withJson([
-        "error" => [
-          "code" => "UNAUTHORIZED",
-          "desc" => "You don't have permission to modify this offering."
-        ]
-      ]);
-    }
-    $userID = $jwt->data->UserID;
-
     try {
-      $offeringData = $this->offering->getOfferingById($id);
-      if (!$offeringData) {
+      $offering = $this->offering->getOfferingById($id);
+      if (!$offering) {
         return $response->withStatus(404)->WithJson([
           "error" => [
             "code" => "OFFERING_NOT_FOUND",
@@ -442,7 +429,18 @@ class OfferingController {
         ]);
       }
 
-      if ($offeringData['Status'] === 'Deleted') {
+      // Verificar si el usuario autenticado es el mismo que creo el offering o un admin
+      if ($offering['UserID'] != $userID && !$jwt->data->IsAdmin) {
+        return $response->withStatus(403)->withJson([
+          "error" => [
+            "code" => "UNAUTHORIZED",
+            "desc" => "You don't have permission to modify this offering."
+          ]
+        ]);
+      }
+      $userID = $jwt->data->UserID;
+
+      if ($offering['Status'] === 'Deleted') {
         return $response->withStatus(400)->withJson([
           "error" => [
             "code" => "OFFERING_DELETED",
@@ -496,8 +494,8 @@ class OfferingController {
 
     try {
       // Verificar que el offering existe
-      $result = $this->offering->getOfferingById($id);
-      if ($result->http_code != 200) {
+      $offering = $this->offering->getOfferingById($id);
+      if (!$offering) {
         return $response->withStatus(404)->WithJson([
           "error" => [
             "code" => "OFFERING_NOT_FOUND",
@@ -505,10 +503,9 @@ class OfferingController {
           ]
         ]);
       }
-      $offeringData = $result->data;
 
       // Verificar permisos
-      if ($offeringData['UserID'] != $userID) {
+      if ($offering['UserID'] != $userID) {
         return $response->withStatus(403)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
@@ -648,8 +645,8 @@ class OfferingController {
 
     try {
       // Verificar que el offering existe
-      $result = $this->offering->getOfferingById($id);
-      if ($result->http_code != 200) {
+      $offering = $this->offering->getOfferingById($id);
+      if (!$offering) {
         return $response->withStatus(404)->WithJson([
           "error" => [
             "code" => "OFFERING_NOT_FOUND",
@@ -658,10 +655,8 @@ class OfferingController {
         ]);
       }
 
-      $offeringData = $result->data;
-
       // Verificar permisos
-      if ($offeringData['UserID'] != $userID) {
+      if ($offering['UserID'] != $userID) {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
@@ -855,8 +850,8 @@ class OfferingController {
     }
 
     try {
-      $result = $this->offering->getOfferingById($id);
-      if ($result->http_code != 200) {
+      $offering = $this->offering->getOfferingById($id);
+      if (!$offering) {
         return $response->withStatus(404)->WithJson([
           "error" => [
             "code" => "OFFERING_NOT_FOUND",
@@ -864,10 +859,9 @@ class OfferingController {
           ]
         ]);
       }
-      $offeringData = $result->data;
 
       // Verificar si el usuario autenticado es el mismo que creo el offering o un admin
-      if ($offeringData['UserID'] != $userID && !$jwt->data->IsAdmin) {
+      if ($offering['UserID'] != $userID && !$jwt->data->IsAdmin) {
         return $response->withStatus(403)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
@@ -901,9 +895,7 @@ class OfferingController {
       // Eliminar el registro de la tabla MEDIA
       $this->offering->deleteOfferingMedia($mediaID);
 
-      return $response->withStatus(200)->withJson([
-        "Message" => "Media file deleted successfully"
-      ]);
+      return $response->withStatus(200)->withJson("Media file deleted successfully");
 
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([

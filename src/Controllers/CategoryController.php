@@ -58,7 +58,7 @@ class CategoryController {
     $query = $queryParams['query'] ?? '';
 
     try {
-      $categories = $this->search->searchCategories($paginator, $query);
+      $categories = $this->category->searchCategories($paginator, $query);
       return $response->withStatus(200)->withJson($categories);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([

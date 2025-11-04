@@ -35,10 +35,10 @@ class NotificationsWorker {
   protected $channels;
   protected $pdo;
 
-  public function __construct(PDO $pdo, Notification $notification, NotificationChannels $channels) {
+  public function __construct(PDO $db, Notification $notification, NotificationChannels $channels) {
     $this->notification = $notification;
     $this->channels = $channels;
-    $this->pdo = $pdo;
+    $this->db = $db;
   }
 
   public function run() {

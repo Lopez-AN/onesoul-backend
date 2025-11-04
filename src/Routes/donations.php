@@ -30,7 +30,4 @@ return function (App $app) {
   $app->post('/donations/assign', [$donationController, 'assignDonation'])->add($requiredJwt);
   $app->delete('/donations/{voucherID}', [$donationController, 'cancelDonation'])->add($requiredJwt);
   $app->get('/coupon/raffle/{quantity}', [$donationController, 'raffleCoupons'])->add($requiredJwt);
-
-  $app->get('/coupon/assign/{quantity}', [$donationController, 'raffleCoupons'])->add($requiredJwt);
-
 };
