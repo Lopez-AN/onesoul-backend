@@ -555,6 +555,7 @@ class User {
       },
       explode(",", $user['Categories'])
     );
+    $user['IsActive'] = $user['DeactivationDate'] === null;
 
     # Agregar sessionType con valores booleanos
     $user['SessionType'] = [
@@ -607,6 +608,7 @@ class User {
         },
         explode(",", $e['Categories'])
       );
+      $e['IsActive'] = $e['DeactivationDate'] === null;
 
       # Agregar sessionType con valores booleanos
       $e['SessionType'] = [

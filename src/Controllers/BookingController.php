@@ -38,16 +38,7 @@ class BookingController
   public function getBookingByID(Request $request, Response $response, $args)
   {
     $bookingID = $args['bookingID'];
-
     $jwt = $request->getAttribute('jwt');
-    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
 
     $userID = $jwt->data->UserID;
 
@@ -87,16 +78,7 @@ class BookingController
   public function getBookingByPublicID(Request $request, Response $response, $args)
   {
     $publicID = $args['publicID'];
-
     $jwt = $request->getAttribute('jwt');
-    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
 
     $userID = $jwt->data->UserID;
 
@@ -139,17 +121,7 @@ class BookingController
     $paginator = paginator($request);
     $jwt = $request->getAttribute('jwt');
 
-    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
-
     $userJWT = $jwt->data->UserID;
-    $userType = $jwt->data->UserType;
 
     try {
       // Leer filtros desde query string
@@ -203,17 +175,7 @@ class BookingController
     $paginator = paginator($request);
     $jwt = $request->getAttribute('jwt');
 
-    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
-
     $userJWT = $jwt->data->UserID;
-    $userType = $jwt->data->UserType;
 
     try {
       $bookings = $this->booking->getBookingsBySeeker($userID, $paginator);
@@ -249,18 +211,10 @@ class BookingController
   }
 
   public function createBooking(Request $request, Response $response, $args) {
-    $userID = $jwt->data->UserID;
     $data = $request->getParsedBody();
-
     $jwt = $request->getAttribute('jwt');
-    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
+
+    $userID = $jwt->data->UserID;
 
     $message = $data['Message'] ?? null;
     $subDomain = $data['SubDomain'] ?? null;
@@ -368,7 +322,7 @@ class BookingController
       }
 
       // VALIDAR: Fecha de cita
-      $scheduledDate = $data['ScheduledDate'] ?? '2025-11-20 12:00:00';  // null;   // DEBUG!!!
+      $scheduledDate = $data['ScheduledDate'];
       if (!$scheduledDate) {
         return $response->withStatus(400)->withJson([
           "error" => [
@@ -580,20 +534,11 @@ class BookingController
   public function updateBooking(Request $request, Response $response, $args)
   {
     $jwt = $request->getAttribute('jwt');
-    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
 
     $userID = $jwt->data->UserID;
-    $userType = $jwt->data->UserType;
     $bookingID = $args['bookingID'];
     $data = $request->getParsedBody();
-    $scheduledDate = $data['ScheduledDate'] ?? '2025-11-20 12:00:00';  // null;   // DEBUG!!!
+    $scheduledDate = $data['ScheduledDate'];
     $mode = strtolower($data['Mode'] ?? '');
     $message = $data['Message'] ?? null;
     $locationID = $data['LocationID'] ?? null;
@@ -863,18 +808,9 @@ class BookingController
   public function cancelBooking(Request $request, Response $response, $args)
   {
     $jwt = $request->getAttribute('jwt');
-    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
 
     $data = $request->getParsedBody();
     $userID = $jwt->data->UserID;
-    $userType = $jwt->data->UserType;
     $bookingID = $args['bookingID'];
     $message = $data['Message'] ?? null;
 
@@ -1041,18 +977,9 @@ class BookingController
   public function confirmBooking(Request $request, Response $response, $args)
   {
     $jwt = $request->getAttribute('jwt');
-    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
 
     $data = $request->getParsedBody();
     $userID = $jwt->data->UserID;
-    $userType = $jwt->data->UserType;
     $bookingID = $args['bookingID'];
     $message = $data['Message'] ?? null;
 
@@ -1213,18 +1140,9 @@ class BookingController
   public function completeBooking(Request $request, Response $response, $args)
   {
     $jwt = $request->getAttribute('jwt');
-    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
 
     $data = $request->getParsedBody();
     $userID = $jwt->data->UserID;
-    $userType = $jwt->data->UserType;
     $bookingID = $args['bookingID'];
     $message = $data['Message'] ?? null;
     $rating = $data['Rating'] ?? null;
@@ -1331,18 +1249,9 @@ class BookingController
   public function rateBooking(Request $request, Response $response, $args)
   {
     $jwt = $request->getAttribute('jwt');
-    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
 
     $data = $request->getParsedBody();
     $userID = $jwt->data->UserID;
-    $userType = $jwt->data->UserType;
     $bookingID = $args['bookingID'];
     $message = $data['Message'] ?? null;
     $rating = $data['Rating'] ?? null;
