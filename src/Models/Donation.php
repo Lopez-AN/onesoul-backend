@@ -48,21 +48,21 @@ class Donation{
 
     $stmt->execute([$userID, $paginator->limit, $paginator->offset]);
 
-    $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $donations = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $stmt = $this->db->query("SELECT FOUND_ROWS() AS total");
     $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    $rs = array_map(function ($e) {
-      $e['Winner'] = @json_decode($e['Winner'], true);
-      $e['Offering'] = @json_decode($e['Offering'], true);
+    $donations = array_map(function ($e) {
+      $e['Winner'] = @json_decode($e['Winner'], true)[0];
+      $e['Offering'] = @json_decode($e['Offering'], true)[0];
       return $e;
-    }, $rs);
+    }, $donations);
 
     return (object) [
-      "data" => $rs,
+      "data" => $donations,
       "rows" => [
         "total" => $total['total'],
-        "fetched" => count($rs)
+        "fetched" => count($donations)
       ]
     ];
   }
@@ -103,21 +103,21 @@ class Donation{
 
     $stmt->execute([$userID, $paginator->limit, $paginator->offset]);
 
-    $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $donations = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $stmt = $this->db->query("SELECT FOUND_ROWS() AS total");
     $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    $rs = array_map(function ($e) {
-      $e['Winner'] = @json_decode($e['Winner'], true);
-      $e['Offering'] = @json_decode($e['Offering'], true);
+    $donations = array_map(function ($e) {
+      $e['Winner'] = @json_decode($e['Winner'], true)[0];
+      $e['Offering'] = @json_decode($e['Offering'], true)[0];
       return $e;
-    }, $rs);
+    }, $donations);
 
     return (object) [
-      "data" => $rs,
+      "data" => $donations,
       "rows" => [
         "total" => $total['total'],
-        "fetched" => count($rs)
+        "fetched" => count($donations)
       ]
     ];
   }
@@ -154,16 +154,16 @@ class Donation{
 
     $stmt->execute([$voucherID]);
 
-    $offering = $stmt->fetch(PDO::FETCH_ASSOC);
+    $donation = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    if (empty($offering)) {
+    if (empty($donation)) {
       return false;
     }
 
-    $offering['Winner'] = @json_decode($offering['Winner'], true);
-    $offering['Offering'] = @json_decode($offering['Offering'], true);
+    $donation['Winner'] = @json_decode($donation['Winner'], true)[0];
+    $donation['Offering'] = @json_decode($donation['Offering'], true)[0];
 
-    return $offering;
+    return $donation;
   }
 
   public function getDonationByRedeemCode($redeemCode){
@@ -198,16 +198,16 @@ class Donation{
 
     $stmt->execute([$redeemCode]);
 
-    $offering = $stmt->fetch(PDO::FETCH_ASSOC);
+    $donation = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    if (empty($offering)) {
+    if (empty($donation)) {
       return false;
     }
 
-    $offering['Winner'] = @json_decode($offering['Winner'], true);
-    $offering['Offering'] = @json_decode($offering['Offering'], true);
+    $donation['Winner'] = @json_decode($donation['Winner'], true)[0];
+    $donation['Offering'] = @json_decode($donation['Offering'], true)[0];
 
-    return $offering;
+    return $donation;
   }
 
   public function createDonation($userID, $offeringID, $quantity){
@@ -246,6 +246,14 @@ class Donation{
     }
   }
 
+  public function assignDonation($agencyID, $voucherID){
+    $stmt = $this->db->prepare("UPDATE DonationVouchers
+      SET AgencyID = ?, Status = 'assigned'
+      WHERE VoucherID = ?");
+
+    $stmt->execute([$agencyID, $voucherID]);
+  }
+
   public function cancelDonation($voucherID){
     $stmt = $this->db->prepare("UPDATE DonationVouchers
       SET Status = 'canceled' WHERE VoucherID = ?");
@@ -269,7 +277,7 @@ class Donation{
       LEFT JOIN Media AS m ON o.OfferingID = m.OfferingID
       WHERE o.OfferingID = d.OfferingID) AS Offering
       FROM DonationVouchers as d
-      WHERE d.Status = 'draft'
+      WHERE d.Status = 'assigned'
       ORDER BY RAND() LIMIT ?");
 
     $stmt->execute([$quantity]);
@@ -285,19 +293,53 @@ class Donation{
       return $e;
     }, $donations);
 
-    $ids = array_map(function($e){
-      return $e['VoucherID'];
-    }, $donations);
-
-    # Actualizo los cupones a assigned
-    $inClause = implode(',', array_fill(0, count($donations), '?'));
-    $update = $this->db->prepare("UPDATE DonationVouchers
-      SET Status = 'in_raffle'
-      WHERE VoucherID IN ($inClause)
-    ");
-    $update->execute($ids);
-
     return $donations;
+  }
+
+  public function getAgencies($paginator){
+    $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS
+      a.AgencyID, a.Name, a.ContactEmail
+    FROM Agencies as a
+    LIMIT ? OFFSET ?");
+
+    $stmt->execute([$paginator->limit, $paginator->offset]);
+
+    $agencies = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $stmt = $this->db->query("SELECT FOUND_ROWS() AS total");
+    $total = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    return (object) [
+      "data" => $agencies,
+      "rows" => [
+        "total" => $total['total'],
+        "fetched" => count($agencies)
+      ]
+    ];
+  }
+
+  public function getAgencyById($agencyID){
+    $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS
+      a.AgencyID, a.Name, a.ContactEmail
+    FROM Agencies as a
+    WHERE a.AgencyID = ?");
+
+    $stmt->execute([$agencyID]);
+
+    return $stmt->fetch(PDO::FETCH_ASSOC);
+  }
+
+  public function createAgency($name, $contactEmail){
+    $stmt = $this->db->prepare("INSERT INTO Agencies
+      (Name, ContactEmail) VALUES (?, ?)");
+
+    $stmt->execute([$name, $contactEmail]);
+  }
+
+  public function deleteAgency($agencyID){
+    $stmt = $this->db->prepare("DELETE FROM Agencies
+      WHERE AgencyID = ?");
+
+    $stmt->execute([$agencyID]);
   }
 
   /**

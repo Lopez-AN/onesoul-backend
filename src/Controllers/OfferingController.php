@@ -28,16 +28,6 @@ class OfferingController {
     $paginator = paginator($request);
     try {
       $result = $this->offering->getOfferings($paginator);
-
-      if ($result === null) {
-        return $response->withStatus(404)->withJson([
-          "error" => [
-            "code" => "OFFERING_NOT_FOUND",
-            "desc" => "No offerings found for this specific user."
-          ]
-        ]);
-      }
-
       return $response->withStatus(200)->withJson($result);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
@@ -105,16 +95,6 @@ class OfferingController {
     $categoryId = $args['categoryID'];
     try {
       $result = $this->offering->getOfferingsByCategoryId($paginator, $categoryId);
-
-      if ($result === null) {
-        return $response->withStatus(404)->withJson([
-          "error" => [
-            "code" => "OFFERING_NOT_FOUND",
-            "desc" => "No offerings found for this specific user."
-          ]
-        ]);
-      }
-
       return $response->withStatus(200)->withJson($result);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
@@ -131,16 +111,6 @@ class OfferingController {
     $userID = $args['userID'];
     try {
       $result = $this->offering->getOfferingsByUserId($paginator, $userID);
-
-      if ($result === null) {
-        return $response->withStatus(404)->withJson([
-          "error" => [
-            "code" => "OFFERING_NOT_FOUND",
-            "desc" => "No offerings found for this specific user."
-          ]
-        ]);
-      }
-
       return $response->withStatus(200)->withJson($result);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
@@ -155,6 +125,7 @@ class OfferingController {
   public function createOffering(Request $request, Response $response, $args)  {
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
+    $userID = $jwt->data->UserID;
 
     // Verificar si el body es un array/object válido
     if (!is_array($data) && !is_object($data)) {
@@ -162,16 +133,6 @@ class OfferingController {
         "error" => [
           "code" => "INVALID_JSON",
           "desc" => "Request body must be valid JSON"
-        ]
-      ]);
-    }
-
-    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')
-      || !property_exists($jwt->data, 'UserType')) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
         ]
       ]);
     }
@@ -185,7 +146,6 @@ class OfferingController {
         ]
       ]);
     }
-    $userID = $jwt->data->UserID;
 
     $data['UserID'] = $userID;
     $data['SKU'] = null;
@@ -229,11 +189,16 @@ class OfferingController {
         }
       }
 
-      $result = $this->offering->createOffering($data);
-      if($result->http_code != 200){
-        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+      $offering = $this->offering->createOffering($data);
+      if(!$offering){
+        return $response->withStatus(500)->withJson([
+          "error" => [
+            "code" => "FETCH_ERROR",
+            "desc" => "Could not retrieve created offering"
+          ]
+        ]);
       }
-      return $response->withStatus(200)->withJson($result);
+      return $response->withStatus(200)->withJson($offering);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -247,16 +212,6 @@ class OfferingController {
   public function approveOffering(Request $request, Response $response, $args)  {
     $id = $args['id'];
     $jwt = $request->getAttribute('jwt');
-
-    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')
-      || !property_exists($jwt->data, 'IsAdmin')) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
 
     # Verificar que el usuario sea admin
     if (!$jwt->data->IsAdmin) {
@@ -309,6 +264,7 @@ class OfferingController {
     $id = $args['id'];
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
+    $userID = $jwt->data->UserID;
 
     // Verificar si el body es un array/object válido
     if (!is_array($data) && !is_object($data)) {
@@ -316,16 +272,6 @@ class OfferingController {
         "error" => [
           "code" => "INVALID_JSON",
           "desc" => "Request body must be valid JSON"
-        ]
-      ]);
-    }
-
-    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')
-      || !property_exists($jwt->data, 'IsAdmin')) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
         ]
       ]);
     }
@@ -350,7 +296,6 @@ class OfferingController {
           ]
         ]);
       }
-      $userID = $jwt->data->UserID;
 
       // Validación de contenido inapropiado
       if((!empty($data['Title']) && $this->containsInappropriateContent($data['Title'])) ||
@@ -389,11 +334,16 @@ class OfferingController {
       }
 
       // Actualizar la oferta
-      $result = $this->offering->updateOffering($id, $data);
-      if($result->http_code != 200){
-        return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
+      $offering = $this->offering->updateOffering($id, $data);
+      if (!$offering) {
+        return $response->withStatus(500)->withJson([
+          "error" => [
+            "code" => "FETCH_ERROR",
+            "desc" => "Could not retrieve updated offering"
+          ]
+        ]);
       }
-      return $response->withStatus(200)->withJson($result);
+      return $response->withStatus(200)->withJson($offering);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -407,16 +357,7 @@ class OfferingController {
   public function deleteOffering(Request $request, Response $response, $args)  {
     $id = $args['id'];
     $jwt = $request->getAttribute('jwt');
-
-    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')
-      || !property_exists($jwt->data, 'IsAdmin')) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
+    $userID = $jwt->data->UserID;
 
     try {
       $offering = $this->offering->getOfferingById($id);
@@ -438,7 +379,6 @@ class OfferingController {
           ]
         ]);
       }
-      $userID = $jwt->data->UserID;
 
       if ($offering['Status'] === 'Deleted') {
         return $response->withStatus(400)->withJson([
@@ -471,6 +411,7 @@ class OfferingController {
     $position = $args['position']; // Posicion del archivo multimedia
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
+    $userID = $jwt->data->UserID;
 
     // Verificar si el body es un array/object válido
     if (!is_array($data) && !is_object($data)) {
@@ -481,16 +422,6 @@ class OfferingController {
         ]
       ]);
     }
-
-    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
-    $userID = $jwt->data->UserID;
 
     try {
       // Verificar que el offering existe
@@ -622,6 +553,7 @@ class OfferingController {
     $position = $args['position']; // Posicion del archivo multimedia
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
+    $userID = $jwt->data->UserID;
 
     // Verificar si el body es un array/object válido
     if (!is_array($data) && !is_object($data)) {
@@ -632,16 +564,6 @@ class OfferingController {
         ]
       ]);
     }
-
-    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
-    $userID = $jwt->data->UserID;
 
     try {
       // Verificar que el offering existe
@@ -838,16 +760,6 @@ class OfferingController {
     $mediaID = $args['mediaID'];
     $jwt = $request->getAttribute('jwt');
     $userID = $jwt->data->UserID;
-
-    if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')
-      || !property_exists($jwt->data, 'IsAdmin')) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "INVALID_TOKEN",
-          "desc" => "Invalid JWT token"
-        ]
-      ]);
-    }
 
     try {
       $offering = $this->offering->getOfferingById($id);

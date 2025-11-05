@@ -30,4 +30,8 @@ return function (App $app) {
   $app->post('/donations/assign', [$donationController, 'assignDonation'])->add($requiredJwt);
   $app->delete('/donations/{voucherID}', [$donationController, 'cancelDonation'])->add($requiredJwt);
   $app->get('/coupon/raffle/{quantity}', [$donationController, 'raffleCoupons'])->add($requiredJwt);
+  $app->get('/agencies', [$donationController, 'getAgencies'])->add($requiredJwt);
+  $app->get('/agencies/{agencyID}', [$donationController, 'getAgencyById'])->add($requiredJwt);
+  $app->post('/agencies', [$donationController, 'createAgency'])->add($requiredJwt);
+  $app->delete('/agencies/{agencyID}', [$donationController, 'deleteAgency'])->add($requiredJwt);
 };

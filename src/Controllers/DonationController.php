@@ -87,8 +87,8 @@ class DonationController {
     $isAdmin = $jwt->data->IsAdmin;
 
     try {
-      $donation = $this->donation->getDonationById($voucherID, $userID, $isAdmin);
-      if ($donation === null) {
+      $donation = $this->donation->getDonationById($voucherID);
+      if (!$donation) {
         return $response->withStatus(404)->withJson([
           "error" => [
             "code" => "DONATION_NOT_FOUND",
@@ -97,7 +97,7 @@ class DonationController {
         ]);
       }
       if ($donation['GuideID'] != $userID && !$isAdmin) {
-        return $response->withStatus(401)->withJson([
+        return $response->withStatus(403)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
             "desc" => "This donation does not belong to you"
@@ -121,7 +121,7 @@ class DonationController {
 
     try {
       $donation = $this->donation->getDonationByRedeemCode($redeemCode);
-      if ($donation === null) {
+      if (!$donation) {
         return $response->withStatus(404)->withJson([
           "error" => [
             "code" => "COUPON_NOT_FOUND",
@@ -154,10 +154,10 @@ class DonationController {
         ]);
       }
       if ($donation['Status'] !== 'assigned'){
-        return $response->withStatus(400)->withJson([
+        return $response->withStatus(409)->withJson([
           "error" => [
-            "code" => "COUPON_NOT_DRAWN",
-            "desc" => "The coupon has not been drawn yet"
+            "code" => "COUPON_NOT_ASSIGNED",
+            "desc" => "The coupon has not been assigned to an agency yet"
           ]
         ]);
       }
@@ -177,6 +177,7 @@ class DonationController {
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
     $paginator = paginator($request);
+    $userID = $jwt->data->UserID;
 
     # Verificar si el body es un array/object válido
     if (!is_array($data) && !is_object($data)) {
@@ -201,14 +202,13 @@ class DonationController {
 
     # Solo los guias pueden crear donaciones
     if ($jwt->data->UserType != 'Guide') {
-      return $response->withStatus(401)->withJson([
+      return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
           "desc" => "You do not have permission to create a donation"
         ]
       ]);
     }
-    $userID = $jwt->data->UserID;
 
     # Ahora busco si no supero el límite de donaciones
     try {
@@ -233,7 +233,7 @@ class DonationController {
         ]);
       }
       if($offering['UserID'] != $userID){
-        return $response->withStatus(401)->WithJson([
+        return $response->withStatus(403)->WithJson([
           "error" => [
             "code" => "UNAUTHORIZED",
             "desc" => "The offering does not belong to you"
@@ -241,7 +241,7 @@ class DonationController {
         ]);
       }
       if($offering['Status'] != 'Active'){
-        return $response->withStatus(400)->WithJson([
+        return $response->withStatus(409)->WithJson([
           "error" => [
             "code" => "OFFERING_NOT_ACTIVE",
             "desc" => "The offering must be active"
@@ -260,6 +260,76 @@ class DonationController {
     }
   }
 
+  public function assignDonation(Request $request, Response $response, $args) {
+    $data = $request->getParsedBody();
+    $jwt = $request->getAttribute('jwt');
+    $paginator = paginator($request);
+
+    # Verificar si el usuario autenticado es el mismo o si es un administrador
+    if (!$jwt->data->IsAdmin) {
+      return $response->withStatus(403)->withJson([
+        "error" => [
+          "code" => "UNAUTHORIZED",
+          "desc" => "You do not have permission to access agencies"
+        ]
+      ]);
+    }
+
+    # Verificar si el body es un array/object válido
+    if (!is_array($data) && !is_object($data)) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_JSON",
+          "desc" => "Request body must be valid JSON"
+        ]
+      ]);
+    }
+
+    $voucherID = $data['VoucherID'] ?? null;
+    $agencyID = $data['AgencyID'] ?? null;
+    if (!is_int($voucherID) || !is_int($agencyID)) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_PARAMETERS",
+          "desc" => "Missing or invalid parameters"
+        ]
+      ]);
+    }
+
+    try {
+      $agency = $this->donation->getAgencyById($agencyID);
+      if (!$agency) {
+        return $response->withStatus(404)->WithJson([
+          "error" => [
+            "code" => "AGENCY_NOT_FOUND",
+            "desc"=> "No agency found for this specific ID."
+          ]
+        ]);
+      }
+
+      $donation = $this->donation->getDonationById($voucherID);
+      if (!$donation) {
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "DONATION_NOT_FOUND",
+            "desc" => "The donation is not found"
+          ]
+        ]);
+      }
+
+      $this->donation->assignDonation($agencyID, $voucherID);
+      $donation = $this->donation->getDonationById($voucherID);
+      return $response->withStatus(200)->withJson($donation);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
   # Cancela una donacion
   public function cancelDonation(Request $request, Response $response, $args) {
     $voucherID = $args['voucherID'];
@@ -267,7 +337,7 @@ class DonationController {
     $jwt = $request->getAttribute('jwt');
     # Solo los guias pueden crear donaciones
     if ($jwt->data->UserType != 'Guide') {
-      return $response->withStatus(401)->withJson([
+      return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
           "desc" => "You do not have permission to cancel a donation"
@@ -280,7 +350,7 @@ class DonationController {
     # Ahora busco si no supero el límite de donaciones
     try {
       $donation = $this->donation->getDonationById($voucherID);
-      if ($donation === null) {
+      if (!$donation) {
         return $response->withStatus(404)->withJson([
           "error" => [
             "code" => "DONATION_NOT_FOUND",
@@ -289,7 +359,7 @@ class DonationController {
         ]);
       }
       if ($donation['GuideID'] != $userID && !$isAdmin) {
-        return $response->withStatus(401)->withJson([
+        return $response->withStatus(403)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
             "desc" => "This donation does not belong to you"
@@ -297,7 +367,7 @@ class DonationController {
         ]);
       }
       if ($donation['Status'] != 'draft') {
-        return $response->withStatus(400)->withJson([
+        return $response->withStatus(409)->withJson([
           "error" => [
             "code" => "DONATION_NOT_CANCELABLE",
             "desc" => "Only draft donations can be canceled"
@@ -323,11 +393,11 @@ class DonationController {
     $jwt = $request->getAttribute('jwt');
 
     # Verificar si el usuario autenticado es el mismo o si es un administrador
-    if ($jwt->data->UserID != $userID && !$jwt->data->IsAdmin) {
+    if (!$jwt->data->IsAdmin) {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
-          "desc" => "You do not have permission to view the referrals of this user."
+          "desc" => "You do not have permission to raffle donations"
         ]
       ]);
     }
@@ -344,6 +414,147 @@ class DonationController {
     try{
       $result = $this->donation->raffleCoupons($quantity);
       return $response->withJson($result);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  public function getAgencies(Request $request, Response $response, $args) {
+    $jwt = $request->getAttribute('jwt');
+    $paginator = paginator($request);
+
+    # Verificar si el usuario autenticado es el mismo o si es un administrador
+    if (!$jwt->data->IsAdmin) {
+      return $response->withStatus(403)->withJson([
+        "error" => [
+          "code" => "UNAUTHORIZED",
+          "desc" => "You do not have permission to access agencies"
+        ]
+      ]);
+    }
+
+    try {
+      $donations = $this->donation->getAgencies($paginator);
+      return $response->withStatus(200)->withJson($donations);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  public function getAgencyById(Request $request, Response $response, $args) {
+    $agencyID = $args['agencyID'];
+    $jwt = $request->getAttribute('jwt');
+    $paginator = paginator($request);
+
+    # Verificar si el usuario autenticado es el mismo o si es un administrador
+    if (!$jwt->data->IsAdmin) {
+      return $response->withStatus(403)->withJson([
+        "error" => [
+          "code" => "UNAUTHORIZED",
+          "desc" => "You do not have permission to access agencies"
+        ]
+      ]);
+    }
+
+    try {
+      $agency = $this->donation->getAgencyById($agencyID);
+      if (!$agency) {
+        return $response->withStatus(404)->WithJson([
+          "error" => [
+            "code" => "AGENCY_NOT_FOUND",
+            "desc"=> "No agency found for this specific ID."
+          ]
+        ]);
+      }
+
+      return $response->withStatus(200)->withJson($agency);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  public function createAgency(Request $request, Response $response, $args) {
+    $data = $request->getParsedBody();
+    $jwt = $request->getAttribute('jwt');
+    $paginator = paginator($request);
+
+    # Verificar si el usuario autenticado es el mismo o si es un administrador
+    if (!$jwt->data->IsAdmin) {
+      return $response->withStatus(403)->withJson([
+        "error" => [
+          "code" => "UNAUTHORIZED",
+          "desc" => "You do not have permission to access agencies"
+        ]
+      ]);
+    }
+
+    # Verificar si el body es un array/object válido
+    if (!is_array($data) && !is_object($data)) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_JSON",
+          "desc" => "Request body must be valid JSON"
+        ]
+      ]);
+    }
+
+    $name = $data['Name'] ?? null;
+    $contactEmail = $data['ContactEmail'] ?? null;
+    if(empty($name) || empty($contactEmail)){
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_PARAMETERS",
+          "desc" => "Missing or invalid parameters"
+        ]
+      ]);
+    }
+
+    try {
+      $this->donation->createAgency($name, $contactEmail);
+      return $response->withJson("Agency added");
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  public function deleteAgency(Request $request, Response $response, $args)  {
+    $agencyID = $args['agencyID'];
+    $jwt = $request->getAttribute('jwt');
+    $userID = $jwt->data->UserID;
+
+    try {
+      $agency = $this->donation->getAgencyById($agencyID);
+      if (!$agency) {
+        return $response->withStatus(404)->WithJson([
+          "error" => [
+            "code" => "AGENCY_NOT_FOUND",
+            "desc"=> "No agency found for this specific ID."
+          ]
+        ]);
+      }
+
+      $this->donation->deleteAgency($agencyID);
+      return $response->withStatus(200)->withJson("Agency deleted successfully");
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
