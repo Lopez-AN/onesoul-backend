@@ -4,10 +4,8 @@ namespace App\Controllers;
 
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
-use App\Models\CalService;
+use App\Models\CalModel;
 use App\Models\User;
-use DateTime;
-use Firebase\JWT\JWT;
 
 #Definir zona horaria
 date_default_timezone_set('America/Argentina/Buenos_Aires');
@@ -17,7 +15,7 @@ class CalController{
   protected $cal;
   protected $user;
 
-  public function __construct(CalService $cal, User $user) {
+  public function __construct(CalModel $cal, User $user) {
     $this->cal = $cal;
     $this->user = $user;
   }
@@ -43,16 +41,11 @@ class CalController{
       ]);
     }
 
-    # Creo un State firmado + PKCE para mayor seguridad
-    $verifier = rtrim(strtr(base64_encode(random_bytes(48)), '+/','-_'), '=');
-    $challenge = rtrim(strtr(base64_encode(hash('sha256', $verifier, true)), '+/','-_'), '=');
-
     $payload = [
       'uid'   => $jwt->data -> UserID, // Lo uso para identificar al usuario
       'exp'   => time()+600, # 5 min expedicion
       'nonce' => bin2hex(random_bytes(8)),
-      'redirect' => $redirect, # URL de redireccion (del frontend) luego de obtener los tokens
-      'ver'   => $verifier
+      'redirect' => $redirect # URL de redireccion (del frontend) luego de obtener los tokens
     ];
     $data = base64_encode(json_encode($payload));
     $mac  = hash_hmac('sha256', $data, $GLOBALS['config']['sig_secret']); # Firmo el payload con mi secret
@@ -61,142 +54,265 @@ class CalController{
     # Envio al frontend un redirect para que se autentifique con Cal.com y autorize nuestra APP
     $url = sprintf(
       'https://app.cal.com/auth/oauth2/authorize?client_id=%s&state=%s',
-      urlencode($GLOBALS['config']['calcom']['client_id']),
+      urlencode($GLOBALS['config']['cal']['client_id']),
       urlencode($state)
     );
     return $response->withStatus(200)->withJson($url);
   }
 
-  // /**
-  // * Desvincula una cuenta de calendly de onesoul, desuscribe webhook y la quita de la base
-  // * @param Request  $request   Objeto de la petición HTTP entrante (Slim\Http\Request).
-  // * @param Response $response  Objeto de la respuesta HTTP (Slim\Http\Response).
-  // * @param array    $args      Argumentos de la ruta definidos en el enrutador.
-  // **/
-  // public function disconnect(Request $request, Response $response, array $args) {
-  //   $jwt = $request->getAttribute('jwt');
+  /**
+  * Desvincula una cuenta de Cal.com de onesoul, desuscribe webhook y la quita de la base
+  * @param Request  $request   Objeto de la petición HTTP entrante (Slim\Http\Request).
+  * @param Response $response  Objeto de la respuesta HTTP (Slim\Http\Response).
+  * @param array    $args      Argumentos de la ruta definidos en el enrutador.
+  **/
+  public function disconnect(Request $request, Response $response, array $args) {
+    $jwt = $request->getAttribute('jwt');
+    $userID = $jwt->data->UserID;
 
-  //   if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID')) {
-  //     return $response->withStatus(401)->withJson([
-  //       "error" => [
-  //         "code" => "INVALID_TOKEN",
-  //         "desc" => "Invalid JWT token"
-  //       ]
-  //     ]);
-  //   }
-  //   $userID = $jwt->data->UserID;
+    # Lo busco en la base
+    try{
+      $user = $this->cal->getCalUser($userID);
+      if(!$user){
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "CAL_USER_NOT_FOUND",
+            "desc" => "No se encontro el usuario de Cal.com"
+          ]
+        ]);
+      }
 
-  //   # Lo busco en la base
-  //   try{
-  //     $user = $this->calendly->getCalendlyUser($userID);
-  //     if(!$user){
-  //       return $response->withStatus(404)->withJson([
-  //         "error" => [
-  //           "code" => "CALENDLY_USER_NOT_FOUND",
-  //           "desc" => "No se encontro el usuario de Calendly"
-  //         ]
-  //       ]);
-  //     }
-  //   } catch (\Throwable $e) {
-  //     return $response->withStatus(500)->withJson([
-  //       "error" => [
-  //         "code" => "INTERNAL_SERVER_ERROR",
-  //         "desc" => $e->getMessage()
-  //       ]
-  //     ]);
-  //   }
+      $accessToken = $user['AccessToken'];
+      $refreshToken = $user['RefreshToken'];
+      $tokenExpiresAt = $user['TokenExpiresAt'];
+      $webhook = $user['Webhook'];
+      $calUserID = $user['CalUserID'];
 
-  //   $accessToken = $user['AccessToken'];
-  //   $refreshToken = $user['RefreshToken'];
-  //   $tokenExpiresAt = $user['TokenExpiresAt'];
-  //   $webhook = $user['Webhook'];
-  //   $userUUID = $user['UserUUID'];
-  //   $orgUUID = $user['OrgUUID'];
+      # ---- BORRADO WEBHOOK ----
+      if($webhook !== null){ # Si tiene webhook registrado procedo
+        # 1) Si accesstoken no expiro, lo pruebo
+        if (time() < $tokenExpiresAt) {
+          $headers = ["Authorization: Bearer ".$accessToken];
+          $result = $this->_calRequest($response, "GET", "api", "/users/me", $headers);
+          if($result->valid){ # Si se acepto el token no hace falta refrescarlo
+            $accessToken = null;
+          }
+        }
 
-  //   $refreshToken = true; # Indica que se debe refrescar el accesstoken
-  //   $deleteWebhook = false; # Indica que se debe solicitar la eliminacion del webhook
+        # 2) Si el access token expiro lo renuevo con el refresh token
+        if(!$accessToken){
+          $clientId = $GLOBALS['config']['cal']['client_id'];
+          $secret = $GLOBALS['config']['cal']['secret'];
 
-  //   # 1) Si accesstoken no expiro, lo pruebo
-  //   if (time() < $tokenExpiresAt) {
-  //     $headers = ["Authorization: Bearer ".$accessToken];
-  //     $result = $this->calendly->calendlyRequest("GET", "api", "/users/me", $headers);
+          $headers = [
+            "Authorization: Bearer $refreshToken"
+          ];
 
-  //     # Si se acepto el accesstoken, no se refresca y se procede a eliminar el webhook
-  //     if($result->http_code == 200){
-  //       $refreshToken = false;
-  //       $deleteWebhook = true;
-  //     }
-  //   }
+          $postData = http_build_query([
+            'client_id'   => $clientId,
+            'client_secret'   => $secret,
+            'grant_type' =>  'refresh_token'
+          ]);
 
-  //   # 2) Si el token expiro lo renuevo con el refresh token
-  //   if($refreshToken){
-  //     $clientId = $GLOBALS['config']['calendly']['client_id'];
-  //     $secret = $GLOBALS['config']['calendly']['calendly_secret'];
+          $result = $this->_calRequest($response, "POST", "app", "/api/auth/oauth/refreshToken", $headers, $postData);
+          if($result->valid){
+            $accessToken = $result->response->access_token;
+          }
+        }
 
-  //     $auth = base64_encode($clientId.':'.$secret);
-  //     $headers = [
-  //       "Authorization: Basic $auth",
-  //       "Content-Type: application/x-www-form-urlencoded"
-  //     ];
+        # Si tengo un access token valido procedo a borrar el webhook
+        if($accessToken){
+          $this->_calRequest($response, "DELETE", "api", "/v2/webhooks/$webhook", $headers);
+        }
+      }
 
-  //     $postData = http_build_query([
-  //       'grant_type'   => 'refresh_token',
-  //       'refresh_token' => $user['RefreshToken']
-  //     ]);
+      $this->cal->deleteCalUser($calUserID);
+      return $response->withStatus(200)->withJson("Cal.com user deleted");
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
 
-  //     $result = $this->calendly->calendlyRequest("POST", "auth", "/oauth/token", $headers, $postData);
-  //     if($result->http_code == 200){
-  //       $accessToken = $result->data->access_token;
-  //       $deleteWebhook = true;
-  //     }else{
-  //       # Si tambien se rechaza el refresh token solo borro de la base, otros mensajes de error de la api lanzo error
-  //       if(!in_array($result->http_code, [400,401])){
-  //         return $response->withStatus(500)->withJson(["error" => $result->error]);
-  //       }
-  //     }
-  //   }
+  /**
+  * Es llamado por Cal.com luego que el usuario se autentica y hace las siguientes acciones:
+  *  1) Obtiene los tokens del usuario en Cal.com
+  *  2) Obtiene los datos del usuario de Cal.com, UUID, etc
+  *  3) Genera un webhook para recibir las reservas del usuario
+  * @param Request  $request   Objeto de la petición HTTP entrante (Slim\Http\Request).
+  * @param Response $response  Objeto de la respuesta HTTP (Slim\Http\Response).
+  * @param array    $args      Argumentos de la ruta definidos en el enrutador.
+  * @return: redireccion al oAUTH de Cal.com
+  **/
+  public function callback(Request $request, Response $response, array $args) {
+    $state = $_GET['state'] ?? ''; # Obtengo el state firmado
+    $code = $_GET['code'] ?? ''; # Obtengo el code enviado por Cal.com
 
-  //   if($deleteWebhook){
-  //     $headers = ["Authorization: Bearer ".$accessToken];
-  //     $result = $this->calendly->calendlyRequest("DELETE", "api", "/webhook_subscriptions/$webhook", $headers);
-  //     if($result->http_code == 404){ # Si dio 404 busco si hay algun webhook registrado con nosotros
-  //       $url = sprintf("/webhook_subscriptions?scope=user&organization=%s&user=%s&count=100",
-  //         urlencode("https://api.calendly.com/organizations/$orgUUID"),
-  //         urlencode("https://api.calendly.com/users/$userUUID")
-  //       );
-  //       $result = $this->calendly->calendlyRequest("GET", "api", $url, $headers);
-  //       if($result->http_code != 200){
-  //         return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
-  //       }
+    if(empty($state) || empty($code)){
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_PARAMETERS",
+          "desc" => "Parameters are missing or invalid"
+        ]
+      ]);
+    }
 
-  //       $webhook = array_filter($result->data->collection, function($e){
-  //         return strstr($e->callback_url,"onesoul.app") !== false;
-  //       });
-  //       # Si encontro un webhook apuntando a onesoul lo elimino
-  //       if(!empty($webhook)){
-  //         $webhook = basename($webhook[0]->uri);
-  //         $result = $this->calendly->calendlyRequest("DELETE", "api", "/webhook_subscriptions/$webhook", $headers);
-  //         if($result->http_code != 200){
-  //           return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
-  //         }
-  //       }
-  //     }else{
-  //       return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
-  //     }
-  //   }
+    try {
+      # Obtengo datos y firma
+      [$dataB64, $macHex] = explode('.', base64_decode(strtr($state, '-_','+/')), 2);
+      # Desencripto y verifico firma
+      $calc = hash_hmac('sha256', $dataB64, $GLOBALS['config']['sig_secret']);
 
-  //   try{
-  //     $this->calendly->deleteCalendlyUser($userUUID);
-  //   } catch (\Throwable $e) {
-  //     return $response->withStatus(500)->withJson([
-  //       "error" => [
-  //         "code" => "INTERNAL_SERVER_ERROR",
-  //         "desc" => $e->getMessage()
-  //       ]
-  //     ]);
-  //   }
-  //   return $response->withJson("ok");
-  // }
+      # Error 401 si la firma es invalida
+      if (!hash_equals($calc, $macHex)) {
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "EXPIRED_REQUEST",
+            "desc" => "The payload has expired"
+          ]
+        ]);
+      }
+
+      # Decodifico el payload y verifico que no este caducado
+      $payload = json_decode(base64_decode($dataB64));
+      if (!$payload || time() > $payload->exp + 7200){
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "EXPIRED_REQUEST",
+            "desc" => "The payload has expired"
+          ]
+        ]);
+      }
+      $userID = $payload->uid; # ID del usuario onesoul
+      $redirect = $payload->redirect; # url del frontend a donde debe redirigir luego de autenticar
+
+      # 1) Obtener los token del usuario
+      # --------------------------------------------
+      $clientId = $GLOBALS['config']['cal']['client_id'];
+      $secret = $GLOBALS['config']['cal']['secret'];
+
+      $headers = [
+        "Content-Type: application/x-www-form-urlencoded"
+      ];
+
+      $postData = http_build_query([
+        'code'         => $code,
+        'client_id'   => $clientId,
+        'client_secret'   => $secret,
+        'grant_type' =>  'authorization_code',
+        'redirect_uri' => $GLOBALS['config']['base_url']."/cal/callback"
+      ]);
+
+      $result = $this->_calRequest($response, "POST", "app", "/api/auth/oauth/token", $headers, $postData);
+      if(!$result->valid){
+        return $result->response;
+      }
+
+      $refreshToken = $result->response->refresh_token;
+
+      $headers = [
+        "Authorization: Bearer $refreshToken"
+      ];
+
+      $postData = http_build_query([
+        'client_id'   => $clientId,
+        'client_secret'   => $secret,
+        'grant_type' =>  'refresh_token'
+      ]);
+
+      $result = $this->_calRequest($response, "POST", "app", "/api/auth/oauth/refreshToken", $headers, $postData);
+      if(!$result->valid){
+        return $result->response;
+      }
+      $accessToken = $result->response->access_token;
+
+      # Extraigo la expiracion del access_token
+      $tokenExpiresAt = json_decode(base64_decode(explode(".",$accessToken)[1])) -> exp;
+
+      # 2) Obtener los datos del usuario
+      # --------------------------------------------
+
+      $headers = [
+        "Authorization: Bearer $accessToken"
+      ];
+
+      $result = $this->_calRequest($response, "GET", "app", "/api/v2/me", $headers);
+      if(!$result->valid){
+        return $result->response;
+      }
+      $calUserID = $result->response->data->id;
+      $timeZone = $result->response->data->timeZone;
+
+      $result = $this->_calRequest($response, "GET", "api", "/v2/event-types", $headers);
+      if(!$result->valid){
+        return $result->response;
+      }
+
+      $bookerUrl = $result->response->data->eventTypeGroups[0]->bookerUrl;
+      $slug = $result->response->data->eventTypeGroups[0]->profile->slug;
+      $eventTypes = $result->response->data->eventTypeGroups[0]->eventTypes;
+
+      $schedulingUrl = "$bookerUrl/$slug/30min";
+
+      # Guardo el usuario cal.com en la base
+
+      $this->cal->saveCalUser(
+        $calUserID, $userID, $accessToken, $refreshToken, $tokenExpiresAt, $slug, $schedulingUrl, $timeZone
+      );
+
+
+      # 3) Genero los webhook
+      # --------------------------------------------
+
+      # Consulto webhooks existentes
+      $result = $this->_calRequest($response, "GET", "api", "/v2/webhooks", $headers);
+      if(!$result->valid){
+        return $result->response;
+      }
+
+      # Busco si ya tiene un webhook con onesoul en ese caso no creo otro
+      $webhooks = array_values(array_filter($result->response->data, function($e){
+        return strstr($e->subscriberUrl, "onesoul.app") !== false;
+      }));
+      if(!empty($webhooks)){
+        $webhook = array_pop($webhooks);
+        # Guardo el webhook del usuario Cal.com en la base
+        $this->cal->saveCalUserWebhook($calUserID, $webhook->id);
+        return $response->withHeader('Location', $redirect)->withStatus(302);
+      }
+
+      # Creo el webhook con nosotros si este no existe
+      $result = $this->_calRequest($response, "POST", "api", "/v2/webhooks", $headers, json_encode([
+        "active" => true,
+        "subscriberUrl" => "https://api.onesoul.app/cal/webhook",
+        "triggers" => [
+          "BOOKING_CREATED",
+          "BOOKING_RESCHEDULED",
+          "BOOKING_CANCELLED"
+        ],
+        "secret" => $GLOBALS['config']['cal']['secret']
+      ]));
+      if(!$result->valid){
+        return $result->response;
+      }
+
+      $webhook = $result->response->data;
+      $this->cal->saveCalUserWebhook($calUserID, $webhook->id);
+      return $response->withHeader('Location', $redirect)->withStatus(302);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
 
   // /**
   // * Busca si un usuario esta vinculado con calendly
@@ -362,181 +478,6 @@ class CalController{
   //   ]]);
   // }
 
-  /**
-  * Es llamado por Cal.com luego que el usuario se autentica y hace las siguientes acciones:
-  *  1) Obtiene los tokens del usuario en Cal.com
-  *  2) Obtiene los datos del usuario de Cal.com, UUID, etc
-  *  3) Genera un webhook para recibir las reservas del usuario
-  * @param Request  $request   Objeto de la petición HTTP entrante (Slim\Http\Request).
-  * @param Response $response  Objeto de la respuesta HTTP (Slim\Http\Response).
-  * @param array    $args      Argumentos de la ruta definidos en el enrutador.
-  * @return: redireccion al oAUTH de Cal.com
-  **/
-  public function callback(Request $request, Response $response, array $args) {
-    $state = $_GET['state'] ?? ''; # Obtengo el state firmado
-    $code = $_GET['code'] ?? ''; # Obtengo el code enviado por Cal.com
-
-    if(empty($state) || empty($code)){
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "INVALID_PARAMETERS",
-          "desc" => "Parameters are missing or invalid"
-        ]
-      ]);
-    }
-
-    # Obtengo datos y firma
-    [$dataB64, $macHex] = explode('.', base64_decode(strtr($state, '-_','+/')), 2);
-    # Desencripto y verifico firma
-    $calc = hash_hmac('sha256', $dataB64, $GLOBALS['config']['sig_secret']);
-
-    # Error 401 si la firma es invalida
-    if (!hash_equals($calc, $macHex)) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "EXPIRED_REQUEST",
-          "desc" => "The payload has expired"
-        ]
-      ]);
-    }
-
-    # Decodifico el payload y verifico que no este caducado
-    $payload = json_decode(base64_decode($dataB64));
-    if (!$payload || time() > $payload->exp + 7200){
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "EXPIRED_REQUEST",
-          "desc" => "The payload has expired"
-        ]
-      ]);
-    }
-    return $response->withJson($payload);
-
-  //   $userID = $payload->uid; # ID del usuario onesoul
-  //   $redirect = $payload->redirect; # url del frontend a donde debe redirigir luego de autenticar
-
-  //   # 1) Solicito el access_token y refresh_token
-  //   # --------------------------------------------
-  //   $clientId = $GLOBALS['config']['calcom']['client_id'];
-  //   $secret = $GLOBALS['config']['calcom']['secret'];
-
-  //   $auth = base64_encode($clientId.':'.$secret);
-  //   $headers = [
-  //     "Authorization: Basic $auth",
-  //     "Content-Type: application/x-www-form-urlencoded"
-  //   ];
-
-  //   $postData = http_build_query([
-  //     'grant_type'   => 'authorization_code',
-  //     'code'         => $code,
-  //     'redirect_uri' => $GLOBALS['config']['base_url']."/calendly/callback"
-  //   ]);
-
-  //   $result = $this->calendly->calendlyRequest("POST", "auth", "/oauth/token", $headers, $postData);
-  //   if($result->http_code != 200){
-  //     return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
-  //   }
-
-  //   # 2) Obtener los token del usuario
-  //   # --------------------------------------------
-  //   $accessToken = $result->data->access_token;
-  //   $refreshToken = $result->data->refresh_token;
-  //   $tokenExpiresAt = $result->data->created_at + $result->data->expires_in;
-
-  //   $headers = [
-  //     "Authorization: Bearer $accessToken"
-  //   ];
-
-  //   $result = $this->calendly->calendlyRequest("GET", "api", "/users/me", $headers);
-  //   if($result->http_code != 200){
-  //     return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
-  //   }
-
-  //   $uri = $result->data->resource->uri;
-  //   $orgUri = $result->data->resource->current_organization;
-  //   $userUuid = basename($result->data->resource->uri);
-
-  //   # Guardo el usuario calendly en la base
-  //   try {
-  //     $this->calendly->saveCalendlyUser($userID, $accessToken, $refreshToken, $tokenExpiresAt, $result->data->resource);
-  //   } catch (\Throwable $e) {
-  //     return $response->withStatus(500)->withJson([
-  //       "error" => [
-  //         "code" => "INTERNAL_SERVER_ERROR",
-  //         "desc" => $e->getMessage()
-  //       ]
-  //     ]);
-  //   }
-
-  //   # 3) Genero los webhook
-  //   # --------------------------------------------
-  //   $url = sprintf(
-  //     "/webhook_subscriptions?scope=user&organization=%s&user=%s&count=100",
-  //     urlencode($orgUri),
-  //     urlencode($uri)
-  //   );
-
-  //   $result = $this->calendly->calendlyRequest("GET", "api", $url, $headers);
-  //   if($result->http_code != 200){
-  //     return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
-  //   }
-
-  //   # Busco si ya tiene un webhook con onesoul. en ese caso no creo otro
-  //   $webhook = array_filter($result->data->collection, function($e){
-  //     return strstr($e->callback_url,"onesoul.app") !== false;
-  //   });
-
-  //   if(!empty($webhook)){
-  //     # Guardo el webhook del usuario calendly en la base
-  //     try {
-  //       $webhook = basename($webhook[0]->uri);
-  //       $this->calendly->saveCalendlyUserWebhook($userUuid, $webhook);
-  //     } catch (\Throwable $e) {
-  //       return $response->withStatus(500)->withJson([
-  //         "error" => [
-  //           "code" => "INTERNAL_SERVER_ERROR",
-  //           "desc" => $e->getMessage()
-  //         ]
-  //       ]);
-  //     }
-  //     return $response->withHeader('Location', $redirect)->withStatus(302);
-  //   }
-
-  //   $headers = [
-  //     "Authorization: Bearer $accessToken",
-  //     "Content-Type: application/json"
-  //   ];
-
-  //   $postData = [
-  //     'url'           => $GLOBALS['config']['base_url']."/calendly/webhook",
-  //     'events'        => ['invitee.created','invitee.canceled'],
-  //     'organization'  => $orgUri,
-  //     'user'          => $uri,
-  //     'scope'         => 'user',
-  //     'signing_key'   => $GLOBALS['config']['calendly']['calendly_webhook_sign']
-  //   ];
-
-  //   $result = $this->calendly->calendlyRequest("POST", "api", "/webhook_subscriptions", $headers, json_encode($postData));
-  //   if($result->http_code != 200){
-  //     return $response->withStatus($result->http_code)->withJson(["error" => $result->error]);
-  //   }
-  //   $webhook = basename($result->data->resource->uri);
-
-  //   # Guardo el webhook del usuario calendly en la base
-  //   try {
-  //     $this->calendly->saveCalendlyUserWebhook($userUuid, $webhook);
-  //   } catch (\Throwable $e) {
-  //     return $response->withStatus(500)->withJson([
-  //       "error" => [
-  //         "code" => "INTERNAL_SERVER_ERROR",
-  //         "desc" => $e->getMessage()
-  //       ]
-  //     ]);
-  //   }
-
-  //   return $response->withHeader('Location', $redirect)->withStatus(302);
-  // }
-
   // public function handleWebhook(Request $request, Response $response, $args) {
   //   $payload = (string)$request->getBody(); # Payload en bruto
   //   # Firma del payload
@@ -593,5 +534,50 @@ class CalController{
   //   }
 
   //   return $response->withStatus(200);
+  //}
+
+
+  /**
+   *  Hace una request por cURL a calendly
+   *  @param  method: metodo HTTP a utilizar GET | POST | PATCH ...
+   *  @param  subdomain: subdominio de calendly, auth, api
+   *  @param  headers: cabeceras de la consulta HTTP
+   *  @param  postFields: body de la consulta HTTP (opcional)
+   *  @return object: { http_code: 200, data: datos }
+   *  @return object: { http_code: cod_http_error, error: objeto error }
+  **/
+  private function _calRequest($response, $method, $subdomain, $path, $headers, $postData = null){
+    $ch = curl_init("https://$subdomain.cal.com$path");
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
+
+    if(in_array($method, ["POST","PATCH","PUT"])){
+      curl_setopt($ch, CURLOPT_POSTFIELDS, $postData);
+    }
+    $curlResp = curl_exec($ch);
+
+    // capturar errores y status antes de cerrar
+    $curlError = curl_error($ch);
+    $curlErrno = curl_errno($ch);
+    $httpCode  = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($curlErrno || ($httpCode >= 400 && $httpCode <= 599)) {
+      return (object) [
+        "valid" => false,
+        "response" => $response->withStatus($httpCode)->withJson([
+          "error" => [
+            "code" => "CAL_API_ERROR",
+            "desc" => $curlErrno
+              ? "cURL error: $curlError"
+              : "Calendly returned HTTP $httpCode",
+            "cal_response" => $curlResp // opcional, útil para debug
+          ]
+        ])
+      ];
+    }
+
+    return (object)["valid" => true, "response" => json_decode($curlResp)];
   }
 }

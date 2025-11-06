@@ -2,7 +2,7 @@
 
 use Slim\App;
 use App\Controllers\CalController;
-use App\Models\CalService;
+use App\Models\CalModel;
 use App\Models\User;
 use Tuupola\Middleware\JwtAuthentication;
 use App\Middleware\JwtTokenMiddleware;
@@ -18,9 +18,9 @@ return function (App $app) {
 
   // Obtener PDO del contenedor DI
   $pdo = $app->getContainer()->get('pdo');
-  $calService = new CalService($pdo);
+  $calModel = new CalModel($pdo);
   $user = new User($pdo);
-  $calController = new CalController($calService, $user);
+  $calController = new CalController($calModel, $user);
 
   $app->post('/cal/connect', [$calController, 'connect'])->add($requiredJwt);
   $app->delete('/cal/disconnect', [$calController, 'disconnect'])->add($requiredJwt);

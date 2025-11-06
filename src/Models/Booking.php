@@ -5,7 +5,7 @@ namespace App\Models;
 use PDO;
 use App\Exceptions\DatabaseException;
 use App\Exceptions\ValidationException;
-use \DateTime;
+use DateTime;
 
 class Booking
 {
@@ -340,8 +340,8 @@ class Booking
 
       // Compara y actualiza ScheduledDate
       if (!empty($scheduledDate) && $original['ScheduledDate'] != $scheduledDate) {
-        $currentDate = new \DateTime();
-        $newScheduledDate = new \DateTime($scheduledDate);
+        $currentDate = new DateTime();
+        $newScheduledDate = new DateTime($scheduledDate);
         if ($newScheduledDate < $currentDate) {
           throw new \Exception("Scheduled date cannot be in the past.");
         }
