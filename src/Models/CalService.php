@@ -5,8 +5,7 @@ namespace App\Models;
 use PDO;
 use App\Exceptions\DatabaseException;
 
-class CalendlyService 
-{
+class CalService {
   protected $db;
 
   public function __construct(PDO $db)
