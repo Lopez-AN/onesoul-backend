@@ -84,48 +84,21 @@ class CalController{
 
       $accessToken = $user['AccessToken'];
       $refreshToken = $user['RefreshToken'];
-      $tokenExpiresAt = $user['TokenExpiresAt'];
       $webhook = $user['Webhook'];
       $calUserID = $user['CalUserID'];
 
       # ---- BORRADO WEBHOOK ----
       if($webhook !== null){ # Si tiene webhook registrado procedo
-        # 1) Si accesstoken no expiro, lo pruebo
-        if (time() < $tokenExpiresAt) {
-          $headers = ["Authorization: Bearer ".$accessToken];
-          $result = $this->_calRequest($response, "GET", "api", "/users/me", $headers);
-          if($result->valid){ # Si se acepto el token no hace falta refrescarlo
-            $accessToken = null;
-          }
-        }
-
-        # 2) Si el access token expiro lo renuevo con el refresh token
-        if(!$accessToken){
-          $clientId = $GLOBALS['config']['cal']['client_id'];
-          $secret = $GLOBALS['config']['cal']['secret'];
-
-          $headers = [
-            "Authorization: Bearer $refreshToken"
-          ];
-
-          $postData = http_build_query([
-            'client_id'   => $clientId,
-            'client_secret'   => $secret,
-            'grant_type' =>  'refresh_token'
-          ]);
-
-          $result = $this->_calRequest($response, "POST", "app", "/api/auth/oauth/refreshToken", $headers, $postData);
-          if($result->valid){
-            $accessToken = $result->response->access_token;
-          }
-        }
-
+        $accessToken = $this -> _refreshCalUserToken($response, $refreshToken, $accessToken);
         # Si tengo un access token valido procedo a borrar el webhook
         if($accessToken){
-          $this->_calRequest($response, "DELETE", "api", "/v2/webhooks/$webhook", $headers);
+          $headers = [
+            "Authorization: Bearer $accessToken"
+          ];
+          $result = $this->_calRequest($response, "DELETE", "api", "/v2/webhooks/$webhook", $headers);
         }
       }
-
+      # Elimino el usuario de la base
       $this->cal->deleteCalUser($calUserID);
       return $response->withStatus(200)->withJson("Cal.com user deleted");
     } catch (\Throwable $e) {
@@ -213,29 +186,18 @@ class CalController{
       }
 
       $refreshToken = $result->response->refresh_token;
-
-      $headers = [
-        "Authorization: Bearer $refreshToken"
-      ];
-
-      $postData = http_build_query([
-        'client_id'   => $clientId,
-        'client_secret'   => $secret,
-        'grant_type' =>  'refresh_token'
-      ]);
-
-      $result = $this->_calRequest($response, "POST", "app", "/api/auth/oauth/refreshToken", $headers, $postData);
-      if(!$result->valid){
-        return $result->response;
+      $accessToken = $this -> _refreshCalUserToken($response, $refreshToken);
+      if(!$accessToken){
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "CAL_INVALID_TOKEN",
+            "desc" => "Invalid Cal.com refresh token"
+          ]
+        ]);
       }
-      $accessToken = $result->response->access_token;
-
-      # Extraigo la expiracion del access_token
-      $tokenExpiresAt = json_decode(base64_decode(explode(".",$accessToken)[1])) -> exp;
 
       # 2) Obtener los datos del usuario
       # --------------------------------------------
-
       $headers = [
         "Authorization: Bearer $accessToken"
       ];
@@ -259,15 +221,12 @@ class CalController{
       $schedulingUrl = "$bookerUrl/$slug/30min";
 
       # Guardo el usuario cal.com en la base
-
       $this->cal->saveCalUser(
-        $calUserID, $userID, $accessToken, $refreshToken, $tokenExpiresAt, $slug, $schedulingUrl, $timeZone
+        $calUserID, $userID, $accessToken, $refreshToken, $slug, $schedulingUrl, $timeZone
       );
-
 
       # 3) Genero los webhook
       # --------------------------------------------
-
       # Consulto webhooks existentes
       $result = $this->_calRequest($response, "GET", "api", "/v2/webhooks", $headers);
       if(!$result->valid){
@@ -285,6 +244,11 @@ class CalController{
         return $response->withHeader('Location', $redirect)->withStatus(302);
       }
 
+      $headers = [
+        "Authorization: Bearer $accessToken",
+        "Content-Type: application/json"
+      ];
+
       # Creo el webhook con nosotros si este no existe
       $result = $this->_calRequest($response, "POST", "api", "/v2/webhooks", $headers, json_encode([
         "active" => true,
@@ -301,6 +265,7 @@ class CalController{
       }
 
       $webhook = $result->response->data;
+      # Guardo el webhook en la base
       $this->cal->saveCalUserWebhook($calUserID, $webhook->id);
       return $response->withHeader('Location', $redirect)->withStatus(302);
     } catch (\Throwable $e) {
@@ -579,5 +544,43 @@ class CalController{
     }
 
     return (object)["valid" => true, "response" => json_decode($curlResp)];
+  }
+
+  private function _refreshCalUserToken($response, $refreshToken, $accessToken = false){
+    # Si se proporciono token se verifica su validez
+    if($accessToken){
+      # Extraigo la expiracion del access_token
+      $tokenExpiresAt = json_decode(base64_decode(explode(".",$accessToken)[1])) -> exp;
+
+      # 1) Si accesstoken no expiro, lo pruebo
+      if (time() < $tokenExpiresAt) {
+        $headers = [
+          "Authorization: Bearer ".$accessToken
+        ];
+        $result = $this->_calRequest($response, "GET", "app", "/api/v2/me", $headers);
+        if($result->valid){ # Si se acepto el token no hace falta refrescarlo
+          return $accessToken;
+        }
+      }
+    }
+
+    # 2) Si el access token expiro o no se proporciono lo renuevo con el refresh token
+    if(!$accessToken){
+      $clientId = $GLOBALS['config']['cal']['client_id'];
+      $secret = $GLOBALS['config']['cal']['secret'];
+
+      $headers = [
+        "Authorization: Bearer $refreshToken"
+      ];
+
+      $postData = http_build_query([
+        'client_id'   => $clientId,
+        'client_secret'   => $secret,
+        'grant_type' =>  'refresh_token'
+      ]);
+
+      $result = $this->_calRequest($response, "POST", "app", "/api/auth/oauth/refreshToken", $headers, $postData);
+      return $result->valid ? $result->response->access_token : false;
+    }
   }
 }

@@ -93,13 +93,12 @@ class CalModel {
    *  @param  tokenExpiresAt: fechahora de expiracion del accesstoken
   **/
   public function saveCalUser(
-    $calUserID, $userID, $accessToken, $refreshToken, $tokenExpiresAt, $slug, $schedulingUrl, $timeZone
+    $calUserID, $userID, $accessToken, $refreshToken, $slug, $schedulingUrl, $timeZone
   ){
-    file_put_contents(ROOT."/debug.log", json_encode([$calUserID, $userID, $slug, $schedulingUrl, $timeZone, $accessToken, $refreshToken, $tokenExpiresAt]));
     $stmt = $this->db->prepare("REPLACE INTO CalConnections
-      (CalUserID, UserID, Slug, SchedulingUrl, TimeZone, AccessToken, RefreshToken, TokenExpiresAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-    $stmt->execute([$calUserID, $userID, $slug, $schedulingUrl, $timeZone, $accessToken, $refreshToken, $tokenExpiresAt]);
+      (CalUserID, UserID, Slug, SchedulingUrl, TimeZone, AccessToken, RefreshToken)
+      VALUES (?, ?, ?, ?, ?, ?, ?)");
+    $stmt->execute([$calUserID, $userID, $slug, $schedulingUrl, $timeZone, $accessToken, $refreshToken]);
   }
 
   /**
