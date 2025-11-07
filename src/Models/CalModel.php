@@ -5,23 +5,25 @@ namespace App\Models;
 use PDO;
 use PDOException;
 use App\Exceptions\DatabaseException;
+use DateTime;
 
 class CalModel {
   protected $db;
 
-  public function __construct(PDO $db)
-  {
+  public function __construct(PDO $db) {
     $this->db = $db;
   }
 
-
   /**
-   *  Actualiza info variable del usuario Cal.com
-   *  @param  calUserID: ID de usuario Cal.com
-   *  @param  slug: nombre del usuario Cal.com
-   *  @param  schedulingUrl: URL de reservas
-   *  @param  timezone: zona horaria del usuario Cal.com
-  **/
+   * Actualiza datos variables del usuario Cal.com
+   * Sincroniza información del perfil de Cal.com como slug, URL de reservas y zona horaria
+   * @param int $calUserID ID del usuario en Cal.com
+   * @param string $slug Slug del usuario Cal.com (usado en la URL de reservas)
+   * @param string $schedulingUrl URL completa de reservas del usuario
+   * @param string $timeZone Zona horaria del usuario (ej: America/Buenos_Aires)
+   * @return void
+   * @throws PDOException Si hay error en la base de datos
+   */
   public function updateCalUserData($calUserID, $slug, $schedulingUrl, $timeZone){
     $stmt = $this->db->prepare("UPDATE CalConnections
       SET Slug = ?, SchedulingUrl = ?, TimeZone = ?
@@ -30,9 +32,12 @@ class CalModel {
   }
 
   /**
-   *  Elimina un usuario calendly
-   *  @param  userUuid: ID de usuario Calendly
-  **/
+   * Elimina un usuario Cal.com de la base de datos
+   * Se ejecuta cuando el usuario desvincula su cuenta de Cal.com
+   * @param int $calUserID ID del usuario en Cal.com
+   * @return void
+   * @throws PDOException Si hay error en la base de datos
+   */
   public function deleteCalUser($calUserID){
     $stmt = $this->db->prepare("DELETE FROM CalConnections
       WHERE CalUserID = ?");
@@ -40,11 +45,14 @@ class CalModel {
   }
 
   /**
-   *  Actualiza tokens del usuario Cal.com
-   *  @param  calUserID: ID de usuario Cal.com
-   *  @param  accessToken: token de acceso para la API
-   *  @param  refreshToken: token para obtener nuevo accesstoken cuando este expira
-  **/
+   * Actualiza los tokens OAuth del usuario Cal.com
+   * Almacena nuevos tokens cuando se refresca la sesión OAuth
+   * @param int $calUserID ID del usuario en Cal.com
+   * @param string $accessToken Token de acceso para la API de Cal.com (temporal)
+   * @param string $refreshToken Token para renovar el accessToken (de larga duración)
+   * @return void
+   * @throws PDOException Si hay error en la base de datos
+   */
   public function updateCalUserTokens($calUserID, $accessToken, $refreshToken){
     $stmt = $this->db->prepare("UPDATE CalConnections
       SET AccessToken = ?, RefreshToken = ?
@@ -53,10 +61,13 @@ class CalModel {
   }
 
   /**
-   *  Guarda el webhook del usuario Cal.com en la base de datos
-   *  @param  calUserID: ID de usuario Calendly
-   *  @param  webhook: UUID del webhook
-  **/
+   * Almacena el UUID del webhook en Cal.com
+   * Se guarda después de crear exitosamente el webhook en Cal.com
+   * @param int $calUserID ID del usuario en Cal.com
+   * @param string $webhook UUID del webhook generado en Cal.com
+   * @return void
+   * @throws PDOException Si hay error en la base de datos
+   */
   public function updateCalUserWebhook($calUserID, $webhook){
     $stmt = $this->db->prepare("UPDATE CalConnections SET Webhook = ?
       WHERE CalUserID = ?");
@@ -64,13 +75,18 @@ class CalModel {
   }
 
   /**
-   *  Guarda el usuario calendly en la base de datos
-   *  @param  calUserId: ID usuario de Cal.com
-   *  @param  userId: ID usuario OneSoul
-   *  @param  accessToken: token de acceso para la API
-   *  @param  refreshToken: token para obtener nuevo accesstoken cuando este expira
-   *  @param  tokenExpiresAt: fechahora de expiracion del accesstoken
-  **/
+   * Guarda un nuevo usuario Cal.com vinculado a OneSoul
+   * Se ejecuta cuando el usuario completa exitosamente el OAuth con Cal.com
+   * @param int $calUserID ID del usuario en Cal.com
+   * @param int $userID ID del usuario en OneSoul
+   * @param string $accessToken Token de acceso para la API de Cal.com
+   * @param string $refreshToken Token para renovar accessToken
+   * @param string $slug Slug del usuario Cal.com
+   * @param string $schedulingUrl URL base de reservas del usuario
+   * @param string $timeZone Zona horaria del usuario
+   * @return void
+   * @throws PDOException Si hay error en la base de datos
+   */
   public function saveCalUser(
     $calUserID, $userID, $accessToken, $refreshToken, $slug, $schedulingUrl, $timeZone
   ){
@@ -81,76 +97,56 @@ class CalModel {
   }
 
   /**
-   *  Guarda los datos recibidos por el webhook luego de verificar su firma
-   *  @param  payload: datos recibidos por el webhook desde calendly
-  **/
-  public function inviteCreated($payload){
+   * Almacena una nueva reserva recibida por webhook de Cal.com
+   * Se ejecuta cuando Cal.com notifica de una nueva reserva (BOOKING_CREATED)
+   * Los datos se validan previamente en el controlador antes de llamar este método
+   * @param string $createdAt Fecha/hora de creación de la cita en Cal.com (ISO 8601)
+   * @param int $seekerID ID del buscador en OneSoul
+   * @param int $guideID ID del guía en OneSoul
+   * @param int $offeringID ID de la publicación/servicio en OneSoul
+   * @param object $payload Objeto con los datos completos del evento de Cal.com
+   * @return void
+   * @throws DatabaseException Si hay error en la inserción
+   */
+  public function bookingCreated($createdAt, $seekerID, $guideID, $offeringID, $assocUUID, $payload){
     try {
-      $uuid = basename($payload->payload->uri);
+      $stmt = $this->db->prepare("INSERT INTO CalWebhooks
+        (Uid, AssocUUID, GuideID, SeekerID, CalUserID, OfferingID,
+        CreatedAt, CancelUrl, RescheduleUrl, Email, StartTime,
+        EndTime, TimeZone, EventTitle, EventComment, Length)
+        VALUES (:uid, :assocUUID, :guideId, :seekerId, :calUserId, :offeringId,
+        :createdAt, :cancelUrl, :rescheduleUrl, :email, :startTime,
+        :endTime, :timeZone, :eventTitle, :eventComment, :length)");
 
-      // Evito request repetidas
-      $stmt0= $this->db->prepare("SELECT UUID FROM CalendlyWebhooks
-        WHERE UUID = :uuid");
-      $stmt0->bindParam(':uuid',          $uuid,           PDO::PARAM_STR);
-      $stmt0->execute();
-      $events = $stmt0->fetchAll(PDO::FETCH_ASSOC);
-
-      if(!empty($events)){
-        return;
-      }
-
-      $stmt = $this->db->prepare("INSERT INTO CalendlyWebhooks
-        (UUID, UserUUID, EventUUID, UserID, BookingID, OfferingID, AssocUUID,
-        CreatedAt, Event, CancelUrl, RescheduleUrl, Email, StartTime, EndTime, Timezone)
-        VALUES (:uuid, :userUuid, :eventUuid, :userId, :bookingId, :offeringId, :assocUuid,
-        :createdAt, :event, :cancelUrl, :rescheduleUrl, :email, :startTime,
-        :endTime, :timezone)");
-
-      $utmContent = json_decode(base64_decode($payload->payload->tracking->utm_content));
-
-      $userUuid = basename($payload->created_by);
-      $eventUuid = basename($payload->payload->event);
-
-      $stmt->bindParam(':uuid',          $uuid,           PDO::PARAM_STR);
-      $stmt->bindParam(':userUuid',      $userUuid,       PDO::PARAM_STR);
-      $stmt->bindParam(':eventUuid',     $eventUuid,      PDO::PARAM_STR);
-
-      $userID = $utmContent->UserId;
-      $bookingId = $utmContent->BookingId;
-      $offeringId = $utmContent->OfferingId;
-      $assocUuid = $utmContent->Uuid;
-
-      $stmt->bindParam(':userId',        $userID,                           PDO::PARAM_INT);
-      $stmt->bindParam(':bookingId',     $bookingId,                        PDO::PARAM_INT);
-      $stmt->bindParam(':offeringId',    $offeringId,                       PDO::PARAM_INT);
-      $stmt->bindParam(':assocUuid',     $assocUuid,                        PDO::PARAM_STR);
-
-      $createdAt = $this -> _calendlyToMysqlDatetime($payload->created_at);
-
-      $stmt->bindParam(':createdAt',     $createdAt,                        PDO::PARAM_STR);
-      $stmt->bindParam(':event',         $payload->event,                   PDO::PARAM_STR);
-      $stmt->bindParam(':cancelUrl',     $payload->payload->cancel_url,     PDO::PARAM_STR);
-      $stmt->bindParam(':rescheduleUrl', $payload->payload->reschedule_url, PDO::PARAM_STR);
-      $stmt->bindParam(':email',         $payload->payload->email,          PDO::PARAM_STR);
-
-      $startTime = $this -> _calendlyToMysqlDatetime($payload->payload->scheduled_event->start_time);
-      $endTime = $this -> _calendlyToMysqlDatetime($payload->payload->scheduled_event->end_time);
-
-      $stmt->bindParam(':startTime',     $startTime,                        PDO::PARAM_STR);
-      $stmt->bindParam(':endTime',       $endTime,                          PDO::PARAM_STR);
-      $stmt->bindParam(':timezone',      $payload->payload->timezone,       PDO::PARAM_STR);
-
-      $stmt->execute();
+      $stmt->execute([
+        ':uid' => $payload->uid,
+        ':assocUUID' => $assocUUID,
+        ':guideId' => $guideID,
+        ':seekerId' => $seekerID,
+        ':calUserId' => $payload->organizer->id,
+        ':offeringId' => $offeringID,
+        ':createdAt' => $this->_calZoneAndFormat($createdAt, $payload->organizer->utcOffset),
+        ':cancelUrl' => "{$payload->bookerUrl}/cancel/{$payload->uid}",
+        ':rescheduleUrl' => "{$payload->bookerUrl}/reschedule/{$payload->uid}",
+        ':email' => $payload->attendees[0]->email ?? '',
+        ':startTime' => $this->_calZoneAndFormat($payload->startTime, $payload->organizer->utcOffset),
+        ':endTime' => $this->_calZoneAndFormat($payload->endTime, $payload->organizer->utcOffset),
+        ':timeZone' => $payload->organizer->timeZone ?? 'UTC',
+        ':eventTitle' => $payload->title,
+        ':eventComment' => $payload->description ?? null,
+        ':length' => $payload->length ?? 60
+      ]);
     } catch (PDOException $e) {
       throw new DatabaseException($e->getMessage());
     }
   }
 
   /**
-   *  Devuelve un user de calendly almacenado
-   *  @param  userId: ID usuario OneSoul
-   *  @return: datos del usuario calendly
-  **/
+   * Obtiene los datos de un usuario Cal.com vinculado
+   * @param int $userID ID del usuario en OneSoul
+   * @return array|null Datos del usuario Cal.com o null si no existe vinculación
+   * @throws PDOException Si hay error en la consulta
+   */
   public function getCalUser($userID){
     $stmt = $this->db->prepare("SELECT * FROM CalConnections
       WHERE UserID = ?");
@@ -159,13 +155,17 @@ class CalModel {
   }
 
   /**
-   *  Convierte una fecha de formato "2025-08-31T18:31:58.000000Z" -> "2025-08-31 18:31:58.000000"
-   *  @param  iso8601: fecha en formato iso8601
-   *  @return fecha en formato mysql
-  **/
-  private function _calendlyToMysqlDatetime($iso8601) {
+   * Convierte fecha ISO 8601 de Cal.com a formato MySQL DATETIME
+   * Transforma "2025-08-31T18:31:58.000000Z" a "2025-08-31 18:31:58.000000"
+   * y aplica el desplazamiento de zona horaria
+   * @param string $iso8601 Fecha en formato ISO 8601
+   * @param int $utcOffset Desplazamiento de zona horaria en minutos
+   * @return string Fecha en formato MySQL DATETIME
+   */
+  private function _calZoneAndFormat($iso8601, $utcOffset) {
     // Convierte "2025-08-31T18:31:58.000000Z" -> "2025-08-31 18:31:58.000000"
     $dt = new DateTime($iso8601);
+    $dt -> modify("$utcOffset minutes");
     return $dt->format("YmdHis");
   }
 }

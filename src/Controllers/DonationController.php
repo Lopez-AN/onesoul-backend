@@ -20,7 +20,16 @@ class DonationController {
     $this->offering = $offering;
   }
 
-  # Obtiene las donaciones de un guia
+  /**
+   * Obtiene todas las donaciones de un guía
+   * @param Request $request: objeto de la petición HTTP entrante
+   * @param Response $response: objeto de la respuesta HTTP
+   * @param array $args: argumentos de la ruta (parámetro 'userID')
+   * @return Response: JSON con array paginado de donaciones
+   * @statusCode 200: éxito
+   * @statusCode 403: usuario no autorizado para ver donaciones ajenas
+   * @statusCode 500: error del servidor
+   **/
   public function getDonations(Request $request, Response $response, $args) {
     $userID = $args['userID'];
     $jwt = $request->getAttribute('jwt');
@@ -49,7 +58,16 @@ class DonationController {
     }
   }
 
-  # Obtiene las donaciones mensuales activas de un guia
+  /**
+   * Obtiene las donaciones mensuales activas (no canceladas) de un guía
+   * @param Request $request: objeto de la petición HTTP entrante
+   * @param Response $response: objeto de la respuesta HTTP
+   * @param array $args: argumentos de la ruta (parámetro 'userID')
+   * @return Response: JSON con array paginado de donaciones mensuales activas
+   * @statusCode 200: éxito
+   * @statusCode 403: usuario no autorizado
+   * @statusCode 500: error del servidor
+   **/
   public function getMontlyDonations(Request $request, Response $response, $args) {
     $userID = $args['userID'];
     $jwt = $request->getAttribute('jwt');
@@ -78,7 +96,18 @@ class DonationController {
     }
   }
 
-  # Obtiene una donacion por ID (debe ser propia o ser admin)
+  /**
+   * Obtiene una donación específica por ID de voucher
+   * El usuario solo puede ver sus propias donaciones (a menos que sea admin)
+   * @param Request $request: objeto de la petición HTTP entrante
+   * @param Response $response: objeto de la respuesta HTTP
+   * @param array $args: argumentos de la ruta (parámetro 'voucherID')
+   * @return Response: JSON con datos de la donación
+   * @statusCode 200: éxito
+   * @statusCode 403: donación no pertenece al usuario
+   * @statusCode 404: voucher no encontrado
+   * @statusCode 500: error del servidor
+   **/
   public function getDonationById(Request $request, Response $response, $args) {
     $voucherID = $args['voucherID'];
     $jwt = $request->getAttribute('jwt');
@@ -115,7 +144,19 @@ class DonationController {
     }
   }
 
-  # Obtiene una donacion por redeemCode
+  /**
+   * Valida y obtiene una donación usando su RedeemCode
+   * Verifica estado: asignado, expirado, canjeado, cancelado
+   * @param Request $request: objeto de la petición HTTP entrante
+   * @param Response $response: objeto de la respuesta HTTP
+   * @param array $args: argumentos de la ruta (parámetro 'redeemCode')
+   * @return Response: JSON con datos de la donación o error específico
+   * @statusCode 200: cupón válido y asignado
+   * @statusCode 404: cupón no encontrado
+   * @statusCode 409: cupón no asignado aún
+   * @statusCode 410: cupón expirado, canjeado o cancelado
+   * @statusCode 500: error del servidor
+   **/
   public function validateCoupon(Request $request, Response $response, $args) {
     $redeemCode = $args['redeemCode'];
 
@@ -172,7 +213,21 @@ class DonationController {
     }
   }
 
-  # Crea una o varias donaciones
+  /**
+   * Crea una o varias donaciones (cupones) para un servicio
+   * Solo guías pueden crear donaciones. Respeta límite mensual de cupones activos
+   * @param Request $request: objeto de la petición HTTP (body: OfferingID, Quantity)
+   * @param Response $response: objeto de la respuesta HTTP
+   * @param array $args: argumentos de la ruta
+   * @return Response: JSON con resultado
+   * @statusCode 200: donaciones creadas exitosamente
+   * @statusCode 400: parámetros inválidos o JSON mal formado
+   * @statusCode 403: usuario no es guía
+   * @statusCode 404: offering no encontrado
+   * @statusCode 406: límite mensual de donaciones excedido
+   * @statusCode 409: offering no está activo
+   * @statusCode 500: error del servidor
+   **/
   public function createDonation(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
@@ -260,6 +315,19 @@ class DonationController {
     }
   }
 
+  /**
+   * Asigna una donación a una agencia
+   * Solo administradores pueden asignar donaciones
+   * @param Request $request: objeto de la petición HTTP (body: VoucherID, AgencyID)
+   * @param Response $response: objeto de la respuesta HTTP
+   * @param array $args: argumentos de la ruta
+   * @return Response: JSON con datos de la donación actualizada
+   * @statusCode 200: asignación exitosa
+   * @statusCode 400: parámetros inválidos o JSON mal formado
+   * @statusCode 403: usuario no es administrador
+   * @statusCode 404: agencia o voucher no encontrado
+   * @statusCode 500: error del servidor
+   **/
   public function assignDonation(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
@@ -330,7 +398,19 @@ class DonationController {
     }
   }
 
-  # Cancela una donacion
+  /**
+   * Cancela una donación en estado 'draft'
+   * Solo el propietario de la donación o administrador pueden cancelarla
+   * @param Request $request: objeto de la petición HTTP entrante
+   * @param Response $response: objeto de la respuesta HTTP
+   * @param array $args: argumentos de la ruta (parámetro 'voucherID')
+   * @return Response: JSON con resultado
+   * @statusCode 200: donación cancelada exitosamente
+   * @statusCode 403: usuario no autorizado o no es guía
+   * @statusCode 404: voucher no encontrado
+   * @statusCode 409: donación no está en estado 'draft'
+   * @statusCode 500: error del servidor
+   **/
   public function cancelDonation(Request $request, Response $response, $args) {
     $voucherID = $args['voucherID'];
 
@@ -387,7 +467,18 @@ class DonationController {
     }
   }
 
-  # Cancela una donacion
+  /**
+   * Sortea (raffle) un número aleatorio de cupones en estado 'assigned'
+   * Solo administradores pueden hacer sorteos
+   * @param Request $request: objeto de la petición HTTP entrante
+   * @param Response $response: objeto de la respuesta HTTP
+   * @param array $args: argumentos de la ruta (parámetro 'quantity': 1-1000)
+   * @return Response: JSON con array de cupones sorteados
+   * @statusCode 200: sorteo realizado
+   * @statusCode 400: cantidad fuera de rango (1-1000)
+   * @statusCode 403: usuario no es administrador
+   * @statusCode 500: error del servidor
+   **/
   public function raffleCoupons(Request $request, Response $response, $args) {
     $quantity = $args['quantity'];
     $jwt = $request->getAttribute('jwt');
@@ -424,6 +515,17 @@ class DonationController {
     }
   }
 
+  /**
+   * Obtiene lista paginada de todas las agencias
+   * Solo administradores pueden acceder
+   * @param Request $request: objeto de la petición HTTP entrante
+   * @param Response $response: objeto de la respuesta HTTP
+   * @param array $args: argumentos de la ruta
+   * @return Response: JSON con array paginado de agencias
+   * @statusCode 200: éxito
+   * @statusCode 403: usuario no es administrador
+   * @statusCode 500: error del servidor
+   **/
   public function getAgencies(Request $request, Response $response, $args) {
     $jwt = $request->getAttribute('jwt');
     $paginator = paginator($request);
@@ -451,6 +553,18 @@ class DonationController {
     }
   }
 
+  /**
+   * Obtiene una agencia específica por ID
+   * Solo administradores pueden acceder
+   * @param Request $request: objeto de la petición HTTP entrante
+   * @param Response $response: objeto de la respuesta HTTP
+   * @param array $args: argumentos de la ruta (parámetro 'agencyID')
+   * @return Response: JSON con datos de la agencia
+   * @statusCode 200: éxito
+   * @statusCode 403: usuario no es administrador
+   * @statusCode 404: agencia no encontrada
+   * @statusCode 500: error del servidor
+   **/
   public function getAgencyById(Request $request, Response $response, $args) {
     $agencyID = $args['agencyID'];
     $jwt = $request->getAttribute('jwt');
@@ -488,6 +602,18 @@ class DonationController {
     }
   }
 
+  /**
+   * Crea una nueva agencia
+   * Solo administradores pueden crear agencias
+   * @param Request $request: objeto de la petición HTTP (body: Name, ContactEmail)
+   * @param Response $response: objeto de la respuesta HTTP
+   * @param array $args: argumentos de la ruta
+   * @return Response: JSON con resultado
+   * @statusCode 200: agencia creada exitosamente
+   * @statusCode 400: parámetros inválidos o JSON mal formado
+   * @statusCode 403: usuario no es administrador
+   * @statusCode 500: error del servidor
+   **/
   public function createAgency(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
@@ -537,6 +663,17 @@ class DonationController {
     }
   }
 
+  /**
+   * Elimina una agencia existente
+   * Solo administradores pueden eliminar agencias
+   * @param Request $request: objeto de la petición HTTP entrante
+   * @param Response $response: objeto de la respuesta HTTP
+   * @param array $args: argumentos de la ruta (parámetro 'agencyID')
+   * @return Response: JSON con resultado
+   * @statusCode 200: agencia eliminada exitosamente
+   * @statusCode 404: agencia no encontrada
+   * @statusCode 500: error del servidor
+   **/
   public function deleteAgency(Request $request, Response $response, $args)  {
     $agencyID = $args['agencyID'];
     $jwt = $request->getAttribute('jwt');

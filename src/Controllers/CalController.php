@@ -6,6 +6,8 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use App\Models\CalModel;
 use App\Models\User;
+use App\Models\Offering;
+use Predis\Client as RedisClient;
 
 #Definir zona horaria
 date_default_timezone_set('America/Argentina/Buenos_Aires');
@@ -14,19 +16,26 @@ class CalController{
 
   protected $cal;
   protected $user;
+  protected $offering;
+  protected $redis;
 
-  public function __construct(CalModel $cal, User $user) {
+  public function __construct(CalModel $cal, User $user, Offering $offering, RedisClient $redisClient) {
     $this->cal = $cal;
     $this->user = $user;
+    $this->offering = $offering;
+    $this->redis = $redisClient;
   }
 
   /**
-  * Inicia el flujo de autenticacion con Cal.com, es lanzado por el frontend
-  * @param Request  $request   Objeto de la petición HTTP entrante (Slim\Http\Request).
-  * @param Response $response  Objeto de la respuesta HTTP (Slim\Http\Response).
-  * @param array    $args      Argumentos de la ruta definidos en el enrutador.
-  * @return: redireccion al oAUTH de Cal.com
-  **/
+   * Inicia el flujo de autenticación OAuth 2.0 con Cal.com
+   * Genera un estado firmado que será enviado al usuario para autenticarse en Cal.com
+   * @param Request $request: objeto de la petición HTTP entrante
+   * @param Response $response: objeto de la respuesta HTTP
+   * @param array $args: argumentos de la ruta definidos en el enrutador
+   * @return Response: JSON con URL de redirección a Cal.com o error
+   * @statusCode 200: éxito - URL de OAuth de Cal.com
+   * @statusCode 400: parámetros inválidos (RedirectUrl faltante)
+   **/
   public function connect(Request $request, Response $response, array $args) {
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
@@ -61,11 +70,16 @@ class CalController{
   }
 
   /**
-  * Desvincula una cuenta de Cal.com de onesoul, desuscribe webhook y la quita de la base
-  * @param Request  $request   Objeto de la petición HTTP entrante (Slim\Http\Request).
-  * @param Response $response  Objeto de la respuesta HTTP (Slim\Http\Response).
-  * @param array    $args      Argumentos de la ruta definidos en el enrutador.
-  **/
+   * Desvincula una cuenta Cal.com de OneSoul
+   * Elimina el webhook en Cal.com y borra la vinculación de la base de datos
+   * @param Request $request: objeto de la petición HTTP entrante
+   * @param Response $response: objeto de la respuesta HTTP
+   * @param array $args: argumentos de la ruta definidos en el enrutador
+   * @return Response: JSON con estado de desvinculación o error
+   * @statusCode 200: desvinculación exitosa
+   * @statusCode 404: usuario Cal.com no encontrado
+   * @statusCode 500: error en operación (Cal.com API o base de datos)
+   **/
   public function disconnect(Request $request, Response $response, array $args) {
     $jwt = $request->getAttribute('jwt');
     $userID = $jwt->data->UserID;
@@ -112,15 +126,17 @@ class CalController{
   }
 
   /**
-  * Es llamado por Cal.com luego que el usuario se autentica y hace las siguientes acciones:
-  *  1) Obtiene los tokens del usuario en Cal.com
-  *  2) Obtiene los datos del usuario de Cal.com, UUID, etc
-  *  3) Genera un webhook para recibir las reservas del usuario
-  * @param Request  $request   Objeto de la petición HTTP entrante (Slim\Http\Request).
-  * @param Response $response  Objeto de la respuesta HTTP (Slim\Http\Response).
-  * @param array    $args      Argumentos de la ruta definidos en el enrutador.
-  * @return: redireccion al oAUTH de Cal.com
-  **/
+   * Callback de OAuth 2.0 - Se ejecuta después que el usuario se autentica en Cal.com
+   * Realiza: 1) obtiene tokens, 2) obtiene datos del usuario, 3) crea webhook
+   * @param Request $request: objeto de la petición HTTP (contiene 'state' y 'code' en query)
+   * @param Response $response: objeto de la respuesta HTTP
+   * @param array $args: argumentos de la ruta definidos en el enrutador
+   * @return Response: redirección a URL de frontend o JSON con error
+   * @statusCode 302: redirección exitosa a frontend
+   * @statusCode 400: parámetros inválidos o payload expirado
+   * @statusCode 401: firma inválida o token inválido
+   * @statusCode 500: error en Cal.com API o base de datos
+   **/
   public function callback(Request $request, Response $response, array $args) {
     $state = $_GET['state'] ?? ''; # Obtengo el state firmado
     $code = $_GET['code'] ?? ''; # Obtengo el code enviado por Cal.com
@@ -283,11 +299,14 @@ class CalController{
 
 
   /**
-  * Busca si un usuario esta vinculado con Cal.com
-  * @param Request  $request   Objeto de la petición HTTP entrante (Slim\Http\Request).
-  * @param Response $response  Objeto de la respuesta HTTP (Slim\Http\Response).
-  * @param array    $args      Argumentos de la ruta definidos en el enrutador.
-  **/
+   * Verifica el estado de vinculación de un usuario con Cal.com
+   * Realiza múltiples intentos: HEAD request público, consulta API con OAuth
+   * @param Request $request: objeto de la petición HTTP (parámetro 'id' = UserID)
+   * @param Response $response: objeto de la respuesta HTTP
+   * @param array $args: argumentos de la ruta definidos en el enrutador
+   * @return Response: JSON con estado (LINKED, UNLINKED, REFRESHED, API_ERROR, NOT_FOUND)
+   * @statusCode 200: información de estado devuelta en JSON
+   **/
   public function checkUser(Request $request, Response $response, array $args) {
     $userID = $args['id'];
 
@@ -376,79 +395,91 @@ class CalController{
     }
   }
 
+  /**
+   * Procesa webhooks recibidos desde Cal.com
+   * Valida firma HMAC-SHA256, verifica duplicados y procesa eventos de reservas
+   * Siempre responde 200 OK (incluso con errores) para evitar reintentos de Cal.com
+   * @param Request $request: objeto de la petición HTTP (body contiene payload JSON)
+   * @param Response $response: objeto de la respuesta HTTP
+   * @param array $args: argumentos de la ruta definidos en el enrutador
+   * @return Response: HTTP 200 OK (siempre)
+   * @statusCode 200: webhook procesado o descartado
+   * @statusCode 400: sin firma X-Cal-Signature-256
+   * @statusCode 401: firma inválida
+   * @statusCode 500: error no controlado
+   **/
   public function handleWebhook(Request $request, Response $response, $args) {
     $payload = (string)$request->getBody(); # Payload en bruto
     $headers = $request->getHeaders();
 
-    file_put_contents(ROOT."/data.log", $payload);
-    file_put_contents(ROOT."/headers.log", json_encode($headers));
+    try{
+      # Firma del payload
+      $sig = $request->getHeaderLine('X-Cal-Signature-256');
+      if (!$sig) {
+        return $response->withStatus(400); # Sin firma no sigo
+      }
 
-    # Firma del payload
-    // $sig = $request->getHeaderLine('Calendly-Webhook-Signature');
-    // if (!$sig) {
-    //   return $response->withStatus(400); # Sin firma no sigo
-    // }
+      $secret = $GLOBALS['config']['cal']['secret'];
+      $expectedSig = hash_hmac('sha256', $payload, $secret);
 
-    // # Parseo t y v1
-    // $parts = [];
-    // foreach (explode(',', $sig) as $pair) {
-    //   [$k, $v] = array_map('trim', explode('=', $pair, 2));
-    //   $parts[$k] = $v;
-    // }
-    // $t  = $parts['t']  ?? null;
-    // $v1 = $parts['v1'] ?? null;
-    // if (!$t || !$v1) {
-    //   return $response->withStatus(400); # firma invalida
-    // }
+      if (!hash_equals($sig, $expectedSig)) {
+        return $response->withStatus(401); # Firma inválida
+      }
 
-    // # Tolerancia solo 5minutos
-    // if (abs(time() - (int)$t) > 300) {
-    //   return $response->withStatus(400);
-    // }
+      # Verifico que no sea un reenvio repetido
+      if ($this->redis->get("calwebhook:{$sig}")) {
+        return $response->withStatus(200); # Ya fue procesado, ignorar
+      }
+      # Si es la primera vez lo guardo en el cache 2horas
+      $this->redis->setex("calwebhook:{$sig}", 7200, '1');
 
-    // # Valido la firma
-    // $webhookSign = $GLOBALS['config']['calendly']['calendly_webhook_sign'];
-    // $signedPayload = $t . '.' . $payload; # Payload firmado
-    // if (!hash_equals(hash_hmac('sha256', $signedPayload, $webhookSign), $v1)) {
-    //   return $response->withStatus(401); # invalid signature
-    // }
+      $payloadJson = json_decode($payload);
+      switch($payloadJson->triggerEvent){
+        case 'BOOKING_CREATED':
+          # Los metadatos deben estar presentes y poder decodificarse
+          $metadata = $payloadJson->payload?->metadata?->onesoul ?? null;
+          $metadata = $metadata ? @json_decode(base64_decode($metadata)) : null;
 
-    // $payload = json_decode($payload);
-    // if(empty($payload->payload->tracking->utm_content)){
-    //   return $response->withStatus(400);
-    // }
-    // $utmContent = @json_decode(base64_decode($payload->payload->tracking->utm_content));
-    // if(!$utmContent){
-    //   return $response->withStatus(400);
-    // }
+          # Si no hay metadatos no procesar
+          if (!$metadata || !is_int($metadata->SeekerID) || !is_int($metadata->OfferingID) || empty($metadata->AssocUUID)){
+            return $response->withStatus(200);
+          }
 
-    // # Si todo esta bien proceso el payload
-    // try{
-    //   if($payload->event == "invitee.created"){
-    //     $this->calendly->inviteCreated($payload);
-    //   }
-    // } catch (\Throwable $e) {
-    //   return $response->withStatus(500)->withJson([
-    //     "error" => [
-    //       "code" => "INTERNAL_SERVER_ERROR",
-    //       "desc" => $e->getMessage()
-    //     ]
-    //   ]);
-    // }
+          # Busco el offering y extraigo el guia asociado
+          $offering = $this->offering->getOfferingById($metadata->OfferingID);
+          if(!$offering){
+            return $response->withStatus(200);
+          }
+          $guideID = $offering['UserID'];
 
-    return $response->withStatus(200);
+          # Busco al buscador y verifico que exista
+          $user = $this->user->getUserById($metadata->SeekerID);
+          if(!$user){
+            return $response->withStatus(200);
+          }
+
+          $this->cal->bookingCreated($payloadJson->createdAt, $metadata->SeekerID,
+            $guideID, $metadata->OfferingID, $metadata->AssocUUID, $payloadJson->payload);
+        break;
+      }
+      return $response->withStatus(200);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500);
+    }
   }
 
 
   /**
-   *  Hace una request por cURL a Cal.com
-   *  @param  method: metodo HTTP a utilizar GET | POST | PATCH ...
-   *  @param  subdomain: subdominio de Cal.com, auth, api
-   *  @param  headers: cabeceras de la consulta HTTP
-   *  @param  postFields: body de la consulta HTTP (opcional)
-   *  @return object: { http_code: 200, data: datos }
-   *  @return object: { http_code: cod_http_error, error: objeto error }
-  **/
+   * Realiza una request a la API de Cal.com
+   * Encapsula llamadas cURL con manejo de errores y respuestas JSON
+   * @param Response $response: objeto de respuesta (para retornar errores)
+   * @param string $method: método HTTP (GET, POST, PATCH, PUT, DELETE)
+   * @param string $subdomain: subdominio de Cal.com (app, api, auth)
+   * @param string $path: ruta de la API (ej: /v2/webhooks)
+   * @param array $headers: array de headers HTTP personalizados
+   * @param string ?$postData: body de la request (para POST/PATCH/PUT)
+   * @return object: {valid: bool, response: Response|object}
+   **/
   private function _calRequest($response, $method, $subdomain, $path, $headers, $postData = null){
     $ch = curl_init("https://$subdomain.cal.com$path");
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -484,6 +515,15 @@ class CalController{
     return (object)["valid" => true, "response" => json_decode($curlResp)];
   }
 
+  /**
+   * Refresca el access token OAuth con Cal.com
+   * Valida y renueva tokens cuando expiran usando refresh token
+   * @param Response $response: objeto de respuesta (para requests)
+   * @param int $calUserID: ID del usuario Cal.com
+   * @param string $refreshToken: token para renovación
+   * @param string|bool $accessToken: token actual (opcional, por defecto false)
+   * @return string|bool: token de acceso renovado o false si falla
+   **/
   private function _refreshCalUserToken($response, $calUserID, $refreshToken, $accessToken = false){
     # Si se proporciono token se verifica su validez
     if($accessToken){
@@ -528,10 +568,11 @@ class CalController{
   }
 
   /**
-   *  Hace un HEAD a una url y devuelve headers sin redirigir
-   *  @param  url: URL destino
-   *  @return (object): http_code + headers
-  **/
+   * Realiza un HEAD request a una URL sin seguir redirecciones
+   * Útil para verificar disponibilidad y obtener headers sin descargar el body
+   * @param string $url: URL destino
+   * @return object: {http_code: int, headers: array}
+   **/
   private function _httpHead($url) {
     $ch = curl_init();
 

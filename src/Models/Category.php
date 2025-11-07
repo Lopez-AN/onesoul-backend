@@ -43,11 +43,9 @@ class Category {
 
   /**
    * Busca categorías por término de búsqueda con paginación
-   *
    * @param  object $paginator: objeto con limit y offset
    * @param  string $query: término(s) de búsqueda
    * @return object: { data: [], rows: { total: int, fetched: int } }
-   *
    **/
   public function searchCategories($paginator, $query) {
     try {

@@ -4,6 +4,7 @@ use Slim\App;
 use App\Controllers\CalController;
 use App\Models\CalModel;
 use App\Models\User;
+use App\Models\Offering;
 use Tuupola\Middleware\JwtAuthentication;
 use App\Middleware\JwtTokenMiddleware;
 use App\Enums\JwtValidationMode;
@@ -18,9 +19,11 @@ return function (App $app) {
 
   // Obtener PDO del contenedor DI
   $pdo = $app->getContainer()->get('pdo');
+  $redis = $app->getContainer()->get('redis'); # Base de datos en RAM
   $calModel = new CalModel($pdo);
   $user = new User($pdo);
-  $calController = new CalController($calModel, $user);
+  $offering = new Offering($pdo);
+  $calController = new CalController($calModel, $user, $offering, $redis);
 
   $app->post('/cal/connect', [$calController, 'connect'])->add($requiredJwt);
   $app->delete('/cal/disconnect', [$calController, 'disconnect'])->add($requiredJwt);
