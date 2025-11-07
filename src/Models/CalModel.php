@@ -16,27 +16,17 @@ class CalModel {
 
 
   /**
-   *  Actualiza info variable del usuario calendly
-   *  @param  userUuid: ID de usuario Calendly
-   *  @param  slug: nombre del usuario calendly
+   *  Actualiza info variable del usuario Cal.com
+   *  @param  calUserID: ID de usuario Cal.com
+   *  @param  slug: nombre del usuario Cal.com
    *  @param  schedulingUrl: URL de reservas
-   *  @param  timezone: zona horaria del usuario calendly
+   *  @param  timezone: zona horaria del usuario Cal.com
   **/
-  public function updateCalendlyUserData($userUuid, $slug, $schedulingUrl, $timezone){
-    try {
-      $stmt = $this->db->prepare("UPDATE CalConnections
-        SET Slug = :slug, SchedulingUrl = :schedulingUrl, Timezone = :timezone
-        WHERE UserUUID = :userUuid");
-
-      $stmt->bindParam(':slug',           $slug,           PDO::PARAM_STR);
-      $stmt->bindParam(':schedulingUrl',  $schedulingUrl,  PDO::PARAM_STR);
-      $stmt->bindParam(':timezone',       $timezone,       PDO::PARAM_STR);
-      $stmt->bindParam(':userUuid',       $userUuid,       PDO::PARAM_STR);
-
-      $stmt->execute();
-    } catch (PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
+  public function updateCalUserData($calUserID, $slug, $schedulingUrl, $timeZone){
+    $stmt = $this->db->prepare("UPDATE CalConnections
+      SET Slug = ?, SchedulingUrl = ?, TimeZone = ?
+      WHERE CalUserID = ?");
+    $stmt->execute([$slug, $schedulingUrl, $timeZone, $calUserID]);
   }
 
   /**
@@ -50,35 +40,24 @@ class CalModel {
   }
 
   /**
-   *  Actualiza tokens del usuario calendly
-   *  @param  userUuid: ID de usuario Calendly
+   *  Actualiza tokens del usuario Cal.com
+   *  @param  calUserID: ID de usuario Cal.com
    *  @param  accessToken: token de acceso para la API
    *  @param  refreshToken: token para obtener nuevo accesstoken cuando este expira
-   *  @param  tokenExpiresAt: fechahora de expiracion del accesstoken
   **/
-  public function updateCalendlyUserTokens($userUuid, $accessToken, $refreshToken, $tokenExpiresAt){
-    try {
-      $stmt = $this->db->prepare("UPDATE CalConnections
-        SET AccessToken = :accessToken, RefreshToken = :refreshToken, TokenExpiresAt = :tokenExpiresAt
-        WHERE UserUUID = :userUuid");
-
-      $stmt->bindParam(':accessToken',    $accessToken,    PDO::PARAM_STR);
-      $stmt->bindParam(':refreshToken',   $refreshToken,   PDO::PARAM_STR);
-      $stmt->bindParam(':tokenExpiresAt', $tokenExpiresAt, PDO::PARAM_STR);
-      $stmt->bindParam(':userUuid',       $userUuid,       PDO::PARAM_STR);
-
-      $stmt->execute();
-    } catch (PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
+  public function updateCalUserTokens($calUserID, $accessToken, $refreshToken){
+    $stmt = $this->db->prepare("UPDATE CalConnections
+      SET AccessToken = ?, RefreshToken = ?
+      WHERE CalUserID = ?");
+    $stmt->execute([$accessToken, $refreshToken, $calUserID]);
   }
 
   /**
-   *  Guarda el webhook del usuario calendly en la base de datos
-   *  @param  userUuid: ID de usuario Calendly
+   *  Guarda el webhook del usuario Cal.com en la base de datos
+   *  @param  calUserID: ID de usuario Calendly
    *  @param  webhook: UUID del webhook
   **/
-  public function saveCalUserWebhook($calUserID, $webhook){
+  public function updateCalUserWebhook($calUserID, $webhook){
     $stmt = $this->db->prepare("UPDATE CalConnections SET Webhook = ?
       WHERE CalUserID = ?");
     $stmt->execute([$webhook, $calUserID]);
@@ -177,45 +156,6 @@ class CalModel {
       WHERE UserID = ?");
     $stmt->execute([$userID]);
     return $stmt->fetch(PDO::FETCH_ASSOC);
-  }
-
-  /**
-   *  Hace un HEAD a una url y devuelve headers sin redirigir
-   *  @param  url: URL destino
-   *  @return (object): http_code + headers
-  **/
-  public function httpHead($url) {
-    $ch = curl_init();
-
-    curl_setopt_array($ch, [
-      CURLOPT_URL            => $url,
-      CURLOPT_NOBODY         => true,   // HEAD en lugar de GET
-      CURLOPT_FOLLOWLOCATION => false,  // no seguir 301/302
-      CURLOPT_HEADER         => true,   // incluir headers en la respuesta
-      CURLOPT_RETURNTRANSFER => true,
-      CURLOPT_TIMEOUT        => 5,
-    ]);
-
-    $raw = curl_exec($ch);
-    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-
-    $headers = [];
-    if ($raw !== false) {
-      $lines = explode("\r\n", $raw);
-      foreach ($lines as $line) {
-        if (strpos($line, ':') !== false) {
-          [$k, $v] = explode(':', $line, 2);
-          $headers[trim($k)] = trim($v);
-        }
-      }
-    }
-
-    curl_close($ch);
-
-    return (object)[
-      'http_code' => $code,
-      'headers'   => $headers
-    ];
   }
 
   /**
