@@ -4,7 +4,7 @@ namespace App\Controllers;
 
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
-use App\Models\CalModel;
+use App\Models\Cal;
 use App\Models\User;
 use App\Models\Offering;
 use Predis\Client as RedisClient;
@@ -19,7 +19,7 @@ class CalController{
   protected $offering;
   protected $redis;
 
-  public function __construct(CalModel $cal, User $user, Offering $offering, RedisClient $redisClient) {
+  public function __construct(Cal $cal, User $user, Offering $offering, RedisClient $redisClient) {
     $this->cal = $cal;
     $this->user = $user;
     $this->offering = $offering;

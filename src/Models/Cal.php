@@ -7,7 +7,7 @@ use PDOException;
 use App\Exceptions\DatabaseException;
 use DateTime;
 
-class CalModel {
+class Cal {
   protected $db;
 
   public function __construct(PDO $db) {
