@@ -67,7 +67,7 @@ class NotificationController{
   public function markInAppAsRead(Request $request, Response $response, $args) {
     $jwt = $request->getAttribute('jwt');
     $userID = $jwt->data->UserID;
-    $notifID = (int) $args['id'];
+    $notifID = intval($args['id']);
 
     $updated = $this->notification->markInAppAsRead($userID, $notifID);
 

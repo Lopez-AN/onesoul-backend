@@ -9,6 +9,7 @@ use Psr\Http\Message\ServerRequestInterface as Request;
 use App\Models\Booking;
 use App\Models\Offering;
 use App\Models\Notification;
+use App\Models\Donation;
 use App\Models\User;
 use App\Utils\EmailHelper;
 use DateTime;
@@ -26,18 +27,20 @@ class BookingController
   protected $offering;
   protected $user;
   protected $notification;
+  protected $donation;
 
-  public function __construct(Booking $booking, Offering $offering, User $user, Notification $notification)
-  {
+  public function __construct(Booking $booking, Offering $offering,
+    User $user, Notification $notification, Donation $donation
+  ){
     $this->booking = $booking;
     $this->offering = $offering;
     $this->user = $user;
     $this->notification = $notification;
+    $this->donation = $donation;
   }
 
-  public function getBookingByID(Request $request, Response $response, $args)
-  {
-    $bookingID = $args['bookingID'];
+  public function getBookingByID(Request $request, Response $response, $args) {
+    $bookingID = intval($args['bookingID']);
     $jwt = $request->getAttribute('jwt');
 
     $userID = $jwt->data->UserID;
@@ -54,8 +57,8 @@ class BookingController
         ]);
       }
 
-      // Validar si el user es el cliente o el guía
-      if ($booking['UserID'] != $userID && $booking['Guide'] != $userID) {
+      # Validar si el user es el cliente o el guía
+      if ($booking['UserID'] !== $userID && $booking['Guide'] !== $userID) {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "FORBIDDEN",
@@ -75,8 +78,7 @@ class BookingController
     }
   }
 
-  public function getBookingByPublicID(Request $request, Response $response, $args)
-  {
+  public function getBookingByPublicID(Request $request, Response $response, $args) {
     $publicID = $args['publicID'];
     $jwt = $request->getAttribute('jwt');
 
@@ -94,8 +96,8 @@ class BookingController
         ]);
       }
 
-      // Validar si el user es el cliente o el guía
-      if ($booking['UserID'] != $userID && $booking['Guide'] != $userID) {
+      # Validar si el user es el cliente o el guía
+      if ($booking['UserID'] !== $userID && $booking['Guide'] !== $userID) {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "FORBIDDEN",
@@ -115,16 +117,15 @@ class BookingController
     }
   }
 
-  public function getBookingsByGuide(Request $request, Response $response, $args)
-  {
-    $userID = $args['userID'];
+  public function getBookingsByGuide(Request $request, Response $response, $args) {
+    $userID = intval($args['userID']);
     $paginator = paginator($request);
     $jwt = $request->getAttribute('jwt');
 
     $userJWT = $jwt->data->UserID;
 
     try {
-      // Leer filtros desde query string
+      # Leer filtros desde query string
       $params = $request->getQueryParams();
       $filters = [];
 
@@ -132,11 +133,11 @@ class BookingController
         $filters['status'] = 'open';
       }
 
-      if (isset($params['count']) && $params['count'] == 'true') {
+      if (isset($params['count']) && $params['count'] === 'true') {
         $filters['count'] = true;
       }
 
-      // Llamar al modelo
+      # Llamar al modelo
       $bookings = $this->booking->getBookingsByGuide($userID, $paginator, $filters);
 
       if ($bookings === null) {
@@ -148,8 +149,8 @@ class BookingController
         ]);
       }
 
-      // Validar si el user es el cliente o el guía
-      if ($userJWT != $userID && !$jwt->data->IsAdmin) {
+      # Validar si el user es el cliente o el guía
+      if ($userJWT !== $userID && !$jwt->data->IsAdmin) {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "FORBIDDEN",
@@ -169,9 +170,8 @@ class BookingController
     }
   }
 
-  public function getBookingsBySeeker(Request $request, Response $response, $args)
-  {
-    $userID = $args['userID'];
+  public function getBookingsBySeeker(Request $request, Response $response, $args) {
+    $userID = intval($args['userID']);
     $paginator = paginator($request);
     $jwt = $request->getAttribute('jwt');
 
@@ -189,8 +189,8 @@ class BookingController
         ]);
       }
 
-      // Validar si el user es el cliente o el guía
-      if ($userJWT != $userID && !$jwt->data->IsAdmin) {
+      # Validar si el user es el cliente o el guía
+      if ($userJWT !== $userID && !$jwt->data->IsAdmin) {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "FORBIDDEN",
@@ -214,35 +214,37 @@ class BookingController
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
 
-    $userID = $jwt->data->UserID;
-
-    $message = $data['Message'] ?? null;
-    $subDomain = $data['SubDomain'] ?? null;
-    $assocUUID = $data['AssocUUID'] ?? null;
-    $coupon = $data['Coupon'] ?? null;
-    $userInfo = $this->user->getUserById($userID);
-    if(!$userInfo){
-      return $response->withStatus(404)->withJson([
-        "error" => [
-          "code" => "USER_NOT_FOUND",
-          "desc" => "No user associated with the specified id was found"
-        ]
-      ]);
-    }
-
-    $emailValidated = !empty($userInfo) && filter_var($userInfo['ValidatedEmail'], FILTER_VALIDATE_BOOLEAN);
-    $phoneValidated = !empty($userInfo) && filter_var($userInfo['ValidatedPhone'], FILTER_VALIDATE_BOOLEAN);
-
-    if (!$userInfo || !$emailValidated || !$phoneValidated) {
+    # Verificar si el body es un array/object válido
+    if (!is_array($data) && !is_object($data)) {
       return $response->withStatus(400)->withJson([
         "error" => [
-          "code" => "USER_NOT_VALIDATE_EMAIL_PHONE",
-          "desc" => "You must validate your email and phone to booking services."
+          "code" => "INVALID_JSON",
+          "desc" => "Request body must be valid JSON"
         ]
       ]);
     }
 
-    // Validar formato de subdominio (solo letras A-Z, a-z)
+    $seekerID = $jwt->data->UserID;
+    $assocUUID = $data['AssocUUID'] ?? null;
+    $coupon = $data['Coupon'] ?? null;
+    $locationID = $data['LocationID'] ?? null;
+    $message = $data['Message'] ?? null;
+    $mode = strtolower($data['Mode'] ?? null);
+    $offeringID = $data['OfferingID'] ?? null;
+    $package = $data['Package'] ?? null;
+    $subDomain = $data['SubDomain'] ?? null;
+
+    # Validación de parámetros
+    if (empty($assocUUID) || empty($message) || empty($package) || empty($mode) || empty($offeringID)) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_PARAMETERS",
+          "desc" => "Parameters are missing or invalid"
+        ]
+      ]);
+    }
+
+    # Validar formato de subdominio si se especifico (solo letras A-Z, a-z)
     if (!empty($subDomain)) {
       if (!preg_match('/^[a-zA-Z]+$/', $subDomain)) {
         return $response->withStatus(400)->withJson([
@@ -254,17 +256,7 @@ class BookingController
       }
     }
 
-    // Valida contenido con Perspective API
-    if($message){
-      if ($this->containsInappropriateContent($message)) {
-        return $response->withStatus(400)->withJson([
-          "code" => "INAPPROPRIATE_CONTENT",
-          "desc" => "Please remove inappropriate content and try again."
-        ]);
-      }
-    }
-
-    if ($message && strlen($message) > 1000) {
+    if (strlen($message) > 1000) {
       return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "MESSAGE_TOO_LONG",
@@ -274,45 +266,47 @@ class BookingController
     }
 
     try {
-      // Verificar si el usuario tiene conexión con Calendly
-      $hasCalendly = false; // $this->booking->userHasCalendly($userID);  // DEBUG!!!
-
-      if ($hasCalendly) {
-        // Buscar el webhook en CalendlyWebhooks
-        $webhook = $this->booking->findCalendlyWebhook($assocUUID, $userID);
-
-        if (!$webhook) {
-          return $response->withStatus(400)->withJson([
-            "error" => [
-              "code" => "CALENDLY_INVITEE_NOT_FOUND",
-              "desc" => "Calendly invitee is required for this service"
-            ]
-          ]);
-        }
-      }
-
-      // VALIDAR: Offering si existe
-      $id = $data['OfferingID'] ?? null;
-      if (!$id) {
-        return $response->withStatus(400)->withJson([
+      $seeker = $this->user->getUserById($seekerID);
+      if(!$seeker){
+        return $response->withStatus(404)->withJson([
           "error" => [
-            "code" => "INVALID_OFFERING",
-            "desc" => "Offering is required."
+            "code" => "USER_NOT_FOUND",
+            "desc" => "Seeker associated with the JWT token not found"
           ]
         ]);
       }
 
-      $offering = $this->offering->getOfferingById($id);
+      $emailValidated = filter_var($seeker['ValidatedEmail'], FILTER_VALIDATE_BOOLEAN);
+      $phoneValidated = filter_var($seeker['ValidatedPhone'], FILTER_VALIDATE_BOOLEAN);
+      if (!$emailValidated || !$phoneValidated) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "USER_NOT_VALIDATE_EMAIL_PHONE",
+            "desc" => "You must validate your email and phone to booking services."
+          ]
+        ]);
+      }
+
+      # Valida contenido con Perspective API
+      if ($this->containsInappropriateContent($message)) {
+        return $response->withStatus(400)->withJson([
+          "code" => "INAPPROPRIATE_CONTENT",
+          "desc" => "Please remove inappropriate content and try again."
+        ]);
+      }
+
+      # Obtener y validar offering
+      $offering = $this->offering->getOfferingById($offeringID);
       if (!$offering) {
         return $response->withStatus(404)->WithJson([
           "error" => [
             "code" => "OFFERING_NOT_FOUND",
-            "desc" => "No Offering found for this specific ID."
+            "desc" => "Associated offering not found"
           ]
         ]);
       }
-
-      if ($offering['UserID'] === $userID) {
+      $guideID = $offering['UserID'];
+      if ($guideID === $seekerID) {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "SELF_BOOKING_NOT_ALLOWED",
@@ -321,50 +315,14 @@ class BookingController
         ]);
       }
 
-      // VALIDAR: Fecha de cita
-      $scheduledDate = $data['ScheduledDate'];
-      if (!$scheduledDate) {
-        return $response->withStatus(400)->withJson([
-          "error" => [
-            "code" => "INVALID_BOOKING_DATE",
-            "desc" => "ScheduledDate is required."
-          ]
-        ]);
-      }
-
-      $scheduledDateTime = DateTime::createFromFormat('Y-m-d H:i:s', $scheduledDate);
-      if (!$scheduledDateTime || $scheduledDateTime->format('Y-m-d H:i:s') !== $scheduledDate) {
-        return $response->withStatus(400)->withJson([
-          "error" => [
-            "code" => "INVALID_BOOKING_DATE",
-            "desc" => "Invalid date format. Must be Y-m-d H:i:s"
-          ]
-        ]);
-      }
-
-      if ($scheduledDateTime < new DateTime()) {
-        return $response->withStatus(400)->withJson([
-          "error" => [
-            "code" => "INVALID_BOOKING_DATE",
-            "desc" => "Cannot create a booking that is already in the past."
-          ]
-        ]);
-      }
-
-      $mode = strtolower($data['Mode'] ?? '');
-      $allowedModes = ['in-person', 'virtual'];
-
-      if (!in_array($mode, $allowedModes)) {
+      if (!in_array($mode, ['in-person', 'virtual'])) {
         return $response->withStatus(400)->withJson([
           "error" => [
             "code" => "INVALID_MODE",
-            "desc" => "Invalid session mode. Allowed values: in-person, virtual."
+            "desc" => "Invalid session mode."
           ]
         ]);
       }
-
-      // VALIDAR: LocationID en caso de ser presencial
-      $locationID = $data['LocationID'] ?? null;
 
       if ($mode === 'in-person') {
         if (!$locationID) {
@@ -376,148 +334,184 @@ class BookingController
           ]);
         }
 
-        // Validar que el LocationID exista en offeringLocations
-        $location = $this->booking->getLocation($id, $locationID);
-
+        # Validar que el LocationID exista en offeringLocations
+        $location = $this->booking->getLocation($offeringID, $locationID);
         if (!$location) {
           return $response->withStatus(400)->withJson([
             "error" => [
               "code" => "INVALID_LOCATION",
-              "desc" => "Invalid LocationID."
+              "desc" => "Provided location ID does not belong to the associated offering or does not exist"
             ]
           ]);
         }
-      } else {
-        // Si no es presencial, LocationID puede ser NULL
-        $locationID = null;
       }
 
-      // Revisar si hay al menos un OfferingPackage con un SessionType válido
-      $sessionTypes = [
-        'in-person' => ['in-person', 'both'],
-        'virtual' => ['virtual', 'both']
-      ];
-
-      $validTypes = $sessionTypes[$mode];
-      $hasValidPackage = false;
-      $price = null;
-      $conditions = null;
-
-      if (!empty($offering['Packages'])) {
-        foreach ($offering['Packages'] as $package) {
-          if (in_array(strtolower($package['SessionType']), $validTypes)) {
-            $price = $package['Price'] ?? null;
-            $conditions = $package['Conditions'] ?? null;
-            $hasValidPackage = true;
-            break;
-          }
-        }
-      }
-
-      if (!$hasValidPackage) {
-        return $response->withStatus(400)->withJson([
+      # Obtengo el guia
+      $guide = $this->user->getUserById($guideID);
+      if(!$guide){
+        return $response->withStatus(404)->withJson([
           "error" => [
-            "code" => "INVALID_SESSION_TYPE",
-            "desc" => "The offering does not support the selected mode: $mode"
+            "code" => "USER_NOT_FOUND",
+            "desc" => "Guide associated with the offering is not found"
           ]
         ]);
       }
 
-      $countryCode = $userInfo['CountryCode'] ?? "AR";
+      # Verificar si el guia tiene conexión con Cal.com
+      if ($this->booking->userHasCal($guideID)) {
+        # Buscar el invite en CalendlyWebhooks
+        $cal = $this->booking->findCalInvitee($assocUUID, $guideID);
+        if (!$cal) {
+          return $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "CALENDLY_INVITEE_NOT_FOUND",
+              "desc" => "Calendly invitee is required for this service"
+            ]
+          ]);
+        }
+        $scheduledDate = DateTime::createFromFormat("Y-m-d H:i:s.u", $cal['StartTime']);
+      }else{
+        $scheduledDate = null; # No hay fecha de reserva si no se usa cal.com
+        $assocUUID = null; # Si no se usa cal.com se descarga el uuid para no asociar nada
+      }
+
+      # Busco el paquete
+      $packages = array_values(array_filter($offering['Packages'], function($e) use ($package){
+        return $e['Package'] === $package;
+      }));
+      if(empty($packages)){
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "INVALID_PACKAGE",
+            "desc" => "Provided package does not belong to this offering"
+          ]
+        ]);
+      }
+
+      # Verifico si el paquete tiene la modalidad seleccionada
+      if($packages[0]['SessionType'] !== 'both' && $packages[0]['SessionType'] !== $mode){
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "INVALID_MODE",
+            "desc" => "Provided package does not have the selected session mode"
+          ]
+        ]);
+      }
+
+      # Valido un cupon
+      if($coupon){
+        $donation = $this->donation->getDonationByRedeemCode($coupon);
+        if (!$donation) {
+          return $response->withStatus(404)->withJson([
+            "error" => [
+              "code" => "COUPON_NOT_FOUND",
+              "desc" => "The coupon does not exist"
+            ]
+          ]);
+        }
+        if ($donation['Status'] === 'redeemed'){
+          return $response->withStatus(410)->withJson([
+            "error" => [
+              "code" => "COUPON_ALREADY_REDEEMED",
+              "desc" => "The coupon has already been redeemed"
+            ]
+          ]);
+        }
+        if ($donation['Status'] === 'expired' || ($donation['ExpiredAt'] && $donation['ExpiredAt'] < time())){
+          return $response->withStatus(410)->withJson([
+            "error" => [
+              "code" => "COUPON_EXPIRED",
+              "desc" => "The coupon has expired"
+            ]
+          ]);
+        }
+        if ($donation['Status'] === 'canceled'){
+          return $response->withStatus(410)->withJson([
+            "error" => [
+              "code" => "COUPON_CANCELED",
+              "desc" => "The coupon has been canceled"
+            ]
+          ]);
+        }
+        if ($donation['Status'] !== 'assigned'){
+          return $response->withStatus(409)->withJson([
+            "error" => [
+              "code" => "COUPON_NOT_ASSIGNED",
+              "desc" => "The coupon has not been assigned to an agency yet"
+            ]
+          ]);
+        }
+      }
+
+      # Si hay voucher es precio 0
+      $price = $coupon ? 0 : $packages[0]['Price'];
+      $conditions = $packages[0]['Conditions'];
+
+      $countryCode = $seeker['CountryCode'] ?? "AR";
       $type = 'B';
       $publicID = $this->booking->generatePublicId($countryCode, $type);
 
-      // PREPARAR datos para el modelo
+      # PREPARAR datos para el modelo
       $data = [
         'PublicID' => $publicID,
-        'OfferingID' => $id,
-        'UserID' => $userID,
+        'OfferingID' => $offeringID,
+        'SeekerID' => $seekerID,
         'Mode' => $mode,
         'LocationID' => $locationID,
         'ScheduledDate' => $scheduledDate,
         'Message' => $message
       ];
 
+      $origin = $subDomain ? "https://{$subDomain}.onesoul.app" : "https://onesoul.app";
       $booking = $this->booking->createBooking($data, $subDomain, $assocUUID, $coupon);
 
-      // Si había Calendly y se encontró el webhook → asociar BookingID en CalendlyWebhooks
-      if ($hasCalendly && isset($booking['BookingID'])) {
-        $this->booking->linkBookingWithCalendly($assocUUID, $booking['BookingID']);
-      }
+      # Notificación para el guía
+      $payloadGuide = [
+        "YEAR"          => date('Y'),
+        "GUIDE_NAME"    => $guide['UserName'] ?? 'Guía',
+        "BOOKING_ID"    => $booking['PublicID'],
+        "SERVICE_NAME"  => $offering['Title'] ?? 'Servicio',
+        "SEARCHER_NAME" => $seeker['FirstName'] && $seeker['LastName'] ?
+          $seeker['FirstName'].' '.$seeker['LastName'] : 'No indicado',
+        "SEARCHER_EMAIL"=> $seeker['Email'],
+        "SEARCHER_PHONE"=> $seeker['Phone'] ?? '-',
+        "MESSAGE"       => $message,
+        "SCHEDULED"     => $scheduledDate ? $scheduledDate -> format('d/m/Y H:i') : "A convenir",
+        "MODE"          => $booking['Mode'] === 'in-person' ? 'Presencial' : 'Virtual',
+        "PRICE"         => $offering['Currency'].' '.$price,
+        "BOOKING_URL"   => "{$origin}/bookings/guide"
+      ];
 
-      $origin = $subDomain ? "https://{$subDomain}.onesoul.app" : "https://onesoul.app";
+      $this->notification->createNotification(
+        $guideID,
+        "BOOKING.CREATED_FOR_GUIDE",
+        $payloadGuide,
+        "BOOKING." . $booking['BookingID'] . ".PENDING.GUIDE"
+      );
 
-      $guideID = $offering['UserID'] ?? null;
-      $guideInfo = $this->user->getUserById($guideID);
-      if(!$guideInfo){
-        return $response->withStatus(404)->withJson([
-          "error" => [
-            "code" => "USER_NOT_FOUND",
-            "desc" => "No user associated with the specified id was found"
-          ]
-        ]);
-      }
+      # Notificación para el buscador
+      $payloadSeeker = [
+        "YEAR"        => date('Y'),
+        "USERNAME"    => $seeker['UserName'],
+        "OFFERING"    => $offering['Title'],
+        "GUIDE_NAME"  => $guide['FirstName'].' '.$guide['LastName'],
+        "GUIDE_EMAIL" => $guide['Email'],
+        "GUIDE_PHONE" => $guide['Phone'],
+        "SCHEDULED"   => $scheduledDate ? $scheduledDate -> format('d/m/Y H:i') : "A convenir",
+        "MODE"        => $booking['Mode'] === 'in-person' ? 'Presencial' : 'Virtual',
+        "PRICE"       => $offering['Currency'].' '.$price,
+        "CONDITIONS"  => $conditions,
+        "BOOKING_ID"  => $booking['PublicID'],
+        "MESSAGE"     => $message,
+        "BOOKING_URL" => "{$origin}/bookings/user"
+      ];
 
-      $guide = $guideInfo['FirstName'] . ' ' . $guideInfo['LastName'];
-      $guideEmail = $guideInfo['Email'] ?? null;
-      $guidePhone = $guideInfo['Phone'] ?? null;
-
-      // Obtener info del usuario (quien reserva)
-      if ($userInfo) {
-        $username = $userInfo['UserName'] ?? 'Usuario';
-        $userEmail = $userInfo['Email'] ?? null;
-        $searcherName = $userInfo['FirstName'] . ' ' . $userInfo['LastName'];
-        $searcherPhone = $userInfo['Phone'] ?? '-';
-
-        // Notificación para el guía
-        if ($guideID && $guideInfo) {
-          $payloadGuide = [
-            "YEAR"          => date('Y'),
-            "GUIDE_NAME"    => $guideInfo['UserName'] ?? 'Guía',
-            "BOOKING_ID"    => $booking['PublicID'],
-            "SERVICE_NAME"  => $offering['Title'] ?? 'Servicio',
-            "SEARCHER_NAME" => $searcherName,
-            "SEARCHER_EMAIL"=> $userEmail,
-            "SEARCHER_PHONE"=> $searcherPhone,
-            "MESSAGE"       => $message,
-            "SCHEDULED"     => date('d/m/Y H:i', strtotime($booking['ScheduledDate'])),
-            "MODE"          => $booking['Mode'] === 'in-person' ? 'Presencial' : 'Virtual',
-            "PRICE"         => $offering['Currency'] . ' ' . $price,
-            "BOOKING_URL"   => "{$origin}/bookings/guide"
-          ];
-
-          $this->notification->createNotification(
-            $guideID,
-            "BOOKING.CREATED_FOR_GUIDE",
-            $payloadGuide,
-            "BOOKING." . $booking['BookingID'] . ".PENDING.GUIDE"
-          );
-        }
-
-        // Notificación para el usuario que hizo la reserva
-        $payloadUser = [
-          "YEAR"        => date('Y'),
-          "USERNAME"    => $username,
-          "OFFERING"    => $offering['Title'] ?? 'Servicio',
-          "GUIDE_NAME"  => $guide,
-          "GUIDE_EMAIL" => $guideEmail,
-          "GUIDE_PHONE" => $guidePhone,
-          "SCHEDULED"   => date('d/m/Y H:i', strtotime($booking['ScheduledDate'])),
-          "MODE"        => $booking['Mode'] === 'in-person' ? 'Presencial' : 'Virtual',
-          "PRICE"       => $offering['Currency'] . ' ' . $price,
-          "CONDITIONS"  => $conditions,
-          "BOOKING_ID"  => $booking['PublicID'],
-          "MESSAGE"     => $message,
-          "BOOKING_URL" => "{$origin}/bookings/user"
-        ];
-
-        $this->notification->createNotification(
-          $userID,
-          "BOOKING.CREATED_FOR_SEEKER",
-          $payloadUser,
-          "BOOKING." . $booking['BookingID'] . ".PENDING.SEEKER"
-        );
-      }
+      $this->notification->createNotification(
+        $seekerID,
+        "BOOKING.CREATED_FOR_SEEKER",
+        $payloadSeeker,
+        "BOOKING." . $booking['BookingID'] . ".PENDING.SEEKER"
+      );
 
       return $response->withStatus(200)->withJson($booking);
 
@@ -531,12 +525,10 @@ class BookingController
     }
   }
 
-  public function updateBooking(Request $request, Response $response, $args)
-  {
+  public function updateBooking(Request $request, Response $response, $args) {
     $jwt = $request->getAttribute('jwt');
-
+    $bookingID = intval($args['bookingID']);
     $userID = $jwt->data->UserID;
-    $bookingID = $args['bookingID'];
     $data = $request->getParsedBody();
     $scheduledDate = $data['ScheduledDate'];
     $mode = strtolower($data['Mode'] ?? '');
@@ -544,7 +536,7 @@ class BookingController
     $locationID = $data['LocationID'] ?? null;
     $subDomain = $data['SubDomain'] ?? '';
 
-    // Validar formato de subdominio (solo letras A-Z, a-z)
+    # Validar formato de subdominio (solo letras A-Z, a-z)
     if (!empty($subDomain)) {
       if (!preg_match('/^[a-zA-Z]+$/', $subDomain)) {
         return $response->withStatus(400)->withJson([
@@ -556,7 +548,7 @@ class BookingController
       }
     }
 
-    // Valida contenido con Perspective API
+    # Valida contenido con Perspective API
     if(!empty($data['Message'])){
       if ($this->containsInappropriateContent($data['Message'])) {
         return $response->withStatus(400)->withJson([
@@ -576,7 +568,7 @@ class BookingController
     }
 
     try {
-      // Validar si booking existe
+      # Validar si booking existe
       $booking = $this->booking->getBookingByID($bookingID);
       if (!$booking) {
         return $response->withStatus(404)->withJson([
@@ -587,8 +579,8 @@ class BookingController
         ]);
       }
 
-      // Validar si el user es el cliente o el guía o un administrador
-      if ($booking['UserID'] != $userID && $booking['Guide'] != $userID && !$jwt->data->IsAdmin){
+      # Validar si el user es el cliente o el guía o un administrador
+      if ($booking['UserID'] !== $userID && $booking['Guide'] !== $userID && !$jwt->data->IsAdmin){
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "FORBIDDEN",
@@ -597,7 +589,7 @@ class BookingController
         ]);
       }
 
-      // Verificar si el booking está cancelado, confirmado, completado o calificado (último evento solamente)
+      # Verificar si el booking está cancelado, confirmado, completado o calificado (último evento solamente)
       if (!empty($booking['Events'])) {
         $latestEvent = $booking['Events'][0];
 
@@ -611,7 +603,7 @@ class BookingController
         }
       }
 
-      // Validar que al menos uno venga definido
+      # Validar que al menos uno venga definido
       if (empty($scheduledDate) && empty($mode) && empty($locationID)) {
         return $response->withStatus(400)->withJson([
           "error" => [
@@ -622,7 +614,7 @@ class BookingController
       }
 
       if ($scheduledDate) {
-        // Verificar que la reserva NO haya sucedido
+        # Verificar que la reserva NO haya sucedido
         $scheduledDateTime = DateTime::createFromFormat('Y-m-d H:i:s', $scheduledDate);
         if (!$scheduledDateTime || $scheduledDateTime->format('Y-m-d H:i:s') !== $scheduledDate) {
           return $response->withStatus(400)->withJson([
@@ -667,13 +659,13 @@ class BookingController
           ]);
         }
 
-        // Revisar si hay al menos un OfferingPackage con un SessionType válido
+        # Revisar si hay al menos un OfferingPackage con un SessionType válido
         $sessionTypes = [
           'in-person' => ['in-person', 'both'],
           'virtual' => ['virtual', 'both']
         ];
 
-        // VALIDAR: LocationID en caso de ser presencial
+        # VALIDAR: LocationID en caso de ser presencial
         if ($mode === 'in-person') {
           if (!$locationID) {
             return $response->withStatus(400)->withJson([
@@ -684,7 +676,7 @@ class BookingController
             ]);
           }
 
-          // Validar que el LocationID exista en offeringLocations
+          # Validar que el LocationID exista en offeringLocations
           $location = $this->booking->getLocation($id, $locationID);
 
           if (!$location) {
@@ -696,7 +688,7 @@ class BookingController
             ]);
           }
         } else {
-          // Si no es presencial, LocationID puede ser NULL
+          # Si no es presencial, LocationID puede ser NULL
           $locationID = null;
         }
 
@@ -726,17 +718,17 @@ class BookingController
 
       $origin = $subDomain ? "https://{$subDomain}.onesoul.app" : "https://onesoul.app";
 
-      // Obtener datos del usuario que hizo la reserva
+      # Obtener datos del usuario que hizo la reserva
       $userInfo = $this->user->getUserById($booking['UserID']);
       if ($userInfo) {
         $user = $userInfo;
         $username = $user['UserName'] ?? $user['DisplayName'] ?? 'Usuario';
         $userEmail = $user['Email'] ?? null;
 
-        // Obtener título del servicio
+        # Obtener título del servicio
         $offeringName = $offering['Title'] ?? 'Servicio';
 
-        // Enviar email al buscador
+        # Enviar email al buscador
         if ($userEmail) {
           EmailHelper::send(
             $username,
@@ -756,7 +748,7 @@ class BookingController
           );
         }
 
-        // Enviar email al guía
+        # Enviar email al guía
         if ($offering) {
           $guideID = $offering['UserID'] ?? null;
           $offeringName = $offering['Title'] ?? 'Servicio';
@@ -805,16 +797,15 @@ class BookingController
     }
   }
 
-  public function cancelBooking(Request $request, Response $response, $args)
-  {
+  public function cancelBooking(Request $request, Response $response, $args) {
     $jwt = $request->getAttribute('jwt');
 
     $data = $request->getParsedBody();
     $userID = $jwt->data->UserID;
-    $bookingID = $args['bookingID'];
+    $bookingID = intval($args['bookingID']);
     $message = $data['Message'] ?? null;
 
-    // Validar que defina el motivo de la anulación (se guarda en campo Message)
+    # Validar que defina el motivo de la anulación (se guarda en campo Message)
     if (!$message) {
       return $response->withStatus(400)->withJson([
         "error" => [
@@ -824,7 +815,7 @@ class BookingController
       ]);
     }
 
-    // Valida contenido con Perspective API
+    # Valida contenido con Perspective API
     if(!empty($data['Message'])){
       if ($this->containsInappropriateContent($data['Message'])) {
         return $response->withStatus(400)->withJson([
@@ -845,7 +836,7 @@ class BookingController
 
     $subDomain = $data['SubDomain'] ?? '';
 
-    // Validar formato de subdominio (solo letras A-Z, a-z)
+    # Validar formato de subdominio (solo letras A-Z, a-z)
     if (!empty($subDomain)) {
       if (!preg_match('/^[a-zA-Z]+$/', $subDomain)) {
         return $response->withStatus(400)->withJson([
@@ -869,8 +860,8 @@ class BookingController
         ]);
       }
 
-      // Validar si el user es el cliente o el guía o un administrador
-      if ($booking['UserID'] != $userID && $booking['Guide'] != $userID && !$jwt->data->IsAdmin){
+      # Validar si el user es el cliente o el guía o un administrador
+      if ($booking['UserID'] !== $userID && $booking['Guide'] !== $userID && !$jwt->data->IsAdmin){
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "FORBIDDEN",
@@ -879,7 +870,7 @@ class BookingController
         ]);
       }
 
-      // Verificar si el booking está cancelado, completado o calificado (último evento solamente)
+      # Verificar si el booking está cancelado, completado o calificado (último evento solamente)
       if (!empty($booking['Events'])) {
         $latestEvent = $booking['Events'][0];
 
@@ -897,18 +888,18 @@ class BookingController
 
       $origin = $subDomain ? "https://{$subDomain}.onesoul.app" : "https://onesoul.app";
 
-      // Obtener datos del usuario que hizo la reserva
+      # Obtener datos del usuario que hizo la reserva
       $userInfo = $this->user->getUserById($booking['UserID']);
       if ($userInfo) {
         $user = $userInfo;
         $username = $user['UserName'] ?? $user['DisplayName'] ?? 'Usuario';
         $userEmail = $user['Email'] ?? null;
 
-        // Obtener info del servicio
+        # Obtener info del servicio
         $offering = $this->offering->getOfferingById($booking['OfferingID']);
         $offeringName = $offering['Title'] ?? 'Servicio';
 
-        // Enviar email al buscador
+        # Enviar email al buscador
         if ($userEmail) {
           EmailHelper::send(
             $username,
@@ -926,7 +917,7 @@ class BookingController
           );
         }
 
-        // Enviar email al guía
+        # Enviar email al guía
         if ($offering) {
           $guideID = $offering['UserID'] ?? null;
           $offeringName = $offering['Title'] ?? 'Servicio';
@@ -974,16 +965,15 @@ class BookingController
     }
   }
 
-  public function confirmBooking(Request $request, Response $response, $args)
-  {
+  public function confirmBooking(Request $request, Response $response, $args) {
     $jwt = $request->getAttribute('jwt');
 
     $data = $request->getParsedBody();
     $userID = $jwt->data->UserID;
-    $bookingID = $args['bookingID'];
+    $bookingID = intval($args['bookingID']);
     $message = $data['Message'] ?? null;
 
-    // Valida contenido con Perspective API
+    # Valida contenido con Perspective API
     if(!empty($data['Message'])){
       if ($this->containsInappropriateContent($data['Message'])) {
         return $response->withStatus(400)->withJson([
@@ -1004,7 +994,7 @@ class BookingController
 
     $subDomain = $data['SubDomain'] ?? '';
 
-    // Validar formato de subdominio (solo letras A-Z, a-z)
+    # Validar formato de subdominio (solo letras A-Z, a-z)
     if (!empty($subDomain)) {
       if (!preg_match('/^[a-zA-Z]+$/', $subDomain)) {
         return $response->withStatus(400)->withJson([
@@ -1028,8 +1018,8 @@ class BookingController
         ]);
       }
 
-      // Validar si es el guía o un administrador
-      if ($booking['Guide'] != $userID && !$jwt->data->IsAdmin){
+      # Validar si es el guía o un administrador
+      if ($booking['Guide'] !== $userID && !$jwt->data->IsAdmin){
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "FORBIDDEN",
@@ -1038,7 +1028,7 @@ class BookingController
         ]);
       }
 
-      // Verificar si el booking está cancelado, completado o calificado (último evento solamente)
+      # Verificar si el booking está cancelado, completado o calificado (último evento solamente)
       if (!empty($booking['Events'])) {
         $latestEvent = $booking['Events'][0];
 
@@ -1056,18 +1046,18 @@ class BookingController
 
       $origin = $subDomain ? "https://{$subDomain}.onesoul.app" : "https://onesoul.app";
 
-      // Obtener datos del usuario que hizo la reserva
+      # Obtener datos del usuario que hizo la reserva
       $userInfo = $this->user->getUserById($booking['UserID']);
       if ($userInfo) {
         $user = $userInfo;
         $username = $user['UserName'] ?? $user['DisplayName'] ?? 'Usuario';
         $userEmail = $user['Email'] ?? null;
 
-        // Obtener info del servicio
+        # Obtener info del servicio
         $offering = $this->offering->getOfferingById($booking['OfferingID']);
         $offeringName = $offering['Title'] ?? 'Servicio';
 
-        // Enviar email al buscador
+        # Enviar email al buscador
         if ($userEmail) {
           EmailHelper::send(
             $username,
@@ -1087,7 +1077,7 @@ class BookingController
           );
         }
 
-        // Enviar email al guía
+        # Enviar email al guía
         if ($offering) {
           $guideID = $offering['UserID'] ?? null;
           $offeringName = $offering['Title'] ?? 'Servicio';
@@ -1143,7 +1133,7 @@ class BookingController
 
     $data = $request->getParsedBody();
     $userID = $jwt->data->UserID;
-    $bookingID = $args['bookingID'];
+    $bookingID = intval($args['bookingID']);
     $message = $data['Message'] ?? null;
     $rating = $data['Rating'] ?? null;
     $fulfilled = $data['Fulfilled'] ?? null;
@@ -1175,7 +1165,7 @@ class BookingController
       ]);
     }
 
-    // Valida contenido con Perspective API
+    # Valida contenido con Perspective API
     if(!empty($data['Message'])){
       if ($this->containsInappropriateContent($data['Message'])) {
         return $response->withStatus(400)->withJson([
@@ -1205,8 +1195,8 @@ class BookingController
         ]);
       }
 
-      // Validar si es el guía o un administrador
-      if ($booking['Guide'] != $userID && !$jwt->data->IsAdmin){
+      # Validar si es el guía o un administrador
+      if ($booking['Guide'] !== $userID && !$jwt->data->IsAdmin){
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "FORBIDDEN",
@@ -1215,7 +1205,7 @@ class BookingController
         ]);
       }
 
-      // Verificar si el último evento del booking es distinto de 'Confirmed'
+      # Verificar si el último evento del booking es distinto de 'Confirmed'
       if (!empty($booking['Events'])) {
         $latestEvent = $booking['Events'][0];
 
@@ -1252,7 +1242,7 @@ class BookingController
 
     $data = $request->getParsedBody();
     $userID = $jwt->data->UserID;
-    $bookingID = $args['bookingID'];
+    $bookingID = intval($args['bookingID']);
     $message = $data['Message'] ?? null;
     $rating = $data['Rating'] ?? null;
     $fulfilled = $data['Fulfilled'] ?? null;
@@ -1284,7 +1274,7 @@ class BookingController
       ]);
     }
 
-    // Valida contenido con Perspective API
+    # Valida contenido con Perspective API
     if(!empty($data['Message'])){
       if ($this->containsInappropriateContent($data['Message'])) {
         return $response->withStatus(400)->withJson([
@@ -1315,8 +1305,8 @@ class BookingController
         ]);
       }
 
-    // Validar si el user es el cliente  o un administrador
-    if ($booking['UserID'] != $userID && !$jwt->data->IsAdmin){
+    # Validar si el user es el cliente  o un administrador
+    if ($booking['UserID'] !== $userID && !$jwt->data->IsAdmin){
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "FORBIDDEN",
@@ -1325,7 +1315,7 @@ class BookingController
       ]);
     }
 
-      // Verificar si el último evento del booking es distinto de 'Confirmed'
+      # Verificar si el último evento del booking es distinto de 'Confirmed'
       if (!empty($booking['Events'])) {
         $latestEvent = $booking['Events'][0];
 
@@ -1380,7 +1370,7 @@ class BookingController
     $rating = $queryParams['rating'] ?? null;
     $limit = isset($queryParams['limit']) ? (int)$queryParams['limit'] : 50;
 
-    // Validar formato YYYYMMDD
+    # Validar formato YYYYMMDD
     $isValidDate = function($date) {
       return preg_match('/^\d{8}$/', $date) && DateTime::createFromFormat('Ymd', $date) !== false;
     };
@@ -1426,9 +1416,8 @@ class BookingController
     }
   }
 
-  public function getReviewsByGuide(Request $request, Response $response, $args)
-  {
-    $userID = $args['userID'];
+  public function getReviewsByGuide(Request $request, Response $response, $args){
+    $userID = intval($args['userID']);
     $queryParams = $request->getQueryParams();
 
     $from = $queryParams['from'] ?? null;
@@ -1436,7 +1425,7 @@ class BookingController
     $rating = $queryParams['rating'] ?? null;
     $limit = isset($queryParams['limit']) ? (int)$queryParams['limit'] : 50;
 
-    // Validar formato YYYYMMDD
+    # Validar formato YYYYMMDD
     $isValidDate = function($date) {
       return preg_match('/^\d{8}$/', $date) && DateTime::createFromFormat('Ymd', $date) !== false;
     };
@@ -1482,9 +1471,8 @@ class BookingController
     }
   }
 
-  public function getReviewsBySeeker(Request $request, Response $response, $args)
-  {
-    $userID = $args['userID'];
+  public function getReviewsBySeeker(Request $request, Response $response, $args) {
+    $userID = intval($args['userID']);
     $queryParams = $request->getQueryParams();
 
     $from = $queryParams['from'] ?? null;
@@ -1492,7 +1480,7 @@ class BookingController
     $rating = $queryParams['rating'] ?? null;
     $limit = isset($queryParams['limit']) ? (int)$queryParams['limit'] : 50;
 
-    // Validar formato YYYYMMDD
+    # Validar formato YYYYMMDD
     $isValidDate = function($date) {
       return preg_match('/^\d{8}$/', $date) && DateTime::createFromFormat('Ymd', $date) !== false;
     };
@@ -1539,7 +1527,7 @@ class BookingController
   }
 
   public function getReviewsByUser(Request $request, Response $response, $args){
-    $userID = $args['userID'];
+    $userID = intval($args['userID']);
     $queryParams = $request->getQueryParams();
 
     $from = $queryParams['from'] ?? null;
@@ -1547,7 +1535,7 @@ class BookingController
     $rating = $queryParams['rating'] ?? null;
     $limit = isset($queryParams['limit']) ? (int)$queryParams['limit'] : 50;
 
-    // Validar formato YYYYMMDD
+    # Validar formato YYYYMMDD
     $isValidDate = function($date) {
       return preg_match('/^\d{8}$/', $date) && DateTime::createFromFormat('Ymd', $date) !== false;
     };
@@ -1593,9 +1581,8 @@ class BookingController
     }
   }
 
-  public function getReviewsByID(Request $request, Response $response, $args)
-  {
-    $reviewID = $args['reviewID'];
+  public function getReviewsByID(Request $request, Response $response, $args) {
+    $reviewID = intval($args['reviewID']);
 
     try {
       $review = $this->booking->getReviewsByID($reviewID);
@@ -1620,9 +1607,8 @@ class BookingController
     }
   }
 
-  public function getReviewsByOffering(Request $request, Response $response, $args)
-  {
-    $offeringID = $args['offeringID'];
+  public function getReviewsByOffering(Request $request, Response $response, $args) {
+    $offeringID = intval($args['offeringID']);
     $queryParams = $request->getQueryParams();
 
     $from = $queryParams['from'] ?? null;
@@ -1630,7 +1616,7 @@ class BookingController
     $rating = $queryParams['rating'] ?? null;
     $limit = isset($queryParams['limit']) ? (int)$queryParams['limit'] : 50;
 
-    // Validar formato YYYYMMDD
+    # Validar formato YYYYMMDD
     $isValidDate = function($date) {
       return preg_match('/^\d{8}$/', $date) && DateTime::createFromFormat('Ymd', $date) !== false;
     };

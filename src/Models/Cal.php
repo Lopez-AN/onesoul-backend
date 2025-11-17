@@ -111,12 +111,12 @@ class Cal {
   public function bookingCreated($createdAt, $seekerID, $guideID, $offeringID, $assocUUID, $payload){
     try {
       $stmt = $this->db->prepare("INSERT INTO CalWebhooks
-        (Uid, AssocUUID, GuideID, SeekerID, CalUserID, OfferingID,
+        (Event, Uid, AssocUUID, GuideID, SeekerID, CalUserID, OfferingID,
         CreatedAt, CancelUrl, RescheduleUrl, Email, StartTime,
         EndTime, TimeZone, EventTitle, EventComment, Length)
-        VALUES (:uid, :assocUUID, :guideId, :seekerId, :calUserId, :offeringId,
-        :createdAt, :cancelUrl, :rescheduleUrl, :email, :startTime,
-        :endTime, :timeZone, :eventTitle, :eventComment, :length)");
+        VALUES ('BOOKING_CREATED', :uid, :assocUUID, :guideId, :seekerId,
+        :calUserId, :offeringId, :createdAt, :cancelUrl, :rescheduleUrl,
+        :email, :startTime, :endTime, :timeZone, :eventTitle, :eventComment, :length)");
 
       $stmt->execute([
         ':uid' => $payload->uid,
@@ -163,7 +163,7 @@ class Cal {
    * @return string Fecha en formato MySQL DATETIME
    */
   private function _calZoneAndFormat($iso8601, $utcOffset) {
-    // Convierte "2025-08-31T18:31:58.000000Z" -> "2025-08-31 18:31:58.000000"
+    # Convierte "2025-08-31T18:31:58.000000Z" -> "2025-08-31 18:31:58.000000"
     $dt = new DateTime($iso8601);
     $dt -> modify("$utcOffset minutes");
     return $dt->format("YmdHis");

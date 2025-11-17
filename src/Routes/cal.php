@@ -27,7 +27,7 @@ return function (App $app) {
 
   $app->post('/cal/connect', [$calController, 'connect'])->add($requiredJwt);
   $app->delete('/cal/disconnect', [$calController, 'disconnect'])->add($requiredJwt);
-  $app->get('/cal/user/{id}', [$calController, 'checkUser'])->add($requiredJwt);
+  $app->get('/cal/user/{id}', [$calController, 'checkUser']);
   $app->get('/cal/callback', [$calController, 'callback']);
   $app->post('/cal/webhook', [$calController, 'handleWebhook']);
 };

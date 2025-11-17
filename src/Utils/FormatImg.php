@@ -17,7 +17,7 @@ function imgFormat($bin) {
   $m_number = $strToHex(substr($bin, 0, 4));
   $extended_check = $strToHex(substr($bin, 4, 8));
 
-  if (substr($m_number, 0, 4) == "424d") {
+  if (substr($m_number, 0, 4) === "424d") {
     return "bmp";
   } else {
     switch ($m_number) {
@@ -28,12 +28,12 @@ function imgFormat($bin) {
       case "47494638":
         return "gif";
       case "52494646":
-        if (substr($extended_check, 0, 8) == "57454250") {
+        if (substr($extended_check, 0, 8) === "57454250") {
           return "webp";
         }
         break;
       case "00000018":
-        if (substr($extended_check, 0, 8) == "66747970" && substr($extended_check, 8, 8) == "68656963") {
+        if (substr($extended_check, 0, 8) === "66747970" && substr($extended_check, 8, 8) === "68656963") {
           return "heic";
         }
         break;

@@ -72,7 +72,7 @@ class StripeController{
 
     try {
       # Verificar si el usuario autenticado es un guía
-      if ($jwt->data->UserType != 'Guide') {
+      if ($jwt->data->UserType !== 'Guide') {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
@@ -578,7 +578,7 @@ class StripeController{
 
       $platformSubscriptionID = $subscription['PlatformSubscriptionID'];
 
-      if ($subscription['Status'] == 'TRIALING') {
+      if ($subscription['Status'] === 'TRIALING') {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "NO_PENDING_DOWNGRADE",
@@ -1262,11 +1262,11 @@ class StripeController{
             // Detectamos realmente un cambio de price (usando prevPriceId si está, sino comparando con BD)
             $isDifferent = false;
             if ($prevPriceId !== null) {
-              $isDifferent = ($prevPriceId != $newPriceId);
+              $isDifferent = ($prevPriceId !== $newPriceId);
             } else {
               if ($planInfo && $currentPlanInfoInDb) {
                 // Validar explícitamente contra la BD
-                if ($planInfo['PlanID'] != $currentPlanInfoInDb['PlanID']) {
+                if ($planInfo['PlanID'] !== $currentPlanInfoInDb['PlanID']) {
                   $isDifferent = true;
                 }
               } elseif ($planInfo && !$currentPlanInfoInDb) {
@@ -1276,7 +1276,7 @@ class StripeController{
             }
 
             // Evitar duplicados: si el plan nuevo es igual al actual en BD → no hacer nada
-            if ($planInfo && $currentPlanInfoInDb && $planInfo['PlanID'] == $currentPlanInfoInDb['PlanID']) {
+            if ($planInfo && $currentPlanInfoInDb && $planInfo['PlanID'] === $currentPlanInfoInDb['PlanID']) {
               $isDifferent = false;
             }
 
@@ -1286,7 +1286,7 @@ class StripeController{
 
               if ($pending) {
                 // Si Stripe ya cambió el price.id, significa que el downgrade programado ya se ejecutó
-                if ($planInfo && $planInfo['PlanID'] == $pending['NewPlanID']) {
+                if ($planInfo && $planInfo['PlanID'] === $pending['NewPlanID']) {
                   $this->subscription->applyScheduledChange($pending['id'], $nextBillingDate);
                   error_log("Cambio pendiente aplicado en BD: changeId {$pending['id']} -> nuevo PlanID {$planInfo['PlanID']}");
                 } else {
@@ -1524,7 +1524,7 @@ class StripeController{
 
       // Validación: que la sesión corresponda al usuario logueado
       $userIDFromSession = $sessionData['metadata']['userID'] ?? null;
-      if ($userIDFromSession && $userIDFromSession != $userID) {
+      if ($userIDFromSession && $userIDFromSession !== $userID) {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "INVALID_STRIPE_SESSION",

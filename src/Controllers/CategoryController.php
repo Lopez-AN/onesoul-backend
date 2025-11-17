@@ -81,7 +81,7 @@ class CategoryController {
    * @statusCode 500: error del servidor
    **/
   public function getCategoryById(Request $request, Response $response, $args) {
-    $categoryID = $args['id'];
+    $categoryID = intval($args['id']);
 
     try {
       $category = $this->category->getCategoryById($categoryID);
@@ -114,7 +114,7 @@ class CategoryController {
    * @statusCode 500: error del servidor
    **/
   public function getCategoriesByParentId(Request $request, Response $response, $args) {
-    $categoryID = $args['id'] == -1 ? null : $args['id'];
+    $categoryID = intval($args['id']) === -1 ? null : intval($args['id']);
     $paginator = paginator($request);
 
     try {
@@ -204,7 +204,7 @@ class CategoryController {
    * @statusCode 500: error del servidor
    **/
   public function updateCategory(Request $request, Response $response, $args) {
-    $categoryID = $args['id'];
+    $categoryID = intval($args['id']);
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
 
@@ -265,7 +265,7 @@ class CategoryController {
    * @statusCode 500: error del servidor
    **/
   public function deleteCategory(Request $request, Response $response, $args) {
-    $categoryID = $args['id'];
+    $categoryID = intval($args['id']);
     $jwt = $request->getAttribute('jwt');
 
     if (!$jwt->data->IsAdmin) {

@@ -96,7 +96,7 @@ class UserController{
    **/
   public function getUsersByCategory(Request $request, Response $response, $args) {
     $paginator = paginator($request);
-    $categoryID = $args['id'];
+    $categoryID = intval($args['id']);
     $jwt = $request->getAttribute('jwt');
 
     try {
@@ -151,7 +151,7 @@ class UserController{
    * @statusCode 500: error del servidor
    **/
   public function getUserById(Request $request, Response $response, $args) {
-    $userID = $args['id'];
+    $userID = intval($args['id']);
     $jwt = $request->getAttribute('jwt');
 
     try {
@@ -295,7 +295,7 @@ class UserController{
    * @statusCode 500: error del servidor
    **/
   public function latestConsentByUser(Request $request, Response $response, $args) {
-    $userID = $args['id'];
+    $userID = intval($args['id']);
     $jwt = $request->getAttribute('jwt');
 
     try {
@@ -311,7 +311,7 @@ class UserController{
       }
 
       # Verificar si el usuario autenticado es el mismo o si es un administrador
-      if ($jwt->data->UserID != $userID && !$jwt->data->IsAdmin) {
+      if ($jwt->data->UserID !== $userID && !$jwt->data->IsAdmin) {
         return $response->withStatus(403)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
@@ -343,11 +343,11 @@ class UserController{
    * @statusCode 500: error del servidor
    **/
   public function referralsByUser(Request $request, Response $response, $args) {
-    $userID = $args['id'];
+    $userID = intval($args['id']);
     $jwt = $request->getAttribute('jwt');
 
     # Verificar si el usuario autenticado es el mismo o si es un administrador
-    if ($jwt->data->UserID != $userID && !$jwt->data->IsAdmin) {
+    if ($jwt->data->UserID !== $userID && !$jwt->data->IsAdmin) {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
@@ -391,11 +391,11 @@ class UserController{
    * @statusCode 500: error del servidor
    **/
   public function rewardsByUser(Request $request, Response $response, $args) {
-    $userID = $args['id'];
+    $userID = intval($args['id']);
     $jwt = $request->getAttribute('jwt');
 
     # Verificar si el usuario autenticado es el mismo o si es un administrador
-    if ($jwt->data->UserID != $userID && !$jwt->data->IsAdmin) {
+    if ($jwt->data->UserID !== $userID && !$jwt->data->IsAdmin) {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
@@ -529,7 +529,7 @@ class UserController{
    * @statusCode 500: error del servidor
    **/
   public function updateUser(Request $request, Response $response, $args) {
-    $userID = $args['id'];
+    $userID = intval($args['id']);
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
 
@@ -544,7 +544,7 @@ class UserController{
     }
 
     # Verificar si el usuario autenticado es el mismo que el que se intenta modificar, o si es un administrador
-    if ($jwt->data->UserID != $userID && !$jwt->data->IsAdmin) {
+    if ($jwt->data->UserID !== $userID && !$jwt->data->IsAdmin) {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
@@ -608,7 +608,7 @@ class UserController{
     # Valido que no se repita el email
     if(!empty($email)){
       $user = $this->user->getUserByEmail($email);
-      if($user && $user['UserID'] != $userID){
+      if($user && $user['UserID'] !== $userID){
         return $response->withStatus(409)->withJson([
           "error" => [
             "code" => "DUPLICATED_EMAIL",
@@ -707,11 +707,11 @@ class UserController{
    * @statusCode 500: error del servidor
    **/
   public function disableUser(Request $request, Response $response, $args) {
-    $userID = $args['id'];
+    $userID = intval($args['id']);
     $jwt = $request->getAttribute('jwt');
 
     # Verificar si el usuario autenticado es el mismo que el que se intenta modificar, o si es un administrador
-    if ($jwt->data->UserID != $userID && !$jwt->data->IsAdmin) {
+    if ($jwt->data->UserID !== $userID && !$jwt->data->IsAdmin) {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
@@ -766,10 +766,10 @@ class UserController{
    * @statusCode 500: error del servidor o FETCH_ERROR
    **/
   public function updateProfilePhoto(Request $request, Response $response, $args) {
-    $userID = $args['id'];
+    $userID = intval($args['id']);
     $jwt = $request->getAttribute('jwt');
 
-    if ($jwt->data->UserID != $userID && !$jwt->data->IsAdmin) {
+    if ($jwt->data->UserID !== $userID && !$jwt->data->IsAdmin) {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
@@ -904,11 +904,11 @@ class UserController{
    * @statusCode 500: error del servidor
    **/
   public function deleteProfilePhoto(Request $request, Response $response, $args) {
-    $userID = $args['id'];
+    $userID = intval($args['id']);
     $jwt = $request->getAttribute('jwt');
 
     # Verificar si el usuario autenticado es el mismo que el que se intenta modificar, o si es un administrador
-    if ($jwt->data->UserID != $userID && !$jwt->data->IsAdmin) {
+    if ($jwt->data->UserID !== $userID && !$jwt->data->IsAdmin) {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
@@ -951,7 +951,7 @@ class UserController{
    * @statusCode 500: error del servidor
    **/
   public function updateUserCategories(Request $request, Response $response, $args) {
-    $userID = $args['id'];
+    $userID = intval($args['id']);
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
 
@@ -966,7 +966,7 @@ class UserController{
     }
 
     # Verificar si el usuario autenticado es el mismo que el que se intenta modificar, o si es un administrador
-    if ($jwt->data->UserID != $userID && !$jwt->data->IsAdmin) {
+    if ($jwt->data->UserID !== $userID && !$jwt->data->IsAdmin) {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
@@ -1049,7 +1049,7 @@ class UserController{
    * @statusCode 500: error del servidor
    **/
   public function updateUserSocialAccounts(Request $request, Response $response, $args) {
-    $userID = $args['id'];
+    $userID = intval($args['id']);
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
 
@@ -1063,7 +1063,7 @@ class UserController{
       ]);
     }
 
-    if ($jwt->data->UserID != $userID && !$jwt->data->IsAdmin) {
+    if ($jwt->data->UserID !== $userID && !$jwt->data->IsAdmin) {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
@@ -1176,7 +1176,7 @@ class UserController{
    * @statusCode 500: error del servidor
    **/
   public function getUserSocialAccounts(Request $request, Response $response, $args) {
-    $userID = $args['id'];
+    $userID = intval($args['id']);
 
     try {
       $result = $this->user->getUserSocialAccounts($userID);

@@ -17,44 +17,35 @@ class Booking
   }
 
   public function generatePublicId ($countryCode, $type) {
-    $dateCode = date('ym'); // AñoMes
-    $random = substr(bin2hex(random_bytes(5)), 0, 8); // Hash corto
+    $dateCode = date('ym'); # AñoMes
+    $random = substr(bin2hex(random_bytes(5)), 0, 8); # Hash corto
     return strtoupper("{$countryCode}-{$dateCode}-{$type}-{$random}");
   }
 
-  public function getBookingByID($bookingID)
-  {
-    try {
-      $stmt = $this->db->prepare("SELECT b.*, o.Title AS TitleOffering, o.UserID AS Guide
-                                  FROM Bookings AS b
-                                  INNER JOIN Offerings AS o ON b.OfferingID = o.OfferingID
-                                  WHERE b.BookingID = :bookingID");
-      $stmt->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);
-      $stmt->execute();
-      $booking = $stmt->fetch(PDO::FETCH_ASSOC);
+  public function getBookingByID($bookingID) {
+    $stmt = $this->db->prepare("SELECT b.*, o.Title AS TitleOffering, o.UserID AS Guide
+      FROM Bookings AS b
+      INNER JOIN Offerings AS o ON b.OfferingID = o.OfferingID
+      WHERE b.BookingID = ?");
+    $stmt->execute([$bookingID]);
+    $booking = $stmt->fetch(PDO::FETCH_ASSOC);
 
-      if (!$booking) {
-        return null; // No se encontró booking
-      }
-
-      // Obtener los eventos de la reserva (BookingStatus)
-      $stmt2 = $this->db->prepare("SELECT BookingEventDate, BookingEvent, ScheduledDate, Message
-                                  FROM BookingStatus
-                                  WHERE BookingID = :bookingID
-                                  ORDER BY BookingEventDate DESC");
-      $stmt2->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);
-      $stmt2->execute();
-
-      $events = $stmt2->fetchAll(PDO::FETCH_ASSOC);
-
-      // Añadir los eventos al booking
-      $booking['Events'] = $events;
-
-      return $booking;
-
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
+    if (!$booking) {
+      return false; # No se encontró booking
     }
+
+    # Obtener los eventos de la reserva (BookingStatus)
+    $stmt = $this->db->prepare("SELECT BookingEventDate, BookingEvent, ScheduledDate, Message
+      FROM BookingStatus
+      WHERE BookingID = :bookingID
+      ORDER BY BookingEventDate DESC");
+    $stmt->execute([$bookingID]);
+    $events = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    # Añadir los eventos al booking
+    $booking['Events'] = $events;
+
+    return $booking;
   }
 
   public function getBookingByPublicID($publicID)
@@ -69,12 +60,12 @@ class Booking
       $booking = $stmt->fetch(PDO::FETCH_ASSOC);
 
       if (!$booking) {
-        return null; // No se encontró booking
+        return null; # No se encontró booking
       }
 
       $bookingID = $booking['BookingID'];
 
-      // Obtener los eventos de la reserva (BookingStatus)
+      # Obtener los eventos de la reserva (BookingStatus)
       $stmt2 = $this->db->prepare("SELECT BookingEventDate, BookingEvent, ScheduledDate, Message
                                   FROM BookingStatus
                                   WHERE BookingID = :bookingID
@@ -84,7 +75,7 @@ class Booking
 
       $events = $stmt2->fetchAll(PDO::FETCH_ASSOC);
 
-      // Añadir los eventos al booking
+      # Añadir los eventos al booking
       $booking['Events'] = $events;
 
       return $booking;
@@ -100,7 +91,7 @@ class Booking
       $where = "o.UserID = :userID";
       $params = ['userID' => $userID];
 
-      // Agregar filtro por estado
+      # Agregar filtro por estado
       if (!empty($filters['status']) && $filters['status'] === 'open') {
         $where .= " AND b.BookingID NOT IN (
                       SELECT BookingID
@@ -110,7 +101,7 @@ class Booking
                   AND b.ScheduledDate >= CURDATE()";
       }
 
-      // Si se requiere solo el conteo
+      # Si se requiere solo el conteo
       if (!empty($filters['count'])) {
         $stmt = $this->db->prepare("SELECT COUNT(*) AS found
                                     FROM Bookings AS b
@@ -121,7 +112,7 @@ class Booking
         return ['found' => (int)($result['found'] ?? 0)];
       }
 
-      // Consulta completa paginada
+      # Consulta completa paginada
       $stmt = $this->db->prepare("SELECT b.BookingID, b.PublicID, b.UserID, u.DisplayName AS Seeker, b.ReviewID, b.PaymentID,
                                         b.Mode, b.LocationID, b.CreationDate, b.ScheduledDate, b.ModificationDate,
                                         o.UserID AS Guide, u2.DisplayName, b.OfferingID, o.Title AS TitleOffering
@@ -143,7 +134,7 @@ class Booking
         return null;
       }
 
-      // Consulta total para paginador
+      # Consulta total para paginador
       $stmtTotal = $this->db->prepare("SELECT COUNT(*) AS total
                                       FROM Bookings AS b
                                       INNER JOIN Offerings AS o ON b.OfferingID = o.OfferingID
@@ -151,7 +142,7 @@ class Booking
       $stmtTotal->execute($params);
       $total = $stmtTotal->fetch(PDO::FETCH_ASSOC);
 
-      // Agregar eventos a cada booking
+      # Agregar eventos a cada booking
       foreach ($bookings as &$booking) {
         $stmt2 = $this->db->prepare("SELECT BookingEventDate, BookingEvent, ScheduledDate, Message
                                     FROM BookingStatus
@@ -178,7 +169,7 @@ class Booking
   public function getBookingsBySeeker($userID, $paginator)
   {
     try {
-      // Obtener todos los bookings del buscador
+      # Obtener todos los bookings del buscador
       $stmt = $this->db->prepare("SELECT b.BookingID, b.PublicID, b.UserID, u.DisplayName AS Seeker, b.ReviewID, b.PaymentID,
                                         b.Mode, b.LocationID, b.CreationDate, b.ScheduledDate, b.ModificationDate,
                                         o.UserID AS Guide, u2.DisplayName, b.OfferingID, o.Title AS TitleOffering
@@ -198,7 +189,7 @@ class Booking
         return null;
       }
 
-      // Consulta total real
+      # Consulta total real
       $stmtTotal = $this->db->prepare("SELECT COUNT(*) as total
                                       FROM Bookings AS b
                                       WHERE b.UserID = :userID");
@@ -206,7 +197,7 @@ class Booking
       $stmtTotal->execute();
       $total = $stmtTotal->fetch(PDO::FETCH_ASSOC);
 
-      // Agregar eventos
+      # Agregar eventos
       foreach ($bookings as &$booking) {
         $stmt2 = $this->db->prepare("SELECT BookingEventDate, BookingEvent, ScheduledDate, Message
                                     FROM BookingStatus
@@ -230,73 +221,66 @@ class Booking
     }
   }
 
-  public function createBooking($data, $subDomain, $assocUUID, $coupon)
-  {
+  public function createBooking($data, $subDomain, $assocUUID, $coupon) {
     try {
+      $this->db->beginTransaction(); # Iniciar transacción
+
       $stmt = $this->db->prepare("INSERT INTO Bookings (OfferingID, PublicID, UserID, Mode, LocationID, CreationDate, ScheduledDate)
-                                  VALUES (:offeringID, :publicID, :userID, :mode, :locationID, NOW(), :scheduledDate)");
-      $stmt->bindParam(':offeringID', $data['OfferingID'], PDO::PARAM_INT);
-      $stmt->bindParam(':publicID', $data['PublicID'], PDO::PARAM_STR);
-      $stmt->bindParam(':userID', $data['UserID'], PDO::PARAM_INT);
-      $stmt->bindParam(':mode', $data['Mode'], PDO::PARAM_STR);
-      $stmt->bindParam(':locationID', $data['LocationID'], $data['LocationID'] === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
-      $stmt->bindParam(':scheduledDate', $data['ScheduledDate'], $data['ScheduledDate'] === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
-      $stmt->execute();
+        VALUES (?, ?, ?, ?, ?, NOW(), ?)");
+      $stmt->execute([
+        $data['OfferingID'], $data['PublicID'],
+        $data['SeekerID'], $data['Mode'],
+        $data['LocationID'], $data['ScheduledDate'] -> format("YmdHis")
+      ]);
 
       $bookingID = $this->db->lastInsertId();
 
       $stmt = $this->db->prepare("INSERT INTO BookingStatus (BookingID, BookingEvent, ScheduledDate, Message)
-                                  VALUES (:bookingID, 'Pending', :scheduledDate, :message)");
-      $stmt->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);
-      $stmt->bindParam(':scheduledDate', $data['ScheduledDate'], $data['ScheduledDate'] === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
-      $stmt->bindParam(':message', $data['Message'], $data['Message'] === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
-      $stmt->execute();
+        VALUES (?, 'Pending', ?, ?)");
+      $stmt->execute([$bookingID, $data['ScheduledDate'] -> format("YmdHis"), $data['Message']]);
 
       if($coupon){
         $stmt = $this->db->prepare("UPDATE DonationVouchers
-          SET WinnerUserID = :userID, RedeemedAt = :redeemedAt, Status = 'redeemed'
-          WHERE RedeemCode = :redeemCode");
-        $stmt->bindParam(':userID', $data['UserID'], PDO::PARAM_INT);
-        $stmt->bindValue(':redeemedAt', date('Y-m-d H:i:s'), PDO::PARAM_STR);
-        $stmt->bindParam(':redeemCode', $coupon, PDO::PARAM_STR);
-        $stmt->execute();
+          SET WinnerUserID = ?, RedeemedAt = NOW(), Status = 'redeemed'
+          WHERE RedeemCode = ?");
+        $stmt->execute([$data['SeekerID'], $coupon]);
       }
 
+      if($assocUUID){
+        $stmt = $this->db->prepare("UPDATE CalWebhooks
+          SET BookingID = ?
+          WHERE AssocUUID = ?");
+        $stmt->execute([$bookingID, $assocUUID]);
+      }
+      $this->db->commit(); # Confirmo transacción
       return $this->getBookingByID($bookingID);
     } catch (\PDOException $e) {
+      $this->db->rollBack(); # Revierto en caso de error
       throw new DatabaseException($e->getMessage());
     }
   }
 
-  public function userHasCalendly($userID)
-{
-    $stmt = $this->db->prepare("SELECT 1 FROM CalendlyConnections WHERE UserID = :userID LIMIT 1");
-    $stmt->bindParam(':userID', $userID, PDO::PARAM_INT);
-    $stmt->execute();
-    return $stmt->fetchColumn() ? true : false;
-}
+  public function userHasCal($userID){
+    $stmt = $this->db->prepare("SELECT 1 FROM CalConnections WHERE UserID = ? LIMIT 1");
+    $stmt->execute([$userID]);
+    return (bool) $stmt->fetchColumn();
+  }
 
-  public function findCalendlyWebhook($assocUUID, $userID) {
+  public function findCalInvitee($assocUUID, $userID) {
     $stmt = $this->db->prepare("SELECT *
-                                FROM CalendlyWebhooks
-                                WHERE BookingID IS NULL
-                                AND AssocUUID = :assocUUID
-                                AND Event = 'invitee.created'
-                                AND UserID = :userID
-                                LIMIT 1");
-    $stmt->bindParam(':assocUUID', $assocUUID, PDO::PARAM_STR);
-    $stmt->bindParam(':userID', $userID, PDO::PARAM_INT);
-    $stmt->execute();
+      FROM CalWebhooks
+      WHERE BookingID IS NULL AND AssocUUID = ?
+      AND Event = 'BOOKING_CREATED' AND GuideID = ?");
+    $stmt->execute([$assocUUID, $userID]);
     return $stmt->fetch(PDO::FETCH_ASSOC);
   }
 
-  public function linkBookingWithCalendly($assocUUID, $bookingID) {
+  public function linkBookingWithCal($assocUUID, $bookingID) {
     $stmt = $this->db->prepare("UPDATE CalendlyWebhooks
-                                SET BookingID = :bookingID
-                                WHERE AssocUUID = :assocUUID
-                                AND Event = 'invitee.created'
-                                AND BookingID IS NULL
-                                LIMIT 1");
+      SET BookingID = ?
+      WHERE BookingID IS NULL AND AssocUUID = ?
+      AND Event = 'BOOKING_CREATED'
+      AND ");
     $stmt->bindParam(':bookingID', $bookingID, PDO::PARAM_INT);
     $stmt->bindParam(':assocUUID', $assocUUID, PDO::PARAM_STR);
     $stmt->execute();
@@ -312,7 +296,7 @@ class Booking
       $changedScheduledDate = false;
       $changedOther = false;
 
-      // Compara y actualiza Mode
+      # Compara y actualiza Mode
       if (!empty($mode) && strtolower($original['Mode']) !== strtolower($mode)) {
         $stmt = $this->db->prepare("UPDATE Bookings
                                     SET Mode = :mode, ModificationDate = NOW()
@@ -325,8 +309,8 @@ class Booking
         $hasChanges = true;
       }
 
-      // Compara y actualiza LocationID
-      if (!empty($locationID) && $original['LocationID'] != $locationID) {
+      # Compara y actualiza LocationID
+      if (!empty($locationID) && $original['LocationID'] !== $locationID) {
         $stmt = $this->db->prepare("UPDATE Bookings
                                     SET LocationID = :locationID, ModificationDate = NOW()
                                     WHERE BookingID = :bookingID");
@@ -338,8 +322,8 @@ class Booking
         $hasChanges = true;
       }
 
-      // Compara y actualiza ScheduledDate
-      if (!empty($scheduledDate) && $original['ScheduledDate'] != $scheduledDate) {
+      # Compara y actualiza ScheduledDate
+      if (!empty($scheduledDate) && $original['ScheduledDate'] !== $scheduledDate) {
         $currentDate = new DateTime();
         $newScheduledDate = new DateTime($scheduledDate);
         if ($newScheduledDate < $currentDate) {
@@ -361,7 +345,7 @@ class Booking
         throw new \Exception("No changes detected");
       }
 
-      // Insertar evento correspondiente en BookingStatus
+      # Insertar evento correspondiente en BookingStatus
       $bookingEvent = ($changedScheduledDate && !$changedOther) ? 'Rescheduled' : 'Modified';
 
       $stmt = $this->db->prepare("INSERT INTO BookingStatus (BookingID, BookingEvent, ScheduledDate, Message)
@@ -425,7 +409,7 @@ class Booking
   public function completeBooking($bookingID, $message, $seekerID, $guideID, $rating, $fulfilled)
   {
     try {
-     // Determinar estado a insertar según Fulfilled
+     # Determinar estado a insertar según Fulfilled
       $fulfilled = $fulfilled ? 0 : 1;
 
       $stmt = $this->db->prepare("INSERT INTO SeekerReviews (SeekerID, GuideID, BookingID, Fulfilled, ReviewText, Rating)
@@ -459,7 +443,7 @@ class Booking
     public function rateBooking($offeringID, $bookingID, $message, $seekerID, $guideID, $rating, $fulfilled)
   {
     try {
-      // Determinar estado a insertar según Fulfilled
+      # Determinar estado a insertar según Fulfilled
       $fulfilled = $fulfilled ? 0 : 1;
 
       $stmt = $this->db->prepare("INSERT INTO Reviews (OfferingID, SeekerID, GuideID, BookingID, Fulfilled, ReviewText, Rating, ReviewType)
@@ -476,7 +460,7 @@ class Booking
       $reviewID = $this->db->lastInsertId();
 
       if (!$reviewID) {
-        return null; // No se encontraron reviews
+        return null; # No se encontraron reviews
       }
 
       $stmt = $this->db->prepare("UPDATE Bookings
@@ -518,7 +502,7 @@ class Booking
               INNER JOIN Users AS u2 ON r.GuideID = u2.UserID
               LEFT JOIN Media AS m ON r.SeekerID = m.UserID";
 
-      // Construimos el WHERE condicionalmente
+      # Construimos el WHERE condicionalmente
       $whereClauses = [];
       if ($from) $whereClauses[] = "r.CreationDate >= :fromDate";
       if ($to) $whereClauses[] = "r.CreationDate <= :toDate";
@@ -583,7 +567,7 @@ class Booking
               INNER JOIN Users AS u2 ON r.GuideID = u2.UserID
               LEFT JOIN Media AS m ON r.SeekerID = m.UserID";
 
-      // Construimos el WHERE condicionalmente
+      # Construimos el WHERE condicionalmente
       $whereClauses = ["r.GuideID = :userID"];
       if ($from) $whereClauses[] = "r.CreationDate >= :fromDate";
       if ($to) $whereClauses[] = "r.CreationDate <= :toDate";
@@ -650,7 +634,7 @@ class Booking
               INNER JOIN Users AS u2 ON r.GuideID = u2.UserID
               LEFT JOIN Media AS m ON r.SeekerID = m.UserID";
 
-      // Construimos el WHERE condicionalmente
+      # Construimos el WHERE condicionalmente
       $whereClauses = ["r.SeekerID = :userID"];
       if ($from) $whereClauses[] = "r.CreationDate >= :fromDate";
       if ($to) $whereClauses[] = "r.CreationDate <= :toDate";
@@ -701,11 +685,11 @@ class Booking
     }
   }
 
-  //TRAE TODAS LAS REVIEWS DEL USUARIO, TANTO COMO GUIA Y COMO BUSCADOR
+  # TRAE TODAS LAS REVIEWS DEL USUARIO, TANTO COMO GUIA Y COMO BUSCADOR
   public function getReviewsByUser($userID, $limit, $from = null, $to = null, $rating = null)
   {
     try {
-      // Determinar el rol del usuario en las reviews
+      # Determinar el rol del usuario en las reviews
       $stmt = $this->db->prepare("SELECT UserType FROM Users WHERE UserID = :userID");
       $stmt->execute([':userID' => $userID]);
       $role = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -714,7 +698,7 @@ class Booking
         throw new \Exception("User not found.");
       }
 
-      $isGuide = $role['UserType'] == 'Guide';
+      $isGuide = $role['UserType'] === 'Guide';
 
       $type = $isGuide ? 'r.GuideID' : 'r.SeekerID';
 
@@ -796,7 +780,7 @@ class Booking
       $review = $stmt->fetch(PDO::FETCH_ASSOC);
 
       if (!$review) {
-        return null; // No se encontró booking
+        return null; # No se encontró booking
       }
 
       return $review;
@@ -822,7 +806,7 @@ class Booking
               INNER JOIN Users AS u2 ON r.GuideID = u2.UserID
               LEFT JOIN Media AS m ON r.SeekerID = m.UserID";
 
-      // Construimos el WHERE condicionalmente
+      # Construimos el WHERE condicionalmente
       $whereClauses = ["r.OfferingID = :offeringID"];
       if ($from) $whereClauses[] = "r.CreationDate >= :fromDate";
       if ($to) $whereClauses[] = "r.CreationDate <= :toDate";
@@ -872,23 +856,11 @@ class Booking
     }
   }
 
-  public function getLocation($offeringID, $locationID)
-  {
-    try {
-      $stmt = $this->db->prepare("SELECT LocationID
-                                  FROM OfferingLocations
-                                  WHERE LocationID = :locationID
-                                  AND OfferingID = :offeringID");
-      $stmt->bindParam(':locationID', $locationID, PDO::PARAM_INT);
-      $stmt->bindParam(':offeringID', $offeringID, PDO::PARAM_INT);
-      $stmt->execute();
-
-      $result = $stmt->fetch(PDO::FETCH_ASSOC);
-
-      return $result ?: null;
-
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
+  public function getLocation($offeringID, $locationID){
+    $stmt = $this->db->prepare("SELECT LocationID
+      FROM OfferingLocations
+      WHERE OfferingID = ? AND LocationID = ?");
+    $stmt->execute([$offeringID, $locationID]);
+    return $stmt->fetch(PDO::FETCH_ASSOC);
   }
 }

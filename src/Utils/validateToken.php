@@ -31,7 +31,7 @@ function validateToken($url) {
   curl_close($ch);
 
   # Verifica si hubo un error en la solicitud
-  if ($error || $httpCode != 200) {
+  if ($error || $httpCode !== 200) {
     return false;
   }
 

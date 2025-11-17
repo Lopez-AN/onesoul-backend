@@ -14,7 +14,7 @@ if ($nparam < 2) {
 }
 
 $version = $argv[1];
-$release = !empty($argv[2]) && $argv[2] == 'release';
+$release = !empty($argv[2]) && $argv[2] === 'release';
 
 if (!is_dir(ROOT . DS . ".." . DS . "installer")) {
   if (!mkdir(ROOT . DS . ".." . DS . "installer")) {
@@ -95,7 +95,7 @@ function rcopy($source, $target){
     @mkdir($target);
     $d = dir($source);
     while (FALSE !== ($file = $d->read())) {
-      if ($file == '.' || $file == '..') {
+      if ($file === '.' || $file === '..') {
         continue;
       }
       $File = $source . '/' . $file;

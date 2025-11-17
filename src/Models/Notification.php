@@ -27,7 +27,7 @@ class Notification
     }
 
     // Insertar en Notifications
-    $sql = "INSERT INTO Notifications (EventTypeID, RecipientUserID, Payload, IdempotencyKey) 
+    $sql = "INSERT INTO Notifications (EventTypeID, RecipientUserID, Payload, IdempotencyKey)
             VALUES (?, ?, ?, ?)";
     $stmt = $this->db->prepare($sql);
     $stmt->execute([
@@ -57,7 +57,7 @@ class Notification
     }
 
     // Canales configurados para el evento
-    $sql = "SELECT Channel FROM NotificationsEventChannel 
+    $sql = "SELECT Channel FROM NotificationsEventChannel
             WHERE EventTypeID = ? AND Enabled = 1 ORDER BY SendOrder ASC";
     $stmt = $this->db->prepare($sql);
     $stmt->execute([$event['ID']]);
@@ -105,8 +105,8 @@ class Notification
       }
 
       // Insertar delivery
-      $sql = "INSERT INTO NotificationsDelivery 
-              (NotificationID, Channel, TemplateID, RenderedSubject, RenderedBody, Status) 
+      $sql = "INSERT INTO NotificationsDelivery
+              (NotificationID, Channel, TemplateID, RenderedSubject, RenderedBody, Status)
               VALUES (?, ?, ?, ?, ?, 'Queued')";
       $stmt = $this->db->prepare($sql);
       $stmt->execute([
@@ -119,7 +119,7 @@ class Notification
 
       // Si es IN_APP → además insertamos en InAppNotification
       if ($channel === 'IN_APP') {
-        $sql = "INSERT INTO InAppNotification (UserID, Title, Body, Priority, IsRead) 
+        $sql = "INSERT INTO InAppNotification (UserID, Title, Body, Priority, IsRead)
                 VALUES (?, ?, ?, ?, 0)";
         $stmt = $this->db->prepare($sql);
         $stmt->execute([
@@ -137,7 +137,7 @@ class Notification
           'body'    => $body ?? ($payload['body'] ?? $payload),
         ];
 
-        $sql = "INSERT INTO NotificationJobs (Channel, Recipient, Message, Attempt, Status) 
+        $sql = "INSERT INTO NotificationJobs (Channel, Recipient, Message, Attempt, Status)
                 VALUES (?, ?, ?, 1, 'PENDING')";
         $stmt = $this->db->prepare($sql);
         $stmt->execute([
@@ -198,9 +198,9 @@ class Notification
 
   // Obtener In-App no leídas
   public function getUnreadInAppByUser($userID) {
-    $sql = "SELECT ID, Title, Body, DeepLink, Priority, CreatedAt 
-            FROM InAppNotification 
-            WHERE UserID = ? AND IsRead = 0 
+    $sql = "SELECT ID, Title, Body, DeepLink, Priority, CreatedAt
+            FROM InAppNotification
+            WHERE UserID = ? AND IsRead = 0
             ORDER BY CreatedAt DESC";
     $stmt = $this->db->prepare($sql);
     $stmt->execute([$userID]);
@@ -209,8 +209,8 @@ class Notification
 
   // Marcar como leída
   public function markInAppAsRead($userID, $notifID) {
-    $sql = "UPDATE InAppNotification 
-            SET IsRead = 1, ReadAt = NOW() 
+    $sql = "UPDATE InAppNotification
+            SET IsRead = 1, ReadAt = NOW()
             WHERE ID = ? AND UserID = ? AND IsRead = 0";
     $stmt = $this->db->prepare($sql);
     $stmt->execute([$notifID, $userID]);
@@ -218,8 +218,8 @@ class Notification
   }
 
   private function getTemplate($eventTypeID, $channel, $locale = 'es') {
-    $sql = "SELECT * FROM NotificationsTemplate 
-            WHERE EventTypeID = ? AND Channel = ? AND Locale = ? AND Status = 'Active' 
+    $sql = "SELECT * FROM NotificationsTemplate
+            WHERE EventTypeID = ? AND Channel = ? AND Locale = ? AND Status = 'Active'
             ORDER BY Version DESC LIMIT 1";
     $stmt = $this->db->prepare($sql);
     $stmt->execute([$eventTypeID, $channel, $locale]);
@@ -264,8 +264,8 @@ class Notification
 
   // Reencolar job con delay y nuevo intento
   public function requeueJob($jobId, $attempt, $delay) {
-    $stmt = $this->db->prepare("UPDATE NotificationJobs 
-                              SET Attempt=?, NextRunAt=DATE_ADD(NOW(), INTERVAL ? SECOND), UpdatedAt=NOW() 
+    $stmt = $this->db->prepare("UPDATE NotificationJobs
+                              SET Attempt=?, NextRunAt=DATE_ADD(NOW(), INTERVAL ? SECOND), UpdatedAt=NOW()
                               WHERE JobID=?");
     $stmt->execute([$attempt, $delay, $jobId]);
   }

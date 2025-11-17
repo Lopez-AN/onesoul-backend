@@ -903,7 +903,7 @@ class Offering {
   {
     try {
       $stmt = $this->db->prepare("UPDATE Offerings SET Status = 'Active', IsActive = 1, Approved = 1
-            WHERE OfferingID = :id AND Status != 'Deleted'");
+            WHERE OfferingID = :id AND Status !== 'Deleted'");
       $stmt->bindParam(':id', $id, PDO::PARAM_INT);
       $stmt->execute();
     } catch (\PDOException $e) {
@@ -925,7 +925,7 @@ class Offering {
 
     try {
       // Verificar si la oferta existe
-      $stmt = $this->db->prepare("SELECT * FROM Offerings WHERE OfferingID = :id AND Status != 'Deleted'");
+      $stmt = $this->db->prepare("SELECT * FROM Offerings WHERE OfferingID = :id AND Status !== 'Deleted'");
       $stmt->bindParam(':id', $id, PDO::PARAM_INT);
       $stmt->execute();
       $offering = $stmt->fetch();
@@ -1123,7 +1123,7 @@ class Offering {
       $result = $stmt->fetch(PDO::FETCH_ASSOC);
 
       // Asignar posición 0 si no existe ninguna imagen en esa posición
-      $position = ($result['count'] == 0 && $mediaType === 'image') ? 0 : null;
+      $position = ($result['count'] === 0 && $mediaType === 'image') ? 0 : null;
 
       // Calcular la próxima posición si no es posición 0
       if ($position === null) {
@@ -1245,9 +1245,9 @@ class Offering {
       // Organizar resultados en un arreglo asociativo
       $counts = ['image' => 0, 'video' => 0];
       foreach ($mediaCounts as $mediaCount) {
-        if ($mediaCount['MediaType'] == 'image') {
+        if ($mediaCount['MediaType'] === 'image') {
           $counts['image'] = $mediaCount['count'];
-        } elseif ($mediaCount['MediaType'] == 'video') {
+        } elseif ($mediaCount['MediaType'] === 'video') {
           $counts['video'] = $mediaCount['count'];
         }
       }

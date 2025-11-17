@@ -51,7 +51,7 @@ class CalController{
     }
 
     $payload = [
-      'uid'   => $jwt->data -> UserID, // Lo uso para identificar al usuario
+      'uid'   => $jwt->data -> UserID, # Lo uso para identificar al usuario
       'exp'   => time()+600, # 5 min expedicion
       'nonce' => bin2hex(random_bytes(8)),
       'redirect' => $redirect # URL de redireccion (del frontend) luego de obtener los tokens
@@ -308,13 +308,13 @@ class CalController{
    * @statusCode 200: información de estado devuelta en JSON
    **/
   public function checkUser(Request $request, Response $response, array $args) {
-    $userID = $args['id'];
+    $userID = intval($args['id']);
 
     # Lo busco en la base
     try{
       $user = $this->cal->getCalUser($userID);
       if(!$user){
-        return $response->withJson(["status" => "NOT_FOUND"]);
+        return $response->withJson(["Status" => "NOT_FOUND"]);
       }
       $calUserID = $user['CalUserID'];
       $slug = $user['Slug'];
@@ -326,8 +326,8 @@ class CalController{
 
       # 1) HEAD público (sin OAuth)
       $result = $this->_httpHead($url);
-      if ($result->http_code == 200) {
-        return $response->withJson(["Status" => "LINKED", "Data" => [
+      if ($result->http_code === 200) {
+        return $response->withJson(["Status" => "LINKED", "CalData" => [
           "CalUserID" => $calUserID,
           "Url"      => $url,
           "UserName" => $slug,
@@ -341,7 +341,7 @@ class CalController{
         if ($loc) {
           $newSlug = basename($loc);
           $this->cal->updateCalUserData($calUserID, $newSlug, $loc, $timeZone);
-          return $response->withJson(["Status" => "LINKED", "Data" => [
+          return $response->withJson(["Status" => "LINKED", "CalData" => [
             "CalUserID" => $calUserID,
             "Url"      => $loc,
             "UserName" => $newSlug,
@@ -364,11 +364,11 @@ class CalController{
       ];
       $result = $this->_calRequest($response, "GET", "api", "/v2/event-types", $headers);
       if(!$result->valid){
-        return $response->withJson(["Status" => "API_ERROR", "Data" => "Cant retrieve the user info"]);
+        return $response->withJson(["Status" => "API_ERROR", "CalData" => "Cant retrieve the user info"]);
       }
 
       if(empty($result->response->data->eventTypeGroups) || empty($result->response->data->eventTypeGroups[0]->eventTypes)){
-        return $response->withJson(["Status" => "API_ERROR", "Data" => "Cant retrieve the user schedule"]);
+        return $response->withJson(["Status" => "API_ERROR", "CalData" => "Cant retrieve the user schedule"]);
       }
 
       $bookerUrl = $result->response->data->eventTypeGroups[0]->bookerUrl;
@@ -377,21 +377,21 @@ class CalController{
       $newSchedulingUrl = "$bookerUrl/$slug/30min";
 
       # Veo si algun campo cambio y lo grabo
-      if($timeZone == $newTimeZone ||
-        $slug == $newSlug ||
-        $schedulingUrl == $newSchedulingUrl
+      if($timeZone === $newTimeZone ||
+        $slug === $newSlug ||
+        $schedulingUrl === $newSchedulingUrl
       ){
         $this->cal->updateCalUserData($calUserID, $newSlug, $newSchedulingUrl, $newTimeZone);
       }
 
-      return $response->withJson(["Status" => "REFRESHED", "Data" => [
+      return $response->withJson(["Status" => "REFRESHED", "CalData" => [
         "CalUserID" => $calUserID,
         "Url" => $newSchedulingUrl,
         "UserName" => $newSlug,
         "TimeZone" => $newTimeZone
       ]]);
     } catch (\Throwable $e) {
-      return $response->withJson(["Status" => "API_ERROR", "Data" => $e->getMessage()]);
+      return $response->withJson(["Status" => "API_ERROR", "CalData" => $e->getMessage()]);
     }
   }
 
@@ -491,7 +491,7 @@ class CalController{
     }
     $curlResp = curl_exec($ch);
 
-    // capturar errores y status antes de cerrar
+    # capturar errores y status antes de cerrar
     $curlError = curl_error($ch);
     $curlErrno = curl_errno($ch);
     $httpCode  = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -506,7 +506,7 @@ class CalController{
             "desc" => $curlErrno
               ? "cURL error: $curlError"
               : "Cal.com returned HTTP $httpCode",
-            "cal_response" => $curlResp // opcional, útil para debug
+            "cal_response" => $curlResp # opcional, útil para debug
           ]
         ])
       ];
@@ -578,9 +578,9 @@ class CalController{
 
     curl_setopt_array($ch, [
       CURLOPT_URL            => $url,
-      CURLOPT_NOBODY         => true,   // HEAD en lugar de GET
-      CURLOPT_FOLLOWLOCATION => false,  // no seguir 301/302
-      CURLOPT_HEADER         => true,   // incluir headers en la respuesta
+      CURLOPT_NOBODY         => true,   # HEAD en lugar de GET
+      CURLOPT_FOLLOWLOCATION => false,  # no seguir 301/302
+      CURLOPT_HEADER         => true,   # incluir headers en la respuesta
       CURLOPT_RETURNTRANSFER => true,
       CURLOPT_TIMEOUT        => 5,
     ]);

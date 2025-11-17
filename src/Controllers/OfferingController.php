@@ -67,7 +67,7 @@ class OfferingController {
   }
 
   public function getOfferingById(Request $request, Response $response, $args)  {
-    $id = $args['id'];
+    $id = intval($args['id']);
     try {
       $offering = $this->offering->getOfferingById($id);
       if (!$offering) {
@@ -92,7 +92,7 @@ class OfferingController {
 
   public function getOfferingsByCategoryId(Request $request, Response $response, $args)  {
     $paginator = paginator($request);
-    $categoryId = $args['categoryID'];
+    $categoryId = intval($args['categoryID']);
     try {
       $result = $this->offering->getOfferingsByCategoryId($paginator, $categoryId);
       return $response->withStatus(200)->withJson($result);
@@ -108,7 +108,7 @@ class OfferingController {
 
   public function getOfferingsByUserId(Request $request, Response $response, $args)  {
     $paginator = paginator($request);
-    $userID = $args['userID'];
+    $userID = intval($args['userID']);
     try {
       $result = $this->offering->getOfferingsByUserId($paginator, $userID);
       return $response->withStatus(200)->withJson($result);
@@ -138,7 +138,7 @@ class OfferingController {
     }
 
     # Verificar si el usuario autenticado es un Guia o un administrador
-    if ($jwt->data->UserType != 'Guide') {
+    if ($jwt->data->UserType !== 'Guide') {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
@@ -210,7 +210,7 @@ class OfferingController {
   }
 
   public function approveOffering(Request $request, Response $response, $args)  {
-    $id = $args['id'];
+    $id = intval($args['id']);
     $jwt = $request->getAttribute('jwt');
 
     # Verificar que el usuario sea admin
@@ -261,7 +261,7 @@ class OfferingController {
   }
 
   public function updateOffering(Request $request, Response $response, $args)  {
-    $id = $args['id'];
+    $id = intval($args['id']);
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
     $userID = $jwt->data->UserID;
@@ -288,7 +288,7 @@ class OfferingController {
       }
 
       // Verificar si el usuario autenticado es el mismo que el que se intenta crear, o si es un administrador
-      if ($offering['UserID'] != $userID && !$jwt->data->IsAdmin) {
+      if ($offering['UserID'] !== $userID && !$jwt->data->IsAdmin) {
         return $response->withStatus(403)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
@@ -355,7 +355,7 @@ class OfferingController {
   }
 
   public function deleteOffering(Request $request, Response $response, $args)  {
-    $id = $args['id'];
+    $id = intval($args['id']);
     $jwt = $request->getAttribute('jwt');
     $userID = $jwt->data->UserID;
 
@@ -371,7 +371,7 @@ class OfferingController {
       }
 
       // Verificar si el usuario autenticado es el mismo que creo el offering o un admin
-      if ($offering['UserID'] != $userID && !$jwt->data->IsAdmin) {
+      if ($offering['UserID'] !== $userID && !$jwt->data->IsAdmin) {
         return $response->withStatus(403)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
@@ -405,10 +405,9 @@ class OfferingController {
     }
   }
 
-  public function createOfferingMedia(Request $request, Response $response, $args)
-  {
-    $id = $args['id']; // ID de offering
-    $position = $args['position']; // Posicion del archivo multimedia
+  public function createOfferingMedia(Request $request, Response $response, $args) {
+    $id = intval($args['id']); // ID de offering
+    $position = intval($args['position']); // Posicion del archivo multimedia
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
     $userID = $jwt->data->UserID;
@@ -436,7 +435,7 @@ class OfferingController {
       }
 
       // Verificar permisos
-      if ($offering['UserID'] != $userID) {
+      if ($offering['UserID'] !== $userID) {
         return $response->withStatus(403)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
@@ -546,11 +545,10 @@ class OfferingController {
     }
   }
 
-  public function updateOfferingMedia(Request $request, Response $response, $args)
-  {
-    $id = $args['id']; // ID de offering
-    $mediaID = $args['mediaID']; // ID del archivo de medios
-    $position = $args['position']; // Posicion del archivo multimedia
+  public function updateOfferingMedia(Request $request, Response $response, $args){
+    $id = intval($args['id']); // ID de offering
+    $mediaID = intval($args['mediaID']); // ID del archivo de medios
+    $position = intval($args['position']); // Posicion del archivo multimedia
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
     $userID = $jwt->data->UserID;
@@ -578,7 +576,7 @@ class OfferingController {
       }
 
       // Verificar permisos
-      if ($offering['UserID'] != $userID) {
+      if ($offering['UserID'] !== $userID) {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
@@ -756,8 +754,8 @@ class OfferingController {
   }
 
   public function deleteOfferingMedia(Request $request, Response $response, $args)  {
-    $id = $args['id'];
-    $mediaID = $args['mediaID'];
+    $id = intval($args['id']);
+    $mediaID = intval($args['mediaID']);
     $jwt = $request->getAttribute('jwt');
     $userID = $jwt->data->UserID;
 
@@ -773,7 +771,7 @@ class OfferingController {
       }
 
       // Verificar si el usuario autenticado es el mismo que creo el offering o un admin
-      if ($offering['UserID'] != $userID && !$jwt->data->IsAdmin) {
+      if ($offering['UserID'] !== $userID && !$jwt->data->IsAdmin) {
         return $response->withStatus(403)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",

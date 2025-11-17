@@ -49,7 +49,7 @@ class SubscriptionController {
   }
 
   public function getSubscriptionPlanByID(Request $request, Response $response, $args) {
-    $id = $args['id'];
+    $id = intval($args['id']);
 
     try {
       $subscription = $this->subscription->getSubscriptionPlanByID($id);
@@ -97,7 +97,7 @@ class SubscriptionController {
   }
 
   public function getSubscriptionByUser(Request $request, Response $response, $args) {
-    $userID = $args['userID'];
+    $userID = intval($args['userID']);
     $jwt = $request->getAttribute('jwt');
 
     if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID') || !property_exists($jwt->data, 'UserType')) {
@@ -111,7 +111,7 @@ class SubscriptionController {
 
     try {
       # Verificar si el usuario autenticado es el mismo o un administrador
-      if ($jwt->data->UserID != $userID && !$jwt->data->IsAdmin) {
+      if ($jwt->data->UserID !== $userID && !$jwt->data->IsAdmin) {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
@@ -169,7 +169,7 @@ class SubscriptionController {
       $userID = $subscription['UserID'];
 
       # Verificar si el usuario autenticado es un administrador
-      if ($jwt->data->UserID != $userID && !$jwt->data->IsAdmin) {
+      if ($jwt->data->UserID !== $userID && !$jwt->data->IsAdmin) {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
@@ -222,7 +222,7 @@ class SubscriptionController {
     }
 
     try {
-      if ($jwt->data->UserID != $userID && !$jwt->data->IsAdmin) {
+      if ($jwt->data->UserID !== $userID && !$jwt->data->IsAdmin) {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
@@ -302,7 +302,7 @@ class SubscriptionController {
   }
 
   public function updateSubscriptionPlan(Request $request, Response $response, $args) {
-    $id = $args['id'];
+    $id = intval($args['id']);
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
 
@@ -391,7 +391,7 @@ class SubscriptionController {
   }
 
   public function getPaymentsByUser(Request $request, Response $response, $args) {
-    $userID = $args['userID'];
+    $userID = intval($args['userID']);
     $paginator = paginator($request);
     $jwt = $request->getAttribute('jwt');
 
@@ -431,7 +431,7 @@ class SubscriptionController {
       }
 
       // Validar si el user es el cliente o el guía
-      if ($userJWT != $userID && !$jwt->data->IsAdmin) {
+      if ($userJWT !== $userID && !$jwt->data->IsAdmin) {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "FORBIDDEN",

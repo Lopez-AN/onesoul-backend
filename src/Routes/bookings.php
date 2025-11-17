@@ -5,6 +5,7 @@ use App\Controllers\BookingController;
 use App\Models\Booking;
 use App\Models\Offering;
 use App\Models\User;
+use App\Models\Donation;
 use App\Models\Notification;
 use Tuupola\Middleware\JwtAuthentication;
 use App\Middleware\JwtTokenMiddleware;
@@ -24,7 +25,8 @@ return function (App $app) {
   $offering = new Offering($pdo);
   $user = new User($pdo);
   $notification = new Notification($pdo);
-  $bookingController = new BookingController($booking, $offering, $user, $notification);
+  $donation = new Donation($pdo);
+  $bookingController = new BookingController($booking, $offering, $user, $notification, $donation);
 
   // Bookings protegidos
   $app->get('/bookings/{bookingID}', [$bookingController, 'getBookingByID'])->add($requiredJwt);

@@ -559,8 +559,8 @@ class User {
 
     # Agregar sessionType con valores booleanos
     $user['SessionType'] = [
-      "Virtual" => $user['hasVirtual'] == 1,
-      "InPerson" => $user['hasInPerson'] == 1
+      "Virtual" => $user['hasVirtual'] === 1,
+      "InPerson" => $user['hasInPerson'] === 1
     ];
     unset($user['hasVirtual'],
     $user['hasInPerson']);
@@ -612,8 +612,8 @@ class User {
 
       # Agregar sessionType con valores booleanos
       $e['SessionType'] = [
-        "Virtual" => $e['hasVirtual'] == 1,
-        "InPerson" => $e['hasInPerson'] == 1
+        "Virtual" => $e['hasVirtual'] === 1,
+        "InPerson" => $e['hasInPerson'] === 1
       ];
 
       unset($e['hasVirtual'], $e['hasInPerson']);

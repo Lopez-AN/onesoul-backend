@@ -518,7 +518,7 @@ class AuthController{
 
     # USUARIO TIENE MFA ACTIVAOD
     $newMfaId = null;
-    if ($user['TwoFactorAuth'] == 1 && !is_null($user['MfaSecret'])) {
+    if ($user['TwoFactorAuth'] === 1 && !is_null($user['MfaSecret'])) {
       # USUARIO PROPORCIONO UN ID DE NAVEGADOR
       if (!empty($mfaID)) {
         # Valido el ID de navegador
@@ -1572,7 +1572,7 @@ class AuthController{
       }
 
       # Comparar el código OTP recibido con el código generado
-      if ($otpCode != $user['OTPCode']) {
+      if ($otpCode !== $user['OTPCode']) {
         $this->auth->incrementUserOtpAttempts($userID);
 
         # Verificar si ya ha alcanzado el límite de intentos fallidos

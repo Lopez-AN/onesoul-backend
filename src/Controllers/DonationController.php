@@ -31,12 +31,12 @@ class DonationController {
    * @statusCode 500: error del servidor
    **/
   public function getDonations(Request $request, Response $response, $args) {
-    $userID = $args['userID'];
+    $userID = intval($args['userID']);
     $jwt = $request->getAttribute('jwt');
     $paginator = paginator($request);
 
     # Verificar si el usuario autenticado es el mismo o si es un administrador
-    if ($jwt->data->UserID != $userID && !$jwt->data->IsAdmin) {
+    if ($jwt->data->UserID !== $userID && !$jwt->data->IsAdmin) {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
@@ -69,12 +69,12 @@ class DonationController {
    * @statusCode 500: error del servidor
    **/
   public function getMontlyDonations(Request $request, Response $response, $args) {
-    $userID = $args['userID'];
+    $userID = intval($args['userID']);
     $jwt = $request->getAttribute('jwt');
     $paginator = paginator($request);
 
     # Verificar si el usuario autenticado es el mismo que el que consulta o un administrador
-    if ($jwt->data->UserID != $userID && !$jwt->data->IsAdmin) {
+    if ($jwt->data->UserID !== $userID && !$jwt->data->IsAdmin) {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
@@ -109,7 +109,7 @@ class DonationController {
    * @statusCode 500: error del servidor
    **/
   public function getDonationById(Request $request, Response $response, $args) {
-    $voucherID = $args['voucherID'];
+    $voucherID = intval($args['voucherID']);
     $jwt = $request->getAttribute('jwt');
 
     $userID = $jwt->data->UserID;
@@ -125,7 +125,7 @@ class DonationController {
           ]
         ]);
       }
-      if ($donation['GuideID'] != $userID && !$isAdmin) {
+      if ($donation['GuideID'] !== $userID && !$isAdmin) {
         return $response->withStatus(403)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
@@ -256,7 +256,7 @@ class DonationController {
     }
 
     # Solo los guias pueden crear donaciones
-    if ($jwt->data->UserType != 'Guide') {
+    if ($jwt->data->UserType !== 'Guide') {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
@@ -287,7 +287,7 @@ class DonationController {
           ]
         ]);
       }
-      if($offering['UserID'] != $userID){
+      if($offering['UserID'] !== $userID){
         return $response->withStatus(403)->WithJson([
           "error" => [
             "code" => "UNAUTHORIZED",
@@ -295,7 +295,7 @@ class DonationController {
           ]
         ]);
       }
-      if($offering['Status'] != 'Active'){
+      if($offering['Status'] !== 'Active'){
         return $response->withStatus(409)->WithJson([
           "error" => [
             "code" => "OFFERING_NOT_ACTIVE",
@@ -412,11 +412,11 @@ class DonationController {
    * @statusCode 500: error del servidor
    **/
   public function cancelDonation(Request $request, Response $response, $args) {
-    $voucherID = $args['voucherID'];
+    $voucherID = intval($args['voucherID']);
 
     $jwt = $request->getAttribute('jwt');
     # Solo los guias pueden crear donaciones
-    if ($jwt->data->UserType != 'Guide') {
+    if ($jwt->data->UserType !== 'Guide') {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
@@ -438,7 +438,7 @@ class DonationController {
           ]
         ]);
       }
-      if ($donation['GuideID'] != $userID && !$isAdmin) {
+      if ($donation['GuideID'] !== $userID && !$isAdmin) {
         return $response->withStatus(403)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
@@ -446,7 +446,7 @@ class DonationController {
           ]
         ]);
       }
-      if ($donation['Status'] != 'draft') {
+      if ($donation['Status'] !== 'draft') {
         return $response->withStatus(409)->withJson([
           "error" => [
             "code" => "DONATION_NOT_CANCELABLE",
@@ -480,7 +480,7 @@ class DonationController {
    * @statusCode 500: error del servidor
    **/
   public function raffleCoupons(Request $request, Response $response, $args) {
-    $quantity = $args['quantity'];
+    $quantity = intval($args['quantity']);
     $jwt = $request->getAttribute('jwt');
 
     # Verificar si el usuario autenticado es el mismo o si es un administrador
@@ -566,7 +566,7 @@ class DonationController {
    * @statusCode 500: error del servidor
    **/
   public function getAgencyById(Request $request, Response $response, $args) {
-    $agencyID = $args['agencyID'];
+    $agencyID = intval($args['agencyID']);
     $jwt = $request->getAttribute('jwt');
     $paginator = paginator($request);
 
@@ -675,7 +675,7 @@ class DonationController {
    * @statusCode 500: error del servidor
    **/
   public function deleteAgency(Request $request, Response $response, $args)  {
-    $agencyID = $args['agencyID'];
+    $agencyID = intval($args['agencyID']);
     $jwt = $request->getAttribute('jwt');
     $userID = $jwt->data->UserID;
 
