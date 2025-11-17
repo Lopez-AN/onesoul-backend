@@ -518,7 +518,7 @@ class AuthController{
 
     # USUARIO TIENE MFA ACTIVAOD
     $newMfaId = null;
-    if ($user['TwoFactorAuth'] === 1 && !is_null($user['MfaSecret'])) {
+    if ($user['TwoFactorAuth'] && !is_null($user['MfaSecret'])) {
       # USUARIO PROPORCIONO UN ID DE NAVEGADOR
       if (!empty($mfaID)) {
         # Valido el ID de navegador

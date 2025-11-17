@@ -899,16 +899,11 @@ class Offering {
     }
   }
 
-  public function approveOfferingById($id)
-  {
-    try {
-      $stmt = $this->db->prepare("UPDATE Offerings SET Status = 'Active', IsActive = 1, Approved = 1
-            WHERE OfferingID = :id AND Status !== 'Deleted'");
-      $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-      $stmt->execute();
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
+  public function approveOfferingById($id) {
+    $stmt = $this->db->prepare("UPDATE Offerings
+      SET Status = 'Active', IsActive = 1, Approved = 1
+      WHERE OfferingID = ? AND Status != 'Deleted'");
+    $stmt->execute([$id]);
   }
 
   public function updateOffering($id, $data)
@@ -925,7 +920,7 @@ class Offering {
 
     try {
       // Verificar si la oferta existe
-      $stmt = $this->db->prepare("SELECT * FROM Offerings WHERE OfferingID = :id AND Status !== 'Deleted'");
+      $stmt = $this->db->prepare("SELECT * FROM Offerings WHERE OfferingID = :id AND Status != 'Deleted'");
       $stmt->bindParam(':id', $id, PDO::PARAM_INT);
       $stmt->execute();
       $offering = $stmt->fetch();
