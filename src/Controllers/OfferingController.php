@@ -90,11 +90,11 @@ class OfferingController {
     }
   }
 
-  public function getOfferingsByCategoryId(Request $request, Response $response, $args)  {
+  public function getOfferingsByCategory(Request $request, Response $response, $args)  {
     $paginator = paginator($request);
     $categoryId = intval($args['categoryID']);
     try {
-      $result = $this->offering->getOfferingsByCategoryId($paginator, $categoryId);
+      $result = $this->offering->getOfferingsByCategory($paginator, $categoryId);
       return $response->withStatus(200)->withJson($result);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
@@ -152,11 +152,22 @@ class OfferingController {
     $data['Stock'] = null;
     $data['ServiceType'] = 'Service';
 
+    // Validar datos obligatorios
+    if (!isset($data['Title'], $data['ShortDescription'], $data['Description'], $data['CategoryID'], $data['UserID'])) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "MISSING_REQUIRED_FIELDS",
+          "desc" => "Missing required fields: Title, ShortDescription, Description, CategoryID, or UserID."
+        ]
+      ]);
+    }
+
     try {
       // Validación de contenido inapropiado
-      if((!empty($data['Title']) && $this->containsInappropriateContent($data['Title'])) ||
-        (!empty($data['Description']) && $this->containsInappropriateContent($data['Description'])) ||
-        (!empty($data['ShortDescription']) && $this->containsInappropriateContent($data['ShortDescription']))){
+      if($this->containsInappropriateContent($data['Title']) ||
+        $this->containsInappropriateContent($data['Description']) ||
+        $this->containsInappropriateContent($data['ShortDescription'])
+      ){
         return $response->withStatus(400)->withJson([
           "code" => "INAPPROPRIATE_CONTENT",
           "desc" => "Please remove inappropriate content and try again."

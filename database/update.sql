@@ -45,3 +45,199 @@ CREATE TABLE `CalWebhooks` (
 COLLATE='utf8mb4_spanish_ci'
 ENGINE=InnoDB
 ;
+
+/**
+ * sp_gen_audit_trigger
+ *
+ * @description Genera triggers de auditoría dinámicamente para registrar cambios (INSERT, UPDATE, DELETE) en AuditLogs en formato JSON.
+ *
+ * @param {ENUM} p_action Tipo de acción: 'insert', 'update' o 'delete'
+ * @param {VARCHAR(64)} p_schema Nombre del esquema/base de datos
+ * @param {VARCHAR(64)} p_table Nombre de la tabla
+ * @param {VARCHAR(64)} p_record_id Columna de identificación del registro (ej: 'ID', 'user_id')
+ * @param {TEXT} p_excluded_columns [OPCIONAL] Columnas a excluir separadas por comas (solo UPDATE)
+ *
+**/
+DELIMITER //
+CREATE DEFINER=`root`@`%` PROCEDURE `sp_gen_audit_trigger`(
+	IN `p_action` ENUM('insert','update','delete'),
+	IN `p_schema` VARCHAR(64),
+	IN `p_table` VARCHAR(64),
+	IN `p_record_id` VARCHAR(64),
+	IN `p_excluded_columns` TEXT
+)
+LANGUAGE SQL
+NOT DETERMINISTIC
+CONTAINS SQL
+SQL SECURITY DEFINER
+COMMENT ''
+BEGIN
+    DECLARE v_if_cond   TEXT; -- Condiciones
+    DECLARE v_old_json  TEXT; -- Json anterior
+    DECLARE v_new_json  TEXT; -- Json posterior
+    DECLARE v_drop      TEXT; -- Query de eliminar trigger existente
+    DECLARE v_sql       LONGTEXT; -- Query de crear nuevo trigger
+
+    CASE p_action
+        WHEN 'insert' THEN
+		    -- 1) JSON_OBJECT para NEW (con TODAS las columnas del nuevo registro en la tabla)
+		    SELECT GROUP_CONCAT(
+		      CONCAT('''', COLUMN_NAME, '''', ', NEW.`', COLUMN_NAME, '`')
+		      ORDER BY ORDINAL_POSITION SEPARATOR ', '
+		    )
+		    INTO v_new_json
+		    FROM INFORMATION_SCHEMA.COLUMNS
+		    WHERE TABLE_SCHEMA = p_schema
+		    AND TABLE_NAME   = p_table;
+
+		    -- 2) SQL completo del trigger de crear y dropear
+		    SET v_drop = CONCAT('DROP TRIGGER IF EXISTS `trg_', LOWER(p_table), '_audit_insert`');
+		    SET v_sql = CONCAT(
+		     'CREATE TRIGGER `trg_', LOWER(p_table), '_audit_insert` ',
+		     'AFTER INSERT ON `', p_schema, '`.`', p_table, '` ',
+		     'FOR EACH ROW ',
+		     'BEGIN ',
+		     '  INSERT INTO `', p_schema, '`.`AuditLogs` ',
+		     '    (TableName, RecordID, Action, ChangedBy, ChangeDate, OldValue, NewValue) ',
+		     '  VALUES (',
+		     '    ''', p_table, ''', ',
+		     '    NEW.',p_record_id,', ',
+		     '    ''INSERT'', ',
+		     '    CURRENT_USER(), ',
+		     '    NOW(), ',
+		     '    NULL,  ',
+		     '    JSON_OBJECT(', v_new_json, ')',
+		     '  ); ',
+		     'END'
+		    );
+        WHEN 'update' THEN
+		    -- 1) Condición de igualdad (excluyendo columnas que NO deben disparar)
+		    SELECT GROUP_CONCAT(
+		   	CONCAT('OLD.`', COLUMN_NAME, '` <=> NEW.`', COLUMN_NAME, '`')
+		      ORDER BY ORDINAL_POSITION SEPARATOR ' AND '
+		    )
+		    INTO v_if_cond
+		    FROM INFORMATION_SCHEMA.COLUMNS
+		    WHERE TABLE_SCHEMA = p_schema
+		    AND TABLE_NAME = p_table
+		    AND (
+		      p_excluded_columns IS NULL
+		      OR p_excluded_columns = ''
+		      OR FIND_IN_SET(COLUMN_NAME, p_excluded_columns) = 0
+		    );
+
+		    -- 2) JSON_OBJECT para OLD (con TODAS las columnas de como estaba el registro antes)
+		    SELECT GROUP_CONCAT(
+		      CONCAT('''', COLUMN_NAME, '''', ', OLD.`', COLUMN_NAME, '`')
+		      ORDER BY ORDINAL_POSITION SEPARATOR ', '
+		    )
+		    INTO v_old_json
+		    FROM INFORMATION_SCHEMA.COLUMNS
+		    WHERE TABLE_SCHEMA = p_schema
+		    AND TABLE_NAME   = p_table;
+
+		    -- 3) JSON_OBJECT para NEW (con TODAS las columnas de como queda el registro ahora)
+		    SELECT GROUP_CONCAT(
+		      CONCAT('''', COLUMN_NAME, '''', ', NEW.`', COLUMN_NAME, '`')
+		      ORDER BY ORDINAL_POSITION SEPARATOR ', '
+		    )
+		    INTO v_new_json
+		    FROM INFORMATION_SCHEMA.COLUMNS
+		    WHERE TABLE_SCHEMA = p_schema
+		    AND TABLE_NAME   = p_table;
+
+		    -- 4) SQL completo del trigger de crear y dropear
+		    SET v_drop = CONCAT('DROP TRIGGER IF EXISTS `trg_', LOWER(p_table), '_audit_update`');
+		    SET v_sql = CONCAT(
+		     'CREATE TRIGGER `trg_', LOWER(p_table), '_audit_update` ',
+		     'AFTER UPDATE ON `', p_schema, '`.`', p_table, '` ',
+		     'FOR EACH ROW ',
+		     'BEGIN ',
+		     '  IF NOT (', v_if_cond, ') THEN ',
+		     '    INSERT INTO `', p_schema, '`.`AuditLogs` ',
+		     '      (TableName, RecordID, Action, ChangedBy, ChangeDate, OldValue, NewValue) ',
+		     '    VALUES (',
+		     '      ''', p_table, ''', ',
+		     '      OLD.',p_record_id,', ',
+		     '      ''UPDATE'', ',
+		     '      CURRENT_USER(), ',
+		     '      NOW(), ',
+		     '      JSON_OBJECT(', v_old_json, '), ',
+		     '      JSON_OBJECT(', v_new_json, ')',
+		     '    ); ',
+		     '  END IF; ',
+		     'END'
+		    );
+        WHEN 'delete' THEN
+		    -- 1) JSON_OBJECT para OLD (con TODAS las columnas del registro a eliminar)
+		    SELECT GROUP_CONCAT(
+		      CONCAT('''', COLUMN_NAME, '''', ', OLD.`', COLUMN_NAME, '`')
+		      ORDER BY ORDINAL_POSITION SEPARATOR ', '
+		    )
+		    INTO v_old_json
+		    FROM INFORMATION_SCHEMA.COLUMNS
+		    WHERE TABLE_SCHEMA = p_schema
+		    AND TABLE_NAME   = p_table;
+
+		    -- 2) SQL completo del trigger de crear y dropear
+		    SET v_drop = CONCAT('DROP TRIGGER IF EXISTS `trg_', LOWER(p_table), '_audit_delete`');
+		    SET v_sql = CONCAT(
+		     'CREATE TRIGGER `trg_', LOWER(p_table), '_audit_delete` ',
+		     'AFTER DELETE ON `', p_schema, '`.`', p_table, '` ',
+		     'FOR EACH ROW ',
+		     'BEGIN ',
+		     '  INSERT INTO `', p_schema, '`.`AuditLogs` ',
+		     '    (TableName, RecordID, Action, ChangedBy, ChangeDate, OldValue, NewValue) ',
+		     '  VALUES (',
+		     '    ''', p_table, ''', ',
+		     '    OLD.',p_record_id,', ',
+		     '    ''DELETE'', ',
+		     '    CURRENT_USER(), ',
+		     '    NOW(), ',
+		     '    JSON_OBJECT(', v_old_json, '),',
+		     '    NULL  ',
+		     '  ); ',
+		     'END'
+		    );
+    END CASE;
+
+    -- 6) Ejecuto el DROP TRIGGER por si existe
+    SET @sql := v_drop;
+    PREPARE stmt FROM @sql;
+    EXECUTE stmt;
+    DEALLOCATE PREPARE stmt;
+
+    -- 7) Ejecuto el CREATE TRIGGER
+    SET @sql := v_sql;
+    PREPARE stmt FROM @sql;
+    EXECUTE stmt;
+    DEALLOCATE PREPARE stmt;
+END//
+DELIMITER ;
+
+-- Genero el trigger de insert para users
+CALL sp_gen_audit_trigger(
+    'insert',
+    'soul',
+    'Users',
+    'UserID',
+    ''
+);
+
+-- Genero el trigger de update para users
+CALL sp_gen_audit_trigger(
+    'update',
+    'soul',
+    'Users',
+    'UserID',
+    'LastLogin,OTPDate,OTPCode,OTPAttemps,FailedLoginAttempts,LockedUntil'
+);
+
+-- Genero el trigger de delete para users
+CALL sp_gen_audit_trigger(
+    'delete',
+    'soul',
+    'Users',
+    'UserID',
+    ''
+);

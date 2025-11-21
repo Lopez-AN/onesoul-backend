@@ -48,35 +48,27 @@ class Category {
    * @return object: { data: [], rows: { total: int, fetched: int } }
    **/
   public function searchCategories($paginator, $query) {
-    try {
-      $searchQuery = "%$query%";
-      $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS c.*,m.URL AS ImgURL
-            FROM Categories AS c
-            LEFT JOIN Media AS m ON c.CategoryID = m.CategoryID
-            WHERE (c.Name LIKE :search1 OR c.Description LIKE :search2) AND c.IsActive = 1
-            ORDER BY c.CategoryID
-            LIMIT :_limit OFFSET :_offset");
+    $searchQuery = "%$query%";
+    $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS c.*,m.URL AS ImgURL
+      FROM Categories AS c
+      LEFT JOIN Media AS m ON c.CategoryID = m.CategoryID
+      WHERE (c.Name LIKE ? OR c.Description LIKE ?) AND c.IsActive = 1
+      ORDER BY c.CategoryID
+      LIMIT ? OFFSET ?");
 
-      $stmt->bindParam(':search1', $searchQuery, PDO::PARAM_STR);
-      $stmt->bindParam(':search2', $searchQuery, PDO::PARAM_STR);
-      $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
-      $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
-      $stmt->execute();
+    $stmt->execute([$searchQuery, $searchQuery, $paginator->limit, $paginator->offset]);
 
-      $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
-      $stmt = $this->db->query("SELECT FOUND_ROWS() AS total");
-      $total = $stmt->fetch(PDO::FETCH_ASSOC);
+    $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $stmt = $this->db->query("SELECT FOUND_ROWS() AS total");
+    $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
-      return (object) [
-        "data" => $rs,
-        "rows" => [
-          "total" => $total['total'],
-          "fetched" => count($rs)
-        ]
-      ];
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
+    return (object) [
+      "data" => $rs,
+      "rows" => [
+        "total" => $total['total'],
+        "fetched" => count($rs)
+      ]
+    ];
   }
 
   /**

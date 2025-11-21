@@ -138,7 +138,18 @@ class User {
    * @note El filtrado de datos según scope (PUBLIC, USER, ADMIN) debe realizarse en el controller
    **/
   public function getUsersByCategory($paginator, $categoryID) {
-    $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
+    $stmt = $this->db->prepare("WITH RECURSIVE category_tree AS (
+      SELECT CategoryID
+      FROM Categories
+      WHERE CategoryID = ?
+
+      UNION ALL
+
+      SELECT c.CategoryID
+      FROM Categories c
+      INNER JOIN category_tree ct ON c.ParentCategoryID = ct.CategoryID
+    )
+    SELECT u.UserID, u.FirstName, u.LastName,
     u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
     u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
     u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth,
@@ -156,8 +167,9 @@ class User {
     (SELECT COUNT(DISTINCT r.ReviewID)
       FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
     FROM Users AS u
-    LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
-    LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
+    INNER JOIN UsersCategories AS uc ON uc.userID = u.userID
+    INNER JOIN Categories AS c ON uc.CategoryID = c.CategoryID
+    INNER JOIN category_tree ct ON ct.CategoryID = c.CategoryID
     LEFT JOIN Media AS m ON u.UserID = m.UserID
     LEFT JOIN (
       SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
@@ -168,12 +180,12 @@ class User {
       WHERE o.Status = 'Active'
       GROUP BY o.UserID
     ) AS sub ON sub.UserID = u.UserID
-    WHERE uc.CategoryID = ? AND u.DeactivationDate is null
+    WHERE u.DeactivationDate is null
     GROUP BY u.UserID
     ORDER BY u.UserID
     LIMIT ? OFFSET ?");
-
     $stmt->execute([$categoryID, $paginator->limit, $paginator->offset]);
+
     $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $stmt = $this->db->query("SELECT FOUND_ROWS() AS total");
     $total = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -195,9 +207,6 @@ class User {
    * @note El filtrado de datos según scope (PUBLIC, USER, ADMIN) debe realizarse en el controller
    **/
   public function searchGuides($paginator, $query) {
-    $query = is_string($query) ? explode(" ", $query) : [];
-    $query = array_map('trim', $query);
-    $query = implode(" ", $query);
     $searchQuery = "%$query%";
 
     $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
@@ -522,20 +531,6 @@ class User {
    *
    * @param  array|null $user: datos del usuario obtenidos de la base de datos o null
    * @return array|false: datos del usuario normalizados o false si no existe
-   *
-   * @example
-   * $userData = $this->_getUserGeneric($rawUserData);
-   * # Retorna datos con tipos convertidos (Floor, UserLevel a int, booleanos convertidos)
-   * # Categories transformadas a array de objetos {Id, Name}
-   * # SessionType agrupado en objeto estructurado
-   *
-   * Transformaciones realizadas:
-   * - Floor, UserLevel: conversión a entero
-   * - ValidatedEmail, ValidatedPhone, TwoFactorAuth, IsAdmin: conversión a booleano
-   * - Categories: transformación de string "id1:name1,id2:name2" a array de objetos {Id, Name}
-   * - SessionType: agrupación de hasVirtual e hasInPerson en objeto {Virtual, InPerson}
-   *
-   * @note El filtrado de campos sensibles se realiza en el controller según scope de acceso
    **/
   private function _getUserGeneric($user){
     if (empty($user)) {
@@ -579,19 +574,6 @@ class User {
    * @param  array $users: array de usuarios obtenidos de la base de datos
    * @param  int $total: cantidad total de registros disponibles en la base de datos
    * @return object: objeto con propiedades 'data' (array de usuarios normalizados) y 'rows' (información de paginación)
-   *
-   * @example
-   * $result = $this->_getUserGenericMulti($usersData, 150);
-   * # Retorna {data: [...], rows: {total: 150, fetched: 20}}
-   * # Con tipos convertidos y estructuras agrupadas
-   *
-   * Transformaciones realizadas:
-   * - Floor, UserLevel: conversión a entero
-   * - ValidatedEmail, ValidatedPhone, TwoFactorAuth, IsAdmin: conversión a booleano
-   * - Categories: transformación de string "id1:name1,id2:name2" a array de objetos {Id, Name}
-   * - SessionType: agrupación de hasVirtual e hasInPerson en objeto {Virtual, InPerson}
-   *
-   * @note El filtrado de campos sensibles se realiza en el controller según scope de acceso
    **/
   private function _getUserGenericMulti($users, $total){
     $users = array_map(function ($e){

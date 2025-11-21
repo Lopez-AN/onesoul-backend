@@ -21,7 +21,7 @@ return function (App $app) {
 	$offeringController = new OfferingController($offering);
 
   $app->get('/offerings', [$offeringController, 'getOfferings']);
-  $app->get('/categories/{categoryID}/offerings', [$offeringController, 'getOfferingsByCategoryId']);
+  $app->get('/categories/{categoryID}/offerings', [$offeringController, 'getOfferingsByCategory']);
   $app->get('/users/{userID}/offerings', [$offeringController, 'getOfferingsByUserId']);
   $app->get('/search/offerings', [$offeringController, 'searchOfferings']);
   $app->get('/offerings/{id}', [$offeringController, 'getOfferingById']);
