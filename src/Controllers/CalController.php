@@ -103,7 +103,7 @@ class CalController{
 
       # ---- BORRADO WEBHOOK ----
       if($webhook !== null){ # Si tiene webhook registrado procedo
-        $accessToken = $this -> _refreshCalUserToken($response, $calUserID, $refreshToken, $accessToken);
+        $accessToken = $this -> _refreshCalUserToken($response, $refreshToken, $accessToken);
         # Si tengo un access token valido procedo a borrar el webhook
         if($accessToken){
           $headers = [
@@ -179,7 +179,19 @@ class CalController{
       $userID = $payload->uid; # ID del usuario onesoul
       $redirect = $payload->redirect; # url del frontend a donde debe redirigir luego de autenticar
 
-      # 1) Obtener los token del usuario
+      # 1) Obtengo la info del usuario
+      # --------------------------------------------
+      $user = $this->user->getUserById($userID);
+      if(!$user){
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "USER_NOT_FOUND",
+            "desc" => "No user associated with this Cal.com account was found"
+          ]
+        ]);
+      }
+
+      # 2) Obtener los token del usuario
       # --------------------------------------------
       $clientId = $GLOBALS['config']['cal']['client_id'];
       $secret = $GLOBALS['config']['cal']['secret'];
@@ -202,7 +214,7 @@ class CalController{
       }
 
       $refreshToken = $result->response->refresh_token;
-      $accessToken = $this -> _refreshCalUserToken($response, $calUserID, $refreshToken);
+      $accessToken = $this -> _refreshCalUserToken($response, $refreshToken);
       if(!$accessToken){
         return $response->withStatus(401)->withJson([
           "error" => [
@@ -212,13 +224,21 @@ class CalController{
         ]);
       }
 
-      # 2) Obtener los datos del usuario
+      # 3) Actualizar metadatos Cal.com
       # --------------------------------------------
-      $headers = [
-        "Authorization: Bearer $accessToken"
-      ];
+      $result = $this -> _updateCalUser($response, $accessToken, $user);
+      if(!$result->valid){
+        return $result->response;
+      }
 
-      $result = $this->_calRequest($response, "GET", "api", "/v2/event-types", $headers);
+      # 4) Chequear schedules y event-types
+      # --------------------------------------------
+      $result = $this -> _checkUserSchedule($response, $accessToken);
+      if(!$result->valid){
+        return $result->response;
+      }
+
+      $result = $this -> _checkUserEventTypes($response, $accessToken);
       if(!$result->valid){
         return $result->response;
       }
@@ -237,15 +257,20 @@ class CalController{
       $bookerUrl = $result->response->data->eventTypeGroups[0]->bookerUrl;
       $slug = $result->response->data->eventTypeGroups[0]->profile->slug;
       $eventTypes = $result->response->data->eventTypeGroups[0]->eventTypes;
-      $schedulingUrl = "$bookerUrl/$slug/30min";
+      $schedulingUrl = "$bookerUrl/$slug";
 
       # Guardo el usuario cal.com en la base
       $this->cal->saveCalUser(
         $calUserID, $userID, $accessToken, $refreshToken, $slug, $schedulingUrl, $timeZone
       );
 
-      # 3) Genero los webhook
+      # 5) Genero los webhook
       # --------------------------------------------
+
+      $headers = [
+        "Authorization: Bearer $accessToken"
+      ];
+
       # Consulto webhooks existentes
       $result = $this->_calRequest($response, "GET", "api", "/v2/webhooks", $headers);
       if(!$result->valid){
@@ -296,7 +321,6 @@ class CalController{
       ]);
     }
   }
-
 
   /**
    * Verifica el estado de vinculación de un usuario con Cal.com
@@ -352,7 +376,7 @@ class CalController{
 
       # Si no lo encontro consultar al usuario con sus tokens
       # -----------------------------------------
-      $accessToken = $this -> _refreshCalUserToken($response, $calUserID, $refreshToken, $accessToken);
+      $accessToken = $this -> _refreshCalUserToken($response, $refreshToken, $accessToken);
       # Si no se puede consultar al usuario por token lo doy de baja ya que esta inaccesible
       if(!$accessToken){
         $this->cal->deleteCalUser($calUserID);
@@ -519,12 +543,16 @@ class CalController{
    * Refresca el access token OAuth con Cal.com
    * Valida y renueva tokens cuando expiran usando refresh token
    * @param Response $response: objeto de respuesta (para requests)
-   * @param int $calUserID: ID del usuario Cal.com
    * @param string $refreshToken: token para renovación
    * @param string|bool $accessToken: token actual (opcional, por defecto false)
    * @return string|bool: token de acceso renovado o false si falla
    **/
-  private function _refreshCalUserToken($response, $calUserID, $refreshToken, $accessToken = false){
+  private function _refreshCalUserToken($response, $refreshToken, $accessToken = false){
+    $calUserID = $this -> _getUserFromToken($refreshToken);
+    if(!$calUserID){
+      return false;
+    }
+
     # Si se proporciono token se verifica su validez
     if($accessToken){
       # Extraigo la expiracion del access_token
@@ -535,7 +563,7 @@ class CalController{
         $headers = [
           "Authorization: Bearer ".$accessToken
         ];
-        $result = $this->_calRequest($response, "GET", "app", "/api/v2/me", $headers);
+        $result = $this->_calRequest($response, "GET", "api", "/v2/me", $headers);
         if($result->valid){ # Si se acepto el token no hace falta refrescarlo
           return $accessToken;
         }
@@ -565,6 +593,140 @@ class CalController{
       }
       return false;
     }
+  }
+
+  /**
+   * Busca si el usuario tiene un schedule de OneSoul asignado
+   * @param Response $response: objeto de respuesta (para retornar errores)
+   * @param string $accessToken: token para acceder a la API del usuario
+   * @return object: {valid: bool, response: Response|object}
+   **/
+  private function _checkUserSchedule($response, $accessToken){
+    $headers = [
+      "Authorization: Bearer $accessToken",
+      "Content-Type: application/json"
+    ];
+
+    $result = $this->_calRequest($response, "GET", "api", "/v2/schedules", $headers);
+    if(!$result->valid){
+      return $result;
+    }
+    $schedules = $result;
+
+    $exists = in_array('OneSoul', array_column($result->response->data, 'name'));
+    if(!$exists){
+      $result = $this->_calRequest($response, "POST", "api", "/v2/schedules", $headers, json_encode([
+        "name" => "OneSoul",
+        "timeZone" => "America/Argentina/Buenos_Aires",
+        "isDefault" => true
+      ]));
+      if(!$result->valid){
+        return $result;
+      }
+
+      $events = $this->_calRequest($response, "GET", "api", "/v2/event-types", $headers);
+      if(!$result->valid){
+        return $result;
+      }
+      $schedules = $result->response;
+    }
+
+    return (object)["valid" => true, "response" => $schedules];
+  }
+
+  /**
+   * Busca si el usuario tiene los event-types de OneSoul asignado
+   * @param Response $response: objeto de respuesta (para retornar errores)
+   * @param string $accessToken: token para acceder a la API del usuario
+   * @return object: {valid: bool, response: Response|object}
+   **/
+  private function _checkUserEventTypes($response, $accessToken){
+    $headers = [
+      "Authorization: Bearer $accessToken",
+      "Content-Type: application/json"
+    ];
+
+    $result = $this->_calRequest($response, "GET", "api", "/v2/event-types", $headers);
+    if(!$result->valid){
+      return $result;
+    }
+    $events = $result;
+
+    # 30min
+    $types = [[30, '30 minutos'], [60, '1 hora'], [90, '1 hora y media'],
+      [120, '2 horas'], [150, '2 horas y media'], [180, '3 horas'], [210, '3 horas y media'],
+      [240, '4 horas'], [270, '4 horas y media'], [300, '5 horas']];
+
+    $eventCreated = false; # Indica si se creo un evento para volver a consultar la API
+    foreach($types as $t){
+      if(!empty($result->response->data->eventTypeGroups)){
+        $slugs = array_column($result->response->data->eventTypeGroups[0]->eventTypes, 'slug');
+      }
+      if(empty($result->response->data->eventTypeGroups) || !in_array("onesoul{$t[0]}min", $slugs)){
+        $result = $this->_calRequest($response, "POST", "api", "/v2/event-types", $headers, json_encode([
+          "length" => $t[0],
+          "title" => "Sesión OneSoul de {$t[1]}",
+          "slug" => "onesoul{$t[0]}min",
+          "bookingFields" => [
+            [
+              "type" => "notes",
+              "required" => false,
+              "label" => "Comentario opcional"
+            ]
+          ],
+          "disableGuests" => true
+        ]));
+        if(!$result->valid){
+          return $result;
+        }
+      }
+      $eventCreated = true;
+    }
+
+    if($eventCreated){
+      $result = $this->_calRequest($response, "GET", "api", "/v2/event-types", $headers);
+      if(!$result->valid){
+        return $result;
+      }
+      $events = $result->response;
+    }
+
+    return (object)["valid" => true, "response" => $events];
+  }
+
+  /**
+   * Actualiza los datos del user de Cal.com
+   * @param Response $response: objeto de respuesta (para retornar errores)
+   * @param string $accessToken: token para acceder a la API del usuario
+   * @param object $user: datos del usuario de OneSoul
+   * @return object: {valid: bool, response: Response|object}
+   **/
+  private function _updateCalUser($response, $accessToken, $user){
+    $headers = [
+      "Authorization: Bearer $accessToken",
+      "Content-Type: application/json"
+    ];
+
+    return $this->_calRequest($response, "PATCH", "api", "/v2/me", $headers, json_encode([
+      "name" => $user->DisplayName ?? $user['UserName'],
+      "timeFormat" => 24,
+      "weekStart" => "Monday",
+      "timeZone" => "America/Argentina/Buenos_Aires",
+      "locale" => "es",
+      "avatarUrl" => $user['ImgURL'],
+      "bio" => $user['ShortDescription']
+    ]));
+  }
+
+  /**
+   * Obtiene el ID de usuario de Cal.com a partir de un token
+   * @param string $url: URL destino
+   * @return int|null: ID del usuario de Cal.com o null si hubo un error
+   **/
+  private function _getUserFromToken($token){
+    [$_, $payload] = explode(".", $token);
+    $r = json_decode(base64_decode($payload ?? ""));
+    return $r->userId ?? null;
   }
 
   /**
