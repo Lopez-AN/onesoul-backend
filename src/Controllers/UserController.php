@@ -487,12 +487,12 @@ class UserController{
       $userID = $jwt->data -> UserID;
       $user = $this->user->getUserById($userID);
       if (empty($user['ReferralCode'])) {
-        return [
+        return $response->withStatus(404)->withJson([
           "error" => [
             "code" => "USER_NOT_FOUND",
             "desc" => "Could not retrieve referral code for the user"
           ]
-        ];
+        ]);
       }
 
       $result = $this->user->inviteByEmail($user['UserName'], $user['ReferralCode'], $email, $subDomain);

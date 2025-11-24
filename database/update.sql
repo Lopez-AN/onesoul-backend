@@ -241,3 +241,9 @@ CALL sp_gen_audit_trigger(
     'UserID',
     ''
 );
+
+ALTER TABLE `Offerings`
+	ADD COLUMN `Price` FLOAT NULL DEFAULT NULL COMMENT 'Precio del servicio' AFTER `ShortDescription`,
+	ADD COLUMN `SessionType` ENUM('in-person','virtual','both') NULL DEFAULT NULL COMMENT 'Modalidad del servicio' COLLATE 'utf8mb4_unicode_ci' AFTER `Price`,
+	ADD COLUMN `Conditions` TEXT NULL DEFAULT NULL COMMENT 'Condiciones del servicio' COLLATE 'utf8mb4_unicode_ci' AFTER `SessionType`,
+	ADD COLUMN `Duration` INT(11) NULL DEFAULT NULL COMMENT 'Duración del servicio en minutos' AFTER `Conditions`

@@ -13,6 +13,16 @@ class Offering {
     $this->db = $db;
   }
 
+  /**
+   * Obtiene todas las publicaciones con paginación
+   *
+   * Retorna publicaciones activas con información del autor, media, FAQs y calificaciones.
+   * Incluye detalles completos de images, videos y preguntas frecuentes.
+   *
+   * @param  object $paginator: objeto con limit y offset para paginación
+   * @return object: { data: [], rows: { total: int, fetched: int } }
+   * @throws DatabaseException
+   **/
   public function getOfferings($paginator) {
     $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*,
       u.UserID AS author_UserID,
@@ -51,26 +61,6 @@ class Offering {
           'Answer', f.Answer
         )
       ) FROM OfferingsFaqs AS f WHERE f.OfferingID = o.OfferingID) AS Faqs,
-      -- Subconsulta para packages
-      (SELECT JSON_ARRAYAGG(
-        JSON_OBJECT(
-          'Package', p.Package,
-          'Price', p.Price,
-          'Description', p.Description,
-          'Conditions', p.Conditions,
-          'SessionType', p.SessionType
-        )
-      ) FROM OfferingsPackages AS p WHERE p.OfferingID = o.OfferingID) AS Packages,
-      -- Subconsulta para locations
-      (SELECT JSON_ARRAYAGG(
-        JSON_OBJECT(
-          'LocationID', l.LocationID,
-          'CountryCode', l.CountryCode,
-          'CountryName', c.CountryName,
-          'State', l.State,
-          'City', l.City
-        )
-      ) FROM OfferingLocations AS l WHERE l.OfferingID = o.OfferingID) AS Locations,
       ROUND(AVG(r.Rating),2) AS Rating,
       COUNT(DISTINCT r.ReviewID) AS TotalReviews,
       COUNT(DISTINCT b.BookingID) as Bookings
@@ -79,7 +69,6 @@ class Offering {
       LEFT JOIN Reviews AS r ON o.OfferingID = r.OfferingID
       LEFT JOIN Reviews AS ru ON u.UserID = ru.SeekerID
       LEFT JOIN Bookings AS b ON b.OfferingID = o.OfferingID AND b.LastBookingEvent IN ('completed', 'rated')
-      LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
       LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode
       GROUP BY o.OfferingID
       ORDER BY o.OfferingID
@@ -96,10 +85,13 @@ class Offering {
   /**
    * Busca publicaciones por término de búsqueda con paginación
    *
+   * Busca en título, descripción, descripción corta y tags. Retorna solo publicaciones
+   * con estado 'Active' que coincidan con el término de búsqueda.
+   *
    * @param  object $paginator: objeto con limit y offset
    * @param  string $query: término(s) de búsqueda
    * @return object: { data: [], rows: { total: int, fetched: int } }
-   *
+   * @throws DatabaseException
    **/
   public function searchOfferings($paginator, $query) {
     $searchQuery = "%$query%";
@@ -140,32 +132,14 @@ class Offering {
           'Answer', f.Answer
         )
       ) FROM OfferingsFaqs f WHERE f.OfferingID = o.OfferingID) AS Faqs,
-      -- Subconsulta para packages
-      (SELECT JSON_ARRAYAGG(
-        JSON_OBJECT(
-          'Package', p.Package,
-          'Price', p.Price,
-          'Description', p.Description,
-          'Conditions', p.Conditions,
-          'SessionType', p.SessionType
-        )
-      ) FROM OfferingsPackages p WHERE p.OfferingID = o.OfferingID) AS Packages,
-      -- Subconsulta para locations
-      (SELECT JSON_ARRAYAGG(
-        JSON_OBJECT(
-          'LocationID', l.LocationID,
-          'CountryCode', l.CountryCode,
-          'CountryName', c.CountryName,
-          'State', l.State,
-          'City', l.City
-        )
-      ) FROM OfferingLocations l WHERE l.OfferingID = o.OfferingID) AS Locations,
-      ROUND(AVG(r.Rating),2) as Rating
+      ROUND(AVG(r.Rating),2) as Rating,
+      COUNT(DISTINCT r.ReviewID) AS TotalReviews,
+      COUNT(DISTINCT b.BookingID) as Bookings
       FROM Offerings AS o
       INNER JOIN Users AS u ON u.UserID = o.UserID
       LEFT JOIN Reviews as r ON o.OfferingID = r.OfferingID
       LEFT JOIN Reviews as ru ON u.UserID = ru.SeekerID
-      LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
+      LEFT JOIN Bookings AS b ON b.OfferingID = o.OfferingID AND b.LastBookingEvent IN ('completed', 'rated')
       LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode
       WHERE (o.Title LIKE ? OR o.Description LIKE ?
       OR o.ShortDescription LIKE ? OR o.Tags LIKE ?)
@@ -183,6 +157,16 @@ class Offering {
     return $this -> _getOfferingsGenericMulti($offerings, $total['total']);
   }
 
+  /**
+   * Obtiene una publicación por su ID
+   *
+   * Retorna información completa de la publicación incluyendo autor, media, FAQs,
+   * calificaciones y número total de bookings.
+   *
+   * @param  int $id: ID de la publicación (OfferingID)
+   * @return array|false: datos de la publicación normalizados o false si no existe
+   * @throws DatabaseException
+   **/
   public function getOfferingById($id) {
     $stmt = $this->db->prepare("SELECT o.*,
     u.UserID AS author_UserID,
@@ -221,26 +205,6 @@ class Offering {
         'Answer', f.Answer
       )
     ) FROM OfferingsFaqs AS f WHERE f.OfferingID = o.OfferingID) AS Faqs,
-    -- Subconsulta para packages
-    (SELECT JSON_ARRAYAGG(
-      JSON_OBJECT(
-        'Package', p.Package,
-        'Price', p.Price,
-        'Description', p.Description,
-        'Conditions', p.Conditions,
-        'SessionType', p.SessionType
-      )
-    ) FROM OfferingsPackages AS p WHERE p.OfferingID = o.OfferingID) AS Packages,
-    -- Subconsulta para locations
-    (SELECT JSON_ARRAYAGG(
-      JSON_OBJECT(
-        'LocationID', l.LocationID,
-        'CountryCode', l.CountryCode,
-        'CountryName', c.CountryName,
-        'State', l.State,
-        'City', l.City
-      )
-    ) FROM OfferingLocations AS l WHERE l.OfferingID = o.OfferingID) AS Locations,
     ROUND(AVG(r.Rating),2) AS Rating,
     COUNT(DISTINCT r.ReviewID) AS TotalReviews,
     COUNT(DISTINCT b.BookingID) as Bookings
@@ -249,7 +213,6 @@ class Offering {
     LEFT JOIN Reviews AS r ON o.OfferingID = r.OfferingID
     LEFT JOIN Reviews AS ru ON u.UserID = ru.SeekerID
     LEFT JOIN Bookings AS b ON b.OfferingID = o.OfferingID AND b.LastBookingEvent IN ('completed', 'rated')
-    LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
     LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode
     WHERE o.OfferingID = ?
     GROUP BY o.OfferingID");
@@ -262,12 +225,15 @@ class Offering {
 
 
   /**
-   * Busca publicaciones por categoria
+   * Obtiene publicaciones de una categoría específica con paginación
+   *
+   * Utiliza búsqueda recursiva de categorías para incluir subcategorías.
+   * Retorna solo publicaciones con estado 'Active'.
    *
    * @param  object $paginator: objeto con limit y offset
-   * @param  string $category: categoria a buscar
+   * @param  int $category: ID de la categoría (incluye subcategorías)
    * @return object: { data: [], rows: { total: int, fetched: int } }
-   *
+   * @throws DatabaseException
    **/
   public function getOfferingsByCategory($paginator, $category) {
     $stmt = $this->db->prepare("WITH RECURSIVE category_tree AS (
@@ -282,75 +248,52 @@ class Offering {
       INNER JOIN category_tree ct ON c.ParentCategoryID = ct.CategoryID
     )
     SELECT SQL_CALC_FOUND_ROWS
-      o.*,
-      u.UserID AS author_UserID,
-      u.DisplayName AS author_DisplayName,
-      u.FirstName AS author_FirstName,
-      u.LastName AS author_LastName,
-      u.UserName AS author_UserName,
-      ROUND(AVG(ru.Rating),2) AS author_Rating,
-      COUNT(DISTINCT ru.ReviewID) AS author_TotalReviews,
-      (SELECT URL FROM Media WHERE UserID = u.UserID LIMIT 1) AS author_ImgURL,
-      -- media_images
-      (SELECT JSON_ARRAYAGG(
-        JSON_OBJECT(
-          'Id', m.MediaID,
-          'Url', m.URL,
-          'Title', m.Title,
-          'Description', m.Description,
-          'Position', m.Position
-        )
-      ) FROM Media m
-      WHERE m.OfferingID = o.OfferingID AND m.MediaType = 'image') AS media_images,
-      -- media_videos
-      (SELECT JSON_ARRAYAGG(
-        JSON_OBJECT(
-          'Id', m.MediaID,
-          'Url', m.URL,
-          'Title', m.Title,
-          'Description', m.Description,
-          'Position', m.Position
-        )
-      ) FROM Media m
-      WHERE m.OfferingID = o.OfferingID AND m.MediaType = 'video') AS media_videos,
-      -- faqs
-      (SELECT JSON_ARRAYAGG(
-        JSON_OBJECT(
-          'Position', f.Position,
-          'Question', f.Question,
-          'Answer', f.Answer
-        )
-      ) FROM OfferingsFaqs f
-      WHERE f.OfferingID = o.OfferingID) AS Faqs,
-      -- packages
-      (SELECT JSON_ARRAYAGG(
-        JSON_OBJECT(
-          'Package', p.Package,
-          'Price', p.Price,
-          'Description', p.Description,
-          'Conditions', p.Conditions,
-          'SessionType', p.SessionType
-        )
-      ) FROM OfferingsPackages p
-      WHERE p.OfferingID = o.OfferingID) AS Packages,
-      -- locations
-      (SELECT JSON_ARRAYAGG(
-        JSON_OBJECT(
-          'LocationID', l.LocationID,
-          'CountryCode', l.CountryCode,
-          'CountryName', c.CountryName,
-          'State', l.State,
-          'City', l.City
-        )
-      ) FROM OfferingLocations l
-      WHERE l.OfferingID = o.OfferingID) AS Locations,
-      ROUND(AVG(r.Rating),2) as Rating
+    o.*,
+    u.UserID AS author_UserID,
+    u.DisplayName AS author_DisplayName,
+    u.FirstName AS author_FirstName,
+    u.LastName AS author_LastName,
+    u.UserName AS author_UserName,
+    ROUND(AVG(ru.Rating),2) AS author_Rating,
+    COUNT(DISTINCT ru.ReviewID) AS author_TotalReviews,
+    (SELECT URL FROM Media WHERE UserID = u.UserID LIMIT 1) AS author_ImgURL,
+    -- media_images
+    (SELECT JSON_ARRAYAGG(
+      JSON_OBJECT(
+        'Id', m.MediaID,
+        'Url', m.URL,
+        'Title', m.Title,
+        'Description', m.Description,
+        'Position', m.Position
+      )
+    ) FROM Media m
+    WHERE m.OfferingID = o.OfferingID AND m.MediaType = 'image') AS media_images,
+    -- media_videos
+    (SELECT JSON_ARRAYAGG(
+      JSON_OBJECT(
+        'Id', m.MediaID,
+        'Url', m.URL,
+        'Title', m.Title,
+        'Description', m.Description,
+        'Position', m.Position
+      )
+    ) FROM Media m
+    WHERE m.OfferingID = o.OfferingID AND m.MediaType = 'video') AS media_videos,
+    -- faqs
+    (SELECT JSON_ARRAYAGG(
+      JSON_OBJECT(
+        'Position', f.Position,
+        'Question', f.Question,
+        'Answer', f.Answer
+      )
+    ) FROM OfferingsFaqs f
+    WHERE f.OfferingID = o.OfferingID) AS Faqs,
+    ROUND(AVG(r.Rating),2) as Rating
     FROM Offerings AS o
     INNER JOIN category_tree ct ON ct.CategoryID = o.CategoryID
     INNER JOIN Users AS u ON u.UserID = o.UserID
     LEFT JOIN Reviews as r ON o.OfferingID = r.OfferingID
     LEFT JOIN Reviews as ru ON u.UserID = ru.SeekerID
-    LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
     LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode
     GROUP BY o.OfferingID
     ORDER BY o.OfferingID
@@ -365,6 +308,17 @@ class Offering {
     return $this -> _getOfferingsGenericMulti($offerings, $total['total']);
   }
 
+  /**
+   * Obtiene publicaciones de un usuario específico con paginación
+   *
+   * Retorna todas las publicaciones creadas por un usuario, incluyendo
+   * información del autor, media, FAQs y calificaciones.
+   *
+   * @param  object $paginator: objeto con limit y offset
+   * @param  int $userID: ID del usuario (propietario de las publicaciones)
+   * @return object: { data: [], rows: { total: int, fetched: int } }
+   * @throws DatabaseException
+   **/
   public function getOfferingsByUserId($paginator, $userID) {
     $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*,
       u.UserID AS author_UserID,
@@ -403,26 +357,6 @@ class Offering {
           'Answer', f.Answer
         )
       ) FROM OfferingsFaqs AS f WHERE f.OfferingID = o.OfferingID) AS Faqs,
-      -- Subconsulta para packages
-      (SELECT JSON_ARRAYAGG(
-        JSON_OBJECT(
-          'Package', p.Package,
-          'Price', p.Price,
-          'Description', p.Description,
-          'Conditions', p.Conditions,
-          'SessionType', p.SessionType
-        )
-      ) FROM OfferingsPackages AS p WHERE p.OfferingID = o.OfferingID) AS Packages,
-      -- Subconsulta para locations
-      (SELECT JSON_ARRAYAGG(
-        JSON_OBJECT(
-          'LocationID', l.LocationID,
-          'CountryCode', l.CountryCode,
-          'CountryName', c.CountryName,
-          'State', l.State,
-          'City', l.City
-        )
-      ) FROM OfferingLocations AS l WHERE l.OfferingID = o.OfferingID) AS Locations,
       ROUND(AVG(r.Rating),2) AS Rating,
       COUNT(DISTINCT r.ReviewID) AS TotalReviews,
       COUNT(DISTINCT b.BookingID) as Bookings
@@ -431,7 +365,6 @@ class Offering {
       LEFT JOIN Reviews AS r ON o.OfferingID = r.OfferingID
       LEFT JOIN Reviews AS ru ON u.UserID = ru.SeekerID
       LEFT JOIN Bookings AS b ON b.OfferingID = o.OfferingID AND b.LastBookingEvent IN ('completed', 'rated')
-      LEFT JOIN OfferingLocations AS ol ON o.OfferingID = ol.OfferingID
       LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode
       WHERE o.UserID = ?
       GROUP BY o.OfferingID
@@ -448,12 +381,14 @@ class Offering {
 
 
   /**
-   * Procesa y normaliza datos de una publicacion individual
+   * Procesa y normaliza datos de una publicación individual
    *
-   * Realiza conversiones de tipos de datos y agrupa información relacionada
+   * Realiza conversiones de tipos de datos, decodificación de JSON de media y FAQs,
+   * y agrupa información del autor. Los datos retornados no están filtrados.
    *
-   * @param  array|null $offering: datos del publicacion obtenidos de la base de datos o null
-   * @return array|false: datos del publicacion normalizados o false si no existe
+   * @param  array|null $offering: datos de la publicación obtenidos de la BD o null
+   * @return array|false: datos de la publicación normalizados o false si no existe
+   * @access private
    **/
   private function _getOfferingGeneric($offering){
     if (empty($offering)) {
@@ -480,16 +415,6 @@ class Offering {
     $faqs = @json_decode($offering['Faqs'], true);
     if($faqs){
       $offering['Faqs'] = $faqs;
-    }
-
-    $packages = @json_decode($offering['Packages'], true);
-    if($packages){
-      $offering['Packages'] = $packages;
-    }
-
-    $locations = @json_decode($offering['Locations'], true);
-    if($locations){
-      $offering['Locations'] = $locations;
     }
 
     $offering['Author'] = [
@@ -522,15 +447,16 @@ class Offering {
   /**
    * Procesa y normaliza múltiples registros de publicaciones
    *
-   * Realiza conversiones de tipos de datos y agrupa información relacionada
-   * para un conjunto de publicaciones.
+   * Realiza conversiones de tipos de datos, decodificación de JSON y agrupa
+   * información para un conjunto de publicaciones. Retorna en formato paginado.
    *
-   * @param  array $offerings: array de publicaciones obtenidos de la base de datos
-   * @param  int $total: cantidad total de registros disponibles en la base de datos
-   * @return object: objeto con propiedades 'data' (array de publicaciones normalizados) y 'rows' (información de paginación)
+   * @param  array $offerings: array de publicaciones obtenidas de la BD
+   * @param  int $total: cantidad total de registros disponibles
+   * @return object: { data: [], rows: { total: int, fetched: int } }
+   * @access private
    **/
   private function _getOfferingsGenericMulti($offerings, $total){
-    // Desagrupo los json traidos por MYSQL para armar el JSON anidado de respuesta
+    # Desagrupo los json traidos por MYSQL para armar el JSON anidado de respuesta
     $offerings = array_map(function ($e) {
       $e['Media'] = [
         'Images' => [],
@@ -552,16 +478,6 @@ class Offering {
       $faqs = @json_decode($e['Faqs'], true);
       if($faqs){
         $e['Faqs'] = $faqs;
-      }
-
-      $packages = @json_decode($e['Packages'], true);
-      if($packages){
-        $e['Packages'] = $packages;
-      }
-
-      $locations = @json_decode($e['Locations'], true);
-      if($locations){
-        $e['Locations'] = $locations;
       }
 
       $e['Author'] = [
@@ -600,14 +516,26 @@ class Offering {
     ];
   }
 
+  /**
+   * Crea una nueva publicación con FAQs asociadas
+   *
+   * Crea una publicación con estado 'Pending' que requiere aprobación del admin.
+   * Inserta además todas las FAQs asociadas en una transacción atómica.
+   *
+   * @param  array $data: datos de la publicación (Title, ShortDescription, Description, etc)
+   * @return array: datos de la publicación creada normalizados
+   * @throws DatabaseException
+   **/
   public function createOffering($data) {
     try {
       $this->db->beginTransaction(); # Iniciar transacción
 
-      $stmt = $this->db->prepare("INSERT INTO Offerings (Title, ShortDescription, Description, CategoryID, UserID,
-        Status, CreationDate, IsActive, Currency, Tags, SKU, Stock, ServiceType)
+      $stmt = $this->db->prepare("INSERT INTO Offerings (Title, ShortDescription,
+        Description, CategoryID, UserID, Status, CreationDate, IsActive, Currency,
+        Tags, SKU, Stock, ServiceType, Price, SessionType, Conditions, Duration)
         VALUES (:Title, :ShortDescription, :Description, :CategoryID, :UserID, :Status,
-        :CreationDate, 0, :Currency, :Tags, :SKU, :Stock, :ServiceType)");
+        :CreationDate, 0, :Currency, :Tags, :SKU, :Stock, :ServiceType,
+        :Price, :SessionType, :Conditions, :Duration)");
 
       $stmt->execute([
         ':Title' => $data['Title'],
@@ -621,19 +549,13 @@ class Offering {
         ':Tags' => is_array($data['Tags']) ? implode(",", $data['Tags']) : $data['Tags'],
         ':SKU' => $data['SKU'] ?? null,
         ':Stock' => $data['Stock'] ?? null,
-        ':ServiceType' => $data['ServiceType']]
-      );
+        ':ServiceType' => $data['ServiceType'],
+        ':Price' => $data['Price'],
+        ':SessionType' => $data['SessionType'],
+        ':Conditions' => $data['Conditions'],
+        ':Duration' => $data['Duration']
+      ]);
       $id = $this->db->lastInsertId();
-
-      // Insertar ubicaciones si existen
-      if (!empty($data['Locations']) && is_array($data['Locations'])) {
-        $stmt = $this->db->prepare("INSERT INTO OfferingLocations (OfferingID, CountryCode, State, City)
-          VALUES (?, ?, ?, ?)");
-
-        foreach ($data['Locations'] as $location) {
-          $stmt->execute([$id, $location['CountryCode'], $location['State'], $location['City']]);
-        }
-      }
 
       if (isset($data['Faqs'])) {
         foreach ($data['Faqs'] as $faq) {
@@ -643,30 +565,8 @@ class Offering {
         }
       }
 
-      // Gestionar los paquetes, si están presentes en los datos
-      if (isset($data['Packages']) && is_array($data['Packages'])) {
-        // Eliminar los paquetes existentes para esta oferta
-        $stmt = $this->db->prepare("DELETE FROM OfferingsPackages WHERE OfferingID = ?");
-        $stmt->execute([$id]);
-
-        // Insertar los nuevos paquetes
-        $stmt = $this->db->prepare("INSERT INTO OfferingsPackages (OfferingID, Package, Price, Description, Conditions, SessionType)
-                VALUES (:id, :package, :price, :description, :conditions, :sessionType)"
-        );
-
-        foreach ($data['Packages'] as $package) {
-          $stmt->execute([
-            ':id' => $id,
-            ':package' => $package['Package'],
-            ':price' => $package['Price'],
-            ':description' => $package['Description'],
-            ':conditions' => $package['Conditions'],
-            ':sessionType' => $package['SessionType']
-          ]);
-        }
-      }
-
-      $offering = $this->getOfferingById($id);
+      $offering = $this->getOfferingById($id) ??
+        throw new DatabaseException("Failed to retrieve the created offering");
 
       $this->db->commit(); # Confirmo transacción
       return $offering;
@@ -676,6 +576,16 @@ class Offering {
     }
   }
 
+  /**
+   * Aprueba una publicación cambiando su estado a 'Active'
+   *
+   * Cambia el estado de la publicación a 'Active', marca IsActive = 1 y Approved = 1.
+   * Solo debe ser ejecutado por administradores.
+   *
+   * @param  int $id: ID de la publicación
+   * @return void
+   * @throws DatabaseException
+   **/
   public function approveOfferingById($id) {
     $stmt = $this->db->prepare("UPDATE Offerings
       SET Status = 'Active', IsActive = 1, Approved = 1
@@ -683,93 +593,42 @@ class Offering {
     $stmt->execute([$id]);
   }
 
-  public function updateOffering($id, $data)
-  {
-    if (empty($data)) {
-      return (object) [
-        "http_code" => 400,
-        "error" => [
-          "code" => "INVALID_PARAMETERS",
-          "desc" => "Parameters are missing or invalid"
-        ]
-      ];
-    }
-
+  /**
+   * Actualiza los datos de una publicación existente
+   *
+   * Actualiza campos permitidos y si se modifican ciertos campos (Title, Description, Faqs, Tags),
+   * automáticamente cambia el estado a 'Pending' para que sea re-aprobada.
+   * Actualiza también las FAQs si se incluyen.
+   *
+   * @param  int $id: ID de la publicación
+   * @param  array $data: array asociativo con campos a actualizar
+   * @return array: datos de la publicación actualizada normalizados
+   * @throws DatabaseException
+   **/
+  public function updateOffering($id, $data) {
     try {
-      // Verificar si la oferta existe
-      $stmt = $this->db->prepare("SELECT * FROM Offerings WHERE OfferingID = :id AND Status != 'Deleted'");
-      $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-      $stmt->execute();
-      $offering = $stmt->fetch();
-      if (!$offering) {
-        throw new NotFoundException("The specified offering does not exist");
-      }
+      $this->db->beginTransaction(); # Iniciar transacción
 
-      // Lista de campos permitidos para actualizar
-      $allowedFields = [
-        'Title',
-        'ShortDescription',
-        'Description',
-        'CategoryID',
-        'Status',
-        'Currency',
-        'Tags',
-        'SKU',
-        'Stock',
-        'ServiceType'
-      ];
-
-      // Filtrar faqs y packages antes del ciclo de validación
-      $faqs = $data['Faqs'] ?? null;
-      $packages = $data['Packages'] ?? null;
-      $locations = $data['Locations'] ?? null;
-      unset($data['Faqs'], $data['Packages'], $data['Locations']);
-
-      // Construcción dinámica de la consulta
+      # Construcción dinámica de la consulta
       $fields = [];
       foreach ($data as $key => $value) {
-        if (in_array($key, $allowedFields)) {
-          $fields[] = "$key = :$key";
-        } else {
-          return (object) [
-            "http_code" => 400,
-            "error" => [
-              "code" => "INVALID_UPDATE_KEY",
-              "desc" => "Key '$key' is not allowed to be updated"
-            ]
-          ];
-        }
+        $fields[] = "$key = :$key";
       }
 
-      if (empty($fields) && !$faqs && !$packages && !$locations) {
-        return (object) [
-          "http_code" => 400,
-          "error" => [
-            "code" => "NO_FIELDS_TO_UPDATE",
-            "desc" => "No valid fields to update"
-          ]
-        ];
-      }
-
-      // Verificar si se han modificado campos que requieren cambiar el estado
-      $updateStatusRequired = false;
-      if (
-        isset($data['Title']) || isset($data['ShortDescription']) || isset($data['Description']) ||
-        isset($faqs['Title']) || isset($faqs['Description']) || isset($packages['Question']) || isset($faqs['Answer'])
-      ) {
-        $updateStatusRequired = true;
-      }
-
-      // Modificación de la fecha de modificación
-      $modificationDate = date("YmdHis");
-      $fields[] = "ModificationDate = :ModificationDate";  // Siempre agregar ModificationDate
-
-      // Construir la consulta SQL de actualización
+      # Verificar si se han modificado campos que requieren cambiar el estado
+      $updateStatusRequired = isset($data['Title']) || isset($data['ShortDescription'])
+        || isset($data['Description']) || isset($data['Faqs'])
+        || isset($data['Description']) || isset($data['Tags']);
       $statusQuery = $updateStatusRequired ? ", Status = 'Pending', IsActive = 0, Approved = 0" : "";
-      $sql = "UPDATE Offerings SET " . implode(", ", $fields) . $statusQuery . " WHERE OfferingID = :id";
-      $stmt = $this->db->prepare($sql);
 
-      // Vincular los parámetros
+      # Siempre agregar ModificationDate
+      $modificationDate = date("YmdHis");
+      $fields[] = "ModificationDate = :ModificationDate";
+
+      # Si cambian ciertos campos hay que volver a autorizar
+      $stmt = $this->db->prepare("UPDATE Offerings SET " . implode(", ", $fields) . $statusQuery . " WHERE OfferingID = :id");
+
+      # Vincular los parámetros
       foreach ($data as $key => $value) {
         if (in_array($key, $allowedFields)) {
           $stmt->bindValue(":$key", $value, $value === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
@@ -780,267 +639,271 @@ class Offering {
       $stmt->bindValue(':ModificationDate', $modificationDate, PDO::PARAM_STR);
       $stmt->execute();
 
-      if ($faqs !== null) {
-        $this->updateOfferingFaqs($id, $faqs);
-      }
-      if ($packages !== null) {
-        $this->updateOfferingPackages($id, $packages);
-      }
-      if ($locations !== null) {
-        $this->updateOfferingLocations($id, $locations);
+      if ($faqs !== null && is_array($faqs)) {
+        $this->_updateOfferingFaqs($id, $faqs);
       }
 
-      return $this->getOfferingById($id);
+      $offering = $this->getOfferingById($id) ??
+        throw new DatabaseException("Failed to retrieve the updated offering");
+
+      $this->db->commit(); # Confirmo transacción
     } catch (\PDOException $e) {
+      $this->db->rollBack(); # Revierto en caso de error
       throw new DatabaseException($e->getMessage());
     }
   }
 
-  public function updateOfferingLocations($id, $locations)
-  {
-    // Si se recibe `locations`, eliminar las existentes y agregar las nuevas
-    if ($locations !== null &&  is_array($locations)) {
-      // Eliminar ubicaciones actuales
-      $stmt = $this->db->prepare("DELETE FROM OfferingLocations WHERE OfferingID = :id");
-      $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-      $stmt->execute();
-
-      // Insertar nuevas ubicaciones
-      $stmt = $this->db->prepare("INSERT INTO OfferingLocations (OfferingID, CountryCode, State, City)
-      VALUES (:id, :CountryCode, :State, :City)");
-
-      foreach ($locations as $location) {
-        $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-        $stmt->bindParam(':CountryCode', $location['CountryCode'], PDO::PARAM_STR);
-        $stmt->bindParam(':State', $location['State'], PDO::PARAM_STR);
-        $stmt->bindParam(':City', $location['City'], PDO::PARAM_STR);
-        $stmt->execute();
-      }
-    }
+  /**
+   * Elimina una publicación realizando soft delete
+   *
+   * Cambia el estado de la publicación a 'Deleted' e IsActive = 0.
+   * No elimina físicamente el registro de la BD.
+   *
+   * @param  int $id: ID de la publicación
+   * @return void
+   * @throws DatabaseException
+   **/
+  public function deleteOffering($id) {
+    $stmt = $this->db->prepare("UPDATE Offerings SET Status = 'Deleted', IsActive = 0
+      WHERE OfferingID = ?");
+    $stmt->execute([$id]);
   }
 
-  public function updateOfferingFaqs($id, $faqs)
-  {
-    if ($faqs !== null && is_array($faqs)) {
-      $stmt = $this->db->prepare("DELETE FROM OfferingsFaqs WHERE OfferingID = :id");
-      $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-      $stmt->execute();
-
-      $stmt = $this->db->prepare("INSERT INTO OfferingsFaqs (OfferingID, Position, Question, Answer)
-      VALUES (:id, :position, :question, :answer)");
-      foreach ($faqs as $faq) {
-        $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-        $stmt->bindParam(':position', $faq['Position'], PDO::PARAM_INT);
-        $stmt->bindParam(':question', $faq['Question'], PDO::PARAM_STR);
-        $stmt->bindParam(':answer', $faq['Answer'], PDO::PARAM_STR);
-        $stmt->execute();
-      }
-    }
+  /**
+   * Obtiene un archivo multimedia específico de una publicación
+   *
+   * Retorna información completa del archivo incluyendo ruta y URL.
+   *
+   * @param  int $id: ID de la publicación (OfferingID)
+   * @param  int $mediaID: ID del archivo multimedia
+   * @return array|false: datos del archivo o false si no existe
+   * @throws DatabaseException
+   **/
+  public function getMediaById($id, $mediaID) {
+    $stmt = $this->db->prepare("SELECT * FROM Media
+      WHERE MediaID = ? AND OfferingID = ?");
+    $stmt->execute([$mediaID, $id]);
+    return $stmt->fetch(PDO::FETCH_ASSOC);
   }
 
-  public function updateOfferingPackages($id, $packages)
-  {
-    if ($packages !== null && is_array($packages)) {
-      $stmt = $this->db->prepare("DELETE FROM OfferingsPackages WHERE OfferingID = :id");
-      $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-      $stmt->execute();
-
-      $stmt = $this->db->prepare("INSERT INTO OfferingsPackages (OfferingID, Package, Price, Description, Conditions, SessionType)
-      VALUES (:id, :package, :price, :description, :conditions, :sessionType)");
-      foreach ($packages as $package) {
-        $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-        $stmt->bindParam(':package', $package['Package'], PDO::PARAM_STR);
-        $stmt->bindParam(':price', $package['Price'], PDO::PARAM_STR);
-        $stmt->bindParam(':description', $package['Description'], PDO::PARAM_STR);
-        $stmt->bindParam(':conditions', $package['Conditions'], PDO::PARAM_STR);
-        $stmt->bindParam(':sessionType', $package['SessionType'], PDO::PARAM_STR);
-        $stmt->execute();
-      }
-    }
-  }
-
-  public function deleteOffering($id)
-  {
+  /**
+   * Agrega un archivo multimedia (imagen o video) a una publicación
+   *
+   * Inserta el archivo en la tabla Media con posicionamiento automático.
+   * La primera imagen se asigna a posición 0 automáticamente.
+   *
+   * @param  int $id: ID de la publicación (OfferingID)
+   * @param  string $title: título del archivo
+   * @param  string $description: descripción del archivo (opcional)
+   * @param  int $position: posición del archivo (se recalcula automáticamente)
+   * @param  string $fileURL: URL pública del archivo optimizado
+   * @param  string $filePath: ruta local completa del archivo
+   * @param  string $mediaType: tipo de archivo ('image' o 'video')
+   * @return void
+   * @throws DatabaseException
+   **/
+  public function createOfferingMedia($id, $title, $description, $position, $fileURL, $filePath, $mediaType) {
     try {
-      $stmt = $this->db->prepare("UPDATE Offerings SET Status = 'Deleted', IsActive = 0
-            WHERE OfferingID = :id");
-      $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-      $stmt->execute();
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
-  }
+      $this->db->beginTransaction(); # Iniciar transacción
 
-  public function getMediaById($id, $mediaID)
-  {
-    try {
-      $stmt = $this->db->prepare("SELECT * FROM Media
-            WHERE MediaID = :mediaID AND OfferingID = :id");
-      $stmt->bindParam(':mediaID', $mediaID, PDO::PARAM_INT);
-      $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-      $stmt->execute();
-      return $stmt->fetch(PDO::FETCH_ASSOC);
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
-  }
-
-  public function createOfferingMedia($id, $title, $description, $position, $fileURL, $filePath, $mediaType)
-  {
-    try {
-      // Verificar si ya existe una posición 0 asociada al OfferingID
-      $stmt = $this->db->prepare("SELECT COUNT(*) AS count FROM Media WHERE OfferingID = :id AND Position = 0 AND MediaType = 'image'");
-      $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-      $stmt->execute();
+      # Verificar si ya existe una posición 0 asociada al OfferingID
+      $stmt = $this->db->prepare("SELECT COUNT(*) AS count FROM Media
+        WHERE OfferingID = ? AND Position = 0 AND MediaType = 'image'");
+      $stmt->execute([$id]);
       $result = $stmt->fetch(PDO::FETCH_ASSOC);
 
-      // Asignar posición 0 si no existe ninguna imagen en esa posición
+      # Asignar posición 0 si no existe ninguna imagen en esa posición
       $position = ($result['count'] === 0 && $mediaType === 'image') ? 0 : null;
 
-      // Calcular la próxima posición si no es posición 0
+      # Calcular la próxima posición si no es posición 0
       if ($position === null) {
-        $stmt = $this->db->prepare("SELECT MAX(Position) AS max_position FROM Media WHERE OfferingID = :id");
-        $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-        $stmt->execute();
+        $stmt = $this->db->prepare("SELECT MAX(Position) AS max_position FROM Media WHERE OfferingID = ?");
+        $stmt->execute([$id]);
         $maxPosition = $stmt->fetch(PDO::FETCH_ASSOC)['max_position'];
         $position = $maxPosition !== null ? $maxPosition + 1 : 1;
       }
 
-      // Insertar en la tabla Media
+      # Insertar en la tabla Media
       $stmt = $this->db->prepare("INSERT INTO Media (`OfferingID`, `Title`, `Description`, `URL`, `Path`, `MediaType`, `Position`)
             VALUES (:id, :title, :description, :fileURL, :filePath, :mediaType, :position)");
 
-      $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-      $stmt->bindParam(':title', $title, PDO::PARAM_STR);
-      $stmt->bindParam(':description', $description, PDO::PARAM_STR);
-      $stmt->bindParam(':position', $position, PDO::PARAM_INT);
-      $stmt->bindParam(':fileURL', $fileURL, PDO::PARAM_STR);
-      $stmt->bindParam(':filePath', $filePath, PDO::PARAM_STR);
-      $stmt->bindParam(':mediaType', $mediaType, PDO::PARAM_STR);
-      $stmt->execute();
+      $stmt->execute([
+        ':id' => $id,
+        ':title' => $title,
+        ':description' => $description,
+        ':fileURL' => $fileURL,
+        ':filePath' => $filePath,
+        ':mediaType' => $mediaType,
+        ':position' => $position
+      ]);
+
+      $this->db->commit(); # Confirmo transacción
     } catch (\PDOException $e) {
+      $this->db->rollBack(); # Revierto en caso de error
       throw new DatabaseException($e->getMessage());
     }
   }
 
-  public function updateOfferingMedia($id, $title, $description, $position, $mediaID, $fileURL = false, $filePath = false, $mediaType = false)
-  {
+  /**
+   * Actualiza un archivo multimedia de una publicación
+   *
+   * Actualiza metadatos (title, description, position) y opcionalmente la URL y ruta del archivo.
+   * Si se actualiza cualquier campo, cambia el estado de la publicación a 'Pending'.
+   *
+   * @param  int $id: ID de la publicación (OfferingID)
+   * @param  string $title: nuevo título del archivo
+   * @param  string $description: nueva descripción del archivo
+   * @param  int $position: nueva posición del archivo
+   * @param  int $mediaID: ID del archivo multimedia
+   * @param  string|bool $fileURL: nueva URL del archivo o false si no se actualiza
+   * @param  string|bool $filePath: nueva ruta local del archivo o false si no se actualiza
+   * @param  string|bool $mediaType: nuevo tipo de archivo ('image'/'video') o false si no se actualiza
+   * @return void
+   * @throws DatabaseException
+   **/
+  public function updateOfferingMedia($id, $title, $description, $position, $mediaID, $fileURL = false, $filePath = false, $mediaType = false) {
     try {
-      // Diferente update según se adjuntó un archivo o no
+      $this->db->beginTransaction(); # Iniciar transacción
+
+      # Diferente update según se adjuntó un archivo o no
       if ($fileURL) {
-        // Actualización para Media con archivo
+        # Actualización para Media con archivo
         $stmt = $this->db->prepare("UPDATE Media
-                SET Title = :title, Description = :description, URL = :fileURL, Path = :filePath, MediaType = :mediaType,
-                Position = :position
-                WHERE MediaID = :mediaID AND OfferingID = :id");
-
-        $stmt->bindParam(':fileURL', $fileURL, PDO::PARAM_STR);
-        $stmt->bindParam(':filePath', $filePath, PDO::PARAM_STR);
-        $stmt->bindParam(':mediaType', $mediaType, PDO::PARAM_STR);
+          SET Title = :title, Description = :description, URL = :fileURL, Path = :filePath, MediaType = :mediaType,
+          Position = :position
+          WHERE MediaID = :mediaID AND OfferingID = :id");
+        $stmt->execute([
+          ':title' => $title,
+          ':description' => $description,
+          ':position' => $position,
+          ':mediaID' => $mediaID,
+          ':id' => $id,
+          ':fileURL' => $fileURL,
+          ':filePath' => $filePath,
+          ':mediaType' => $mediaType
+        ]);
       } else {
-        // Actualización para Media sin archivo
+        # Actualización para Media sin archivo
         $stmt = $this->db->prepare("UPDATE Media SET Title = :title, Description = :description, Position = :position
-                WHERE MediaID = :mediaID AND OfferingID = :id");
+          WHERE MediaID = :mediaID AND OfferingID = :id");
+        $stmt->execute([
+          ':title' => $title,
+          ':description' => $description,
+          ':position' => $position,
+          ':mediaID' => $mediaID,
+          ':id' => $id
+        ]);
       }
 
-      // Vínculo de los parámetros para Media
-      $stmt->bindParam(':title', $title, PDO::PARAM_STR);
-      $stmt->bindParam(':description', $description, PDO::PARAM_STR);
-      $stmt->bindParam(':position', $position, PDO::PARAM_INT);
-      $stmt->bindParam(':mediaID', $mediaID, PDO::PARAM_INT);
-      $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-
-      // Ejecutar la consulta
-      $stmt->execute();
-
-      // Verificar si es necesario actualizar el Offering
-      $updateStatusRequired = false;
-      if (isset($title) || isset($description) || isset($fileURL) || isset($filePath)) {
-        $updateStatusRequired = true;
-      }
-
-      // Modificación de la fecha de modificación
-      $modificationDate = date("YmdHis");
-      $fields = ["ModificationDate = :ModificationDate"]; // Siempre agregar ModificationDate
-
-      // Construir la consulta SQL de actualización para Offering
+      # Verificar si se han modificado campos que requieren cambiar el estado
+      $updateStatusRequired = isset($title) || isset($description) || isset($fileURL) || isset($filePath);
       $statusQuery = $updateStatusRequired ? ", Status = 'Pending', IsActive = 0, Approved = 0" : "";
-      $sql = "UPDATE Offerings SET " . implode(", ", $fields) . $statusQuery . " WHERE OfferingID = :id";
 
-      // Preparar la consulta de Offering
-      $stmt = $this->db->prepare($sql);
-      $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-      $stmt->bindValue(':ModificationDate', $modificationDate, PDO::PARAM_STR);
+      $stmt = $this->db->prepare("UPDATE Offerings SET ModificationDate = ? $statusQuery WHERE OfferingID = ?");
+      $stmt->execute([date("YmdHis"), $id]);
 
-      // Ejecutar la consulta de Offering
-      $stmt->execute();
-
+      $this->db->commit(); # Confirmo transacción
     } catch (\PDOException $e) {
+      $this->db->rollBack(); # Revierto en caso de error
       throw new DatabaseException($e->getMessage());
     }
   }
 
-  public function deleteOfferingMedia($mediaID)
-  {
-    try {
-      $stmt = $this->db->prepare("DELETE FROM Media WHERE MediaID = :mediaID");
-      $stmt->bindParam(':mediaID', $mediaID, PDO::PARAM_INT);
-      $stmt->execute();
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
+  /**
+   * Elimina un archivo multimedia de una publicación
+   *
+   * Elimina el registro de la tabla Media. El archivo físico debe ser eliminado
+   * por el controller antes de llamar este método.
+   *
+   * @param  int $mediaID: ID del archivo multimedia
+   * @return void
+   * @throws DatabaseException
+   **/
+  public function deleteOfferingMedia($mediaID) {
+    $stmt = $this->db->prepare("DELETE FROM Media WHERE MediaID = ?");
+    $stmt->execute([$mediaID]);
   }
 
-
-  public function getMediaByOfferingId($id)
-  {
-    try {
-      $stmt = $this->db->prepare("SELECT MediaID, Path FROM Media
-            WHERE OfferingID = :id");
-      $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-      $stmt->execute();
-      return $stmt->fetch(PDO::FETCH_ASSOC);
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
+  /**
+   * Obtiene el archivo multimedia de una publicación por ID de publicación
+   *
+   * Retorna solo un archivo (LIMIT 1) con su ruta local y URL.
+   *
+   * @param  int $id: ID de la publicación (OfferingID)
+   * @return array|false: datos del archivo o false si no existe
+   * @throws DatabaseException
+   **/
+  public function getMediaByOfferingId($id) {
+    $stmt = $this->db->prepare("SELECT MediaID, Path FROM Media
+      WHERE OfferingID = ?");
+    $stmt->execute([$id]);
+    return $stmt->fetch(PDO::FETCH_ASSOC);
   }
 
-  public function getMediaCountByType($id)
-  {
-    try {
-      $stmt = $this->db->prepare("SELECT MediaType, COUNT(*) AS count FROM Media
-            WHERE OfferingID = :id GROUP BY MediaType");
-      $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-      $stmt->execute();
-      $mediaCounts = $stmt->fetchAll(PDO::FETCH_ASSOC);
+  /**
+   * Obtiene el conteo de archivos multimedia por tipo para una publicación
+   *
+   * Retorna cantidad de imágenes y videos asociados a una publicación.
+   *
+   * @param  int $id: ID de la publicación (OfferingID)
+   * @return array: { 'image': int, 'video': int }
+   * @throws DatabaseException
+   **/
+  public function getMediaCountByType($id) {
+    $stmt = $this->db->prepare("SELECT MediaType, COUNT(*) AS count FROM Media
+      WHERE OfferingID = ? GROUP BY MediaType");
+    $stmt->execute([$id]);
+    $mediaCounts = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-      // Organizar resultados en un arreglo asociativo
-      $counts = ['image' => 0, 'video' => 0];
-      foreach ($mediaCounts as $mediaCount) {
-        if ($mediaCount['MediaType'] === 'image') {
-          $counts['image'] = $mediaCount['count'];
-        } elseif ($mediaCount['MediaType'] === 'video') {
-          $counts['video'] = $mediaCount['count'];
-        }
+    # Organizar resultados en un arreglo asociativo
+    $counts = ['image' => 0, 'video' => 0];
+    foreach ($mediaCounts as $mediaCount) {
+      if ($mediaCount['MediaType'] === 'image') {
+        $counts['image'] = $mediaCount['count'];
+      } elseif ($mediaCount['MediaType'] === 'video') {
+        $counts['video'] = $mediaCount['count'];
       }
-      return $counts;
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
     }
+    return $counts;
   }
 
-  // Función para verificar suscripción de usuario a la categoría
-  public function checkUserCategorySubscription($userID, $categoryID)
-  {
-    try {
-      $stmt = $this->db->prepare("SELECT COUNT(*) FROM UsersCategories
-            WHERE UserID = :userID AND CategoryID = :categoryID");
-      $stmt->bindParam(':userID', $userID, PDO::PARAM_INT);
-      $stmt->bindParam(':categoryID', $categoryID, PDO::PARAM_INT);
-      $stmt->execute();
-      return $stmt->fetchColumn() > 0;
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
+  /**
+   * Verifica si un usuario está suscrito a una categoría
+   *
+   * @param  int $userID: ID del usuario
+   * @param  int $categoryID: ID de la categoría
+   * @return bool: true si el usuario está suscrito, false en caso contrario
+   * @access public
+   **/
+  public function checkUserCategorySubscription($userID, $categoryID) {
+    $stmt = $this->db->prepare("SELECT COUNT(*) FROM UsersCategories
+      WHERE UserID = ? AND CategoryID = ?");
+    $stmt->execute([$userID, $categoryID]);
+    return $stmt->fetchColumn() > 0;
+  }
+
+  /**
+   * Actualiza las FAQs asociadas a una publicación
+   *
+   * Elimina todas las FAQs existentes e inserta las nuevas.
+   * Se ejecuta en contexto de una transacción.
+   *
+   * @param  int $id: ID de la publicación (OfferingID)
+   * @param  array $faqs: array de FAQs con structure { Position, Question, Answer }
+   * @return void
+   * @throws DatabaseException
+   * @access private
+   **/
+  private function _updateOfferingFaqs($id, $faqs) {
+    if ($faqs !== null && is_array($faqs)) {
+      $stmt = $this->db->prepare("DELETE FROM OfferingsFaqs WHERE OfferingID = ?");
+      $stmt->execute([$id]);
+
+      $stmt = $this->db->prepare("INSERT INTO OfferingsFaqs (OfferingID, Position, Question, Answer)
+      VALUES (?, ?, ?, ?)");
+      foreach ($faqs as $faq) {
+        $stmt->execute([$id, $faq['Position'], $faq['Question'], $faq['Answer']]);
+      }
     }
   }
 }

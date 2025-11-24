@@ -44,7 +44,7 @@ class CategoryController {
   }
 
   /**
-   * Obtiene una categoría por su ID
+   * Busca una categoria por un termino de busqueda
    * @param  Request $request: objeto de request HTTP
    * @param  Response $response: objeto de response HTTP
    * @param  string ?query: texto a buscar
