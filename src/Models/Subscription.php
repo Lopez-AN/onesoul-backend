@@ -34,12 +34,12 @@ class Subscription {
       $stmt->execute();
       $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-      // Organizar los planes en un array estructurado
+      # Organizar los planes en un array estructurado
       $plans = [];
       foreach ($results as $row) {
         $planId = $row['PlanID'];
 
-        // Castear el valor según el tipo
+        # Castear el valor según el tipo
         $value = $row['Value'];
         if (isset($value) && isset($row['Type'])) {
           switch ($row['Type']) {
@@ -59,7 +59,7 @@ class Subscription {
           }
         }
 
-        // Si el plan no está en el array, inicializarlo
+        # Si el plan no está en el array, inicializarlo
         if (!isset($plans[$planId])) {
           $plans[$planId] = [
             "PlanID"       => $row['PlanID'],
@@ -74,7 +74,7 @@ class Subscription {
           ];
         }
 
-        // Agregar las características solo si existen
+        # Agregar las características solo si existen
         if (!empty($row['FeatureCode'])) {
           $plans[$planId]['Features'][] = [
             "FeatureCode"  => $row['FeatureCode'],
@@ -115,10 +115,10 @@ class Subscription {
       $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
       if (empty($rows)) {
-        return null; // No existe el plan
+        return null; # No existe el plan
       }
 
-      // Inicializar el plan
+      # Inicializar el plan
       $subscription = [
         "PlanID"       => $rows[0]['PlanID'],
         "StripeID"     => $rows[0]['StripeID'],
@@ -131,11 +131,11 @@ class Subscription {
         "Features"     => []
       ];
 
-      // Agregar las features
+      # Agregar las features
       foreach ($rows as $row) {
         if (!empty($row['FeatureCode'])) {
 
-          // Castear el valor según el tipo
+          # Castear el valor según el tipo
           $value = $row['Value'];
           if (isset($value) && isset($row['Type'])) {
             switch ($row['Type']) {
@@ -194,10 +194,10 @@ class Subscription {
       $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
       if (empty($rows)) {
-        return null; // No existe el plan
+        return null; # No existe el plan
       }
 
-      // Inicializar el plan
+      # Inicializar el plan
       $subscription = [
         "PlanID"       => $rows[0]['PlanID'],
         "StripeID"     => $rows[0]['StripeID'],
@@ -210,11 +210,11 @@ class Subscription {
         "Features"     => []
       ];
 
-      // Agregar las features
+      # Agregar las features
       foreach ($rows as $row) {
         if (!empty($row['FeatureCode'])) {
 
-          // Castear el valor según el tipo
+          # Castear el valor según el tipo
           $value = $row['Value'];
           if (isset($value) && isset($row['Type'])) {
             switch ($row['Type']) {
@@ -251,57 +251,54 @@ class Subscription {
   }
 
   /**
-  * Obtiene la suscripción activa de un usuario e incluye el detalle del plan.
+  * Obtiene la suscripción activa de un usuario
   * @param int $userID
-  * @return array|null Suscripción o null si no hay activa/trial.
-  * @throws DatabaseException
+  * @return array|null Suscripción o false si no hay activa/trial.
   */
   public function getSubscriptionByUser($userID) {
-    try {
-      $stmt = $this->db->prepare("SELECT * FROM Subscriptions
-                                  WHERE UserID = :userID
-                                  AND Status IN ('ACTIVE','TRIALING')
-                                  ORDER BY StartDate DESC
-                                  LIMIT 1");
+    $stmt = $this->db->prepare("SELECT * FROM Subscriptions
+      WHERE UserID = :userID
+      AND Status IN ('ACTIVE','TRIALING')
+      ORDER BY StartDate DESC
+      LIMIT 1");
 
-      $stmt->bindParam(':userID', $userID, PDO::PARAM_INT);
-      $stmt->execute();
+    $stmt->bindParam(':userID', $userID, PDO::PARAM_INT);
+    $stmt->execute();
 
-      $subscription = $stmt->fetch(PDO::FETCH_ASSOC);
-      if (!$subscription) {
-        return null;
-      }
-
-      // Upgrade pendiente (por alguna demora en pago por ejemplo)
-      $stmt1 = $this->db->prepare("SELECT NewPlanID
-                                  FROM SubscriptionChanges
-                                  WHERE UserID = :userID
-                                  AND Status = 'WAITING'
-                                  ORDER BY CreatedAt DESC
-                                  LIMIT 1");
-
-      $stmt1->bindParam(':userID', $userID, PDO::PARAM_INT);
-      $stmt1->execute();
-      $newPlanID = $stmt1->fetchColumn();
-      $subscription['PendingUpgrade'] = $newPlanID ?: null;
-
-      // Downgrade pendiente (aun no llego la fecha)
-      $stmt2 = $this->db->prepare("SELECT NewPlanID
-                                  FROM SubscriptionChanges
-                                  WHERE UserID = :userID
-                                  AND Status = 'PENDING'
-                                  ORDER BY CreatedAt DESC
-                                  LIMIT 1");
-
-      $stmt2->bindParam(':userID', $userID, PDO::PARAM_INT);
-      $stmt2->execute();
-      $newPlanID = $stmt2->fetchColumn();
-      $subscription['PendingDowngrade'] = $newPlanID ?: null;
-
-      return $subscription;
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
+    $subscription = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$subscription) {
+      return false;
     }
+
+    # Upgrade pendiente (por alguna demora en pago por ejemplo)
+    $stmt = $this->db->prepare("SELECT NewPlanID
+      FROM SubscriptionChanges
+      WHERE UserID = :userID
+      AND Status = 'WAITING'
+      ORDER BY CreatedAt DESC
+      LIMIT 1");
+
+    $stmt->bindParam(':userID', $userID, PDO::PARAM_INT);
+    $stmt->execute();
+    $newPlanID = $stmt->fetchColumn();
+    $subscription['PendingUpgrade'] = $newPlanID ?: null;
+
+    # Downgrade pendiente (aun no llego la fecha)
+    $stmt = $this->db->prepare("SELECT NewPlanID
+      FROM SubscriptionChanges
+      WHERE UserID = :userID
+      AND Status = 'PENDING'
+      ORDER BY CreatedAt DESC
+      LIMIT 1");
+
+    $stmt->bindParam(':userID', $userID, PDO::PARAM_INT);
+    $stmt->execute();
+    $newPlanID = $stmt->fetchColumn();
+    $subscription['PendingDowngrade'] = $newPlanID ?: null;
+
+
+
+    return $subscription;
   }
 
   /**
@@ -313,10 +310,10 @@ class Subscription {
   public function getUserSubscriptionByPlatformSubID($platformSubscriptionID) {
     try {
       $stmt = $this->db->prepare("SELECT * FROM Subscriptions
-                                  WHERE PlatformSubscriptionID = :platformSubscriptionID
-                                  AND Status IN ('ACTIVE','TRIALING')
-                                  ORDER BY StartDate DESC
-                                  LIMIT 1");
+        WHERE PlatformSubscriptionID = :platformSubscriptionID
+        AND Status IN ('ACTIVE','TRIALING')
+        ORDER BY StartDate DESC
+        LIMIT 1");
 
       $stmt->bindParam(':platformSubscriptionID', $platformSubscriptionID, PDO::PARAM_STR);
       $stmt->execute();
@@ -326,7 +323,7 @@ class Subscription {
         return null;
       }
 
-      // Se obtiene los detalles del Plan del usuario
+      # Se obtiene los detalles del Plan del usuario
       $id = $subscription['PlanID'];
       $planDetails = $this->getSubscriptionPlanByID($id);
       $subscription['PlanDetails'] = $planDetails;
@@ -350,7 +347,7 @@ class Subscription {
   */
   public function createConfirmedSubscription($userID, $planID, $platformSubscriptionID, $platformCustomerID, $subDomain = '', $userData = []) {
     try {
-      // Cancelar suscripción anterior si existe
+      # Cancelar suscripción anterior si existe
       $stmt = $this->db->prepare("UPDATE Subscriptions
                                 SET EndDate = NOW(), Status = 'CANCELED'
                                 WHERE UserID = :userID AND Status = 'ACTIVE'");
@@ -365,10 +362,10 @@ class Subscription {
       $latestInvoice = $userData['LatestInvoiceID'];
       $trialEndDate = $trialEnd ? substr($trialEnd, 0, 10) : null;
 
-      // TRIALING si el trial no terminó aún
+      # TRIALING si el trial no terminó aún
       $status = ($trialEndDate && $trialEndDate >= $today) ? 'TRIALING' : 'ACTIVE';
 
-      // Insertar nueva suscripción
+      # Insertar nueva suscripción
       $stmt = $this->db->prepare("INSERT INTO Subscriptions (PlanID, UserID, TrialStart, TrialEnd, TrialSource,
               StartDate, Status, PaymentPlatform, PlatformSubscriptionID, PlatformCustomerID, NextBillingDate, LatestInvoiceID)
               VALUES (:planID, :userID, :trialStart, :trialEnd, :trialSource, NOW(), :status,
@@ -388,7 +385,7 @@ class Subscription {
         ':latestInvoice' => $latestInvoice
       ]);
 
-      // Marcar referido como exitoso si corresponde
+      # Marcar referido como exitoso si corresponde
       $stmt = $this->db->prepare("UPDATE Referrals
                                 SET ReferralStatus = 'Successful'
                                 WHERE ReferredUserID = :userID AND ReferralStatus = 'Pending'");
@@ -396,7 +393,7 @@ class Subscription {
 
       $subscription = $this->getSubscriptionByUser($userID);
 
-      // Enviar email si hay datos del usuario
+      # Enviar email si hay datos del usuario
       if (!empty($userData['UserName']) && !empty($userData['Email'])) {
         $username = $userData['UserName'];
         $email = $userData['Email'];
@@ -407,7 +404,7 @@ class Subscription {
         $origin = $subDomain ? "https://{$subDomain}.onesoul.app" : "https://onesoul.app";
         $dashboardURL = $origin . "/profile";
 
-        // Enviar email
+        # Enviar email
         if ($email) {
           EmailHelper::send(
           $username,
@@ -501,7 +498,7 @@ class Subscription {
     }
   }
 
-  // Crea un cambio pendiente de pago
+  # Crea un cambio pendiente de pago
   public function waitingSubscriptionChange($platformSubscriptionID, $newPlanID, $effectiveDate = null) {
     $effectiveDate = $effectiveDate ? date("Y-m-d H:i:s", $effectiveDate) : null;
 
@@ -617,15 +614,15 @@ class Subscription {
   */
   public function applyScheduledChange($changeId, $effectiveDate = null) {
     try {
-      $this->db->beginTransaction(); // Iniciar transacción
+      $this->db->beginTransaction(); # Iniciar transacción
 
-      // bloquear y leer el cambio
+      # bloquear y leer el cambio
       $stmt = $this->db->prepare("SELECT * FROM SubscriptionChanges WHERE id = :id FOR UPDATE");
       $stmt->execute([':id' => $changeId]);
       $change = $stmt->fetch(PDO::FETCH_ASSOC);
       if (!$change) throw new DatabaseException("Change not found: $changeId");
 
-      // actualizar Subscriptions
+      # actualizar Subscriptions
       $stmtUp = $this->db->prepare(
         "UPDATE Subscriptions
         SET PlanID = :newPlanID, NextBillingDate = :nextBillingDate
@@ -639,7 +636,7 @@ class Subscription {
         ':platformSubscriptionID' => $change['PlatformSubscriptionID']
       ]);
 
-      // marcar change como aplicado
+      # marcar change como aplicado
       $stmt2 = $this->db->prepare("UPDATE SubscriptionChanges SET Status = 'APPLIED', AppliedAt = NOW() WHERE id = :id");
       $stmt2->execute([':id' => $changeId]);
 
@@ -663,14 +660,14 @@ class Subscription {
   public function updateSubscriptionByUser($platformSubscriptionID, $newPlanID, $nextBillingDate = null, $applyNow = true) {
     try {
       if (!$applyNow) {
-        // crear registro pendiente
+        # crear registro pendiente
         return $this->scheduleSubscriptionChange($platformSubscriptionID, $newPlanID, $nextBillingDate);
       }
 
-      // aplicar ahora (comportamiento previo) + registrar en SubscriptionChanges como APPLIED
-      $this->db->beginTransaction(); // Iniciar transacción
+      # aplicar ahora (comportamiento previo) + registrar en SubscriptionChanges como APPLIED
+      $this->db->beginTransaction(); # Iniciar transacción
 
-      // obtener suscripción actual para oldPlanID
+      # obtener suscripción actual para oldPlanID
       $current = $this->getUserSubscriptionByPlatformSubID($platformSubscriptionID);
       $oldPlanID = $current ? $current['PlanID'] : null;
 
@@ -690,7 +687,7 @@ class Subscription {
       $affected = $stmt->rowCount();
 
       if (!$skipHistory) {
-        // registrar en historico como APPLIED
+        # registrar en historico como APPLIED
         $stmtHist = $this->db->prepare("INSERT INTO SubscriptionChanges
               (PlatformSubscriptionID, UserID, OldPlanID, NewPlanID, EffectiveDate, Status, CreatedAt, AppliedAt)
               VALUES (:platformSubscriptionID, :userID, :oldPlanID, :newPlanID, :effectiveDate, 'APPLIED', NOW(), NOW())"
@@ -705,7 +702,7 @@ class Subscription {
         ]);
       }
 
-      $this->db->commit(); // Confirmo transacción
+      $this->db->commit(); # Confirmo transacción
 
       if ($affected === 0) {
         error_log("Warning: updateSubscriptionByUser no afectó filas para PlatformSubscriptionID={$platformSubscriptionID}.
@@ -715,7 +712,7 @@ class Subscription {
       $subscription = $this->getUserSubscriptionByPlatformSubID($platformSubscriptionID);
       return ['Subscription' => $subscription];
     } catch (\PDOException $e) {
-      $this->db->rollBack(); // Revierto en caso de error
+      $this->db->rollBack(); # Revierto en caso de error
       throw new DatabaseException($e->getMessage());
     }
   }
@@ -746,7 +743,7 @@ class Subscription {
             ':InvoiceID'      => $invoiceID
         ]);
 
-      // Devolver el registro recién creado
+      # Devolver el registro recién creado
       return $this->getPaymentByInvoiceID($invoiceID);
     } catch (\PDOException $e) {
       throw new DatabaseException($e->getMessage());
@@ -794,7 +791,7 @@ class Subscription {
         return null;
       }
 
-      // Consulta total real
+      # Consulta total real
       $stmtTotal = $this->db->prepare("SELECT COUNT(*) as total
                                       FROM SubscriptionsPayments AS sp
                                       WHERE sp.PlatformCustomerID = :customerID");
@@ -842,7 +839,7 @@ class Subscription {
   */
   public function cancelSubscription($platformSubscriptionID, $endDate) {
     try {
-      // Cancelar la suscripción
+      # Cancelar la suscripción
       $stmt = $this->db->prepare("UPDATE Subscriptions
                                   SET Status = 'CANCELED', EndDate = :endDate, NextBillingDate = NULL
                                   WHERE PlatformSubscriptionID = :platformSubscriptionID
@@ -851,7 +848,7 @@ class Subscription {
       $stmt->bindValue(':endDate', $endDate, PDO::PARAM_STR);
       $stmt->execute();
 
-      // Marcar cambios pendientes como aplicados
+      # Marcar cambios pendientes como aplicados
       $sql = "UPDATE SubscriptionChanges
               SET Status = 'APPLIED', AppliedAt = NOW()
               WHERE PlatformSubscriptionID = :platformSubscriptionID
@@ -874,7 +871,7 @@ class Subscription {
   * @throws DatabaseException
   */
   public function handleTrialWillEnd($platformSubscriptionID, $trialEnd) {
-    // Refleja el fin de trial informado por Stripe.
+    # Refleja el fin de trial informado por Stripe.
     try {
       $stmt = $this->db->prepare("UPDATE Subscriptions
                                   SET TrialEnd = COALESCE(:trialEnd, TrialEnd),
@@ -1016,7 +1013,7 @@ class Subscription {
 
       $stmt->execute($data);
 
-      // Update Subscriptions con el último invoice
+      # Update Subscriptions con el último invoice
       if (!empty($data['SubscriptionID'])) {
         $stmt = $this->db->prepare("UPDATE Subscriptions
                                     SET LatestInvoiceID = :InvoiceID
@@ -1121,13 +1118,13 @@ class Subscription {
       $exists = $stmt->fetchColumn() > 0;
 
       if ($exists) {
-        // 1. Si existe, actualizar el plan
+        # 1. Si existe, actualizar el plan
         $stmt = $this->db->prepare("UPDATE SubscriptionPlans
                                     SET Name = :Name, Description = :Description, Beneficts = :Beneficts, Price = :Price,
                                     CurrencyCode = :CurrencyCode, Duration = :Duration, StripeID = :StripeID
                                     WHERE PlanID = :planID");
       } else {
-        // 2. Si no existe, insertar el plan
+        # 2. Si no existe, insertar el plan
         $stmt = $this->db->prepare("INSERT INTO SubscriptionPlans (PlanID, Name, Description, Beneficts, Price, CurrencyCode, Duration, StripeID)
                                     VALUES (:planID, :Name, :Description, :Beneficts, :Price, :CurrencyCode, :Duration, :StripeID)");
       }
@@ -1142,24 +1139,24 @@ class Subscription {
       $stmt->bindParam(':StripeID', $data['StripeID'], PDO::PARAM_STR);
       $stmt->execute();
 
-      // 3. Si hay Features en el body
+      # 3. Si hay Features en el body
       if (isset($data['Features']) && is_array($data['Features'])) {
 
-        // Eliminar los SubscriptionItems actuales del Plan
+        # Eliminar los SubscriptionItems actuales del Plan
         $deleteStmt = $this->db->prepare("DELETE FROM SubscriptionItems WHERE PlanID = :planID");
         $deleteStmt->bindParam(':planID', $planID, PDO::PARAM_INT);
         $deleteStmt->execute();
 
-        // Preparar inserción en SubscriptionFeatures (para asegurarnos que existan)
+        # Preparar inserción en SubscriptionFeatures (para asegurarnos que existan)
         $insertFeatureStmt = $this->db->prepare("INSERT IGNORE INTO SubscriptionFeatures (FeatureCode, Description, IsActive)
                                                  VALUES (:FeatureCode, :Description, 1)");
 
-        // Preparar inserción en SubscriptionItems
+        # Preparar inserción en SubscriptionItems
         $insertItemStmt = $this->db->prepare("INSERT INTO SubscriptionItems (PlanID, FeatureCode, Value, Type, Description)
                                               VALUES (:planID, :FeatureCode, :Value, :Type, :ItemDescription)");
 
         foreach ($data['Features'] as $feature) {
-          // Insertar en SubscriptionFeatures si no existe
+          # Insertar en SubscriptionFeatures si no existe
           $featureCode = $feature['FeatureCode'];
           $description = $feature['Description'];
           $value = isset($feature['Value']) ? $feature['Value'] : null;
@@ -1170,7 +1167,7 @@ class Subscription {
           $insertFeatureStmt->bindParam(':Description', $description, PDO::PARAM_STR);
           $insertFeatureStmt->execute();
 
-          // Insertar la relación en SubscriptionItems
+          # Insertar la relación en SubscriptionItems
           $insertItemStmt->bindParam(':planID', $planID, PDO::PARAM_INT);
           $insertItemStmt->bindParam(':FeatureCode', $featureCode, PDO::PARAM_STR);
           $insertItemStmt->bindParam(':planID', $planID, PDO::PARAM_INT);

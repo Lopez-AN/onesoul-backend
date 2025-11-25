@@ -5,6 +5,7 @@ namespace App\Models;
 use PDO;
 use App\Exceptions\DatabaseException;
 use App\Exceptions\ValidationException;
+use App\Enums\MediaType;
 
 class Offering {
   protected $db;
@@ -69,7 +70,6 @@ class Offering {
       LEFT JOIN Reviews AS r ON o.OfferingID = r.OfferingID
       LEFT JOIN Reviews AS ru ON u.UserID = ru.SeekerID
       LEFT JOIN Bookings AS b ON b.OfferingID = o.OfferingID AND b.LastBookingEvent IN ('completed', 'rated')
-      LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode
       GROUP BY o.OfferingID
       ORDER BY o.OfferingID
       LIMIT ? OFFSET ?");
@@ -140,7 +140,6 @@ class Offering {
       LEFT JOIN Reviews as r ON o.OfferingID = r.OfferingID
       LEFT JOIN Reviews as ru ON u.UserID = ru.SeekerID
       LEFT JOIN Bookings AS b ON b.OfferingID = o.OfferingID AND b.LastBookingEvent IN ('completed', 'rated')
-      LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode
       WHERE (o.Title LIKE ? OR o.Description LIKE ?
       OR o.ShortDescription LIKE ? OR o.Tags LIKE ?)
       AND o.Status = 'Active'
@@ -213,7 +212,6 @@ class Offering {
     LEFT JOIN Reviews AS r ON o.OfferingID = r.OfferingID
     LEFT JOIN Reviews AS ru ON u.UserID = ru.SeekerID
     LEFT JOIN Bookings AS b ON b.OfferingID = o.OfferingID AND b.LastBookingEvent IN ('completed', 'rated')
-    LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode
     WHERE o.OfferingID = ?
     GROUP BY o.OfferingID");
 
@@ -294,7 +292,7 @@ class Offering {
     INNER JOIN Users AS u ON u.UserID = o.UserID
     LEFT JOIN Reviews as r ON o.OfferingID = r.OfferingID
     LEFT JOIN Reviews as ru ON u.UserID = ru.SeekerID
-    LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode
+    LEFT JOIN Bookings AS b ON b.OfferingID = o.OfferingID AND b.LastBookingEvent IN ('completed', 'rated')
     GROUP BY o.OfferingID
     ORDER BY o.OfferingID
     LIMIT ? OFFSET ?");
@@ -365,7 +363,6 @@ class Offering {
       LEFT JOIN Reviews AS r ON o.OfferingID = r.OfferingID
       LEFT JOIN Reviews AS ru ON u.UserID = ru.SeekerID
       LEFT JOIN Bookings AS b ON b.OfferingID = o.OfferingID AND b.LastBookingEvent IN ('completed', 'rated')
-      LEFT JOIN Countries AS c ON ol.CountryCode = c.CountryCode
       WHERE o.UserID = ?
       GROUP BY o.OfferingID
       ORDER BY o.OfferingID
@@ -583,14 +580,26 @@ class Offering {
    * Solo debe ser ejecutado por administradores.
    *
    * @param  int $id: ID de la publicación
-   * @return void
+   * @return array: datos de la publicación activada
    * @throws DatabaseException
    **/
   public function approveOfferingById($id) {
-    $stmt = $this->db->prepare("UPDATE Offerings
-      SET Status = 'Active', IsActive = 1, Approved = 1
-      WHERE OfferingID = ? AND Status != 'Deleted'");
-    $stmt->execute([$id]);
+    try {
+      $this->db->beginTransaction(); # Iniciar transacción
+      $stmt = $this->db->prepare("UPDATE Offerings
+        SET Status = 'Active', IsActive = 1, Approved = 1
+        WHERE OfferingID = ? AND Status != 'Deleted'");
+      $stmt->execute([$id]);
+
+      $offering = $this->getOfferingById($id) ??
+        throw new DatabaseException("Failed to retrieve the updated offering");
+
+      $this->db->commit(); # Confirmo transacción
+      return $offering;
+    } catch (\PDOException $e) {
+      $this->db->rollBack(); # Revierto en caso de error
+      throw new DatabaseException($e->getMessage());
+    }
   }
 
   /**
@@ -602,7 +611,8 @@ class Offering {
    *
    * @param  int $id: ID de la publicación
    * @param  array $data: array asociativo con campos a actualizar
-   * @return array: datos de la publicación actualizada normalizados
+   * @return array: datos de la publicación actualizada
+   * @return array: faqs si los hubiera
    * @throws DatabaseException
    **/
   public function updateOffering($id, $data) {
@@ -612,7 +622,9 @@ class Offering {
       # Construcción dinámica de la consulta
       $fields = [];
       foreach ($data as $key => $value) {
-        $fields[] = "$key = :$key";
+        if(!is_array($value)){ # Parametros compuestos (array) no
+          $fields[] = "$key = :$key";
+        }
       }
 
       # Verificar si se han modificado campos que requieren cambiar el estado
@@ -630,7 +642,7 @@ class Offering {
 
       # Vincular los parámetros
       foreach ($data as $key => $value) {
-        if (in_array($key, $allowedFields)) {
+        if(!is_array($value)){ # Parametros compuestos (array) no
           $stmt->bindValue(":$key", $value, $value === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
         }
       }
@@ -639,14 +651,15 @@ class Offering {
       $stmt->bindValue(':ModificationDate', $modificationDate, PDO::PARAM_STR);
       $stmt->execute();
 
-      if ($faqs !== null && is_array($faqs)) {
-        $this->_updateOfferingFaqs($id, $faqs);
+      if (isset($data['Faqs']) && is_array($data['Faqs'])) {
+        $this->_updateOfferingFaqs($id, $data['Faqs']);
       }
 
       $offering = $this->getOfferingById($id) ??
         throw new DatabaseException("Failed to retrieve the updated offering");
 
       $this->db->commit(); # Confirmo transacción
+      return $offering;
     } catch (\PDOException $e) {
       $this->db->rollBack(); # Revierto en caso de error
       throw new DatabaseException($e->getMessage());
@@ -664,9 +677,22 @@ class Offering {
    * @throws DatabaseException
    **/
   public function deleteOffering($id) {
-    $stmt = $this->db->prepare("UPDATE Offerings SET Status = 'Deleted', IsActive = 0
-      WHERE OfferingID = ?");
-    $stmt->execute([$id]);
+    try{
+      $this->db->beginTransaction(); # Iniciar transacción
+
+      $stmt = $this->db->prepare("UPDATE Offerings SET Status = 'Deleted', IsActive = 0
+        WHERE OfferingID = ?");
+      $stmt->execute([$id]);
+
+      $offering = $this->getOfferingById($id) ??
+        throw new DatabaseException("Failed to retrieve the updated offering");
+
+      $this->db->commit(); # Confirmo transacción
+      return $offering;
+    } catch (\PDOException $e) {
+      $this->db->rollBack(); # Revierto en caso de error
+      throw new DatabaseException($e->getMessage());
+    }
   }
 
   /**
@@ -687,6 +713,24 @@ class Offering {
   }
 
   /**
+   * Obtiene un archivo multimedia por tipo y posicion de una publicación
+   *
+   * Retorna información completa del archivo incluyendo ruta y URL.
+   *
+   * @param  int $id: ID de la publicación (OfferingID)
+   * @param  MediaType $mediaType: Tipo de archivo multimedia
+   * @param  int $position: Posicion del archivo multimedia
+   * @return array|false: datos del archivo o false si no existe
+   * @throws DatabaseException
+   **/
+  public function getMediaByTypePosition($id, MediaType $mediaType, $position) {
+    $stmt = $this->db->prepare("SELECT * FROM Media
+      WHERE OfferingID = ? AND MediaType = ? AND Position = ?");
+    $stmt->execute([$id, $mediaType->value, $position]);
+    return $stmt->fetch(PDO::FETCH_ASSOC);
+  }
+
+  /**
    * Agrega un archivo multimedia (imagen o video) a una publicación
    *
    * Inserta el archivo en la tabla Media con posicionamiento automático.
@@ -695,33 +739,22 @@ class Offering {
    * @param  int $id: ID de la publicación (OfferingID)
    * @param  string $title: título del archivo
    * @param  string $description: descripción del archivo (opcional)
-   * @param  int $position: posición del archivo (se recalcula automáticamente)
    * @param  string $fileURL: URL pública del archivo optimizado
    * @param  string $filePath: ruta local completa del archivo
-   * @param  string $mediaType: tipo de archivo ('image' o 'video')
+   * @param  MediaType $mediaType: tipo de archivo ('image' o 'video')
    * @return void
    * @throws DatabaseException
    **/
-  public function createOfferingMedia($id, $title, $description, $position, $fileURL, $filePath, $mediaType) {
+  public function createOfferingMedia($id, $title, $description, $fileURL, $filePath, MediaType $mediaType) {
     try {
       $this->db->beginTransaction(); # Iniciar transacción
 
-      # Verificar si ya existe una posición 0 asociada al OfferingID
-      $stmt = $this->db->prepare("SELECT COUNT(*) AS count FROM Media
-        WHERE OfferingID = ? AND Position = 0 AND MediaType = 'image'");
-      $stmt->execute([$id]);
-      $result = $stmt->fetch(PDO::FETCH_ASSOC);
-
-      # Asignar posición 0 si no existe ninguna imagen en esa posición
-      $position = ($result['count'] === 0 && $mediaType === 'image') ? 0 : null;
-
-      # Calcular la próxima posición si no es posición 0
-      if ($position === null) {
-        $stmt = $this->db->prepare("SELECT MAX(Position) AS max_position FROM Media WHERE OfferingID = ?");
-        $stmt->execute([$id]);
-        $maxPosition = $stmt->fetch(PDO::FETCH_ASSOC)['max_position'];
-        $position = $maxPosition !== null ? $maxPosition + 1 : 1;
-      }
+      # Calcular la próxima posición
+      $stmt = $this->db->prepare("SELECT MAX(Position) AS max_position FROM Media
+        WHERE OfferingID = ? AND MediaType = ?");
+      $stmt->execute([$id, $mediaType->value]);
+      $maxPosition = $stmt->fetch(PDO::FETCH_ASSOC)['max_position'];
+      $position = $maxPosition !== null ? $maxPosition + 1 : 0;
 
       # Insertar en la tabla Media
       $stmt = $this->db->prepare("INSERT INTO Media (`OfferingID`, `Title`, `Description`, `URL`, `Path`, `MediaType`, `Position`)
@@ -733,11 +766,15 @@ class Offering {
         ':description' => $description,
         ':fileURL' => $fileURL,
         ':filePath' => $filePath,
-        ':mediaType' => $mediaType,
+        ':mediaType' => $mediaType->value,
         ':position' => $position
       ]);
 
+      $offering = $this->getOfferingById($id) ??
+        throw new DatabaseException("Failed to retrieve the updated offering");
+
       $this->db->commit(); # Confirmo transacción
+      return $offering;
     } catch (\PDOException $e) {
       $this->db->rollBack(); # Revierto en caso de error
       throw new DatabaseException($e->getMessage());
@@ -802,7 +839,11 @@ class Offering {
       $stmt = $this->db->prepare("UPDATE Offerings SET ModificationDate = ? $statusQuery WHERE OfferingID = ?");
       $stmt->execute([date("YmdHis"), $id]);
 
+      $offering = $this->getOfferingById($id) ??
+        throw new DatabaseException("Failed to retrieve the updated offering");
+
       $this->db->commit(); # Confirmo transacción
+      return $offering;
     } catch (\PDOException $e) {
       $this->db->rollBack(); # Revierto en caso de error
       throw new DatabaseException($e->getMessage());

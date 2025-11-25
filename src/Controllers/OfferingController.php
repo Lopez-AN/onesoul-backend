@@ -5,7 +5,9 @@ namespace App\Controllers;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use App\Models\Offering;
+use App\Models\Subscription;
 use Firebase\JWT\JWT;
+use App\Enums\MediaType;
 
 require_once(ROOT . '/src/Utils/Paginator.php');
 require_once(ROOT . '/src/Utils/OptimizeImg.php');
@@ -19,9 +21,11 @@ define("MAX_VIDEO_SIZE", 50 * 1024 * 1024);
 
 class OfferingController {
   protected $offering;
+  protected $subscription;
 
-  public function __construct(Offering $offering)  {
+  public function __construct(Offering $offering, Subscription $subscription)  {
     $this->offering = $offering;
+    $this->subscription = $subscription;
   }
 
   /**
@@ -213,16 +217,8 @@ class OfferingController {
       ]);
     }
 
-    if(!isset($data['Faqs']) || !is_array($data['Faqs'])){
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "INVALID_PARAMETERS",
-          "desc" => "Parameters are missing or invalid"
-        ]
-      ]);
-    }
-    foreach($data['Faqs'] as $f){
-      if(!isset($f['Position'], $f['Question'], $f['Answer'])){
+    if(!empty($faqs)){
+      if(!is_array($faqs)){
         return $response->withStatus(400)->withJson([
           "error" => [
             "code" => "INVALID_PARAMETERS",
@@ -230,13 +226,19 @@ class OfferingController {
           ]
         ]);
       }
+      foreach($faqs as $f){
+        if(!isset($f['Position'], $f['Question'], $f['Answer'])){
+          return $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "INVALID_PARAMETERS",
+              "desc" => "Parameters are missing or invalid"
+            ]
+          ]);
+        }
+      }
     }
 
     try {
-      $faqs = array_map(function($e){
-        return $e['Question']." ".$e['Answer'];
-      }, $data['Faqs']);
-
       # Validación de contenido inapropiado
       $contentToCheck = implode(" ", [
         $data['Title'] ?? '',
@@ -244,7 +246,9 @@ class OfferingController {
         $data['ShortDescription'] ?? '',
         $data['Conditions'] ?? '',
         implode(" ", $data['Tags']),
-        implode(" ", $faqs),
+        implode(" ", array_map(function($e){
+          return $e['Question']." ".$e['Answer'];
+        }, $data['Faqs'] ?? []))
       ]);
 
       if($this->_containsInappropriateContent($contentToCheck)){
@@ -303,21 +307,19 @@ class OfferingController {
         ]);
       }
 
-      # Verificar que el offering no esté eliminado
-      if ($offering['Status'] === 'Deleted') {
+      # Verificar que el offering este pendiente
+      if ($offering['Status'] !== 'Pending') {
         return $response->withStatus(400)->withJson([
           "error" => [
-            "code" => "OFFERING_DELETED",
-            "desc" => "The specified offering is deleted"
+            "code" => "OFFERING_NOT_PENDING",
+            "desc" => "The specified offering must have pending status"
           ]
         ]);
       }
 
       # Aprobar el offering (cambiar el estado a 'Active')
-      $this->offering->approveOfferingById($id);
-
-      return $response->withStatus(200)->withJson("Offering approved successfully");
-
+      $offering = $this->offering->approveOfferingById($id);
+      return $response->withStatus(200)->withJson($offering);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -356,6 +358,15 @@ class OfferingController {
       ]);
     }
 
+    if (empty($data)) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "NO_FIELDS_TO_UPDATE",
+          "desc" => "No valid fields to update"
+        ]
+      ]);
+    }
+
     # Control de campos que se permiten actualizar
     $allowedFields = [
       'Title',
@@ -371,11 +382,9 @@ class OfferingController {
       'Price',
       'SessionType',
       'Conditions',
-      'Duration'
+      'Duration',
+      'Faqs'
     ];
-
-    $faqs = $data['Faqs'] ?? null;
-    unset($data['Faqs']);
 
     foreach ($data as $key => $value) {
       if (!in_array($key, $allowedFields)) {
@@ -388,16 +397,8 @@ class OfferingController {
       }
     }
 
-    if(!empty($faqs) && !is_array($faqs)){
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "INVALID_PARAMETERS",
-          "desc" => "Parameters are missing or invalid"
-        ]
-      ]);
-    }
-    foreach($faqs as $f){
-      if(!isset($f['Position'], $f['Question'], $f['Answer'])){
+    if(!empty($data['Faqs'])){
+      if(!is_array($data['Faqs'])){
         return $response->withStatus(400)->withJson([
           "error" => [
             "code" => "INVALID_PARAMETERS",
@@ -405,15 +406,16 @@ class OfferingController {
           ]
         ]);
       }
-    }
-
-    if (empty($data) && empty($faqs)) {
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "NO_FIELDS_TO_UPDATE",
-          "desc" => "No valid fields to update"
-        ]
-      ]);
+      foreach($data['Faqs'] as $f){
+        if(!isset($f['Position'], $f['Question'], $f['Answer'])){
+          return $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "INVALID_PARAMETERS",
+              "desc" => "Parameters are missing or invalid"
+            ]
+          ]);
+        }
+      }
     }
 
     try {
@@ -453,8 +455,10 @@ class OfferingController {
         $data['Description'] ?? '',
         $data['ShortDescription'] ?? '',
         $data['Conditions'] ?? '',
-        implode(" ", $data['Tags']),
-        implode(" ", $faqs),
+        implode(" ", $data['Tags'] ?? []),
+        implode(" ", array_map(function($e){
+          return $e['Question']." ".$e['Answer'];
+        }, $data['Faqs'] ?? []))
       ]);
 
       if($this->_containsInappropriateContent($contentToCheck)){
@@ -466,14 +470,6 @@ class OfferingController {
 
       # Actualizar la oferta
       $offering = $this->offering->updateOffering($id, $data);
-      if (!$offering) {
-        return $response->withStatus(500)->withJson([
-          "error" => [
-            "code" => "FETCH_ERROR",
-            "desc" => "Could not retrieve updated offering"
-          ]
-        ]);
-      }
       return $response->withStatus(200)->withJson($offering);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
@@ -532,12 +528,8 @@ class OfferingController {
         ]);
       }
 
-      $this->offering->deleteOffering($id);
-
-      return $response->withStatus(200)->withJson([
-        "Message" => "Offering deleted successfully"
-      ]);
-
+      $offering = $this->offering->deleteOffering($id);
+      return $response->withStatus(200)->withJson($offering);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -562,8 +554,12 @@ class OfferingController {
    **/
   public function createOfferingMedia(Request $request, Response $response, $args) {
     $id = intval($args['id']); # ID de offering
-    $position = intval($args['position']); # Posicion del archivo multimedia
+    # Obtener los metadatos
     $data = $request->getParsedBody();
+    # Obtener el archivo adjunto
+    $uploadedFiles = $request->getUploadedFiles();
+    $uploadedFile = $uploadedFiles['Media'] ?? null;
+    # Token JWT
     $jwt = $request->getAttribute('jwt');
     $userID = $jwt->data->UserID;
 
@@ -599,30 +595,40 @@ class OfferingController {
         ]);
       }
 
-      # Verifico si el archivo multimedia es valido
-      $uploadedMedia = $this->_getUploadedMedia($request, true);
-      if ($uploadedMedia !== false) {
+      $title = $data['Title'] ?? null;
+      $description = $data['Description'] ?? null;
+
+      if(!$title){
         return $response->withStatus(400)->withJson([
           "error" => [
-            "code" => "UPLOAD_ERROR",
-            "desc" => "Cannot read the attached file"
+            "code" => "INVALID_PARAMETERS",
+            "desc" => "Parameters are missing or invalid"
           ]
         ]);
       }
-      if (isset($uploadedMedia->error)) {
-        return $response->withStatus(400)->withJson($uploadedMedia->error);
+
+      # Valida contenido con Perspective API
+      $contentToCheck = implode(" ", [
+        $data['Title'] ?? '',
+        $data['Description'] ?? ''
+      ]);
+      if ($this->_containsInappropriateContent($contentToCheck)) {
+        return $response->withStatus(400)->withJson([
+          "code" => "INAPPROPRIATE_CONTENT",
+          "desc" => "Please remove inappropriate content and try again."
+        ]);
       }
 
-      # Obtengo la extención del archivo media
-      $fileExtension = $uploadedMedia->Extension;
-
-      # Ruta temporal del archivo
-      $tempFilePath = $uploadedMedia->File->getStream()->getMetadata('uri');
+      $validation = $this -> _validateUploadedMedia($response, $uploadedFile);
+      if(!$validation->valid){
+        return $validation->response;
+      }
+      $media = $validation->response;
 
       # Analizar la imagen con Amazon Rekognition
       if(empty($GLOBALS['config']['debug_mode']) || !$GLOBALS['config']['debug_mode']){
-        if (in_array($fileExtension, ['jpg', 'jpeg', 'png'])) {
-          $rekognitionResult = analyzeImageWithRekognition($tempFilePath);
+        if ($media->MediaType === MediaType::IMAGE) {
+          $rekognitionResult = analyzeImageWithRekognition($media->TempFilePath);
           if (!empty($rekognitionResult['error'])) {
             return $response->withStatus(400)->withJson([
               "error" => [
@@ -636,7 +642,7 @@ class OfferingController {
 
       # Validar cantidad de archivos existentes
       $mediaCounts = $this->offering->getMediaCountByType($id);
-      if ($this->_isImage($uploadedMedia->MimeType) && $mediaCounts['image'] >= MAX_IMAGES) {
+      if ($media->MediaType === MediaType::IMAGE && $mediaCounts['image'] >= MAX_IMAGES) {
         return $response->withStatus(400)->withJson([
           "error" => [
             "code" => "MEDIA_TOO_MANY",
@@ -644,7 +650,23 @@ class OfferingController {
           ]
         ]);
       }
-      if (!$this->_isImage($uploadedMedia->MimeType) && $mediaCounts['video'] >= MAX_VIDEOS) {
+
+      $userSubscription = $this->subscription->getSubscriptionByUser($userID);
+      $plan = $userSubscription ? $this->subscription->getSubscriptionPlanByID($userSubscription['PlanID']) : null;
+      $hasVideo = array_filter($plan['Features'] ?? null, function($e){
+        return $e['FeatureCode'] === 'VIDEOS' && $e['Value'];
+      });
+
+      if(!$hasVideo){
+        return $response->withStatus(403)->withJson([
+          "error" => [
+            "code" => "HIGHER_PLAN_NEEDED",
+            "desc" => "Your subscription plan does not include videos in publicacions"
+          ]
+        ]);
+      }
+
+      if ($media->MediaType === MediaType::VIDEO && $mediaCounts['video'] >= MAX_VIDEOS) {
         return $response->withStatus(400)->withJson([
           "error" => [
             "code" => "MEDIA_TOO_MANY",
@@ -653,48 +675,26 @@ class OfferingController {
         ]);
       }
 
-      $title = $data['Title'];
-      $description = $data['Description'] ?? null;
-
-      # Valida contenido con Perspective API
-      if ($title && $description) {
-        if (
-          $this->_containsInappropriateContent($data['Title']) ||
-          $this->_containsInappropriateContent($data['Description'])
-        ) {
-          return $response->withStatus(400)->withJson([
-            "code" => "INAPPROPRIATE_CONTENT",
-            "desc" => "Please remove inappropriate content and try again."
-          ]);
-        }
-      }
-
       # Ruta de archivo y URL
-      $fileExtension = $uploadedMedia->Extension;
       $uid = uniqid();
       $uploadDirectory = $GLOBALS['config']['media_folder']['path'];
-      $filePath = "$uploadDirectory/offering/$uid.$fileExtension";
-      $fileURL = $GLOBALS['config']['media_folder']['url'] . "/offering/$uid.$fileExtension";
+      $filePath = "$uploadDirectory/offering/$uid.{$media->Extension}";
+      $fileURL = $GLOBALS['config']['media_folder']['url'] . "/offering/$uid.{$media->Extension}";
 
       # Mover el archivo al destino
-      $uploadedMedia->File->moveTo($filePath);
+      $media->File->moveTo($filePath);
 
       # Insertar media en la base de datos
-      $this->offering->createOfferingMedia(
+      $offering = $this->offering->createOfferingMedia(
         $id,
         $title,
         $description,
-        $position,
         $fileURL,
         $filePath,
-        $this->_isImage($uploadedMedia->MimeType) ? 'image' : 'video'
+        $media->MediaType
       );
 
-      return $response->withStatus(200)->withJson([
-        "Message" => "Media file added successfully",
-        "URL" => $fileURL,
-        "DetectedText" => isset($rekognitionResult['text']) ? $rekognitionResult['text'] : ''
-      ]);
+      return $response->withStatus(200)->withJson($offering);
     } catch (\Throwable $e) {
       if (!empty($filePath) && is_file($filePath)) {
         unlink($filePath); # Eliminar archivo subido en caso de error
@@ -724,7 +724,12 @@ class OfferingController {
     $id = intval($args['id']); # ID de offering
     $mediaID = intval($args['mediaID']); # ID del archivo de medios
     $position = intval($args['position']); # Posicion del archivo multimedia
+    # Obtener los metadatos
     $data = $request->getParsedBody();
+    # Obtener el archivo adjunto
+    $uploadedFiles = $request->getUploadedFiles();
+    $uploadedFile = $uploadedFiles['Media'] ?? null;
+    # Token JWT
     $jwt = $request->getAttribute('jwt');
     $userID = $jwt->data->UserID;
 
@@ -757,6 +762,30 @@ class OfferingController {
             "code" => "UNAUTHORIZED",
             "desc" => "You do not have permission to modify this offering"
           ]
+        ]);
+      }
+
+      $title = $data['Title'] ?? null;
+      $description = $data['Description'] ?? null;
+
+      if(!$title){
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "INVALID_PARAMETERS",
+            "desc" => "Parameters are missing or invalid"
+          ]
+        ]);
+      }
+
+      # Valida contenido con Perspective API
+      $contentToCheck = implode(" ", [
+        $title ?? '',
+        $description ?? ''
+      ]);
+      if ($this->_containsInappropriateContent($contentToCheck)) {
+        return $response->withStatus(400)->withJson([
+          "code" => "INAPPROPRIATE_CONTENT",
+          "desc" => "Please remove inappropriate content and try again."
         ]);
       }
 
@@ -926,29 +955,25 @@ class OfferingController {
     }
   }
 
-  # Función para verificar contenido inapropiado utilizando Perspective API
+  /**
+   * Verifica si el contenido contiene material inapropiado
+   * @param  string $text: texto a validar
+   * @return bool: true si contiene contenido inapropiado, false si es válido
+   **/
   private function _containsInappropriateContent($text)  {
     return validateContentWithPerspective($text);
   }
 
-  # Extrae el archivo multimedia del request y analiza si es valido
-  private function _getUploadedMedia($request, $required){
-    # Obtener el archivo del request
-    $uploadedFiles = $request->getUploadedFiles();
-    $uploadedFile = $uploadedFiles['Media'] ?? null;
-
-    if(!$uploadedFile){
-      if($required){
-        return (object) [
-          "error" => [
-            "code" => "UPLOAD_ERROR",
-            "desc" => "Cannot read the attached file"
-          ]
-        ];
-      }
-      return false;
-    }
-
+  /**
+   * Valida un archivo multimedia subido al server
+   * @param  Response $response: objeto de response HTTP de Slim
+   * @param  File $uploadedFile: archivo subido
+   * @return object: objeto con datos del archivo si es válido, objeto error si hay problema, false si no es requerido
+   * @statusCode error UPLOAD_ERROR: no se puede leer el archivo adjunto
+   * @statusCode error MEDIA_TOO_BIG: tamaño excede límite (5MB imágenes, 50MB videos)
+   * @statusCode error MEDIA_FORMAT_INVALID: formato no permitido
+   **/
+  private function _validateUploadedMedia($response, $uploadedFile){
     if (!$uploadedFile || $uploadedFile->getError() !== UPLOAD_ERR_OK) {
       return (object) [
         "error" => [
@@ -960,47 +985,70 @@ class OfferingController {
 
     # Datos del archivo
     $fileSize = $uploadedFile->getSize();
-    $mimeType = $uploadedFile->getClientMediaType();
     $extension = pathinfo($uploadedFile->getClientFilename(), PATHINFO_EXTENSION);
-
-    # Validar el tamaño del archivo
-    if(($this->_isImage($mimeType) && $fileSize > MAX_IMAGE_SIZE) ||
-      (!$this->_isImage($mimeType) && $fileSize > MAX_VIDEO_SIZE)
-    ){
-      return (object) [
-        "error" => [
-          "code" => "MEDIA_TOO_BIG",
-          "desc" => "Maximum size is 5MB for photos and 50MB for videos"
-        ]
-      ];
-    }
 
     # Validar el formato de archivo usando finfo_file
     $finfo = finfo_open(FILEINFO_MIME_TYPE);
     $filePathTemp = $uploadedFile->getStream()->getMetadata('uri');
-    $actualMimeType = finfo_file($finfo, $filePathTemp);
+    $mimeType = finfo_file($finfo, $filePathTemp);
     finfo_close($finfo);
 
-    $allowedMimeTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'video/mp4', 'video/x-matroska'];
-    if(!in_array($actualMimeType, $allowedMimeTypes)){
+    # Tipo de archivo multimedia
+    $mediaType = $this->_getMediaType($mimeType);
+
+    # Debe ser video o imagen
+    if(!in_array($mediaType, [MediaType::IMAGE, MediaType::VIDEO])){
       return (object) [
-        "error" => [
-          "code" => "MEDIA_FORMAT_INVALID",
-          "desc" => "Allowed formats are JPEG, PNG, GIF, WEBP, MP4, MKV"
-        ]
+        "valid" => false,
+        "response" => $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "MEDIA_FORMAT_INVALID",
+            "desc" => "Allowed formats are JPEG, PNG, GIF, WEBP, MP4, WEBM, MOV, MKV"
+          ]
+        ])
+      ];
+    }
+
+    if((MediaType::IMAGE === $mediaType && $fileSize > MAX_IMAGE_SIZE) ||
+      (MediaType::VIDEO === $mediaType && $fileSize > MAX_VIDEO_SIZE)
+    ){
+      return (object) [
+        "valid" => false,
+        "response" => $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "MEDIA_TOO_BIG",
+            "desc" => "Maximum size is 5MB for photos and 50MB for videos"
+          ]
+        ])
       ];
     }
 
     return (object) [
-      "File" => $uploadedFile,
-      "MimeType" => $mimeType,
-      "FileSize" => $fileSize,
-      "Extension" => $extension
+      "valid" => true,
+      "response" => (object)[
+        "File" => $uploadedFile,
+        "TempFilePath" => $filePathTemp,
+        "MimeType" => $mimeType,
+        "MediaType" => $mediaType,
+        "FileSize" => $fileSize,
+        "Extension" => $extension
+      ]
     ];
   }
 
-  # Función para validar si el archivo es imagen
-  private function _isImage($mimeType)  {
-    return in_array($mimeType, ['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+  /**
+   * Valida si el archivo es una imagen según su MIME type
+   * @param  string $mimeType: tipo MIME del archivo
+   * @return bool: true si es imagen válida, false en caso contrario
+   **/
+  private function _getMediaType($mimeType) {
+    if(in_array($mimeType, ['image/jpeg', 'image/png', 'image/gif', 'image/webp'])){
+      return MediaType::IMAGE;
+    }
+
+    if(in_array($mimeType, ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-matroska'])){
+      return MediaType::VIDEO;
+    }
+    MediaType::INVALID;
   }
 }
