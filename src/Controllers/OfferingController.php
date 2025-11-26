@@ -573,6 +573,9 @@ class OfferingController {
       ]);
     }
 
+    $title = $data['Title'] ?? null;
+    $description = $data['Description'] ?? null;
+
     try {
       # Verificar que el offering existe
       $offering = $this->offering->getOfferingById($id);
@@ -594,9 +597,6 @@ class OfferingController {
           ]
         ]);
       }
-
-      $title = $data['Title'] ?? null;
-      $description = $data['Description'] ?? null;
 
       if(!$title){
         return $response->withStatus(400)->withJson([
@@ -626,17 +626,17 @@ class OfferingController {
       $media = $validation->response;
 
       # Analizar la imagen con Amazon Rekognition
-      if(empty($GLOBALS['config']['debug_mode']) || !$GLOBALS['config']['debug_mode']){
-        if ($media->MediaType === MediaType::IMAGE) {
-          $rekognitionResult = analyzeImageWithRekognition($media->TempFilePath);
-          if (!empty($rekognitionResult['error'])) {
-            return $response->withStatus(400)->withJson([
-              "error" => [
-                "code" => "INAPPROPRIATE_IMAGE",
-                "desc" => $rekognitionResult['reason']
-              ]
-            ]);
-          }
+      if($media->MediaType === MediaType::IMAGE &&
+        (empty($GLOBALS['config']['debug_mode']) || !$GLOBALS['config']['debug_mode'])
+      ){
+        $rekognitionResult = analyzeImageWithRekognition($media->TempFilePath);
+        if (!empty($rekognitionResult['error'])) {
+          return $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "INAPPROPRIATE_IMAGE",
+              "desc" => $rekognitionResult['reason']
+            ]
+          ]);
         }
       }
 
@@ -651,28 +651,31 @@ class OfferingController {
         ]);
       }
 
-      $userSubscription = $this->subscription->getSubscriptionByUser($userID);
-      $plan = $userSubscription ? $this->subscription->getSubscriptionPlanByID($userSubscription['PlanID']) : null;
-      $hasVideo = array_filter($plan['Features'] ?? null, function($e){
-        return $e['FeatureCode'] === 'VIDEOS' && $e['Value'];
-      });
+      # Si se adjunto un video ver si tiene un plan que lo permita
+      if ($media->MediaType === MediaType::VIDEO){
+        if($mediaCounts['video'] >= MAX_VIDEOS){
+          return $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "MEDIA_TOO_MANY",
+              "desc" => "Cannot add more videos to this offering"
+            ]
+          ]);
+        }
 
-      if(!$hasVideo){
-        return $response->withStatus(403)->withJson([
-          "error" => [
-            "code" => "HIGHER_PLAN_NEEDED",
-            "desc" => "Your subscription plan does not include videos in publicacions"
-          ]
-        ]);
-      }
+        $userSubscription = $this->subscription->getSubscriptionByUser($userID);
+        $plan = $userSubscription ? $this->subscription->getSubscriptionPlanByID($userSubscription['PlanID']) : null;
+        $hasVideo = array_filter($plan['Features'] ?? null, function($e){
+          return $e['FeatureCode'] === 'VIDEOS' && $e['Value'];
+        });
 
-      if ($media->MediaType === MediaType::VIDEO && $mediaCounts['video'] >= MAX_VIDEOS) {
-        return $response->withStatus(400)->withJson([
-          "error" => [
-            "code" => "MEDIA_TOO_MANY",
-            "desc" => "Cannot add more videos to this offering"
-          ]
-        ]);
+        if(!$hasVideo){
+          return $response->withStatus(403)->withJson([
+            "error" => [
+              "code" => "HIGHER_PLAN_NEEDED",
+              "desc" => "Your subscription plan does not include videos in publicacions"
+            ]
+          ]);
+        }
       }
 
       # Ruta de archivo y URL
@@ -723,7 +726,6 @@ class OfferingController {
   public function updateOfferingMedia(Request $request, Response $response, $args){
     $id = intval($args['id']); # ID de offering
     $mediaID = intval($args['mediaID']); # ID del archivo de medios
-    $position = intval($args['position']); # Posicion del archivo multimedia
     # Obtener los metadatos
     $data = $request->getParsedBody();
     # Obtener el archivo adjunto
@@ -743,6 +745,10 @@ class OfferingController {
       ]);
     }
 
+    $title = $data['Title'] ?? null;
+    $description = $data['Description'] ?? null;
+    $position = $data['Position'] ?? null;
+
     try {
       # Verificar que el offering existe
       $offering = $this->offering->getOfferingById($id);
@@ -757,16 +763,13 @@ class OfferingController {
 
       # Verificar permisos
       if ($offering['UserID'] !== $userID) {
-        return $response->withStatus(401)->withJson([
+        return $response->withStatus(403)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
             "desc" => "You do not have permission to modify this offering"
           ]
         ]);
       }
-
-      $title = $data['Title'] ?? null;
-      $description = $data['Description'] ?? null;
 
       if(!$title){
         return $response->withStatus(400)->withJson([
@@ -790,8 +793,8 @@ class OfferingController {
       }
 
       # Busco el media del offering
-      $media = $this->offering->getMediaById($id, $mediaID);
-      if (empty($media)) {
+      $currentMedia = $this->offering->getMediaById($id, $mediaID);
+      if (empty($currentMedia)) {
         return $response->withStatus(404)->withJson([
           "error" => [
             "code" => "MEDIA_NOT_FOUND",
@@ -800,73 +803,91 @@ class OfferingController {
         ]);
       }
 
-      $title = $data['Title'] ?? null;
-      $description = $data['Description'] ?? null;
-
       # Valida contenido con Perspective API
-      if ($title && $description) {
-        if (
-          $this->_containsInappropriateContent($data['Title']) ||
-          $this->_containsInappropriateContent($data['Description'])
-        ) {
-          return $response->withStatus(400)->withJson([
-            "code" => "INAPPROPRIATE_CONTENT",
-            "desc" => "Please remove inappropriate content and try again."
-          ]);
-        }
+      $contentToCheck = implode(" ", [
+        $data['Title'] ?? '',
+        $data['Description'] ?? ''
+      ]);
+      if ($this->_containsInappropriateContent($contentToCheck)) {
+        return $response->withStatus(400)->withJson([
+          "code" => "INAPPROPRIATE_CONTENT",
+          "desc" => "Please remove inappropriate content and try again."
+        ]);
       }
 
-      # Verifico si el archivo multimedia es valido (si se subio)
-      $uploadedMedia = $this->_getUploadedMedia($request, false);
-      if ($uploadedMedia !== false) {
-        if (isset($uploadedMedia->error)) {
-          return $response->withStatus(400)->withJson($uploadedMedia->error);
+      # Si se adjunto un archivo lo valido
+      if($uploadedFile !== null){
+        $validation = $this -> _validateUploadedMedia($response, $uploadedFile);
+        if(!$validation->valid){
+          return $validation->response;
+        }
+        $media = $validation->response;
+
+        # Si se adjunto un archivo el tipo de archivo anterior debe ser el mismo
+        if($media->MediaType->value !== $currentMedia['MediaType']){
+          return $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "MEDIA_TYPE_MISMATCH",
+              "desc" => "New media must be of the same type (video/image) as the current one"
+            ]
+          ]);
         }
 
-        # Obtengo la extención del archivo media
-        $fileExtension = $uploadedMedia->Extension;
-        # Ruta temporal del archivo
-        $tempFilePath = $uploadedMedia->File->getStream()->getMetadata('uri');
+        # Si se adjunto una imagen analizarla con Amazon Rekognition
+        if($media->MediaType === MediaType::IMAGE &&
+          (empty($GLOBALS['config']['debug_mode']) || !$GLOBALS['config']['debug_mode'])
+        ){
+          $rekognitionResult = analyzeImageWithRekognition($media->TempFilePath);
+          if (!empty($rekognitionResult['error'])) {
+            return $response->withStatus(400)->withJson([
+              "error" => [
+                "code" => "INAPPROPRIATE_IMAGE",
+                "desc" => $rekognitionResult['reason']
+              ]
+            ]);
+          }
+        }
 
-        # Analizar la imagen con Amazon Rekognition
-        if(empty($GLOBALS['config']['debug_mode']) || !$GLOBALS['config']['debug_mode']){
-          if (in_array($fileExtension, ['jpg', 'jpeg', 'png'])) {
-            $rekognitionResult = analyzeImageWithRekognition($tempFilePath);
+        # Si se adjunto un video ver si tiene un plan que lo permita
+        if ($media->MediaType === MediaType::VIDEO){
+          $userSubscription = $this->subscription->getSubscriptionByUser($userID);
+          $plan = $userSubscription ? $this->subscription->getSubscriptionPlanByID($userSubscription['PlanID']) : null;
+          $hasVideo = array_filter($plan['Features'] ?? null, function($e){
+            return $e['FeatureCode'] === 'VIDEOS' && $e['Value'];
+          });
 
-            if (!empty($rekognitionResult['error'])) {
-              return $response->withStatus(400)->withJson([
-                "error" => [
-                  "code" => "INAPPROPRIATE_IMAGE",
-                  "desc" => $rekognitionResult['reason']
-                ]
-              ]);
-            }
+          if(!$hasVideo){
+            return $response->withStatus(403)->withJson([
+              "error" => [
+                "code" => "HIGHER_PLAN_NEEDED",
+                "desc" => "Your subscription plan does not include videos in publicacions"
+              ]
+            ]);
           }
         }
 
         # Ruta de archivo y URL
         $uid = uniqid();
         $uploadDirectory = $GLOBALS['config']['media_folder']['path'];
-        $filePath = "$uploadDirectory/offering/$uid.$fileExtension";
-        $fileURL = $GLOBALS['config']['media_folder']['url'] . "/offering/$uid.$fileExtension";
+        $filePath = "$uploadDirectory/offering/$uid.{$media->Extension}";
+        $fileURL = $GLOBALS['config']['media_folder']['url'] . "/offering/$uid.{$media->Extension}";
 
         # Mover el archivo al destino
-        $uploadedMedia->File->moveTo($filePath);
-
-        $this->offering->updateOfferingMedia($id, $title, $description, $position, $mediaID, $fileURL, $filePath,
-          $this->_isImage($uploadedMedia->MimeType) ? 'image' : 'video');
-        # Elimino el archivo antiguo si se actualizo con uno nuevo
-        unlink($media['Path']);
-      } else {
-        $fileURL = null;
-        $this->offering->updateOfferingMedia($id, $title, $description, $position, $mediaID);
+        $media->File->moveTo($filePath);
       }
 
-      return $response->withStatus(200)->withJson([
-        "Message" => "Media file updated successfully",
-        "URL" => $fileURL,
-        "DetectedText" => isset($rekognitionResult['text']) ? $rekognitionResult['text'] : ''
-      ]);
+      $position = !is_null($position) && is_numeric($position) ? intval($position) : $currentMedia['Position'];
+
+      # Actualizo el media
+      $offering = $this->offering->updateOfferingMedia($id, $title, $description, $position, $mediaID,
+        $fileURL ?? null, $filePath ?? null, (empty($media) ? null : $media->MediaType));
+
+      # Borro el archivo antiguo
+      if($uploadedFile !== null && file_exists($currentMedia['Path'])){
+        @unlink($currentMedia['Path']);
+      }
+
+      return $response->withStatus(200)->withJson($offering);
     } catch (\Throwable $e) {
       if (!empty($filePath) && is_file($filePath)) {
         unlink($filePath); # Eliminar archivo subido en caso de error
@@ -894,6 +915,7 @@ class OfferingController {
   public function deleteOfferingMedia(Request $request, Response $response, $args)  {
     $id = intval($args['id']);
     $mediaID = intval($args['mediaID']);
+    # Token JWT
     $jwt = $request->getAttribute('jwt');
     $userID = $jwt->data->UserID;
 
@@ -913,15 +935,14 @@ class OfferingController {
         return $response->withStatus(403)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
-            "desc" => "You do not have permission to modify this user"
+            "desc" => "You do not have permission to modify this offering"
           ]
         ]);
       }
 
       # Obtener el archivo multimedia por mediaId y offeringId
-      $media = $this->offering->getMediaById($id, $mediaID);
-
-      if (empty($media)) {
+      $currentMedia = $this->offering->getMediaById($id, $mediaID);
+      if (empty($currentMedia)) {
         return $response->withStatus(404)->withJson([
           "error" => [
             "code" => "MEDIA_NOT_FOUND",
@@ -930,21 +951,15 @@ class OfferingController {
         ]);
       }
 
-      # Eliminar el archivo físico usando unlink()
-      if (!empty($media['Path']) && is_file($media['Path']) && !unlink($media['Path'])) {
-        return $response->withStatus(500)->withJson([
-          "error" => [
-            "code" => "DELETE_FAILED",
-            "desc" => "Failed to delete the media file from the filesystem"
-          ]
-        ]);
+      # Eliminar el registro de la tabla MEDIA
+      $offering = $this->offering->deleteOfferingMedia($id, $mediaID);
+
+      # Borro el archivo
+      if(file_exists($currentMedia['Path'])){
+        @unlink($currentMedia['Path']);
       }
 
-      # Eliminar el registro de la tabla MEDIA
-      $this->offering->deleteOfferingMedia($mediaID);
-
-      return $response->withStatus(200)->withJson("Media file deleted successfully");
-
+      return $response->withStatus(200)->withJson($offering);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [

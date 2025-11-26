@@ -673,7 +673,7 @@ class Offering {
    * No elimina físicamente el registro de la BD.
    *
    * @param  int $id: ID de la publicación
-   * @return void
+   * @return array: datos de la publicación actualizada
    * @throws DatabaseException
    **/
   public function deleteOffering($id) {
@@ -703,7 +703,6 @@ class Offering {
    * @param  int $id: ID de la publicación (OfferingID)
    * @param  int $mediaID: ID del archivo multimedia
    * @return array|false: datos del archivo o false si no existe
-   * @throws DatabaseException
    **/
   public function getMediaById($id, $mediaID) {
     $stmt = $this->db->prepare("SELECT * FROM Media
@@ -742,10 +741,12 @@ class Offering {
    * @param  string $fileURL: URL pública del archivo optimizado
    * @param  string $filePath: ruta local completa del archivo
    * @param  MediaType $mediaType: tipo de archivo ('image' o 'video')
-   * @return void
+   * @return array: datos de la publicación actualizada
    * @throws DatabaseException
    **/
-  public function createOfferingMedia($id, $title, $description, $fileURL, $filePath, MediaType $mediaType) {
+  public function createOfferingMedia($id, $title, $description, $fileURL,
+    $filePath, MediaType $mediaType
+  ){
     try {
       $this->db->beginTransaction(); # Iniciar transacción
 
@@ -757,8 +758,9 @@ class Offering {
       $position = $maxPosition !== null ? $maxPosition + 1 : 0;
 
       # Insertar en la tabla Media
-      $stmt = $this->db->prepare("INSERT INTO Media (`OfferingID`, `Title`, `Description`, `URL`, `Path`, `MediaType`, `Position`)
-            VALUES (:id, :title, :description, :fileURL, :filePath, :mediaType, :position)");
+      $stmt = $this->db->prepare("INSERT INTO Media
+        (`OfferingID`, `Title`, `Description`, `URL`, `Path`, `MediaType`, `Position`)
+        VALUES (:id, :title, :description, :fileURL, :filePath, :mediaType, :position)");
 
       $stmt->execute([
         ':id' => $id,
@@ -792,13 +794,15 @@ class Offering {
    * @param  string $description: nueva descripción del archivo
    * @param  int $position: nueva posición del archivo
    * @param  int $mediaID: ID del archivo multimedia
-   * @param  string|bool $fileURL: nueva URL del archivo o false si no se actualiza
-   * @param  string|bool $filePath: nueva ruta local del archivo o false si no se actualiza
-   * @param  string|bool $mediaType: nuevo tipo de archivo ('image'/'video') o false si no se actualiza
-   * @return void
+   * @param  string|null $fileURL: nueva URL del archivo o false si no se actualiza
+   * @param  string|null $filePath: nueva ruta local del archivo o false si no se actualiza
+   * @param  MediaType|null $mediaType: nuevo tipo de archivo ('image'/'video') o false si no se actualiza
+   * @return array: datos de la publicación actualizada
    * @throws DatabaseException
    **/
-  public function updateOfferingMedia($id, $title, $description, $position, $mediaID, $fileURL = false, $filePath = false, $mediaType = false) {
+  public function updateOfferingMedia($id, $title, $description, $position,
+    $mediaID, $fileURL, $filePath, MediaType|null $mediaType
+  ){
     try {
       $this->db->beginTransaction(); # Iniciar transacción
 
@@ -806,7 +810,8 @@ class Offering {
       if ($fileURL) {
         # Actualización para Media con archivo
         $stmt = $this->db->prepare("UPDATE Media
-          SET Title = :title, Description = :description, URL = :fileURL, Path = :filePath, MediaType = :mediaType,
+          SET Title = :title, Description = :description,
+          URL = :fileURL, Path = :filePath, MediaType = :mediaType,
           Position = :position
           WHERE MediaID = :mediaID AND OfferingID = :id");
         $stmt->execute([
@@ -817,11 +822,12 @@ class Offering {
           ':id' => $id,
           ':fileURL' => $fileURL,
           ':filePath' => $filePath,
-          ':mediaType' => $mediaType
+          ':mediaType' => $mediaType->value
         ]);
       } else {
         # Actualización para Media sin archivo
-        $stmt = $this->db->prepare("UPDATE Media SET Title = :title, Description = :description, Position = :position
+        $stmt = $this->db->prepare("UPDATE Media SET Title = :title,
+          Description = :description, Position = :position
           WHERE MediaID = :mediaID AND OfferingID = :id");
         $stmt->execute([
           ':title' => $title,
@@ -856,13 +862,27 @@ class Offering {
    * Elimina el registro de la tabla Media. El archivo físico debe ser eliminado
    * por el controller antes de llamar este método.
    *
+   * @param  int $id: ID de la publicación (OfferingID)
    * @param  int $mediaID: ID del archivo multimedia
-   * @return void
+   * @return array: datos de la publicación actualizada
    * @throws DatabaseException
    **/
-  public function deleteOfferingMedia($mediaID) {
-    $stmt = $this->db->prepare("DELETE FROM Media WHERE MediaID = ?");
-    $stmt->execute([$mediaID]);
+  public function deleteOfferingMedia($id, $mediaID) {
+    try{
+      $this->db->beginTransaction(); # Iniciar transacción
+
+      $stmt = $this->db->prepare("DELETE FROM Media WHERE MediaID = ?");
+      $stmt->execute([$mediaID]);
+
+      $offering = $this->getOfferingById($id) ??
+        throw new DatabaseException("Failed to retrieve the updated offering");
+
+      $this->db->commit(); # Confirmo transacción
+      return $offering;
+    } catch (\PDOException $e) {
+      $this->db->rollBack(); # Revierto en caso de error
+      throw new DatabaseException($e->getMessage());
+    }
   }
 
   /**
@@ -936,15 +956,22 @@ class Offering {
    * @access private
    **/
   private function _updateOfferingFaqs($id, $faqs) {
-    if ($faqs !== null && is_array($faqs)) {
-      $stmt = $this->db->prepare("DELETE FROM OfferingsFaqs WHERE OfferingID = ?");
-      $stmt->execute([$id]);
+    try{
+      $this->db->beginTransaction(); # Iniciar transacción
+      if ($faqs !== null && is_array($faqs)) {
+        $stmt = $this->db->prepare("DELETE FROM OfferingsFaqs WHERE OfferingID = ?");
+        $stmt->execute([$id]);
 
-      $stmt = $this->db->prepare("INSERT INTO OfferingsFaqs (OfferingID, Position, Question, Answer)
-      VALUES (?, ?, ?, ?)");
-      foreach ($faqs as $faq) {
-        $stmt->execute([$id, $faq['Position'], $faq['Question'], $faq['Answer']]);
+        $stmt = $this->db->prepare("INSERT INTO OfferingsFaqs (OfferingID, Position, Question, Answer)
+        VALUES (?, ?, ?, ?)");
+        foreach ($faqs as $faq) {
+          $stmt->execute([$id, $faq['Position'], $faq['Question'], $faq['Answer']]);
+        }
       }
+      $this->db->commit(); # Confirmo transacción
+    } catch (\PDOException $e) {
+      $this->db->rollBack(); # Revierto en caso de error
+      throw new DatabaseException($e->getMessage());
     }
   }
 }

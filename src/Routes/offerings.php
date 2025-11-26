@@ -31,7 +31,7 @@ return function (App $app) {
   $app->patch('/offerings/{id}', [$offeringController, 'updateOffering'])->add($requiredJwt);
   $app->delete('/offerings/{id}', [$offeringController, 'deleteOffering'])->add($requiredJwt);
   $app->post('/offerings/{id}/media', [$offeringController, 'createOfferingMedia'])->add($requiredJwt);
-  $app->post('/offerings/{id}/media/{mediaID}/{position}', [$offeringController, 'updateOfferingMedia'])->add($requiredJwt);
+  $app->post('/offerings/{id}/media/{mediaID}', [$offeringController, 'updateOfferingMedia'])->add($requiredJwt);
   $app->delete('/offerings/{id}/media/{mediaID}', [$offeringController, 'deleteOfferingMedia'])->add($requiredJwt);
   $app->patch('/offerings/approve/{id}', [$offeringController, 'approveOffering'])->add($requiredJwt);
 };
