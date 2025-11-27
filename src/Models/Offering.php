@@ -162,11 +162,11 @@ class Offering {
    * Retorna información completa de la publicación incluyendo autor, media, FAQs,
    * calificaciones y número total de bookings.
    *
-   * @param  int $id: ID de la publicación (OfferingID)
+   * @param  int $offeringID: ID de la publicación
    * @return array|false: datos de la publicación normalizados o false si no existe
    * @throws DatabaseException
    **/
-  public function getOfferingById($id) {
+  public function getOfferingById($offeringID) {
     $stmt = $this->db->prepare("SELECT o.*,
     u.UserID AS author_UserID,
     u.DisplayName AS author_DisplayName,
@@ -215,7 +215,7 @@ class Offering {
     WHERE o.OfferingID = ?
     GROUP BY o.OfferingID");
 
-    $stmt->execute([$id]);
+    $stmt->execute([$offeringID]);
     $offering = $stmt->fetch(PDO::FETCH_ASSOC);
 
     return $this -> _getOfferingGeneric($offering);
@@ -385,7 +385,6 @@ class Offering {
    *
    * @param  array|null $offering: datos de la publicación obtenidos de la BD o null
    * @return array|false: datos de la publicación normalizados o false si no existe
-   * @access private
    **/
   private function _getOfferingGeneric($offering){
     if (empty($offering)) {
@@ -450,7 +449,6 @@ class Offering {
    * @param  array $offerings: array de publicaciones obtenidas de la BD
    * @param  int $total: cantidad total de registros disponibles
    * @return object: { data: [], rows: { total: int, fetched: int } }
-   * @access private
    **/
   private function _getOfferingsGenericMulti($offerings, $total){
     # Desagrupo los json traidos por MYSQL para armar el JSON anidado de respuesta
@@ -552,17 +550,17 @@ class Offering {
         ':Conditions' => $data['Conditions'],
         ':Duration' => $data['Duration']
       ]);
-      $id = $this->db->lastInsertId();
+      $offeringID = $this->db->lastInsertId();
 
       if (isset($data['Faqs'])) {
         foreach ($data['Faqs'] as $faq) {
           $stmt = $this->db->prepare("INSERT INTO OfferingsFaqs (OfferingID, Position, Question, Answer)
             VALUES (?, ?, ?, ?)");
-          $stmt->execute([$id, $faq['Position'], $faq['Question'], $faq['Answer']]);
+          $stmt->execute([$offeringID, $faq['Position'], $faq['Question'], $faq['Answer']]);
         }
       }
 
-      $offering = $this->getOfferingById($id) ??
+      $offering = $this->getOfferingById($offeringID) ?:
         throw new DatabaseException("Failed to retrieve the created offering");
 
       $this->db->commit(); # Confirmo transacción
@@ -579,19 +577,20 @@ class Offering {
    * Cambia el estado de la publicación a 'Active', marca IsActive = 1 y Approved = 1.
    * Solo debe ser ejecutado por administradores.
    *
-   * @param  int $id: ID de la publicación
+   * @param  int $offeringID: ID de la publicación
    * @return array: datos de la publicación activada
    * @throws DatabaseException
    **/
-  public function approveOfferingById($id) {
+  public function approveOfferingById($offeringID) {
     try {
       $this->db->beginTransaction(); # Iniciar transacción
+
       $stmt = $this->db->prepare("UPDATE Offerings
         SET Status = 'Active', IsActive = 1, Approved = 1
         WHERE OfferingID = ? AND Status != 'Deleted'");
-      $stmt->execute([$id]);
+      $stmt->execute([$offeringID]);
 
-      $offering = $this->getOfferingById($id) ??
+      $offering = $this->getOfferingById($offeringID) ?:
         throw new DatabaseException("Failed to retrieve the updated offering");
 
       $this->db->commit(); # Confirmo transacción
@@ -609,13 +608,13 @@ class Offering {
    * automáticamente cambia el estado a 'Pending' para que sea re-aprobada.
    * Actualiza también las FAQs si se incluyen.
    *
-   * @param  int $id: ID de la publicación
+   * @param  int $offeringID: ID de la publicación
    * @param  array $data: array asociativo con campos a actualizar
    * @return array: datos de la publicación actualizada
    * @return array: faqs si los hubiera
    * @throws DatabaseException
    **/
-  public function updateOffering($id, $data) {
+  public function updateOffering($offeringID, $data) {
     try {
       $this->db->beginTransaction(); # Iniciar transacción
 
@@ -638,7 +637,7 @@ class Offering {
       $fields[] = "ModificationDate = :ModificationDate";
 
       # Si cambian ciertos campos hay que volver a autorizar
-      $stmt = $this->db->prepare("UPDATE Offerings SET " . implode(", ", $fields) . $statusQuery . " WHERE OfferingID = :id");
+      $stmt = $this->db->prepare("UPDATE Offerings SET " . implode(", ", $fields) . $statusQuery . " WHERE OfferingID = :offeringID");
 
       # Vincular los parámetros
       foreach ($data as $key => $value) {
@@ -647,15 +646,15 @@ class Offering {
         }
       }
 
-      $stmt->bindValue(':id', $id, PDO::PARAM_INT);
+      $stmt->bindValue(':offeringID', $offeringID, PDO::PARAM_INT);
       $stmt->bindValue(':ModificationDate', $modificationDate, PDO::PARAM_STR);
       $stmt->execute();
 
       if (isset($data['Faqs']) && is_array($data['Faqs'])) {
-        $this->_updateOfferingFaqs($id, $data['Faqs']);
+        $this->_updateOfferingFaqs($offeringID, $data['Faqs']);
       }
 
-      $offering = $this->getOfferingById($id) ??
+      $offering = $this->getOfferingById($offeringID) ?:
         throw new DatabaseException("Failed to retrieve the updated offering");
 
       $this->db->commit(); # Confirmo transacción
@@ -672,19 +671,19 @@ class Offering {
    * Cambia el estado de la publicación a 'Deleted' e IsActive = 0.
    * No elimina físicamente el registro de la BD.
    *
-   * @param  int $id: ID de la publicación
+   * @param  int $offeringID: ID de la publicación
    * @return array: datos de la publicación actualizada
    * @throws DatabaseException
    **/
-  public function deleteOffering($id) {
+  public function deleteOffering($offeringID) {
     try{
       $this->db->beginTransaction(); # Iniciar transacción
 
       $stmt = $this->db->prepare("UPDATE Offerings SET Status = 'Deleted', IsActive = 0
         WHERE OfferingID = ?");
-      $stmt->execute([$id]);
+      $stmt->execute([$offeringID]);
 
-      $offering = $this->getOfferingById($id) ??
+      $offering = $this->getOfferingById($offeringID) ?:
         throw new DatabaseException("Failed to retrieve the updated offering");
 
       $this->db->commit(); # Confirmo transacción
@@ -700,33 +699,29 @@ class Offering {
    *
    * Retorna información completa del archivo incluyendo ruta y URL.
    *
-   * @param  int $id: ID de la publicación (OfferingID)
+   * @param  int $offeringID: ID de la publicación
    * @param  int $mediaID: ID del archivo multimedia
    * @return array|false: datos del archivo o false si no existe
    **/
-  public function getMediaById($id, $mediaID) {
+  public function getMediaById($offeringID, $mediaID) {
     $stmt = $this->db->prepare("SELECT * FROM Media
       WHERE MediaID = ? AND OfferingID = ?");
-    $stmt->execute([$mediaID, $id]);
+    $stmt->execute([$mediaID, $offeringID]);
     return $stmt->fetch(PDO::FETCH_ASSOC);
   }
 
   /**
-   * Obtiene un archivo multimedia por tipo y posicion de una publicación
+   * Obtiene la cantidad de publicaciones activas o pendientes del guia
    *
-   * Retorna información completa del archivo incluyendo ruta y URL.
-   *
-   * @param  int $id: ID de la publicación (OfferingID)
-   * @param  MediaType $mediaType: Tipo de archivo multimedia
-   * @param  int $position: Posicion del archivo multimedia
-   * @return array|false: datos del archivo o false si no existe
-   * @throws DatabaseException
+   * @param  int $userID: ID del guia propietario de las publicaciones
+   * @return int: cantidad de publicaciones activas o pendientes
    **/
-  public function getMediaByTypePosition($id, MediaType $mediaType, $position) {
-    $stmt = $this->db->prepare("SELECT * FROM Media
-      WHERE OfferingID = ? AND MediaType = ? AND Position = ?");
-    $stmt->execute([$id, $mediaType->value, $position]);
-    return $stmt->fetch(PDO::FETCH_ASSOC);
+  public function countActiveOfferings($userID) {
+    $stmt = $this->db->prepare("SELECT count(*) as found FROM Offerings
+      WHERE UserID = ? AND Status IN ('Active','Pending')");
+    $stmt->execute([$userID]);
+    $offerings = $stmt->fetch(PDO::FETCH_ASSOC);
+    return ($offerings && isset($offerings['found'])) ? $offerings['found'] : 0;
   }
 
   /**
@@ -735,7 +730,7 @@ class Offering {
    * Inserta el archivo en la tabla Media con posicionamiento automático.
    * La primera imagen se asigna a posición 0 automáticamente.
    *
-   * @param  int $id: ID de la publicación (OfferingID)
+   * @param  int $offeringID: ID de la publicación
    * @param  string $title: título del archivo
    * @param  string $description: descripción del archivo (opcional)
    * @param  string $fileURL: URL pública del archivo optimizado
@@ -744,7 +739,7 @@ class Offering {
    * @return array: datos de la publicación actualizada
    * @throws DatabaseException
    **/
-  public function createOfferingMedia($id, $title, $description, $fileURL,
+  public function createOfferingMedia($offeringID, $title, $description, $fileURL,
     $filePath, MediaType $mediaType
   ){
     try {
@@ -753,17 +748,17 @@ class Offering {
       # Calcular la próxima posición
       $stmt = $this->db->prepare("SELECT MAX(Position) AS max_position FROM Media
         WHERE OfferingID = ? AND MediaType = ?");
-      $stmt->execute([$id, $mediaType->value]);
+      $stmt->execute([$offeringID, $mediaType->value]);
       $maxPosition = $stmt->fetch(PDO::FETCH_ASSOC)['max_position'];
       $position = $maxPosition !== null ? $maxPosition + 1 : 0;
 
       # Insertar en la tabla Media
       $stmt = $this->db->prepare("INSERT INTO Media
         (`OfferingID`, `Title`, `Description`, `URL`, `Path`, `MediaType`, `Position`)
-        VALUES (:id, :title, :description, :fileURL, :filePath, :mediaType, :position)");
+        VALUES (:offeringID, :title, :description, :fileURL, :filePath, :mediaType, :position)");
 
       $stmt->execute([
-        ':id' => $id,
+        ':offeringID' => $offeringID,
         ':title' => $title,
         ':description' => $description,
         ':fileURL' => $fileURL,
@@ -772,7 +767,7 @@ class Offering {
         ':position' => $position
       ]);
 
-      $offering = $this->getOfferingById($id) ??
+      $offering = $this->getOfferingById($offeringID) ?:
         throw new DatabaseException("Failed to retrieve the updated offering");
 
       $this->db->commit(); # Confirmo transacción
@@ -789,7 +784,7 @@ class Offering {
    * Actualiza metadatos (title, description, position) y opcionalmente la URL y ruta del archivo.
    * Si se actualiza cualquier campo, cambia el estado de la publicación a 'Pending'.
    *
-   * @param  int $id: ID de la publicación (OfferingID)
+   * @param  int $offeringID: ID de la publicación
    * @param  string $title: nuevo título del archivo
    * @param  string $description: nueva descripción del archivo
    * @param  int $position: nueva posición del archivo
@@ -800,7 +795,7 @@ class Offering {
    * @return array: datos de la publicación actualizada
    * @throws DatabaseException
    **/
-  public function updateOfferingMedia($id, $title, $description, $position,
+  public function updateOfferingMedia($offeringID, $title, $description, $position,
     $mediaID, $fileURL, $filePath, MediaType|null $mediaType
   ){
     try {
@@ -813,13 +808,13 @@ class Offering {
           SET Title = :title, Description = :description,
           URL = :fileURL, Path = :filePath, MediaType = :mediaType,
           Position = :position
-          WHERE MediaID = :mediaID AND OfferingID = :id");
+          WHERE MediaID = :mediaID AND OfferingID = :offeringID");
         $stmt->execute([
           ':title' => $title,
           ':description' => $description,
           ':position' => $position,
           ':mediaID' => $mediaID,
-          ':id' => $id,
+          ':offeringID' => $offeringID,
           ':fileURL' => $fileURL,
           ':filePath' => $filePath,
           ':mediaType' => $mediaType->value
@@ -828,13 +823,13 @@ class Offering {
         # Actualización para Media sin archivo
         $stmt = $this->db->prepare("UPDATE Media SET Title = :title,
           Description = :description, Position = :position
-          WHERE MediaID = :mediaID AND OfferingID = :id");
+          WHERE MediaID = :mediaID AND OfferingID = :offeringID");
         $stmt->execute([
           ':title' => $title,
           ':description' => $description,
           ':position' => $position,
           ':mediaID' => $mediaID,
-          ':id' => $id
+          ':offeringID' => $offeringID
         ]);
       }
 
@@ -843,9 +838,9 @@ class Offering {
       $statusQuery = $updateStatusRequired ? ", Status = 'Pending', IsActive = 0, Approved = 0" : "";
 
       $stmt = $this->db->prepare("UPDATE Offerings SET ModificationDate = ? $statusQuery WHERE OfferingID = ?");
-      $stmt->execute([date("YmdHis"), $id]);
+      $stmt->execute([date("YmdHis"), $offeringID]);
 
-      $offering = $this->getOfferingById($id) ??
+      $offering = $this->getOfferingById($offeringID) ?:
         throw new DatabaseException("Failed to retrieve the updated offering");
 
       $this->db->commit(); # Confirmo transacción
@@ -862,19 +857,19 @@ class Offering {
    * Elimina el registro de la tabla Media. El archivo físico debe ser eliminado
    * por el controller antes de llamar este método.
    *
-   * @param  int $id: ID de la publicación (OfferingID)
+   * @param  int $offeringID: ID de la publicación
    * @param  int $mediaID: ID del archivo multimedia
    * @return array: datos de la publicación actualizada
    * @throws DatabaseException
    **/
-  public function deleteOfferingMedia($id, $mediaID) {
+  public function deleteOfferingMedia($offeringID, $mediaID) {
     try{
       $this->db->beginTransaction(); # Iniciar transacción
 
       $stmt = $this->db->prepare("DELETE FROM Media WHERE MediaID = ?");
       $stmt->execute([$mediaID]);
 
-      $offering = $this->getOfferingById($id) ??
+      $offering = $this->getOfferingById($offeringID) ?:
         throw new DatabaseException("Failed to retrieve the updated offering");
 
       $this->db->commit(); # Confirmo transacción
@@ -890,14 +885,13 @@ class Offering {
    *
    * Retorna solo un archivo (LIMIT 1) con su ruta local y URL.
    *
-   * @param  int $id: ID de la publicación (OfferingID)
+   * @param  int $offeringID: ID de la publicación
    * @return array|false: datos del archivo o false si no existe
-   * @throws DatabaseException
    **/
-  public function getMediaByOfferingId($id) {
+  public function getMediaByOfferingId($offeringID) {
     $stmt = $this->db->prepare("SELECT MediaID, Path FROM Media
       WHERE OfferingID = ?");
-    $stmt->execute([$id]);
+    $stmt->execute([$offeringID]);
     return $stmt->fetch(PDO::FETCH_ASSOC);
   }
 
@@ -906,14 +900,13 @@ class Offering {
    *
    * Retorna cantidad de imágenes y videos asociados a una publicación.
    *
-   * @param  int $id: ID de la publicación (OfferingID)
+   * @param  int $offeringID: ID de la publicación
    * @return array: { 'image': int, 'video': int }
-   * @throws DatabaseException
    **/
-  public function getMediaCountByType($id) {
+  public function getMediaCountByType($offeringID) {
     $stmt = $this->db->prepare("SELECT MediaType, COUNT(*) AS count FROM Media
       WHERE OfferingID = ? GROUP BY MediaType");
-    $stmt->execute([$id]);
+    $stmt->execute([$offeringID]);
     $mediaCounts = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     # Organizar resultados en un arreglo asociativo
@@ -934,7 +927,6 @@ class Offering {
    * @param  int $userID: ID del usuario
    * @param  int $categoryID: ID de la categoría
    * @return bool: true si el usuario está suscrito, false en caso contrario
-   * @access public
    **/
   public function checkUserCategorySubscription($userID, $categoryID) {
     $stmt = $this->db->prepare("SELECT COUNT(*) FROM UsersCategories
@@ -949,25 +941,25 @@ class Offering {
    * Elimina todas las FAQs existentes e inserta las nuevas.
    * Se ejecuta en contexto de una transacción.
    *
-   * @param  int $id: ID de la publicación (OfferingID)
+   * @param  int $offeringID: ID de la publicación
    * @param  array $faqs: array de FAQs con structure { Position, Question, Answer }
-   * @return void
    * @throws DatabaseException
-   * @access private
    **/
-  private function _updateOfferingFaqs($id, $faqs) {
+  private function _updateOfferingFaqs($offeringID, $faqs) {
     try{
       $this->db->beginTransaction(); # Iniciar transacción
+
       if ($faqs !== null && is_array($faqs)) {
         $stmt = $this->db->prepare("DELETE FROM OfferingsFaqs WHERE OfferingID = ?");
-        $stmt->execute([$id]);
+        $stmt->execute([$offeringID]);
 
         $stmt = $this->db->prepare("INSERT INTO OfferingsFaqs (OfferingID, Position, Question, Answer)
         VALUES (?, ?, ?, ?)");
         foreach ($faqs as $faq) {
-          $stmt->execute([$id, $faq['Position'], $faq['Question'], $faq['Answer']]);
+          $stmt->execute([$offeringID, $faq['Position'], $faq['Question'], $faq['Answer']]);
         }
       }
+
       $this->db->commit(); # Confirmo transacción
     } catch (\PDOException $e) {
       $this->db->rollBack(); # Revierto en caso de error

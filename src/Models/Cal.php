@@ -21,8 +21,6 @@ class Cal {
    * @param string $slug Slug del usuario Cal.com (usado en la URL de reservas)
    * @param string $schedulingUrl URL completa de reservas del usuario
    * @param string $timeZone Zona horaria del usuario (ej: America/Buenos_Aires)
-   * @return void
-   * @throws PDOException Si hay error en la base de datos
    */
   public function updateCalUserData($calUserID, $slug, $schedulingUrl, $timeZone){
     $stmt = $this->db->prepare("UPDATE CalConnections
@@ -35,8 +33,6 @@ class Cal {
    * Elimina un usuario Cal.com de la base de datos
    * Se ejecuta cuando el usuario desvincula su cuenta de Cal.com
    * @param int $calUserID ID del usuario en Cal.com
-   * @return void
-   * @throws PDOException Si hay error en la base de datos
    */
   public function deleteCalUser($calUserID){
     $stmt = $this->db->prepare("DELETE FROM CalConnections
@@ -50,8 +46,6 @@ class Cal {
    * @param int $calUserID ID del usuario en Cal.com
    * @param string $accessToken Token de acceso para la API de Cal.com (temporal)
    * @param string $refreshToken Token para renovar el accessToken (de larga duración)
-   * @return void
-   * @throws PDOException Si hay error en la base de datos
    */
   public function updateCalUserTokens($calUserID, $accessToken, $refreshToken){
     $stmt = $this->db->prepare("UPDATE CalConnections
@@ -65,8 +59,6 @@ class Cal {
    * Se guarda después de crear exitosamente el webhook en Cal.com
    * @param int $calUserID ID del usuario en Cal.com
    * @param string $webhook UUID del webhook generado en Cal.com
-   * @return void
-   * @throws PDOException Si hay error en la base de datos
    */
   public function updateCalUserWebhook($calUserID, $webhook){
     $stmt = $this->db->prepare("UPDATE CalConnections SET Webhook = ?
@@ -84,8 +76,6 @@ class Cal {
    * @param string $slug Slug del usuario Cal.com
    * @param string $schedulingUrl URL base de reservas del usuario
    * @param string $timeZone Zona horaria del usuario
-   * @return void
-   * @throws PDOException Si hay error en la base de datos
    */
   public function saveCalUser(
     $calUserID, $userID, $accessToken, $refreshToken, $slug, $schedulingUrl, $timeZone
@@ -105,7 +95,6 @@ class Cal {
    * @param int $guideID ID del guía en OneSoul
    * @param int $offeringID ID de la publicación/servicio en OneSoul
    * @param object $payload Objeto con los datos completos del evento de Cal.com
-   * @return void
    * @throws DatabaseException Si hay error en la inserción
    */
   public function bookingCreated($createdAt, $seekerID, $guideID, $offeringID, $assocUUID, $payload){
@@ -145,7 +134,6 @@ class Cal {
    * Obtiene los datos de un usuario Cal.com vinculado
    * @param int $userID ID del usuario en OneSoul
    * @return array|null Datos del usuario Cal.com o null si no existe vinculación
-   * @throws PDOException Si hay error en la consulta
    */
   public function getCalUser($userID){
     $stmt = $this->db->prepare("SELECT * FROM CalConnections

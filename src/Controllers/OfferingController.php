@@ -239,6 +239,25 @@ class OfferingController {
     }
 
     try {
+      # Valido si el usuario puede crear publicaciones y no supero el limite
+      $pubMax = $this->subscription->getUserSubscriptionFeature($userID, 'PUB_MAX');
+      if(!$pubMax){
+        return $response->withStatus(403)->withJson([
+          "error" => [
+            "code" => "SUBSCRIPTION_NEEDED",
+            "desc" => "A subscription is needed to publish."
+          ]
+        ]);
+      }
+      if($pubMax['Value'] !== null && $this->offering->countActiveOfferings($userID) >= $pubMax['Value']){
+        return $response->withStatus(403)->withJson([
+          "error" => [
+            "code" => "HIGHER_PLAN_NEEDED",
+            "desc" => "You need a higher subscription to publish more."
+          ]
+        ]);
+      }
+
       # Validación de contenido inapropiado
       $contentToCheck = implode(" ", [
         $data['Title'] ?? '',

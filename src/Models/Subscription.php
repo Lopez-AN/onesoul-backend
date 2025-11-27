@@ -16,28 +16,187 @@ class Subscription {
   }
 
   /**
-  * Obtiene todos los planes con features activos.
-  * @return array Lista de planes.
-  * @throws DatabaseException
-  */
+   * Obtiene todos los planes de suscripción con características activas
+   * @return array: lista de planes normalizados con características
+   */
   public function getSubscriptionPlans() {
-    try {
-      $stmt = $this->db->prepare("SELECT sp.PlanID, sp.StripeID, sp.Name, sp.Description, sp.Beneficts, sp.Price, sp.CurrencyCode, sp.Duration,
-                    sf.FeatureCode, sf.Description AS FeatureDescription,
-                    si.Value, si.Type, si.Description AS ItemDescription
-                FROM SubscriptionPlans AS sp
-                LEFT JOIN SubscriptionItems AS si ON sp.PlanID = si.PlanID
-                LEFT JOIN SubscriptionFeatures AS sf ON si.FeatureCode = sf.FeatureCode
-                WHERE sf.IsActive = 1
-                ORDER BY sp.PlanID, sf.FeatureCode");
+    $stmt = $this->db->prepare("SELECT sp.PlanID, sp.StripeID, sp.Name,
+      sp.Description, sp.Beneficts, sp.Price, sp.CurrencyCode, sp.Duration,
+      sf.FeatureCode, sf.Description AS FeatureDescription,
+      si.Value, si.Type, si.Description AS ItemDescription
+      FROM SubscriptionPlans AS sp
+      LEFT JOIN SubscriptionItems AS si ON sp.PlanID = si.PlanID
+      LEFT JOIN SubscriptionFeatures AS sf ON si.FeatureCode = sf.FeatureCode
+      WHERE sf.IsActive = 1
+      ORDER BY sp.PlanID, sf.FeatureCode");
 
-      $stmt->execute();
-      $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $stmt->execute();
+    $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-      # Organizar los planes en un array estructurado
-      $plans = [];
-      foreach ($results as $row) {
-        $planId = $row['PlanID'];
+    # Organizar los planes en un array estructurado
+    $plans = [];
+    foreach ($results as $row) {
+      $planId = $row['PlanID'];
+
+      # Castear el valor según el tipo
+      $value = $row['Value'];
+      if (isset($value) && isset($row['Type'])) {
+        switch ($row['Type']) {
+          case 'INTEGER':
+            $value = is_numeric($value) ? (int)$value : 0;
+            break;
+          case 'FLOAT':
+            $value = is_numeric($value) ? (float)$value : 0.0;
+            break;
+          case 'BOOLEAN':
+            $value = filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+            break;
+          case 'STRING':
+          default:
+            $value = (string)$value;
+            break;
+        }
+      }
+
+      # Si el plan no está en el array, inicializarlo
+      if (!isset($plans[$planId])) {
+        $plans[$planId] = [
+          "PlanID"       => $row['PlanID'],
+          "StripeID"     => $row['StripeID'],
+          "Name"         => $row['Name'],
+          "Description"  => $row['Description'],
+          "Beneficts"    => $row['Beneficts'],
+          "Price"        => (float)$row['Price'],
+          "CurrencyCode" => $row['CurrencyCode'],
+          "Duration"     => $row['Duration'],
+          "Features"     => []
+        ];
+      }
+
+      # Agregar las características solo si existen
+      if (!empty($row['FeatureCode'])) {
+        $plans[$planId]['Features'][] = [
+          "FeatureCode"  => $row['FeatureCode'],
+          "Description"  => $row['FeatureDescription'],
+          "Value"  => $value,
+          "ItemDescription"  => $row['ItemDescription']
+        ];
+      }
+    }
+
+    return array_values($plans);
+  }
+
+  /**
+   * Obtiene un plan de suscripción por su ID
+   * @param  int $planID: ID del plan de suscripción
+   * @return array|false: datos del plan o false si no existe
+   */
+  public function getSubscriptionPlanByID($planID) {
+    $stmt = $this->db->prepare("SELECT sp.PlanID, sp.StripeID, sp.Name,
+      sp.Description, sp.Beneficts, sp.Price, sp.CurrencyCode, sp.Duration,
+      sf.FeatureCode, sf.Description AS FeatureDescription,
+      si.Value, si.Type, si.Description AS ItemDescription
+      FROM SubscriptionPlans AS sp
+      LEFT JOIN SubscriptionItems AS si ON sp.PlanID = si.PlanID
+      LEFT JOIN SubscriptionFeatures AS sf ON si.FeatureCode = sf.FeatureCode
+      WHERE sp.PlanID = ? AND sf.IsActive = 1
+      ORDER BY sf.FeatureCode");
+
+    $stmt->execute([$planID]);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    if (empty($rows)) {
+      return false; # No existe el plan
+    }
+
+    # Inicializar el plan
+    $subscription = [
+      "PlanID"       => $rows[0]['PlanID'],
+      "StripeID"     => $rows[0]['StripeID'],
+      "Name"         => $rows[0]['Name'],
+      "Description"  => $rows[0]['Description'],
+      "Beneficts"    => $rows[0]['Beneficts'],
+      "Price"        => (float)$rows[0]['Price'],
+      "CurrencyCode" => $rows[0]['CurrencyCode'],
+      "Duration"     => $rows[0]['Duration'],
+      "Features"     => []
+    ];
+
+    # Agregar las features
+    foreach ($rows as $row) {
+      if (!empty($row['FeatureCode'])) {
+        # Castear el valor según el tipo
+        $value = $row['Value'];
+        if (isset($value) && isset($row['Type'])) {
+          switch ($row['Type']) {
+            case 'INTEGER':
+              $value = is_numeric($value) ? (int)$value : 0;
+              break;
+            case 'FLOAT':
+              $value = is_numeric($value) ? (float)$value : 0.0;
+              break;
+            case 'BOOLEAN':
+              $value = filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+              break;
+            case 'STRING':
+            default:
+              $value = (string)$value;
+              break;
+          }
+        }
+
+        $subscription['Features'][] = [
+          "FeatureCode"  => $row['FeatureCode'],
+          "Description"  => $row['FeatureDescription'],
+          "Value"  => $value,
+          "ItemDescription"  => $row['ItemDescription']
+        ];
+      }
+    }
+
+    return $subscription;
+  }
+
+  /**
+   * Obtiene un plan de suscripción por su ID de Stripe
+   * @param  string $stripePriceID: ID del precio en Stripe
+   * @return array|false: datos del plan o false si no existe
+   */
+  public function getSubscriptionPlanByStripeID($stripePriceID) {
+    $stmt = $this->db->prepare("SELECT sp.PlanID, sp.StripeID, sp.Name,
+      sp.Description, sp.Beneficts, sp.Price, sp.CurrencyCode, sp.Duration,
+      sf.FeatureCode, sf.Description AS FeatureDescription,
+      si.Value, si.Type, si.Description AS ItemDescription
+      FROM SubscriptionPlans AS sp
+      LEFT JOIN SubscriptionItems AS si ON sp.PlanID = si.PlanID
+      LEFT JOIN SubscriptionFeatures AS sf ON si.FeatureCode = sf.FeatureCode
+      WHERE sp.StripeID = ? AND sf.IsActive = 1
+      ORDER BY sf.FeatureCode");
+
+    $stmt->execute([$stripePriceID]);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    if (empty($rows)) {
+      return false; # No existe el plan
+    }
+
+    # Inicializar el plan
+    $subscription = [
+      "PlanID"       => $rows[0]['PlanID'],
+      "StripeID"     => $rows[0]['StripeID'],
+      "Name"         => $rows[0]['Name'],
+      "Description"  => $rows[0]['Description'],
+      "Beneficts"    => $rows[0]['Beneficts'],
+      "Price"        => (float)$rows[0]['Price'],
+      "CurrencyCode" => $rows[0]['CurrencyCode'],
+      "Duration"     => $rows[0]['Duration'],
+      "Features"     => []
+    ];
+
+    # Agregar las features
+    foreach ($rows as $row) {
+      if (!empty($row['FeatureCode'])) {
 
         # Castear el valor según el tipo
         $value = $row['Value'];
@@ -59,202 +218,23 @@ class Subscription {
           }
         }
 
-        # Si el plan no está en el array, inicializarlo
-        if (!isset($plans[$planId])) {
-          $plans[$planId] = [
-            "PlanID"       => $row['PlanID'],
-            "StripeID"     => $row['StripeID'],
-            "Name"         => $row['Name'],
-            "Description"  => $row['Description'],
-            "Beneficts"    => $row['Beneficts'],
-            "Price"        => (float)$row['Price'],
-            "CurrencyCode" => $row['CurrencyCode'],
-            "Duration"     => $row['Duration'],
-            "Features"     => []
-          ];
-        }
-
-        # Agregar las características solo si existen
-        if (!empty($row['FeatureCode'])) {
-          $plans[$planId]['Features'][] = [
-            "FeatureCode"  => $row['FeatureCode'],
-            "Description"  => $row['FeatureDescription'],
-            "Value"  => $value,
-            "ItemDescription"  => $row['ItemDescription']
-          ];
-        }
+        $subscription['Features'][] = [
+          "FeatureCode"  => $row['FeatureCode'],
+          "Description"  => $row['FeatureDescription'],
+          "Value"  => $value,
+          "ItemDescription"  => $row['ItemDescription']
+        ];
       }
-
-      return array_values($plans);
-
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
     }
+
+    return $subscription;
   }
 
   /**
-  * Obtiene un plan por ID con sus features.
-  * @param int $id
-  * @return array|null Plan o null si no existe.
-  * @throws DatabaseException
-  */
-  public function getSubscriptionPlanByID($id) {
-    try {
-      $stmt = $this->db->prepare("SELECT sp.PlanID, sp.StripeID, sp.Name, sp.Description, sp.Beneficts, sp.Price, sp.CurrencyCode, sp.Duration,
-                                sf.FeatureCode, sf.Description AS FeatureDescription,
-                                si.Value, si.Type, si.Description AS ItemDescription
-                                FROM SubscriptionPlans AS sp
-                                LEFT JOIN SubscriptionItems AS si ON sp.PlanID = si.PlanID
-                                LEFT JOIN SubscriptionFeatures AS sf ON si.FeatureCode = sf.FeatureCode
-                                WHERE sp.PlanID = :id AND sf.IsActive = 1
-                                ORDER BY sf.FeatureCode");
-
-      $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-      $stmt->execute();
-
-      $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-      if (empty($rows)) {
-        return null; # No existe el plan
-      }
-
-      # Inicializar el plan
-      $subscription = [
-        "PlanID"       => $rows[0]['PlanID'],
-        "StripeID"     => $rows[0]['StripeID'],
-        "Name"         => $rows[0]['Name'],
-        "Description"  => $rows[0]['Description'],
-        "Beneficts"    => $rows[0]['Beneficts'],
-        "Price"        => (float)$rows[0]['Price'],
-        "CurrencyCode" => $rows[0]['CurrencyCode'],
-        "Duration"     => $rows[0]['Duration'],
-        "Features"     => []
-      ];
-
-      # Agregar las features
-      foreach ($rows as $row) {
-        if (!empty($row['FeatureCode'])) {
-
-          # Castear el valor según el tipo
-          $value = $row['Value'];
-          if (isset($value) && isset($row['Type'])) {
-            switch ($row['Type']) {
-              case 'INTEGER':
-                $value = is_numeric($value) ? (int)$value : 0;
-                break;
-              case 'FLOAT':
-                $value = is_numeric($value) ? (float)$value : 0.0;
-                break;
-              case 'BOOLEAN':
-                $value = filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
-                break;
-              case 'STRING':
-              default:
-                $value = (string)$value;
-                break;
-            }
-          }
-
-          $subscription['Features'][] = [
-            "FeatureCode"  => $row['FeatureCode'],
-            "Description"  => $row['FeatureDescription'],
-            "Value"  => $value,
-            "ItemDescription"  => $row['ItemDescription']
-          ];
-        }
-      }
-
-      return $subscription;
-
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
-  }
-
-  /**
-  * Obtiene un plan por Stripe Price ID.
-  * @param string $priceID
-  * @return array|null Plan o null si no existe.
-  * @throws DatabaseException
-  */
-  public function getSubscriptionPlanByStripeID($priceID) {
-    try {
-      $stmt = $this->db->prepare("SELECT sp.PlanID, sp.StripeID, sp.Name, sp.Description, sp.Beneficts, sp.Price, sp.CurrencyCode, sp.Duration,
-                                sf.FeatureCode, sf.Description AS FeatureDescription,
-                                si.Value, si.Type, si.Description AS ItemDescription
-                                FROM SubscriptionPlans AS sp
-                                LEFT JOIN SubscriptionItems AS si ON sp.PlanID = si.PlanID
-                                LEFT JOIN SubscriptionFeatures AS sf ON si.FeatureCode = sf.FeatureCode
-                                WHERE sp.StripeID = :priceID AND sf.IsActive = 1
-                                ORDER BY sf.FeatureCode");
-
-      $stmt->bindParam(':priceID', $priceID, PDO::PARAM_STR);
-      $stmt->execute();
-
-      $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-      if (empty($rows)) {
-        return null; # No existe el plan
-      }
-
-      # Inicializar el plan
-      $subscription = [
-        "PlanID"       => $rows[0]['PlanID'],
-        "StripeID"     => $rows[0]['StripeID'],
-        "Name"         => $rows[0]['Name'],
-        "Description"  => $rows[0]['Description'],
-        "Beneficts"    => $rows[0]['Beneficts'],
-        "Price"        => (float)$rows[0]['Price'],
-        "CurrencyCode" => $rows[0]['CurrencyCode'],
-        "Duration"     => $rows[0]['Duration'],
-        "Features"     => []
-      ];
-
-      # Agregar las features
-      foreach ($rows as $row) {
-        if (!empty($row['FeatureCode'])) {
-
-          # Castear el valor según el tipo
-          $value = $row['Value'];
-          if (isset($value) && isset($row['Type'])) {
-            switch ($row['Type']) {
-              case 'INTEGER':
-                $value = is_numeric($value) ? (int)$value : 0;
-                break;
-              case 'FLOAT':
-                $value = is_numeric($value) ? (float)$value : 0.0;
-                break;
-              case 'BOOLEAN':
-                $value = filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
-                break;
-              case 'STRING':
-              default:
-                $value = (string)$value;
-                break;
-            }
-          }
-
-          $subscription['Features'][] = [
-            "FeatureCode"  => $row['FeatureCode'],
-            "Description"  => $row['FeatureDescription'],
-            "Value"  => $value,
-            "ItemDescription"  => $row['ItemDescription']
-          ];
-        }
-      }
-
-      return $subscription;
-
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
-  }
-
-  /**
-  * Obtiene la suscripción activa de un usuario
-  * @param int $userID
-  * @return array|null Suscripción o false si no hay activa/trial.
-  */
+   * Obtiene la suscripción activa de un usuario
+   * @param  int $userID: ID del usuario
+   * @return array|false: datos de suscripción con upgrades/downgrades pendientes o false
+   */
   public function getSubscriptionByUser($userID) {
     $stmt = $this->db->prepare("SELECT * FROM Subscriptions
       WHERE UserID = :userID
@@ -296,62 +276,72 @@ class Subscription {
     $newPlanID = $stmt->fetchColumn();
     $subscription['PendingDowngrade'] = $newPlanID ?: null;
 
+    return $subscription;
+  }
 
+  public function getUserSubscriptionFeature($guideID, $feature) {
+    $userSubscription = $this->getSubscriptionByUser($guideID);
+    if(!$userSubscription){
+      return null; # Devuelvo null si no tiene subscripcion
+    }
+    $plan = $this->getSubscriptionPlanByID($userSubscription['PlanID']);
+    $feature = $plan ? array_filter($plan['Features'] ?? null, function($e) use ($feature){
+      return $e['FeatureCode'] === $feature;
+    }) : [];
+    if(empty($feature)){ # Esto es una ecepcion porque , deberia existir el feature siempre
+      throw new Exception("Plan or feature not found");
+    }
+    return array_pop($feature);
+  }
+
+
+  /**
+   * Obtiene la suscripción activa por ID de plataforma de pagos
+   * @param  string $platformSubscriptionID: ID de suscripción en plataforma de pagos
+   * @return array|false: datos de suscripción con detalles de plan o false
+   */
+  public function getUserSubscriptionByPlatformSubID($platformSubscriptionID) {
+    $stmt = $this->db->prepare("SELECT * FROM Subscriptions
+      WHERE PlatformSubscriptionID = ?
+      AND Status IN ('ACTIVE','TRIALING')
+      ORDER BY StartDate DESC
+      LIMIT 1");
+
+    $stmt->execute([$platformSubscriptionID]);
+
+    $subscription = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$subscription) {
+      return false;
+    }
+
+    # Se obtiene los detalles del Plan del usuario
+    $id = $subscription['PlanID'];
+    $planDetails = $this->getSubscriptionPlanByID($id);
+    $subscription['PlanDetails'] = $planDetails;
 
     return $subscription;
   }
 
   /**
-  * Obtiene la suscripción activa por ID de suscripción en plataforma.
-  * @param string $platformSubscriptionID
-  * @return array|null Suscripción o null si no hay activa/trial.
-  * @throws DatabaseException
-  */
-  public function getUserSubscriptionByPlatformSubID($platformSubscriptionID) {
-    try {
-      $stmt = $this->db->prepare("SELECT * FROM Subscriptions
-        WHERE PlatformSubscriptionID = :platformSubscriptionID
-        AND Status IN ('ACTIVE','TRIALING')
-        ORDER BY StartDate DESC
-        LIMIT 1");
-
-      $stmt->bindParam(':platformSubscriptionID', $platformSubscriptionID, PDO::PARAM_STR);
-      $stmt->execute();
-
-      $subscription = $stmt->fetch(PDO::FETCH_ASSOC);
-      if (!$subscription) {
-        return null;
-      }
-
-      # Se obtiene los detalles del Plan del usuario
-      $id = $subscription['PlanID'];
-      $planDetails = $this->getSubscriptionPlanByID($id);
-      $subscription['PlanDetails'] = $planDetails;
-
-      return $subscription;
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
-  }
-
-  /**
-  * Crea una suscripción confirmada (reemplaza la activa si la hubiera) y envía email opcional.
-  * @param int $userID
-  * @param int $planID
-  * @param string $platformSubscriptionID
-  * @param string $platformCustomerID
-  * @param string $subDomain
-  * @param array $userData
-  * @return array Datos de la suscripción creada.
-  * @throws DatabaseException
-  */
+   * Crea una suscripción confirmada reemplazando la anterior si existe
+   * @param  int $userID: ID del usuario
+   * @param  int $planID: ID del plan a contratar
+   * @param  string $platformSubscriptionID: ID de suscripción en plataforma de pagos
+   * @param  string $platformCustomerID: ID de cliente en plataforma de pagos
+   * @param  string $subDomain: subdominio personalizado (opcional)
+   * @param  array $userData: datos del usuario con email, nombre y período de prueba
+   * @return array: datos de suscripción creada
+   * @throws DatabaseException
+   */
   public function createConfirmedSubscription($userID, $planID, $platformSubscriptionID, $platformCustomerID, $subDomain = '', $userData = []) {
     try {
+      $this->db->beginTransaction(); # Iniciar transacción
+
       # Cancelar suscripción anterior si existe
       $stmt = $this->db->prepare("UPDATE Subscriptions
-                                SET EndDate = NOW(), Status = 'CANCELED'
-                                WHERE UserID = :userID AND Status = 'ACTIVE'");
-      $stmt->execute(['userID' => $userID]);
+        SET EndDate = NOW(), Status = 'CANCELED'
+        WHERE UserID = ? AND Status = 'ACTIVE'");
+      $stmt->execute([$userID]);
 
       $today = date('Y-m-d');
       $trialStart = $userData['TrialStart'];
@@ -367,9 +357,9 @@ class Subscription {
 
       # Insertar nueva suscripción
       $stmt = $this->db->prepare("INSERT INTO Subscriptions (PlanID, UserID, TrialStart, TrialEnd, TrialSource,
-              StartDate, Status, PaymentPlatform, PlatformSubscriptionID, PlatformCustomerID, NextBillingDate, LatestInvoiceID)
-              VALUES (:planID, :userID, :trialStart, :trialEnd, :trialSource, NOW(), :status,
-              :paymentPlatform, :platformSubscriptionID, :platformCustomerID, :nextBillingDate, :latestInvoice)");
+        StartDate, Status, PaymentPlatform, PlatformSubscriptionID, PlatformCustomerID, NextBillingDate, LatestInvoiceID)
+        VALUES (:planID, :userID, :trialStart, :trialEnd, :trialSource, NOW(), :status,
+        :paymentPlatform, :platformSubscriptionID, :platformCustomerID, :nextBillingDate, :latestInvoice)");
 
       $stmt->execute([
         ':planID' => $planID,
@@ -387,9 +377,9 @@ class Subscription {
 
       # Marcar referido como exitoso si corresponde
       $stmt = $this->db->prepare("UPDATE Referrals
-                                SET ReferralStatus = 'Successful'
-                                WHERE ReferredUserID = :userID AND ReferralStatus = 'Pending'");
-      $stmt->execute(['userID' => $userID]);
+        SET ReferralStatus = 'Successful'
+        WHERE ReferredUserID = ? AND ReferralStatus = 'Pending'");
+      $stmt->execute([$userID]);
 
       $subscription = $this->getSubscriptionByUser($userID);
 
@@ -426,23 +416,28 @@ class Subscription {
         'Subscription' => $subscription
       ];
 
+      $this->db->commit(); # Confirmo transacción
+      return $booking;
     } catch (\PDOException $e) {
+      $this->db->rollBack(); # Revierto en caso de error
       throw new DatabaseException($e->getMessage());
     }
   }
 
   /**
-  * Registra un cambio de plan programado (pendiente).
-  * @param string $platformSubscriptionID
-  * @param int $newPlanID
-  * @param int|string|null $effectiveDate Timestamp o null.
-  * @return string|int ID del cambio.
-  * @throws DatabaseException
-  */
+   * Programa un cambio de plan para ejecutarse en fecha futura
+   * @param  string $platformSubscriptionID: ID de suscripción en plataforma de pagos
+   * @param  int $newPlanID: ID del nuevo plan
+   * @param  int|null $effectiveDate: timestamp de ejecución (opcional)
+   * @return string|int: ID del cambio programado
+   * @throws DatabaseException
+   */
   public function scheduleSubscriptionChange($platformSubscriptionID, $newPlanID, $effectiveDate = null) {
     $effectiveDate = $effectiveDate ? date("Y-m-d H:i:s", $effectiveDate) : null;
 
     try {
+      $this->db->beginTransaction(); # Iniciar transacción
+
       $sub = $this->getUserSubscriptionByPlatformSubID($platformSubscriptionID);
       if (!$sub) {
         throw new DatabaseException("Subscription not found: $platformSubscriptionID");
@@ -462,47 +457,55 @@ class Subscription {
         ':effectiveDate' => $effectiveDate
       ]);
 
-      return $this->db->lastInsertId();
+      $id = $this->db->lastInsertId();
+
+      $this->db->commit(); # Confirmo transacción
+      return $id;
     } catch (\PDOException $e) {
+      $this->db->rollBack(); # Revierto en caso de error
       throw new DatabaseException($e->getMessage());
     }
   }
 
   /**
-  * Obtiene un cambio pendiente.
-  * @param string $platformSubscriptionID
-  * @param int|null|false $newPlanID Filtra por nuevo plan (null acepta NULL, false ignora filtro).
-  * @return array|false Fila o false si no existe.
-  * @throws DatabaseException
-  */
+   * Obtiene el cambio pendiente de un plan programado
+   * @param  string $platformSubscriptionID: ID de suscripción en plataforma de pagos
+   * @param  int|null|false $newPlanID: filtra por nuevo plan (null: acepta NULL, false: ignora)
+   * @return array|false: datos del cambio pendiente o false
+   */
   public function getPendingChange($platformSubscriptionID, $newPlanID = null) {
-    try {
-      $sql = "SELECT * FROM SubscriptionChanges WHERE PlatformSubscriptionID = :platformSubscriptionID AND Status = 'PENDING'";
+    $sql = "SELECT * FROM SubscriptionChanges WHERE PlatformSubscriptionID = :platformSubscriptionID AND Status = 'PENDING'";
 
-      if ($newPlanID !== null) {
-        $sql .= " AND NewPlanID = :newPlanID ";
-      }
-
-      $sql .= " ORDER BY CreatedAt DESC LIMIT 1";
-
-      $stmt = $this->db->prepare($sql);
-      $stmt->bindValue(':platformSubscriptionID', $platformSubscriptionID, PDO::PARAM_STR);
-      if ($newPlanID !== null) {
-        $stmt->bindValue(':newPlanID', $newPlanID, PDO::PARAM_INT);
-      }
-      $stmt->execute();
-
-      return $stmt->fetch(PDO::FETCH_ASSOC);
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
+    if ($newPlanID !== null) {
+      $sql .= " AND NewPlanID = :newPlanID ";
     }
+
+    $sql .= " ORDER BY CreatedAt DESC LIMIT 1";
+
+    $stmt = $this->db->prepare($sql);
+    $stmt->bindValue(':platformSubscriptionID', $platformSubscriptionID, PDO::PARAM_STR);
+    if ($newPlanID !== null) {
+      $stmt->bindValue(':newPlanID', $newPlanID, PDO::PARAM_INT);
+    }
+    $stmt->execute();
+
+    return $stmt->fetch(PDO::FETCH_ASSOC);
   }
 
-  # Crea un cambio pendiente de pago
+  /**
+   * Programa un cambio de plan en estado "en espera de pago"
+   * @param  string $platformSubscriptionID: ID de suscripción en plataforma de pagos
+   * @param  int $newPlanID: ID del nuevo plan
+   * @param  int|null $effectiveDate: timestamp de ejecución (opcional)
+   * @return string|int: ID del cambio programado
+   * @throws DatabaseException
+   */
   public function waitingSubscriptionChange($platformSubscriptionID, $newPlanID, $effectiveDate = null) {
     $effectiveDate = $effectiveDate ? date("Y-m-d H:i:s", $effectiveDate) : null;
 
     try {
+      $this->db->beginTransaction(); # Iniciar transacción
+
       $sub = $this->getUserSubscriptionByPlatformSubID($platformSubscriptionID);
       if (!$sub) {
         throw new DatabaseException("Subscription not found: $platformSubscriptionID");
@@ -522,96 +525,82 @@ class Subscription {
         ':effectiveDate' => $effectiveDate
       ]);
 
-      return $this->db->lastInsertId();
+      $id = $this->db->lastInsertId();
+
+      $this->db->commit(); # Confirmo transacción
+      return $id;
     } catch (\PDOException $e) {
+      $this->db->rollBack(); # Revierto en caso de error
       throw new DatabaseException($e->getMessage());
     }
   }
 
+  /**
+   * Obtiene el cambio pendiente en estado "en espera de pago"
+   * @param  string $platformSubscriptionID: ID de suscripción en plataforma de pagos
+   * @return array|false: datos del cambio o false
+   */
   public function getWaitingChange($platformSubscriptionID) {
-    try {
-      $sql = "SELECT * FROM SubscriptionChanges
-              WHERE PlatformSubscriptionID = :platformSubscriptionID AND Status = 'WAITING'
-              ORDER BY CreatedAt DESC LIMIT 1";
+    $sql = "SELECT * FROM SubscriptionChanges
+      WHERE PlatformSubscriptionID = ? AND Status = 'WAITING'
+      ORDER BY CreatedAt DESC LIMIT 1";
 
-      $stmt = $this->db->prepare($sql);
-      $stmt->bindValue(':platformSubscriptionID', $platformSubscriptionID, PDO::PARAM_STR);
-      $stmt->execute();
+    $stmt = $this->db->prepare($sql);
+    $stmt->execute([$platformSubscriptionID]);
 
-      return $stmt->fetch(PDO::FETCH_ASSOC);
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
+    return $stmt->fetch(PDO::FETCH_ASSOC);
   }
 
   /**
-  * Cancela cambios pendientes.
-  * @param string $platformSubscriptionID
-  * @return void
-  * @throws DatabaseException
-  */
+   * Cancela cambios pendientes de una suscripción
+   * @param  string $platformSubscriptionID: ID de suscripción en plataforma de pagos
+   */
   public function cancelSubscriptionChange($platformSubscriptionID) {
-    try {
-      $sql = "UPDATE SubscriptionChanges SET Status = 'CANCELLED', AppliedAt = NOW()
-        WHERE PlatformSubscriptionID = :platformSubscriptionID AND Status = 'PENDING'";
+    $sql = "UPDATE SubscriptionChanges SET Status = 'CANCELLED', AppliedAt = NOW()
+      WHERE PlatformSubscriptionID = ? AND Status = 'PENDING'";
 
-      $stmt = $this->db->prepare($sql);
-      $stmt->bindValue(':platformSubscriptionID', $platformSubscriptionID, PDO::PARAM_STR);
-      $stmt->execute();
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
+    $stmt = $this->db->prepare($sql);
+    $stmt->execute([$platformSubscriptionID]);
   }
 
   /**
-  * Obtiene una cancelación pendiente (cancel_at_period_end).
-  * @param string $platformSubscriptionID
-  * @return array|false
-  * @throws DatabaseException
-  */
+   * Obtiene una cancelación pendiente al final del período
+   * @param  string $platformSubscriptionID: ID de suscripción en plataforma de pagos
+   * @return array|false: datos de cancelación pendiente o false
+   */
   public function getPendingCancel($platformSubscriptionID) {
-    try {
-      $sql = "SELECT * FROM SubscriptionChanges
-        WHERE PlatformSubscriptionID = :platformSubscriptionID
-        AND NewPlanID IS NULL AND Status = 'PENDING'";
-      $stmt = $this->db->prepare($sql);
-      $stmt->bindValue(':platformSubscriptionID', $platformSubscriptionID, PDO::PARAM_STR);
-      $stmt->execute();
+    $stmt = $this->db->prepare("SELECT * FROM SubscriptionChanges
+      WHERE PlatformSubscriptionID = ?
+      AND NewPlanID IS NULL AND Status = 'PENDING'"
+    );
+    $stmt->execute([$platformSubscriptionID]);
 
-      return $stmt->fetch(PDO::FETCH_ASSOC);
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
+    return $stmt->fetch(PDO::FETCH_ASSOC);
   }
 
   /**
-  * Programa o desprograma la cancelación al final de período.
-  * @param string $platformSubscriptionID
-  * @param int|false $cancelAt Timestamp o false.
-  * @return void
-  * @throws DatabaseException
-  */
+   * Programa o desprograma la cancelación al final del período
+   * @param  string $platformSubscriptionID: ID de suscripción en plataforma de pagos
+   * @param  int|false $cancelAt: timestamp de cancelación o false para deshacer
+   */
   public function resumeSubscription($platformSubscriptionID, $cancelAt = false) {
-    try {
-      $sql = "UPDATE Subscriptions SET CancelAtPeriodEnd = :cancel, CancelAt = :cancelAt
-        WHERE PlatformSubscriptionID = :platformSubscriptionID";
-      $stmt = $this->db->prepare($sql);
-      $stmt->bindValue(':platformSubscriptionID', $platformSubscriptionID, PDO::PARAM_STR);
-      $stmt->bindValue(':cancel', $cancelAt ? 1 : 0, PDO::PARAM_INT);
-      $stmt->bindValue(':cancelAt', $cancelAt ? date('Y-m-d H:i:s', $cancelAt) : null, PDO::PARAM_STR);
-      $stmt->execute();
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
+    $stmt = $this->db->prepare("UPDATE Subscriptions SET CancelAtPeriodEnd = :cancel, CancelAt = :cancelAt
+      WHERE PlatformSubscriptionID = :platformSubscriptionID"
+    );
+    $stmt->execute([
+      ':platformSubscriptionID' => $platformSubscriptionID,
+      ':cancel' => $cancelAt ? 1 : 0,
+      ':cancelAt' => $cancelAt ? date('Y-m-d H:i:s', $cancelAt) : null
+    ]);
   }
 
   /**
-  * Aplica un cambio programado y actualiza la suscripción.
-  * @param int|string $changeId
-  * @param string|null $effectiveDate
-  * @return bool
-  * @throws DatabaseException
-  */
+   * Aplica un cambio de plan programado inmediatamente
+   * @param  int|string $changeId: ID del cambio a aplicar
+   * @param  string|null $effectiveDate: fecha efectiva del cambio (opcional)
+   * @return bool: true si se aplicó exitosamente
+   * @throws DatabaseException
+   */
   public function applyScheduledChange($changeId, $effectiveDate = null) {
     try {
       $this->db->beginTransaction(); # Iniciar transacción
@@ -637,8 +626,8 @@ class Subscription {
       ]);
 
       # marcar change como aplicado
-      $stmt2 = $this->db->prepare("UPDATE SubscriptionChanges SET Status = 'APPLIED', AppliedAt = NOW() WHERE id = :id");
-      $stmt2->execute([':id' => $changeId]);
+      $stmt = $this->db->prepare("UPDATE SubscriptionChanges SET Status = 'APPLIED', AppliedAt = NOW() WHERE id = :id");
+      $stmt->execute([':id' => $changeId]);
 
       $this->db->commit();
       return true;
@@ -649,14 +638,14 @@ class Subscription {
   }
 
   /**
-  * Actualiza el plan de una suscripción (inmediato o programado).
-  * @param string $platformSubscriptionID
-  * @param int $newPlanID
-  * @param string|null $nextBillingDate
-  * @param bool $applyNow
-  * @return array|string|int Resultado o ID de cambio si es programado.
-  * @throws DatabaseException
-  */
+   * Actualiza el plan de una suscripción (inmediato o programado)
+   * @param  string $platformSubscriptionID: ID de suscripción en plataforma de pagos
+   * @param  int $newPlanID: ID del nuevo plan
+   * @param  string|null $nextBillingDate: próxima fecha de facturación (opcional)
+   * @param  bool $applyNow: aplicar inmediatamente o programar para después
+   * @return array|string|int: resultado o ID de cambio programado
+   * @throws DatabaseException
+   */
   public function updateSubscriptionByUser($platformSubscriptionID, $newPlanID, $nextBillingDate = null, $applyNow = true) {
     try {
       if (!$applyNow) {
@@ -718,442 +707,363 @@ class Subscription {
   }
 
   /**
-  * Actualiza campos de pago de una factura y devuelve el registro.
-  * @param string $invoiceID
-  * @param array $data
-  * @return array
-  * @throws DatabaseException
-  */
+   * Actualiza campos de pago de una factura
+   * @param  string $invoiceID: ID de factura
+   * @param  array $data: datos a actualizar (AmountDue, AmountPaid, AmountRemaining, Status, PaidAt)
+   * @return array: datos actualizados de pago
+   * @throws DatabaseException
+   */
   public function updateSubscriptionPayment($invoiceID, $data) {
     try {
-      $stmt = $this->db->prepare("UPDATE SubscriptionsPayments
-            SET AmountDue            = :AmountDue,
-                AmountPaid           = :AmountPaid,
-                AmountRemaining      = :AmountRemaining,
-                Status               = :Status,
-                PaidAt               = :PaidAt
-            WHERE InvoiceID = :InvoiceID");
+      $this->db->beginTransaction(); # Iniciar transacción
 
-        $stmt->execute([
-            ':AmountDue'      => $data['AmountDue'],
-            ':AmountPaid'     => $data['AmountPaid'],
-            ':AmountRemaining'=> $data['AmountRemaining'],
-            ':Status'         => $data['Status'],
-            ':PaidAt'         => $data['PaidAt'],
-            ':InvoiceID'      => $invoiceID
-        ]);
+      $stmt = $this->db->prepare("UPDATE SubscriptionsPayments
+        SET AmountDue = :AmountDue, AmountPaid = :AmountPaid,
+        AmountRemaining = :AmountRemaining, Status = :Status,
+        PaidAt = :PaidAt
+        WHERE InvoiceID = :InvoiceID");
+
+      $stmt->execute([
+        ':AmountDue' => $data['AmountDue'],
+        ':AmountPaid' => $data['AmountPaid'],
+        ':AmountRemaining'=> $data['AmountRemaining'],
+        ':Status' => $data['Status'],
+        ':PaidAt' => $data['PaidAt'],
+        ':InvoiceID' => $invoiceID
+      ]);
 
       # Devolver el registro recién creado
-      return $this->getPaymentByInvoiceID($invoiceID);
+      $payment = $this->getPaymentByInvoiceID($invoiceID) ?:
+        throw new DatabaseException("Failed to retrieve the updated payment");
+
+      $this->db->commit(); # Confirmo transacción
+      return $payment;
     } catch (\PDOException $e) {
+      $this->db->rollBack(); # Revierto en caso de error
       throw new DatabaseException($e->getMessage());
     }
   }
 
   /**
-  * Obtiene un pago por InvoiceID.
-  * @param string $invoiceID
-  * @return array|false
-  * @throws DatabaseException
-  */
+   * Obtiene un pago por ID de factura
+   * @param  string $invoiceID: ID de factura
+   * @return array|false: datos del pago o false
+   */
   public function getPaymentByInvoiceID($invoiceID) {
-    try {
-      $stmt = $this->db->prepare("SELECT * FROM SubscriptionsPayments
-      WHERE InvoiceID = :invoiceID");
-      $stmt->execute(['invoiceID' => $invoiceID]);
+    $stmt = $this->db->prepare("SELECT * FROM SubscriptionsPayments
+    WHERE InvoiceID = :invoiceID");
+    $stmt->execute(['invoiceID' => $invoiceID]);
 
-      return $stmt->fetch(PDO::FETCH_ASSOC);
-
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
+    return $stmt->fetch(PDO::FETCH_ASSOC);
   }
 
   /**
-  * Lista pagos por cliente con paginación.
-  * @param string $customerID
-  * @param object $paginator Debe exponer ->limit y ->offset.
-  * @return array|null
-  * @throws DatabaseException
-  */
+   * Lista pagos de un cliente con paginación
+   * @param  string $customerID: ID de cliente en plataforma de pagos
+   * @param  object $paginator: objeto con limit y offset
+   * @return object|null: { data: array, rows: { total: int, fetched: int } } o null
+   */
   public function getPaymentsByUser($customerID, $paginator) {
-    try {
-      $stmt = $this->db->prepare("SELECT * FROM SubscriptionsPayments
-                                  WHERE PlatformCustomerID = :customerID
-                                  LIMIT :_limit OFFSET :_offset");
-      $stmt->bindParam(':customerID', $customerID, PDO::PARAM_STR);
-      $stmt->bindValue(':_limit', $paginator->limit, PDO::PARAM_INT);
-      $stmt->bindValue(':_offset', $paginator->offset, PDO::PARAM_INT);
-      $stmt->execute();
-      $payments = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $stmt = $this->db->prepare("SELECT * FROM SubscriptionsPayments
+      WHERE PlatformCustomerID = ?
+      LIMIT ? OFFSET ?");
 
-      if (empty($payments)) {
-        return null;
-      }
+    $stmt->execute([$customerID, $paginator->limit, $paginator->offset]);
+    $payments = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-      # Consulta total real
-      $stmtTotal = $this->db->prepare("SELECT COUNT(*) as total
-                                      FROM SubscriptionsPayments AS sp
-                                      WHERE sp.PlatformCustomerID = :customerID");
-      $stmtTotal->bindParam(':customerID', $customerID, PDO::PARAM_STR);
-      $stmtTotal->execute();
-      $total = (int)$stmtTotal->fetchColumn();
-
-      return $payments;
-
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
+    if (empty($payments)) {
+      return false;
     }
+
+    $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
+    $total = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    return (object) [
+      "data" => $payments,
+      "rows" => [
+        "total" => $total,
+        "fetched" => count($payments)
+      ]
+    ];
   }
 
   /**
-  * Marca cancel_at_period_end y fecha de cancelación.
-  * @param string $platformSubscriptionID
-  * @param string $canceledAt
-  * @param string $nextBillingDate
-  * @return bool
-  * @throws DatabaseException
-  */
+   * Marca cancelación al final del período con fecha de efectividad
+   * @param  string $platformSubscriptionID: ID de suscripción en plataforma de pagos
+   * @param  string $canceledAt: fecha de cancelación
+   * @param  string $nextBillingDate: próxima fecha de facturación
+   */
   public function markCancelAtPeriodEnd($platformSubscriptionID, $canceledAt, $nextBillingDate) {
-    try {
-      $stmt = $this->db->prepare("UPDATE Subscriptions
-                                  SET CancelAtPeriodEnd = 1, CancelAt = :canceledAt, NextBillingDate = :nextBillingDate
-                                  WHERE PlatformSubscriptionID = :platformSubscriptionID AND
-                                  Status IN ('ACTIVE','TRIALING')");
-      $stmt->execute([
-        'canceledAt' => $canceledAt,
-        'nextBillingDate' => $nextBillingDate,
-        'platformSubscriptionID' => $platformSubscriptionID
-      ]);
-      return true;
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
+    $stmt = $this->db->prepare("UPDATE Subscriptions
+      SET CancelAtPeriodEnd = 1, CancelAt = ?, NextBillingDate = ?
+      WHERE PlatformSubscriptionID = ? AND
+      Status IN ('ACTIVE','TRIALING')");
+    $stmt->execute([$canceledAt, $nextBillingDate, $platformSubscriptionID]);
   }
 
   /**
-  * Cancela definitivamente una suscripción activa/trial.
-  * @param string $platformSubscriptionID
-  * @return bool
-  * @throws DatabaseException
-  */
+   * Cancela definitivamente una suscripción activa
+   * @param  string $platformSubscriptionID: ID de suscripción en plataforma de pagos
+   * @param  string $endDate: fecha de finalización
+   * @throws DatabaseException
+   */
   public function cancelSubscription($platformSubscriptionID, $endDate) {
     try {
+      $this->db->beginTransaction(); # Iniciar transacción
+
       # Cancelar la suscripción
       $stmt = $this->db->prepare("UPDATE Subscriptions
-                                  SET Status = 'CANCELED', EndDate = :endDate, NextBillingDate = NULL
-                                  WHERE PlatformSubscriptionID = :platformSubscriptionID
-                                  AND Status IN ('ACTIVE','TRIALING')");
-      $stmt->bindValue(':platformSubscriptionID', $platformSubscriptionID, PDO::PARAM_STR);
-      $stmt->bindValue(':endDate', $endDate, PDO::PARAM_STR);
-      $stmt->execute();
+        SET Status = 'CANCELED', EndDate = ?, NextBillingDate = NULL
+        WHERE PlatformSubscriptionID = ?
+        AND Status IN ('ACTIVE','TRIALING')");
+      $stmt->execute([$endDate, $platformSubscriptionID]);
 
       # Marcar cambios pendientes como aplicados
-      $sql = "UPDATE SubscriptionChanges
-              SET Status = 'APPLIED', AppliedAt = NOW()
-              WHERE PlatformSubscriptionID = :platformSubscriptionID
-              AND Status = 'PENDING'";
-      $stmt2 = $this->db->prepare($sql);
-      $stmt2->bindValue(':platformSubscriptionID', $platformSubscriptionID, PDO::PARAM_STR);
-      $stmt2->execute();
+      $stmt = $this->db->prepare("UPDATE SubscriptionChanges
+        SET Status = 'APPLIED', AppliedAt = NOW()
+        WHERE PlatformSubscriptionID = ?
+        AND Status = 'PENDING'");
+      $stmt->execute([$platformSubscriptionID]);
 
-      return true;
+      $this->db->commit(); # Confirmo transacción
     } catch (\PDOException $e) {
+      $this->db->rollBack(); # Revierto en caso de error
       throw new DatabaseException($e->getMessage());
     }
   }
 
   /**
-  * Actualiza el fin de trial informado por Stripe.
-  * @param string $platformSubscriptionID
-  * @param string|null $trialEnd
-  * @return bool
-  * @throws DatabaseException
-  */
+   * Actualiza el fin del período de prueba informado por Stripe
+   * @param  string $platformSubscriptionID: ID de suscripción en plataforma de pagos
+   * @param  string|null $trialEnd: fecha de fin de prueba
+   */
   public function handleTrialWillEnd($platformSubscriptionID, $trialEnd) {
     # Refleja el fin de trial informado por Stripe.
-    try {
-      $stmt = $this->db->prepare("UPDATE Subscriptions
-                                  SET TrialEnd = COALESCE(:trialEnd, TrialEnd),
-                                  TrialSource = 'STRIPE'
-                                  WHERE PlatformSubscriptionID = :platformSubscriptionID");
-      $stmt->execute([
-        ':trialEnd' => $trialEnd,
-        ':platformSubscriptionID' => $platformSubscriptionID
-      ]);
-
-      return true;
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
+    $stmt = $this->db->prepare("UPDATE Subscriptions
+      SET TrialEnd = COALESCE(?, TrialEnd),
+      TrialSource = 'STRIPE'
+      WHERE PlatformSubscriptionID = ?");
+    $stmt->execute([$trialEnd, $platformSubscriptionID]);
   }
 
   /**
-  * Marca una suscripción como pausada.
-  * @param string $platformSubscriptionID
-  * @param string|null $behavior
-  * @return bool
-  * @throws DatabaseException
-  */
+   * Marca una suscripción como pausada
+   * @param  string $platformSubscriptionID: ID de suscripción en plataforma de pagos
+   * @param  string|null $behavior: comportamiento al pausar (opcional)
+   */
   public function markPaused($platformSubscriptionID, $behavior = null) {
-    try {
-      $stmt = $this->db->prepare("UPDATE Subscriptions
-                                  SET Status = 'PAUSED', NextBillingDate = NULL
-                                  WHERE PlatformSubscriptionID = :platformSubscriptionID
-                                  AND Status IN ('ACTIVE','PAST_DUE','INCOMPLETE')");
-      $stmt->execute([':platformSubscriptionID' => $platformSubscriptionID]);
-      return $stmt->rowCount() > 0;
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
+    $stmt = $this->db->prepare("UPDATE Subscriptions
+      SET Status = 'PAUSED', NextBillingDate = NULL
+      WHERE PlatformSubscriptionID = ?
+      AND Status IN ('ACTIVE','PAST_DUE','INCOMPLETE')");
+    $stmt->execute([$platformSubscriptionID]);
   }
 
 
   /**
-  * Reactiva una suscripción pausada/past_due/incomplete.
-  * @param string $platformSubscriptionID
-  * @param string $nextBillingDate
-  * @return bool
-  * @throws DatabaseException
-  */
+   * Reactiva una suscripción pausada
+   * @param  string $platformSubscriptionID: ID de suscripción en plataforma de pagos
+   * @param  string $nextBillingDate: próxima fecha de facturación
+   */
   public function markResumed($platformSubscriptionID, $nextBillingDate) {
-    try {
-      $stmt = $this->db->prepare("UPDATE Subscriptions
-                                  SET Status = 'ACTIVE', NextBillingDate = :nextBillingDate,
-                                  CancelAtPeriodEnd = 0, CancelAt = NULL
-                                  WHERE PlatformSubscriptionID = :PlatformSubscriptionID
-                                  AND Status IN ('PAUSED','PAST_DUE','INCOMPLETE')");
-      $stmt->execute([
-        ':nextBillingDate' => $nextBillingDate,
-        ':PlatformSubscriptionID' => $platformSubscriptionID
-      ]);
-      return $stmt->rowCount() > 0;
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
+    $stmt = $this->db->prepare("UPDATE Subscriptions
+      SET Status = 'ACTIVE', NextBillingDate = ?,
+      CancelAtPeriodEnd = 0, CancelAt = NULL
+      WHERE PlatformSubscriptionID = ?
+      AND Status IN ('PAUSED','PAST_DUE','INCOMPLETE')");
+    $stmt->execute([$nextBillingDate, $platformSubscriptionID]);
   }
 
   /**
-  * Crea un cupón en base local (estado PENDING).
-  * @param array $data
-  * @return void
-  * @throws DatabaseException
-  */
+   * Crea un cupón en base local
+   * @param  array $data: datos del cupón con código, porcentaje/monto de descuento
+   */
   public function createCoupon($data) {
-    try {
-      $stmt = $this->db->prepare("INSERT INTO SubscriptionsCoupons (PlatformSubscriptionID, PlatformCouponID, CouponCode, CouponName,
-                                  UserID, PercentOff, AmountOff, Status, ExpiresAt)
-                                  VALUES (:PlatformSubscriptionID, :PlatformCouponID, :CouponCode, :CouponName, :UserID, :PercentOff,
-                                  :AmountOff, 'PENDING', :ExpiresAt)");
-      $stmt->execute([
-          ':PlatformSubscriptionID' => $data['PlatformSubscriptionID'],
-          ':PlatformCouponID' => $data['PlatformCouponID'],
-          ':CouponCode' => $data['CouponCode'],
-          ':CouponName' => $data['CouponName'],
-          ':UserID' => $data['UserID'],
-          ':PercentOff' => $data['PercentOff'],
-          ':AmountOff' => $data['AmountOff'],
-          ':AppliedAt' => $data['AppliedAt'],
-          ':ExpiresAt' => $data['ExpiresAt'],
-      ]);
-
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
+    $stmt = $this->db->prepare("INSERT INTO SubscriptionsCoupons
+      (PlatformSubscriptionID, PlatformCouponID, CouponCode, CouponName,
+      UserID, PercentOff, AmountOff, Status, ExpiresAt)
+      VALUES (:PlatformSubscriptionID, :PlatformCouponID, :CouponCode, :CouponName, :UserID, :PercentOff,
+      :AmountOff, 'PENDING', :ExpiresAt)");
+    $stmt->execute([
+      ':PlatformSubscriptionID' => $data['PlatformSubscriptionID'],
+      ':PlatformCouponID' => $data['PlatformCouponID'],
+      ':CouponCode' => $data['CouponCode'],
+      ':CouponName' => $data['CouponName'],
+      ':UserID' => $data['UserID'],
+      ':PercentOff' => $data['PercentOff'],
+      ':AmountOff' => $data['AmountOff'],
+      ':AppliedAt' => $data['AppliedAt'],
+      ':ExpiresAt' => $data['ExpiresAt'],
+    ]);
   }
 
   /**
-  * Marca un cupón como aplicado y lo asocia al último pago.
-  * @param string $platformSubscriptionID
-  * @param string $platformCouponID
-  * @return void
-  * @throws DatabaseException
-  */
+   * Actualiza estado de cupón a aplicado
+   * @param  string $platformSubscriptionID: ID de suscripción en plataforma de pagos
+   * @param  string $platformCouponID: ID de cupón en plataforma de pagos
+   * @throws DatabaseException
+   */
   public function updateCouponStatus($platformSubscriptionID, $platformCouponID) {
     try {
+      $this->db->beginTransaction(); # Iniciar transacción
+
       $stmt = $this->db->prepare("UPDATE SubscriptionsCoupons
-                                  SET Status = 'APPLIED',
-                                  AppliedAt = NOW(),
-                                  UpdatedAt = CURRENT_TIMESTAMP
-                                  WHERE PlatformSubscriptionID = :platformSubscriptionID AND PlatformCouponID = :platformCouponID");
-      $stmt->execute([
-          ':PlatformSubscriptionID' => $platformSubscriptionID,
-          ':PlatformCouponID' => $platformCouponID
-      ]);
+        SET Status = 'APPLIED',
+        AppliedAt = NOW(),
+        UpdatedAt = CURRENT_TIMESTAMP
+        WHERE PlatformSubscriptionID = ? AND PlatformCouponID = ?");
+      $stmt->execute([$platformSubscriptionID, $platformCouponID]);
 
       $stmt = $this->db->prepare("UPDATE SubscriptionsPayments
-                                  SET PlatformCouponID = :platformCouponID
-                                  WHERE PlatformSubscriptionID = :platformSubscriptionID
-                                  ORDER BY CreatedAt DESC LIMIT 1");
-      $stmt->execute([
-          ':PlatformSubscriptionID' => $platformSubscriptionID,
-          ':PlatformCouponID' => $platformCouponID
-      ]);
+        SET PlatformCouponID = ?
+        WHERE PlatformSubscriptionID = ?
+        ORDER BY CreatedAt DESC LIMIT 1");
+      $stmt->execute([$platformCouponID, $platformSubscriptionID]);
 
+      $this->db->commit(); # Confirmo transacción
     } catch (\PDOException $e) {
+      $this->db->rollBack(); # Revierto en caso de error
       throw new DatabaseException($e->getMessage());
     }
   }
 
   /**
-  * Inserta/actualiza una factura en base local y actualiza última invoice de la suscripción.
-  * @param array $data
-  * @return bool
-  * @throws DatabaseException
-  */
+   * Inserta o actualiza una factura en base local
+   * @param  array $data: datos de factura con InvoiceID, moneda, monto, estado
+   * @throws DatabaseException
+   */
   public function upsertInvoice($data) {
     try {
+      $this->db->beginTransaction(); # Iniciar transacción
+
       $stmt = $this->db->prepare("INSERT INTO SubscriptionsPayments (InvoiceID, Motive, PlatformSubscriptionID, PlatformCustomerID,
-              Currency, AmountDue, AmountPaid, AmountRemaining, Status, PlatformPriceID, PlatformProductID, Quantity,
-              PeriodStart, PeriodEnd, InvoicePDF, HostedInvoiceURL, CreatedAt, PaidAt)
-              VALUES (:InvoiceID, :BillingReason, :SubscriptionID, :CustomerID, :Currency,
-              :AmountDue, :AmountPaid, :AmountRemaining, :Status,
-              :PriceID, :ProductID, :Quantity, :PeriodStart, :PeriodEnd,
-              :InvoicePDF, :HostedInvoiceURL, :CreatedAt, :PaidAt)");
+        Currency, AmountDue, AmountPaid, AmountRemaining, Status, PlatformPriceID, PlatformProductID, Quantity,
+        PeriodStart, PeriodEnd, InvoicePDF, HostedInvoiceURL, CreatedAt, PaidAt)
+        VALUES (:InvoiceID, :BillingReason, :SubscriptionID, :CustomerID, :Currency,
+        :AmountDue, :AmountPaid, :AmountRemaining, :Status,
+        :PriceID, :ProductID, :Quantity, :PeriodStart, :PeriodEnd,
+        :InvoicePDF, :HostedInvoiceURL, :CreatedAt, :PaidAt)");
 
       $stmt->execute($data);
 
       # Update Subscriptions con el último invoice
       if (!empty($data['SubscriptionID'])) {
         $stmt = $this->db->prepare("UPDATE Subscriptions
-                                    SET LatestInvoiceID = :InvoiceID
-                                    WHERE PlatformSubscriptionID = :SubscriptionID");
+          SET LatestInvoiceID = :InvoiceID
+          WHERE PlatformSubscriptionID = :SubscriptionID");
         $stmt->execute([
-            ':InvoiceID'      => $data['InvoiceID'],
-            ':SubscriptionID' => $data['SubscriptionID']
+          ':InvoiceID'      => $data['InvoiceID'],
+          ':SubscriptionID' => $data['SubscriptionID']
         ]);
       }
 
-      return true;
+      $this->db->commit(); # Confirmo transacción
     } catch (\PDOException $e) {
+      $this->db->rollBack(); # Revierto en caso de error
       throw new DatabaseException($e->getMessage());
     }
   }
 
   /**
-  * Marca una invoice como “Void”.
-  * @param string $invoiceId
-  * @return bool
-  * @throws DatabaseException
-  */
+   * Marca una factura como anulada
+   * @param  string $invoiceId: ID de factura
+   */
   public function markInvoiceVoided($invoiceId) {
-    try {
-      $stmt = $this->db->prepare("UPDATE SubscriptionsPayments
-                                  SET Status='Void'
-                                  WHERE InvoiceID = :InvoiceID");
-      $stmt->execute([':InvoiceID'=>$invoiceId]);
-      return true;
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
+    $stmt = $this->db->prepare("UPDATE SubscriptionsPayments
+      SET Status='Void' WHERE InvoiceID = ?");
+    $stmt->execute([$invoiceId]);
   }
 
   /**
-  * Marca una invoice como “Uncollectible”.
-  * @param string $invoiceId
-  * @return bool
-  * @throws DatabaseException
-  */
+   * Marca una factura como incobrable
+   * @param  string $invoiceId: ID de factura
+   */
   public function markInvoiceUncollectible($invoiceId) {
-    try {
-      $stmt = $this->db->prepare("UPDATE SubscriptionsPayments
-                                  SET Status='Uncollectible'
-                                  WHERE InvoiceID = :InvoiceID");
-      $stmt->execute([':InvoiceID'=>$invoiceId]);
-      return true;
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
+    $stmt = $this->db->prepare("UPDATE SubscriptionsPayments
+      SET Status='Uncollectible'
+      WHERE InvoiceID = ?");
+    $stmt->execute([$invoiceId]);
   }
 
   /**
-  * Marca una suscripción como “PAST_DUE”.
-  * @param string $platformSubscriptionID
-  * @return bool
-  * @throws DatabaseException
-  */
+   * Marca una suscripción como vencida
+   * @param  string $platformSubscriptionID: ID de suscripción en plataforma de pagos
+   */
   public function markPastDue($platformSubscriptionID) {
-    try {
-      $stmt = $this->db->prepare("UPDATE Subscriptions
-                                  SET Status='PAST_DUE'
-                                  WHERE PlatformSubscriptionID = :platformSubscriptionID
-                                  AND Status IN ('ACTIVE','INCOMPLETE')");
-      $stmt->execute([':platformSubscriptionID'=>$platformSubscriptionID]);
-      return true;
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
+    $stmt = $this->db->prepare("UPDATE Subscriptions
+      SET Status='PAST_DUE'
+      WHERE PlatformSubscriptionID = ?
+      AND Status IN ('ACTIVE','INCOMPLETE')");
+    $stmt->execute([$platformSubscriptionID]);
   }
 
   /**
-  * Devuelve una suscripción PAST_DUE a ACTIVE al pagarse.
-  * @param string $platformSubscriptionID
-  * @return bool
-  * @throws DatabaseException
-  */
+   * Crea o actualiza un plan de suscripción y sus características
+   * @param  int $planID: ID del plan
+   * @param  array $data: datos del plan (Name, Description, Price, StripeID, Features)
+   * @return array: resultado con código y mensaje
+   * @throws DatabaseException
+   */
   public function clearPastDueOnPaid($platformSubscriptionID) {
-    try {
-      $stmt = $this->db->prepare("UPDATE Subscriptions
-                                  SET Status='ACTIVE'
-                                  WHERE PlatformSubscriptionID = :platformSubscriptionID
-                                  AND Status='PAST_DUE'");
-      $stmt->execute([':platformSubscriptionID'=>$platformSubscriptionID]);
-      return true;
-    } catch (\PDOException $e) {
-      throw new DatabaseException($e->getMessage());
-    }
+    $stmt = $this->db->prepare("UPDATE Subscriptions
+      SET Status='ACTIVE'
+      WHERE PlatformSubscriptionID = ?
+      AND Status='PAST_DUE'");
+    $stmt->execute([$platformSubscriptionID]);
   }
 
   /**
-  * Crea o actualiza un plan y sus features.
-  * @param int $planID
-  * @param array $data
-  * @return array Resultado con código/mensaje.
-  * @throws DatabaseException
-  */
+   * Activa o desactiva una característica de suscripción globalmente
+   * @param  string $featureCode: código de característica
+   * @param  int $isActive: 1 para activa, 0 para inactiva
+   * @return array: datos de característica actualizada
+   * @throws DatabaseException
+   */
   public function updateSubscriptionPlan($planID, $data) {
-    try{
-      $stmt = $this->db->prepare("SELECT COUNT(*) FROM SubscriptionPlans WHERE PlanID = :planID");
-      $stmt->execute(['planID' => $planID]);
+    try {
+      $this->db->beginTransaction(); # Iniciar transacción
+
+      $stmt = $this->db->prepare("SELECT COUNT(*) FROM SubscriptionPlans
+        WHERE PlanID = ?");
+      $stmt->execute([$planID]);
       $exists = $stmt->fetchColumn() > 0;
 
       if ($exists) {
         # 1. Si existe, actualizar el plan
         $stmt = $this->db->prepare("UPDATE SubscriptionPlans
-                                    SET Name = :Name, Description = :Description, Beneficts = :Beneficts, Price = :Price,
-                                    CurrencyCode = :CurrencyCode, Duration = :Duration, StripeID = :StripeID
-                                    WHERE PlanID = :planID");
+          SET Name = :Name, Description = :Description, Beneficts = :Beneficts, Price = :Price,
+          CurrencyCode = :CurrencyCode, Duration = :Duration, StripeID = :StripeID
+          WHERE PlanID = :planID");
       } else {
         # 2. Si no existe, insertar el plan
         $stmt = $this->db->prepare("INSERT INTO SubscriptionPlans (PlanID, Name, Description, Beneficts, Price, CurrencyCode, Duration, StripeID)
-                                    VALUES (:planID, :Name, :Description, :Beneficts, :Price, :CurrencyCode, :Duration, :StripeID)");
+          VALUES (:planID, :Name, :Description, :Beneficts, :Price, :CurrencyCode, :Duration, :StripeID)");
       }
 
-      $stmt->bindParam(':planID', $planID, PDO::PARAM_INT);
-      $stmt->bindParam(':Name', $data['Name'], PDO::PARAM_STR);
-      $stmt->bindParam(':Description', $data['Description'], PDO::PARAM_STR);
-      $stmt->bindParam(':Beneficts', $data['Beneficts'], PDO::PARAM_STR);
-      $stmt->bindParam(':Price', $data['Price']);
-      $stmt->bindParam(':CurrencyCode', $data['CurrencyCode'], PDO::PARAM_STR);
-      $stmt->bindParam(':Duration', $data['Duration'], PDO::PARAM_INT);
-      $stmt->bindParam(':StripeID', $data['StripeID'], PDO::PARAM_STR);
-      $stmt->execute();
+      $stmt->execute([
+        ':planID' => $planID,
+        ':Name' => $data['Name'],
+        ':Description' => $data['Description'],
+        ':Beneficts' => $data['Beneficts'],
+        ':Price' => $data['Price'],
+        ':CurrencyCode' => $data['CurrencyCode'],
+        ':Duration' => $data['Duration'],
+        ':StripeID' => $data['StripeID']
+      ]);
 
       # 3. Si hay Features en el body
       if (isset($data['Features']) && is_array($data['Features'])) {
 
         # Eliminar los SubscriptionItems actuales del Plan
-        $deleteStmt = $this->db->prepare("DELETE FROM SubscriptionItems WHERE PlanID = :planID");
-        $deleteStmt->bindParam(':planID', $planID, PDO::PARAM_INT);
-        $deleteStmt->execute();
+        $deleteStmt = $this->db->prepare("DELETE FROM SubscriptionItems WHERE PlanID = ?");
+        $deleteStmt->execute([$planID]);
 
         # Preparar inserción en SubscriptionFeatures (para asegurarnos que existan)
         $insertFeatureStmt = $this->db->prepare("INSERT IGNORE INTO SubscriptionFeatures (FeatureCode, Description, IsActive)
-                                                 VALUES (:FeatureCode, :Description, 1)");
-
+          VALUES (:FeatureCode, :Description, 1)");
         # Preparar inserción en SubscriptionItems
         $insertItemStmt = $this->db->prepare("INSERT INTO SubscriptionItems (PlanID, FeatureCode, Value, Type, Description)
-                                              VALUES (:planID, :FeatureCode, :Value, :Type, :ItemDescription)");
+          VALUES (:planID, :FeatureCode, :Value, :Type, :ItemDescription)");
 
         foreach ($data['Features'] as $feature) {
           # Insertar en SubscriptionFeatures si no existe
@@ -1179,39 +1089,47 @@ class Subscription {
         }
       }
 
+      $this->db->commit(); # Confirmo transacción
+
       return [
         "Code" => $exists ? "PLAN_UPDATED" : "PLAN_CREATED",
         "Message" => $exists ? "Subscription plan updated successfully." : "Subscription plan created successfully."
       ];
     } catch (\PDOException $e) {
+      $this->db->rollBack(); # Revierto en caso de error
       throw new DatabaseException($e->getMessage());
     }
   }
 
   /**
-  * Activa/desactiva una feature globalmente.
-  * @param string $featureCode
-  * @param int $isActive 1 o 0
-  * @return string Mensaje de resultado.
-  * @throws DatabaseException
-  */
+   * Obtiene estado de una característica de suscripción
+   * @param  string $featureCode: código de característica
+   * @return array|false: datos de característica o false
+   */
   public function updateFeatureStatus($featureCode, $isActive) {
     try {
+      $this->db->beginTransaction(); # Iniciar transacción
+
       $stmt = $this->db->prepare("UPDATE SubscriptionFeatures
-                                  SET IsActive = :isActive
-                                  WHERE FeatureCode = :featureCode");
+        SET IsActive = ?
+        WHERE FeatureCode = ?");
+      $stmt->execute([$isActive, $featureCode]);
 
-      $stmt->bindParam(':isActive', $isActive, PDO::PARAM_INT);
-      $stmt->bindParam(':featureCode', $featureCode, PDO::PARAM_STR);
-      $stmt->execute();
+      $featureStatus = $this->getFeatureStatus ?:
+        throw new DatabaseException("Failed to retrieve the updated feature");
 
-      if ($stmt->rowCount() === 0) {
-        throw new DatabaseException("No feature found with FeatureCode {$featureCode}.");
-      }
-
-      return "Feature {$featureCode} updated successfully.";
+      $this->db->commit(); # Confirmo transacción
+      return $featureStatus;
     } catch (\PDOException $e) {
+      $this->db->rollBack(); # Revierto en caso de error
       throw new DatabaseException($e->getMessage());
     }
+  }
+
+  public function getFeatureStatus($featureCode) {
+    $stmt = $this->db->prepare("SELECT * FROM SubscriptionFeatures
+      WHERE FeatureCode = ?");
+    $stmt->execute([$featureCode]);
+    return $stmt->fetch(PDO::FETCH_ASSOC);
   }
 }

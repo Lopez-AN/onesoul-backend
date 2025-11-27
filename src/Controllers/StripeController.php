@@ -73,7 +73,7 @@ class StripeController{
     try {
       # Verificar si el usuario autenticado es un guía
       if ($jwt->data->UserType !== 'Guide') {
-        return $response->withStatus(401)->withJson([
+        return $response->withStatus(403)->withJson([
           "error" => [
             "code" => "UNAUTHORIZED",
             "desc" => "You are not authorized to subscribe."

@@ -1263,7 +1263,6 @@ class UserController{
    * Valida si un texto contiene contenido inapropiado
    * @param  string $text: texto a validar
    * @return bool: true si contiene contenido inapropiado, false en caso contrario
-   * @access private
    **/
   private function _containsInappropriateContent($text) {
     return validateContentWithPerspective($text);

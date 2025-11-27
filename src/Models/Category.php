@@ -27,15 +27,15 @@ class Category {
 
     $stmt->execute([$paginator->limit, $paginator->offset]);
 
-    $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
     $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
     return (object) [
-      "data" => $rs,
+      "data" => $categories,
       "rows" => [
         "total" => $total['total'],
-        "fetched" => count($rs)
+        "fetched" => count($categories)
       ]
     ];
   }
@@ -58,15 +58,15 @@ class Category {
 
     $stmt->execute([$searchQuery, $searchQuery, $paginator->limit, $paginator->offset]);
 
-    $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $stmt = $this->db->query("SELECT FOUND_ROWS() AS total");
     $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
     return (object) [
-      "data" => $rs,
+      "data" => $categories,
       "rows" => [
         "total" => $total['total'],
-        "fetched" => count($rs)
+        "fetched" => count($categories)
       ]
     ];
   }
@@ -118,15 +118,15 @@ class Category {
 
     $stmt->execute([$categoryID, $categoryID, $paginator->limit, $paginator->offset]);
 
-    $rs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
     $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
     return (object) [
-      "data" => $rs,
+      "data" => $categories,
       "rows" => [
         "total" => $total['total'],
-        "fetched" => count($rs)
+        "fetched" => count($categories)
       ]
     ];
   }
@@ -144,10 +144,14 @@ class Category {
     try {
       $this->db->beginTransaction(); # Iniciar transacción
 
-      $stmt = $this->db->prepare("INSERT INTO Categories (ParentCategoryID, Name, Description, CreationDate, IsActive)
+      $stmt = $this->db->prepare("INSERT INTO Categories
+        (ParentCategoryID, Name, Description, CreationDate, IsActive)
         VALUES (?, ?, ?, ?, ?)");
       $stmt->execute([$parentCategoryID, $name, $description, date('Y-m-d H:i:s'), $isActive]);
-      $category = $this->getCategoryById($this->db->lastInsertId());
+      $categoryID = $this->db->lastInsertId();
+
+      $category = $this->getCategoryById($categoryID) ?:
+        throw new DatabaseException("Failed to retrieve the created category");
 
       $this->db->commit(); # Confirmo transacción
       return $category;
@@ -174,7 +178,9 @@ class Category {
       $stmt = $this->db->prepare("UPDATE Categories SET ParentCategoryID = ?, Name = ?, Description = ?,
         ModificationDate = ?, IsActive = ? WHERE CategoryID = ?");
       $stmt->execute([$parentCategoryID, $name, $description, date('Y-m-d H:i:s'), $isActive]);
-      $category = $this->getCategoryById($categoryID);
+
+      $category = $this->getCategoryById($categoryID) ?:
+        throw new DatabaseException("Failed to retrieve the updated category");
 
       $this->db->commit(); # Confirmo transacción
       return $category;

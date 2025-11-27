@@ -736,7 +736,8 @@ class User {
           $stmt->execute([$userID]); # Ejecutar la consulta
         }
       }
-      $user = $this->getUserById($userID);
+      $user = $this->getUserById($userID) ?:
+        throw new DatabaseException("Failed to retrieve the updated user");
 
       $this->db->commit(); # Confirmo transacción
       return $user;
@@ -789,7 +790,8 @@ class User {
         $stmt = $this->db->prepare("INSERT INTO Media (`URL`, `Path`, `UserID`) VALUES (?, ?, ?)");
         $stmt->execute([$fileURL, $filePath, $userID]);
       }
-      $user = $this->getUserById($userID);
+      $user = $this->getUserById($userID) ?:
+        throw new DatabaseException("Failed to retrieve the updated user");
 
       $this->db->commit(); # Confirmo transacción
       return $user;
@@ -834,7 +836,8 @@ class User {
       if (!is_null($profilePhoto['Path']) && file_exists($profilePhoto['Path'])) {
         unlink($profilePhoto['Path']); # Eliminar el archivo del sistema
       }
-      $user = $this->getUserById($userID);
+      $user = $this->getUserById($userID) ?:
+        throw new DatabaseException("Failed to retrieve the updated user");
 
       $this->db->commit(); # Confirmo transacción
       return $user;

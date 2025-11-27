@@ -2413,7 +2413,6 @@ class AuthController{
    * Maneja la recompensa de referido cuando un nuevo usuario se registra
    * @param  int $referrerUserId: ID del usuario referidor
    * @param  int $userId: ID del usuario nuevo
-   * @return void
    **/
   private function _handleReferralReward($referrerUserID, $userID) {
     # Genero los rewards si corresponde

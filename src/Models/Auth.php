@@ -181,7 +181,6 @@ class Auth{
   /**
    * Marca el email de un usuario como validado
    * @param  int $userID: ID del usuario
-   * @return void
    **/
   public function validateUserEmail($userID){
     $stmt = $this->db->prepare("UPDATE Users SET ValidatedEmail = 1 WHERE UserID = ?");

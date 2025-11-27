@@ -114,8 +114,8 @@ class CategoryController {
    * @statusCode 500: error del servidor
    **/
   public function getCategoriesByParentId(Request $request, Response $response, $args) {
-    $categoryID = intval($args['id']) === -1 ? null : intval($args['id']);
     $paginator = paginator($request);
+    $categoryID = intval($args['id']) === -1 ? null : intval($args['id']);
 
     try {
       $categories = $this->category->getCategoriesByParentId($paginator, $categoryID);

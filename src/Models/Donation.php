@@ -243,7 +243,6 @@ class Donation{
    * @param int $userID: ID del guía propietario
    * @param int $offeringID: ID del servicio asociado
    * @param int $quantity: cantidad de cupones a crear
-   * @return void
    * @throws DatabaseException: si hay error en inserción o duplicidad de códigos
    **/
   public function createDonation($userID, $offeringID, $quantity){
@@ -286,8 +285,6 @@ class Donation{
    * Asigna una donación a una agencia (cambia estado de 'draft' a 'assigned')
    * @param int $agencyID: ID de la agencia a asignar
    * @param int $voucherID: ID del voucher a asignar
-   * @return void
-   * @throws DatabaseException: si hay error en la actualización
    **/
   public function assignDonation($agencyID, $voucherID){
     $stmt = $this->db->prepare("UPDATE DonationVouchers
@@ -300,7 +297,6 @@ class Donation{
   /**
    * Cancela una donación existente (cambia estado a 'canceled')
    * @param int $voucherID: ID del voucher a cancelar
-   * @return void
    * @throws DatabaseException: si hay error en la actualización
    **/
   public function cancelDonation($voucherID){
@@ -400,7 +396,6 @@ class Donation{
    * Crea una nueva agencia
    * @param string $name: nombre de la agencia
    * @param string $contactEmail: email de contacto de la agencia
-   * @return void
    * @throws DatabaseException: si hay error en inserción
    **/
   public function createAgency($name, $contactEmail){
@@ -413,7 +408,6 @@ class Donation{
   /**
    * Elimina una agencia existente
    * @param int $agencyID: ID de la agencia a eliminar
-   * @return void
    * @throws DatabaseException: si hay error en la eliminación
    **/
   public function deleteAgency($agencyID){

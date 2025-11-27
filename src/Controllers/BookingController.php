@@ -21,8 +21,7 @@ require_once(ROOT . '/src/Utils/Paginator.php');
 #Definir zona horaria
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 
-class BookingController
-{
+class BookingController {
   protected $booking;
   protected $offering;
   protected $user;
@@ -47,7 +46,6 @@ class BookingController
 
     try {
       $booking = $this->booking->getBookingByID($bookingID);
-
       if (!$booking) {
         return $response->withStatus(404)->withJson([
           "error" => [
@@ -86,7 +84,6 @@ class BookingController
 
     try {
       $booking = $this->booking->getBookingByPublicID($publicID);
-
       if (!$booking) {
         return $response->withStatus(404)->withJson([
           "error" => [
@@ -118,43 +115,34 @@ class BookingController
   }
 
   public function getBookingsByGuide(Request $request, Response $response, $args) {
-    $userID = intval($args['userID']);
     $paginator = paginator($request);
-    $jwt = $request->getAttribute('jwt');
+    $params = $request->getQueryParams();
+    $guideID = intval($args['userID']);
 
-    $userJWT = $jwt->data->UserID;
+    $jwt = $request->getAttribute('jwt');
+    $userID = $jwt->data->UserID;
+
+    # Validar solo el guia o un admin puede consultar sus booking
+    if ($userID !== $guideID && !$jwt->data->IsAdmin) {
+      return $response->withStatus(403)->withJson([
+        "error" => [
+          "code" => "FORBIDDEN",
+          "desc" => "You are not authorized to view bookings from this guide."
+        ]
+      ]);
+    }
 
     try {
-      # Leer filtros desde query string
-      $params = $request->getQueryParams();
-      $filters = [];
-
-      if (isset($params['status']) && $params['status'] === 'open') {
-        $filters['status'] = 'open';
-      }
-
-      if (isset($params['count']) && $params['count'] === 'true') {
-        $filters['count'] = true;
-      }
+      # Filtro solo abiertos
+      $onlyOpen = isset($params['status']) && $params['status'] === 'open';
 
       # Llamar al modelo
-      $bookings = $this->booking->getBookingsByGuide($userID, $paginator, $filters);
-
+      $bookings = $this->booking->getBookingsByGuide($guideID, $paginator, $onlyOpen);
       if ($bookings === null) {
         return $response->withStatus(404)->withJson([
           "error" => [
             "code" => "BOOKING_NOT_FOUND",
             "desc" => "No Bookings found for this specific user."
-          ]
-        ]);
-      }
-
-      # Validar si el user es el cliente o el guía
-      if ($userJWT !== $userID && !$jwt->data->IsAdmin) {
-        return $response->withStatus(401)->withJson([
-          "error" => [
-            "code" => "FORBIDDEN",
-            "desc" => "You are not authorized to view this booking."
           ]
         ]);
       }
@@ -171,30 +159,34 @@ class BookingController
   }
 
   public function getBookingsBySeeker(Request $request, Response $response, $args) {
-    $userID = intval($args['userID']);
     $paginator = paginator($request);
-    $jwt = $request->getAttribute('jwt');
+    $params = $request->getQueryParams();
+    $seekerID = intval($args['userID']);
 
-    $userJWT = $jwt->data->UserID;
+    $jwt = $request->getAttribute('jwt');
+    $userID = $jwt->data->UserID;
+
+    # Validar solo el guia o un admin puede consultar sus booking
+    if ($seekerID !== $guideID && !$jwt->data->IsAdmin) {
+      return $response->withStatus(403)->withJson([
+        "error" => [
+          "code" => "FORBIDDEN",
+          "desc" => "You are not authorized to view bookings from this seeker."
+        ]
+      ]);
+    }
 
     try {
-      $bookings = $this->booking->getBookingsBySeeker($userID, $paginator);
+      # Filtro solo abiertos
+      $onlyOpen = isset($params['status']) && $params['status'] === 'open';
 
+      # Llamar al modelo
+      $bookings = $this->booking->getBookingsBySeeker($seekerID, $paginator, $onlyOpen);
       if ($bookings === null) {
         return $response->withStatus(404)->withJson([
           "error" => [
             "code" => "BOOKING_NOT_FOUND",
             "desc" => "No Bookings found for this specific user."
-          ]
-        ]);
-      }
-
-      # Validar si el user es el cliente o el guía
-      if ($userJWT !== $userID && !$jwt->data->IsAdmin) {
-        return $response->withStatus(401)->withJson([
-          "error" => [
-            "code" => "FORBIDDEN",
-            "desc" => "You are not authorized to view this booking."
           ]
         ]);
       }
@@ -231,11 +223,10 @@ class BookingController
     $message = $data['Message'] ?? null;
     $mode = strtolower($data['Mode'] ?? null);
     $offeringID = $data['OfferingID'] ?? null;
-    $package = $data['Package'] ?? null;
     $subDomain = $data['SubDomain'] ?? null;
 
     # Validación de parámetros
-    if (empty($assocUUID) || empty($message) || empty($package) || empty($mode) || empty($offeringID)) {
+    if (empty($assocUUID) || empty($message) || empty($mode) || empty($offeringID)) {
       return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "INVALID_PARAMETERS",
@@ -288,7 +279,7 @@ class BookingController
       }
 
       # Valida contenido con Perspective API
-      if ($this->containsInappropriateContent($message)) {
+      if ($this->_containsInappropriateContent($message)) {
         return $response->withStatus(400)->withJson([
           "code" => "INAPPROPRIATE_CONTENT",
           "desc" => "Please remove inappropriate content and try again."
@@ -334,16 +325,17 @@ class BookingController
           ]);
         }
 
-        # Validar que el LocationID exista en offeringLocations
-        $location = $this->booking->getLocation($offeringID, $locationID);
-        if (!$location) {
-          return $response->withStatus(400)->withJson([
-            "error" => [
-              "code" => "INVALID_LOCATION",
-              "desc" => "Provided location ID does not belong to the associated offering or does not exist"
-            ]
-          ]);
-        }
+        // --> REWORK PENDIENTE
+        // # Validar que el LocationID exista en offeringLocations
+        // $location = $this->booking->getLocation($offeringID, $locationID);
+        // if (!$location) {
+        //   return $response->withStatus(400)->withJson([
+        //     "error" => [
+        //       "code" => "INVALID_LOCATION",
+        //       "desc" => "Provided location ID does not belong to the associated offering or does not exist"
+        //     ]
+        //   ]);
+        // }
       }
 
       # Obtengo el guia
@@ -375,25 +367,12 @@ class BookingController
         $assocUUID = null; # Si no se usa cal.com se descarga el uuid para no asociar nada
       }
 
-      # Busco el paquete
-      $packages = array_values(array_filter($offering['Packages'], function($e) use ($package){
-        return $e['Package'] === $package;
-      }));
-      if(empty($packages)){
-        return $response->withStatus(400)->withJson([
-          "error" => [
-            "code" => "INVALID_PACKAGE",
-            "desc" => "Provided package does not belong to this offering"
-          ]
-        ]);
-      }
-
-      # Verifico si el paquete tiene la modalidad seleccionada
-      if($packages[0]['SessionType'] !== 'both' && $packages[0]['SessionType'] !== $mode){
+      # Verifico si el offering tiene la modalidad seleccionada
+      if($offering['SessionType'] !== 'both' && $offering['SessionType'] !== $mode){
         return $response->withStatus(400)->withJson([
           "error" => [
             "code" => "INVALID_MODE",
-            "desc" => "Provided package does not have the selected session mode"
+            "desc" => "The offering does not have the selected session mode"
           ]
         ]);
       }
@@ -444,12 +423,12 @@ class BookingController
       }
 
       # Si hay voucher es precio 0
-      $price = $coupon ? 0 : $packages[0]['Price'];
-      $conditions = $packages[0]['Conditions'];
+      $price = $coupon ? 0 : $offering['Price'];
+      $conditions = $offering['Conditions'];
 
       $countryCode = $seeker['CountryCode'] ?? "AR";
       $type = 'B';
-      $publicID = $this->booking->generatePublicId($countryCode, $type);
+      $publicID = $this->booking->_generatePublicId($countryCode, $type);
 
       # PREPARAR datos para el modelo
       $data = [
@@ -514,7 +493,6 @@ class BookingController
       );
 
       return $response->withStatus(200)->withJson($booking);
-
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -526,15 +504,35 @@ class BookingController
   }
 
   public function updateBooking(Request $request, Response $response, $args) {
-    $jwt = $request->getAttribute('jwt');
     $bookingID = intval($args['bookingID']);
-    $userID = $jwt->data->UserID;
     $data = $request->getParsedBody();
-    $scheduledDate = $data['ScheduledDate'];
+    $jwt = $request->getAttribute('jwt');
+    $userID = $jwt->data->UserID;
+
+    # Verificar si el body es un array/object válido
+    if (!is_array($data) && !is_object($data)) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_JSON",
+          "desc" => "Request body must be valid JSON"
+        ]
+      ]);
+    }
+
     $mode = strtolower($data['Mode'] ?? '');
     $message = $data['Message'] ?? null;
     $locationID = $data['LocationID'] ?? null;
     $subDomain = $data['SubDomain'] ?? '';
+
+    # Validar que al menos se estre modificando algo
+    if (empty($mode) && is_null($locationID)) {
+      return $response->withStatus(400)->withJson([
+        "error" => [
+          "code" => "INVALID_PARAMETERS",
+          "desc" => "Parameters are missing or invalid"
+        ]
+      ]);
+    }
 
     # Validar formato de subdominio (solo letras A-Z, a-z)
     if (!empty($subDomain)) {
@@ -550,7 +548,7 @@ class BookingController
 
     # Valida contenido con Perspective API
     if(!empty($data['Message'])){
-      if ($this->containsInappropriateContent($data['Message'])) {
+      if ($this->_containsInappropriateContent($data['Message'])) {
         return $response->withStatus(400)->withJson([
           "code" => "INAPPROPRIATE_CONTENT",
           "desc" => "Please remove inappropriate content and try again."
@@ -581,7 +579,7 @@ class BookingController
 
       # Validar si el user es el cliente o el guía o un administrador
       if ($booking['UserID'] !== $userID && $booking['Guide'] !== $userID && !$jwt->data->IsAdmin){
-        return $response->withStatus(401)->withJson([
+        return $response->withStatus(403)->withJson([
           "error" => [
             "code" => "FORBIDDEN",
             "desc" => "You are not authorized to cancel this booking."
@@ -598,38 +596,6 @@ class BookingController
             "error" => [
               "code" => "BOOKING_ALREADY_CANCELED_OR_CONFIRMED",
               "desc" => "Cannot update this booking."
-            ]
-          ]);
-        }
-      }
-
-      # Validar que al menos uno venga definido
-      if (empty($scheduledDate) && empty($mode) && empty($locationID)) {
-        return $response->withStatus(400)->withJson([
-          "error" => [
-            "code" => "NO_FIELDS_TO_UPDATE",
-            "desc" => "No valid fields provided to update."
-          ]
-        ]);
-      }
-
-      if ($scheduledDate) {
-        # Verificar que la reserva NO haya sucedido
-        $scheduledDateTime = DateTime::createFromFormat('Y-m-d H:i:s', $scheduledDate);
-        if (!$scheduledDateTime || $scheduledDateTime->format('Y-m-d H:i:s') !== $scheduledDate) {
-          return $response->withStatus(400)->withJson([
-            "error" => [
-              "code" => "INVALID_BOOKING_DATE",
-              "desc" => "Invalid date format. Must be Y-m-d H:i:s"
-            ]
-          ]);
-        }
-
-        if ($scheduledDateTime < new DateTime()) {
-          return $response->withStatus(400)->withJson([
-            "error" => [
-              "code" => "INVALID_BOOKING_DATE",
-              "desc" => "Cannot cancel a booking that is already in the past."
             ]
           ]);
         }
@@ -817,7 +783,7 @@ class BookingController
 
     # Valida contenido con Perspective API
     if(!empty($data['Message'])){
-      if ($this->containsInappropriateContent($data['Message'])) {
+      if ($this->_containsInappropriateContent($data['Message'])) {
         return $response->withStatus(400)->withJson([
           "code" => "INAPPROPRIATE_CONTENT",
           "desc" => "Please remove inappropriate content and try again."
@@ -975,7 +941,7 @@ class BookingController
 
     # Valida contenido con Perspective API
     if(!empty($data['Message'])){
-      if ($this->containsInappropriateContent($data['Message'])) {
+      if ($this->_containsInappropriateContent($data['Message'])) {
         return $response->withStatus(400)->withJson([
           "code" => "INAPPROPRIATE_CONTENT",
           "desc" => "Please remove inappropriate content and try again."
@@ -1167,7 +1133,7 @@ class BookingController
 
     # Valida contenido con Perspective API
     if(!empty($data['Message'])){
-      if ($this->containsInappropriateContent($data['Message'])) {
+      if ($this->_containsInappropriateContent($data['Message'])) {
         return $response->withStatus(400)->withJson([
           "code" => "INAPPROPRIATE_CONTENT",
           "desc" => "Please remove inappropriate content and try again."
@@ -1276,7 +1242,7 @@ class BookingController
 
     # Valida contenido con Perspective API
     if(!empty($data['Message'])){
-      if ($this->containsInappropriateContent($data['Message'])) {
+      if ($this->_containsInappropriateContent($data['Message'])) {
         return $response->withStatus(400)->withJson([
           "code" => "INAPPROPRIATE_CONTENT",
           "desc" => "Please remove inappropriate content and try again."
@@ -1661,8 +1627,13 @@ class BookingController
     }
   }
 
-  private function containsInappropriateContent($text)
-  {
+  private function _containsInappropriateContent($text) {
     return validateContentWithPerspective($text);
+  }
+
+  private function _generatePublicId ($countryCode, $type) {
+    $dateCode = date('ym'); # AñoMes
+    $random = substr(bin2hex(random_bytes(5)), 0, 8); # Hash corto
+    return strtoupper("{$countryCode}-{$dateCode}-{$type}-{$random}");
   }
 }
