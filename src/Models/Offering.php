@@ -736,21 +736,25 @@ class Offering {
    * @param  string $fileURL: URL pública del archivo optimizado
    * @param  string $filePath: ruta local completa del archivo
    * @param  MediaType $mediaType: tipo de archivo ('image' o 'video')
+   * @param  $position: posicion del archivo (opcional)
    * @return array: datos de la publicación actualizada
    * @throws DatabaseException
    **/
   public function createOfferingMedia($offeringID, $title, $description, $fileURL,
-    $filePath, MediaType $mediaType
+    $filePath, MediaType $mediaType, $position
   ){
     try {
       $this->db->beginTransaction(); # Iniciar transacción
 
-      # Calcular la próxima posición
-      $stmt = $this->db->prepare("SELECT MAX(Position) AS max_position FROM Media
-        WHERE OfferingID = ? AND MediaType = ?");
-      $stmt->execute([$offeringID, $mediaType->value]);
-      $maxPosition = $stmt->fetch(PDO::FETCH_ASSOC)['max_position'];
-      $position = $maxPosition !== null ? $maxPosition + 1 : 0;
+      # Si no se especifico posicion calcular una nueva
+      if(is_null($position)){
+        # Calcular la próxima posición
+        $stmt = $this->db->prepare("SELECT MAX(Position) AS max_position FROM Media
+          WHERE OfferingID = ? AND MediaType = ?");
+        $stmt->execute([$offeringID, $mediaType->value]);
+        $maxPosition = $stmt->fetch(PDO::FETCH_ASSOC)['max_position'];
+        $position = $maxPosition !== null ? $maxPosition + 1 : 0;
+      }
 
       # Insertar en la tabla Media
       $stmt = $this->db->prepare("INSERT INTO Media

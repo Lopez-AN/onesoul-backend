@@ -72,7 +72,7 @@ class Booking {
     return $booking;
   }
 
-  public function getBookingsByGuide($userID, $paginator, $onlyOpen) {
+  public function getBookingsByGuide($guideID, $paginator, $onlyOpen) {
     $filterOpen = $onlyOpen ?
       " AND LastBookingEvent NOT IN ('Canceled', 'Completed', 'Rated') " : "";
 
@@ -89,13 +89,13 @@ class Booking {
       ORDER BY b.CreationDate DESC
       LIMIT ? OFFSET ?");
 
-    $stmt->execute([$userID, $paginator->limit, $paginator->offset]);
+    $stmt->execute([$guideID, $paginator->limit, $paginator->offset]);
 
     $bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
     $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    return $this -> _getUserGenericMulti($users, $total['total']);
+    return $this -> _getBookingsGenericMulti($bookings, $total['total'], $onlyOpen);
   }
 
   public function getBookingsBySeeker($seekerID, $paginator, $onlyOpen) {
@@ -115,13 +115,13 @@ class Booking {
       ORDER BY b.CreationDate DESC
       LIMIT ? OFFSET ?");
 
-    $stmt->execute([$userID, $paginator->limit, $paginator->offset]);
+    $stmt->execute([$seekerID, $paginator->limit, $paginator->offset]);
 
     $bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
     $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    return $this -> _getUserGenericMulti($users, $total['total']);
+    return $this -> _getBookingsGenericMulti($bookings, $total['total'], $onlyOpen);
   }
 
   /**
@@ -132,9 +132,10 @@ class Booking {
    *
    * @param  array $offerings: array de bookings obtenidas de la BD
    * @param  int $total: cantidad total de registros disponibles
+   * @param  int $onlyOpen: solo bookings abiertos
    * @return object: { data: [], rows: { total: int, fetched: int } }
    **/
-  private function _getBookingsGenericMulti($bookings, $total){
+  private function _getBookingsGenericMulti($bookings, $total, $onlyOpen){
     $filterOpen = $onlyOpen ?
       " AND LastBookingEvent NOT IN ('Canceled', 'Completed', 'Rated') " : "";
 

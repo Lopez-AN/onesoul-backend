@@ -204,10 +204,11 @@ class OfferingController {
     $data['SKU'] = null;
     $data['Stock'] = null;
     $data['ServiceType'] = 'Service';
+    $data['Conditions'] ?? null;
 
     # Validar datos obligatorios
     if (!isset($data['Title'], $data['ShortDescription'], $data['Description'], $data['CategoryID'],
-      $data['Price'], $data['SessionType'], $data['Conditions'], $data['Duration']) || !is_array($data['Tags'])
+      $data['Price'], $data['SessionType'], $data['Duration']) || !is_array($data['Tags'])
     ){
       return $response->withStatus(400)->withJson([
         "error" => [
@@ -594,6 +595,7 @@ class OfferingController {
 
     $title = $data['Title'] ?? null;
     $description = $data['Description'] ?? null;
+    $position = $data['Position'] ?? null;
 
     try {
       # Verificar que el offering existe
@@ -713,7 +715,8 @@ class OfferingController {
         $description,
         $fileURL,
         $filePath,
-        $media->MediaType
+        $media->MediaType,
+        $position
       );
 
       return $response->withStatus(200)->withJson($offering);

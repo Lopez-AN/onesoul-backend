@@ -166,8 +166,8 @@ class BookingController {
     $jwt = $request->getAttribute('jwt');
     $userID = $jwt->data->UserID;
 
-    # Validar solo el guia o un admin puede consultar sus booking
-    if ($seekerID !== $guideID && !$jwt->data->IsAdmin) {
+    # Validar solo el buscador o un admin puede consultar sus booking
+    if ($userID !== $seekerID && !$jwt->data->IsAdmin) {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "FORBIDDEN",
