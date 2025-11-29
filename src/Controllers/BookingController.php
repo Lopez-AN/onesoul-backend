@@ -356,8 +356,8 @@ class BookingController {
         if (!$cal) {
           return $response->withStatus(400)->withJson([
             "error" => [
-              "code" => "CALENDLY_INVITEE_NOT_FOUND",
-              "desc" => "Calendly invitee is required for this service"
+              "code" => "CAL_INVITEE_NOT_FOUND",
+              "desc" => "Cal.com invitee is required for this service"
             ]
           ]);
         }
@@ -428,7 +428,7 @@ class BookingController {
 
       $countryCode = $seeker['CountryCode'] ?? "AR";
       $type = 'B';
-      $publicID = $this->booking->_generatePublicId($countryCode, $type);
+      $publicID = $this->_generatePublicId($countryCode, $type);
 
       # PREPARAR datos para el modelo
       $data = [

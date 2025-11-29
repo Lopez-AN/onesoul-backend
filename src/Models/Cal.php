@@ -143,6 +143,17 @@ class Cal {
   }
 
   /**
+   * Obtiene un schedule por UUID
+   * @param $uuid identificador asociador del schedule
+   */
+  public function getScheduleByAssocUUID($assocUUID){
+    $stmt = $this->db->prepare("SELECT * FROM CalWebhooks
+      WHERE AssocUUID = ? AND Event = 'BOOKING_CREATED'");
+    $stmt->execute([$assocUUID]);
+    return $stmt->fetch(PDO::FETCH_ASSOC);
+  }
+
+  /**
    * Convierte fecha ISO 8601 de Cal.com a formato MySQL DATETIME
    * Transforma "2025-08-31T18:31:58.000000Z" a "2025-08-31 18:31:58.000000"
    * y aplica el desplazamiento de zona horaria

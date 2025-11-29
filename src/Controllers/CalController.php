@@ -420,6 +420,53 @@ class CalController{
   }
 
   /**
+   * Obtiene un schedule por UUID
+   * @param Request $request: objeto de la petición HTTP (parámetro 'uuid' = assocUUID)
+   * @param Response $response: objeto de la respuesta HTTP
+   * @param array $args: argumentos de la ruta definidos en el enrutador
+   * @return Response: JSON con los datos del schedule
+   * @statusCode 200: información de estado devuelta en JSON
+   * @statusCode 403: no autorizado a ver el schedule (no es el guia ni el buscador)
+   * @statusCode 404: schedule no encontrado
+   **/
+  public function getScheduleByAssocUUID(Request $request, Response $response, array $args) {
+    $assocUUID = $args['uuid'];
+
+    $jwt = $request->getAttribute('jwt');
+    $userID = $jwt->data->UserID;
+
+    try{
+      $schedule = $this->cal->getScheduleByAssocUUID($assocUUID);
+      if(!$schedule){
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "SCHEDULE_NOT_FOUND",
+            "desc" => "No schedule was found with provided UUID"
+          ]
+        ]);
+      }
+
+      if($userID !== $schedule['SeekerID'] && $userID !== $schedule['GuideID']){
+        return $response->withStatus(403)->withJson([
+          "error" => [
+            "code" => "FORBIDDEN",
+            "desc" => "You are not authorized to view this schedule."
+          ]
+        ]);
+      }
+
+      return $response->withJson($schedule);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  /**
    * Procesa webhooks recibidos desde Cal.com
    * Valida firma HMAC-SHA256, verifica duplicados y procesa eventos de reservas
    * Siempre responde 200 OK (incluso con errores) para evitar reintentos de Cal.com
