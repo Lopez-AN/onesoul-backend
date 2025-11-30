@@ -221,12 +221,13 @@ class BookingController {
     $coupon = $data['Coupon'] ?? null;
     $locationID = $data['LocationID'] ?? null;
     $message = $data['Message'] ?? null;
-    $mode = strtolower($data['Mode'] ?? null);
+    $sessionType = $data['SessionType'] ?? null;
     $offeringID = $data['OfferingID'] ?? null;
     $subDomain = $data['SubDomain'] ?? null;
+    $scheduledDate = $data['ScheduledDate'] ?? null;
 
     # Validación de parámetros
-    if (empty($assocUUID) || empty($message) || empty($mode) || empty($offeringID)) {
+    if (empty($assocUUID) || empty($message) || empty($offeringID) || !in_array($sessionType, ['in-person', 'virtual'])) {
       return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "INVALID_PARAMETERS",
@@ -296,6 +297,17 @@ class BookingController {
           ]
         ]);
       }
+
+      # Verifico si el offering tiene la modalidad seleccionada
+      if($offering['SessionType'] !== 'both' && $offering['SessionType'] !== $sessionType){
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "INVALID_SESSION_TYPE",
+            "desc" => "The offering does not have the selected session mode"
+          ]
+        ]);
+      }
+
       $guideID = $offering['UserID'];
       if ($guideID === $seekerID) {
         return $response->withStatus(401)->withJson([
@@ -306,24 +318,15 @@ class BookingController {
         ]);
       }
 
-      if (!in_array($mode, ['in-person', 'virtual'])) {
-        return $response->withStatus(400)->withJson([
-          "error" => [
-            "code" => "INVALID_MODE",
-            "desc" => "Invalid session mode."
-          ]
-        ]);
-      }
-
-      if ($mode === 'in-person') {
-        if (!$locationID) {
-          return $response->withStatus(400)->withJson([
-            "error" => [
-              "code" => "INVALID_LOCATION",
-              "desc" => "LocationID is required for in-person services."
-            ]
-          ]);
-        }
+      if ($sessionType === 'in-person') {
+        // if (!$locationID) {
+        //   return $response->withStatus(400)->withJson([
+        //     "error" => [
+        //       "code" => "INVALID_LOCATION",
+        //       "desc" => "LocationID is required for in-person services."
+        //     ]
+        //   ]);
+        // }
 
         // --> REWORK PENDIENTE
         // # Validar que el LocationID exista en offeringLocations
@@ -367,17 +370,8 @@ class BookingController {
         $assocUUID = null; # Si no se usa cal.com se descarga el uuid para no asociar nada
       }
 
-      # Verifico si el offering tiene la modalidad seleccionada
-      if($offering['SessionType'] !== 'both' && $offering['SessionType'] !== $mode){
-        return $response->withStatus(400)->withJson([
-          "error" => [
-            "code" => "INVALID_MODE",
-            "desc" => "The offering does not have the selected session mode"
-          ]
-        ]);
-      }
-
       # Valido un cupon
+      $voucherID = null;
       if($coupon){
         $donation = $this->donation->getDonationByRedeemCode($coupon);
         if (!$donation) {
@@ -420,6 +414,7 @@ class BookingController {
             ]
           ]);
         }
+        $voucherID = $donation['VoucherID'];
       }
 
       # Si hay voucher es precio 0
@@ -435,14 +430,14 @@ class BookingController {
         'PublicID' => $publicID,
         'OfferingID' => $offeringID,
         'SeekerID' => $seekerID,
-        'Mode' => $mode,
+        'SessionType' => $sessionType,
         'LocationID' => $locationID,
         'ScheduledDate' => $scheduledDate,
         'Message' => $message
       ];
 
       $origin = $subDomain ? "https://{$subDomain}.onesoul.app" : "https://onesoul.app";
-      $booking = $this->booking->createBooking($data, $subDomain, $assocUUID, $coupon);
+      $booking = $this->booking->createBooking($data, $subDomain, $assocUUID, $voucherID);
 
       # Notificación para el guía
       $payloadGuide = [
@@ -456,7 +451,7 @@ class BookingController {
         "SEARCHER_PHONE"=> $seeker['Phone'] ?? '-',
         "MESSAGE"       => $message,
         "SCHEDULED"     => $scheduledDate ? $scheduledDate -> format('d/m/Y H:i') : "A convenir",
-        "MODE"          => $booking['Mode'] === 'in-person' ? 'Presencial' : 'Virtual',
+        "MODE"          => $booking['SessionType'] === 'in-person' ? 'Presencial' : 'Virtual',
         "PRICE"         => $offering['Currency'].' '.$price,
         "BOOKING_URL"   => "{$origin}/bookings/guide"
       ];
@@ -477,7 +472,7 @@ class BookingController {
         "GUIDE_EMAIL" => $guide['Email'],
         "GUIDE_PHONE" => $guide['Phone'],
         "SCHEDULED"   => $scheduledDate ? $scheduledDate -> format('d/m/Y H:i') : "A convenir",
-        "MODE"        => $booking['Mode'] === 'in-person' ? 'Presencial' : 'Virtual',
+        "MODE"        => $booking['SessionType'] === 'in-person' ? 'Presencial' : 'Virtual',
         "PRICE"       => $offering['Currency'].' '.$price,
         "CONDITIONS"  => $conditions,
         "BOOKING_ID"  => $booking['PublicID'],
@@ -519,13 +514,13 @@ class BookingController {
       ]);
     }
 
-    $mode = strtolower($data['Mode'] ?? '');
     $message = $data['Message'] ?? null;
+    $sessionType = $data['SessionType'] ?? null;
     $locationID = $data['LocationID'] ?? null;
+    $scheduledDate = $data['ScheduledDate'] ?? null;
     $subDomain = $data['SubDomain'] ?? '';
 
-    # Validar que al menos se estre modificando algo
-    if (empty($mode) && is_null($locationID)) {
+    if (is_null($sessionType) || !in_array($sessionType, ['in-person', 'virtual'])) {
       return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "INVALID_PARAMETERS",
@@ -547,22 +542,21 @@ class BookingController {
     }
 
     # Valida contenido con Perspective API
-    if(!empty($data['Message'])){
-      if ($this->_containsInappropriateContent($data['Message'])) {
+    if(!empty($message)){
+      if ($this->_containsInappropriateContent($message)) {
         return $response->withStatus(400)->withJson([
           "code" => "INAPPROPRIATE_CONTENT",
           "desc" => "Please remove inappropriate content and try again."
         ]);
       }
-    }
-
-    if (strlen($message) > 1000) {
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "MESSAGE_TOO_LONG",
-          "desc" => "The message is too long (max 1000 characters)"
-        ]
-      ]);
+      if (strlen($message) > 1000) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "MESSAGE_TOO_LONG",
+            "desc" => "The message is too long (max 1000 characters)"
+          ]
+        ]);
+      }
     }
 
     try {
@@ -613,74 +607,53 @@ class BookingController {
         ]);
       }
 
-      if ($mode) {
-        $allowedModes = ['in-person', 'virtual'];
-
-        if (!in_array($mode, $allowedModes)) {
-          return $response->withStatus(400)->withJson([
-            "error" => [
-              "code" => "INVALID_MODE",
-              "desc" => "Invalid session mode. Allowed values: in-person, virtual."
-            ]
-          ]);
-        }
-
-        # Revisar si hay al menos un OfferingPackage con un SessionType válido
-        $sessionTypes = [
-          'in-person' => ['in-person', 'both'],
-          'virtual' => ['virtual', 'both']
-        ];
-
-        # VALIDAR: LocationID en caso de ser presencial
-        if ($mode === 'in-person') {
-          if (!$locationID) {
-            return $response->withStatus(400)->withJson([
-              "error" => [
-                "code" => "INVALID_LOCATION",
-                "desc" => "LocationID is required for in-person services."
-              ]
-            ]);
-          }
-
-          # Validar que el LocationID exista en offeringLocations
-          $location = $this->booking->getLocation($id, $locationID);
-
-          if (!$location) {
-            return $response->withStatus(400)->withJson([
-              "error" => [
-                "code" => "INVALID_LOCATION",
-                "desc" => "Invalid LocationID."
-              ]
-            ]);
-          }
-        } else {
-          # Si no es presencial, LocationID puede ser NULL
-          $locationID = null;
-        }
-
-        $validTypes = $sessionTypes[$mode];
-        $hasValidPackage = false;
-
-        if (!empty($offering['Packages'])) {
-          foreach ($offering['Packages'] as $package) {
-            if (in_array(strtolower($package['SessionType']), $validTypes)) {
-              $hasValidPackage = true;
-              break;
-            }
-          }
-        }
-
-        if (!$hasValidPackage) {
-          return $response->withStatus(400)->withJson([
-            "error" => [
-              "code" => "INVALID_SESSION_TYPE",
-              "desc" => "The offering does not support the selected mode: $mode"
-            ]
-          ]);
-        }
+      # Verifico si el offering tiene la modalidad seleccionada
+      if($offering['SessionType'] !== 'both' && $offering['SessionType'] !== $sessionType){
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "INVALID_SESSION_TYPE",
+            "desc" => "The offering does not have the selected session mode"
+          ]
+        ]);
       }
 
-      $booking = $this->booking->updateBooking($bookingID, $mode, $scheduledDate, $message, $locationID, $subDomain);
+      # VALIDAR: LocationID en caso de ser presencial
+      if ($sessionType === 'in-person') {
+        // if (!$locationID) {
+        //   return $response->withStatus(400)->withJson([
+        //     "error" => [
+        //       "code" => "INVALID_LOCATION",
+        //       "desc" => "LocationID is required for in-person services."
+        //     ]
+        //   ]);
+        // }
+
+        # Validar que el LocationID exista en offeringLocations
+        // $location = $this->booking->getLocation($id, $locationID);
+
+        // if (!$location) {
+          // return $response->withStatus(400)->withJson([
+          //   "error" => [
+          //     "code" => "INVALID_LOCATION",
+          //     "desc" => "Invalid LocationID."
+          //   ]
+          // ]);
+        // }
+      } else {
+        # Si no es presencial, LocationID puede ser NULL
+        // $locationID = null;
+      }
+
+      if (!in_array($sessionType, ['in-person', 'virtual'])) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "INVALID_SESSION_TYPE",
+            "desc" => "Invalid session type. Allowed values: in-person, virtual."
+          ]
+        ]);
+      }
+
+      $booking = $this->booking->updateBooking($bookingID, $sessionType, $scheduledDate, $message, $locationID, $subDomain);
 
       $origin = $subDomain ? "https://{$subDomain}.onesoul.app" : "https://onesoul.app";
 
@@ -706,9 +679,9 @@ class BookingController {
               '{USERNAME}' => $username,
               '{OFFERING}' => $offeringName,
               '{BOOKING_ID}' => $booking['PublicID'],
-              '{MESSAGE}' => $message,
+              '{MESSAGE}' => $message ?? '(El guía no agregó comentarios)',
               '{SCHEDULED}' => date('d/m/Y H:i', strtotime($booking['ScheduledDate'])),
-              '{MODE}' => $booking['Mode'] === 'in-person' ? 'Presencial' : 'Virtual',
+              '{MODE}' => $booking['SessionType'] === 'in-person' ? 'Presencial' : 'Virtual',
               '{BOOKING_URL}' => "{$origin}/bookings/seeker",
             ]
           );
@@ -742,7 +715,7 @@ class BookingController {
                     '{MESSAGE}' => $message,
                     '{SEARCHER_PHONE}' => $userInfo['Phone'] ?? '-',
                     '{SCHEDULED}' => date('d/m/Y H:i', strtotime($booking['ScheduledDate'])),
-                    '{MODE}' => $booking['Mode'] === 'in-person' ? 'Presencial' : 'Virtual',
+                    '{MODE}' => $booking['SessionType'] === 'in-person' ? 'Presencial' : 'Virtual',
                     '{BOOKING_URL}' => "{$origin}/bookings/guide"
                   ]
                 );
@@ -770,6 +743,7 @@ class BookingController {
     $userID = $jwt->data->UserID;
     $bookingID = intval($args['bookingID']);
     $message = $data['Message'] ?? null;
+    $subDomain = $data['SubDomain'] ?? '';
 
     # Validar que defina el motivo de la anulación (se guarda en campo Message)
     if (!$message) {
@@ -782,25 +756,23 @@ class BookingController {
     }
 
     # Valida contenido con Perspective API
-    if(!empty($data['Message'])){
-      if ($this->_containsInappropriateContent($data['Message'])) {
+    if(!empty($message)){
+      if ($this->_containsInappropriateContent($message)) {
         return $response->withStatus(400)->withJson([
           "code" => "INAPPROPRIATE_CONTENT",
           "desc" => "Please remove inappropriate content and try again."
         ]);
       }
-    }
 
-    if (strlen($message) > 1000) {
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "MESSAGE_TOO_LONG",
-          "desc" => "The message is too long (max 1000 characters)"
-        ]
-      ]);
+      if (strlen($message) > 1000) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "MESSAGE_TOO_LONG",
+            "desc" => "The message is too long (max 1000 characters)"
+          ]
+        ]);
+      }
     }
-
-    $subDomain = $data['SubDomain'] ?? '';
 
     # Validar formato de subdominio (solo letras A-Z, a-z)
     if (!empty($subDomain)) {
@@ -938,27 +910,26 @@ class BookingController {
     $userID = $jwt->data->UserID;
     $bookingID = intval($args['bookingID']);
     $message = $data['Message'] ?? null;
+    $subDomain = $data['SubDomain'] ?? '';
 
     # Valida contenido con Perspective API
-    if(!empty($data['Message'])){
-      if ($this->_containsInappropriateContent($data['Message'])) {
+    if(!empty($message)){
+      if ($this->_containsInappropriateContent($message)) {
         return $response->withStatus(400)->withJson([
           "code" => "INAPPROPRIATE_CONTENT",
           "desc" => "Please remove inappropriate content and try again."
         ]);
       }
-    }
 
-    if (strlen($message) > 1000) {
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "MESSAGE_TOO_LONG",
-          "desc" => "The message is too long (max 1000 characters)"
-        ]
-      ]);
+      if (strlen($message) > 1000) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "MESSAGE_TOO_LONG",
+            "desc" => "The message is too long (max 1000 characters)"
+          ]
+        ]);
+      }
     }
-
-    $subDomain = $data['SubDomain'] ?? '';
 
     # Validar formato de subdominio (solo letras A-Z, a-z)
     if (!empty($subDomain)) {
@@ -1036,8 +1007,8 @@ class BookingController {
               '{OFFERING}' => $offeringName,
               '{BOOKING_ID}' => $booking['PublicID'],
               '{SCHEDULED}' => $booking['ScheduledDate'] ? $booking['ScheduledDate'] : 'A confirmar',
-              '{MODE}' => $booking['Mode'],
-              '{MESSAGE}' => $message,
+              '{MODE}' => $booking['SessionType'],
+              '{MESSAGE}' => $message ?? '(El guía no agregó comentarios)',
               '{BOOKING_URL}' => "{$origin}/bookings/seeker",
             ]
           );
@@ -1067,11 +1038,11 @@ class BookingController {
                     '{SERVICE_NAME}' => $offeringName,
                     '{BOOKING_ID}' => $booking['PublicID'],
                     '{SCHEDULED}' => $booking['ScheduledDate'] ? $booking['ScheduledDate'] : 'A confirmar',
-                    '{MODE}' => $booking['Mode'],
+                    '{MODE}' => $booking['SessionType'],
                     '{SEARCHER_NAME}' => $searcherName,
                     '{SEARCHER_EMAIL}' => $userEmail,
                     '{SEARCHER_PHONE}' => $userInfo['Phone'] ?? '-',
-                    '{MESSAGE}' => $message,
+                    '{MESSAGE}' => $message ?? '(El guía no agregó comentarios)',
                     '{BOOKING_URL}' => "{$origin}/bookings/guide"
                   ]
                 );
@@ -1093,8 +1064,7 @@ class BookingController {
     }
   }
 
-  public function completeBooking(Request $request, Response $response, $args)
-  {
+  public function completeBooking(Request $request, Response $response, $args) {
     $jwt = $request->getAttribute('jwt');
 
     $data = $request->getParsedBody();
@@ -1122,7 +1092,7 @@ class BookingController {
       ]);
     }
 
-    if (!in_array($data['Rating'], [1, 2, 3, 4, 5])) {
+    if (!in_array($rating, [1, 2, 3, 4, 5])) {
       return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "INVALID_RATING",
@@ -1132,22 +1102,21 @@ class BookingController {
     }
 
     # Valida contenido con Perspective API
-    if(!empty($data['Message'])){
-      if ($this->_containsInappropriateContent($data['Message'])) {
+    if(!empty($message)){
+      if ($this->_containsInappropriateContent($message)) {
         return $response->withStatus(400)->withJson([
           "code" => "INAPPROPRIATE_CONTENT",
           "desc" => "Please remove inappropriate content and try again."
         ]);
       }
-    }
-
-    if (strlen($message) > 1000) {
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "MESSAGE_TOO_LONG",
-          "desc" => "The message is too long (max 1000 characters)"
-        ]
-      ]);
+      if (strlen($message) > 1000) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "MESSAGE_TOO_LONG",
+            "desc" => "The message is too long (max 1000 characters)"
+          ]
+        ]);
+      }
     }
 
     try {
@@ -1202,16 +1171,15 @@ class BookingController {
     }
   }
 
-  public function rateBooking(Request $request, Response $response, $args)
-  {
-    $jwt = $request->getAttribute('jwt');
-
+  public function rateBooking(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
-    $userID = $jwt->data->UserID;
     $bookingID = intval($args['bookingID']);
     $message = $data['Message'] ?? null;
     $rating = $data['Rating'] ?? null;
     $fulfilled = $data['Fulfilled'] ?? null;
+
+    $jwt = $request->getAttribute('jwt');
+    $userID = $jwt->data->UserID;
 
     if (!is_bool($fulfilled)) {
       return $response->withStatus(400)->withJson([
@@ -1241,22 +1209,21 @@ class BookingController {
     }
 
     # Valida contenido con Perspective API
-    if(!empty($data['Message'])){
-      if ($this->_containsInappropriateContent($data['Message'])) {
+    if(!empty($message)){
+      if ($this->_containsInappropriateContent($message)) {
         return $response->withStatus(400)->withJson([
           "code" => "INAPPROPRIATE_CONTENT",
           "desc" => "Please remove inappropriate content and try again."
         ]);
       }
-    }
-
-    if (strlen($message) > 1000) {
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "MESSAGE_TOO_LONG",
-          "desc" => "The message is too long (max 1000 characters)"
-        ]
-      ]);
+      if (strlen($message) > 1000) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "MESSAGE_TOO_LONG",
+            "desc" => "The message is too long (max 1000 characters)"
+          ]
+        ]);
+      }
     }
 
     try {

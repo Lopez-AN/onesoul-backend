@@ -178,7 +178,9 @@ class DonationController {
           ]
         ]);
       }
-      if ($donation['Status'] === 'expired' || ($donation['ExpiredAt'] && $donation['ExpiredAt'] < time())){
+
+      if ($donation['Status'] === 'expired' ||
+          ($donation['ExpiredAt'] && strtotime($donation['ExpiredAt']) < time())) {
         return $response->withStatus(410)->withJson([
           "error" => [
             "code" => "COUPON_EXPIRED",

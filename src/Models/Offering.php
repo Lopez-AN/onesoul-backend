@@ -286,7 +286,9 @@ class Offering {
       )
     ) FROM OfferingsFaqs f
     WHERE f.OfferingID = o.OfferingID) AS Faqs,
-    ROUND(AVG(r.Rating),2) as Rating
+    ROUND(AVG(r.Rating),2) as Rating,
+    COUNT(DISTINCT r.ReviewID) AS TotalReviews,
+    COUNT(DISTINCT b.BookingID) as Bookings
     FROM Offerings AS o
     INNER JOIN category_tree ct ON ct.CategoryID = o.CategoryID
     INNER JOIN Users AS u ON u.UserID = o.UserID
@@ -375,7 +377,6 @@ class Offering {
 
     return $this -> _getOfferingsGenericMulti($offerings, $total['total']);
   }
-
 
   /**
    * Procesa y normaliza datos de una publicación individual
@@ -950,24 +951,15 @@ class Offering {
    * @throws DatabaseException
    **/
   private function _updateOfferingFaqs($offeringID, $faqs) {
-    try{
-      $this->db->beginTransaction(); # Iniciar transacción
+    if ($faqs !== null && is_array($faqs)) {
+      $stmt = $this->db->prepare("DELETE FROM OfferingsFaqs WHERE OfferingID = ?");
+      $stmt->execute([$offeringID]);
 
-      if ($faqs !== null && is_array($faqs)) {
-        $stmt = $this->db->prepare("DELETE FROM OfferingsFaqs WHERE OfferingID = ?");
-        $stmt->execute([$offeringID]);
-
-        $stmt = $this->db->prepare("INSERT INTO OfferingsFaqs (OfferingID, Position, Question, Answer)
-        VALUES (?, ?, ?, ?)");
-        foreach ($faqs as $faq) {
-          $stmt->execute([$offeringID, $faq['Position'], $faq['Question'], $faq['Answer']]);
-        }
+      $stmt = $this->db->prepare("INSERT INTO OfferingsFaqs (OfferingID, Position, Question, Answer)
+      VALUES (?, ?, ?, ?)");
+      foreach ($faqs as $faq) {
+        $stmt->execute([$offeringID, $faq['Position'], $faq['Question'], $faq['Answer']]);
       }
-
-      $this->db->commit(); # Confirmo transacción
-    } catch (\PDOException $e) {
-      $this->db->rollBack(); # Revierto en caso de error
-      throw new DatabaseException($e->getMessage());
     }
   }
 }

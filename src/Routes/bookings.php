@@ -30,7 +30,7 @@ return function (App $app) {
 
   // Bookings protegidos
   $app->get('/bookings/{bookingID}', [$bookingController, 'getBookingByID'])->add($requiredJwt);
-  $app->get('/bookings/id/{publicID}', [$bookingController, 'getBookingByPublicID'])->add($requiredJwt);
+  $app->get('/bookings/public/{publicID}', [$bookingController, 'getBookingByPublicID'])->add($requiredJwt);
   $app->get('/bookings/guide/{userID}', [$bookingController, 'getBookingsByGuide'])->add($requiredJwt);
   $app->get('/bookings/seeker/{userID}', [$bookingController, 'getBookingsBySeeker'])->add($requiredJwt);
   $app->post('/bookings', [$bookingController, 'createBooking'])->add($requiredJwt);
