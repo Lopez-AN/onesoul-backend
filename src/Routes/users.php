@@ -29,10 +29,10 @@ return function (App $app) {
   $userController = new UserController($user, $auth, $category, $subscription);
 
   $app->get('/users', [$userController, 'getUsers'])->add($optionalJwt);
-  $app->get('/users/type/{type}', [$userController, 'getUsersByType'])->add($optionalJwt);
-  $app->get('/users/category/{id}', [$userController, 'getUsersByCategory'])->add($optionalJwt);
+  $app->get('/users/type/{UserType}', [$userController, 'getUsersByType'])->add($optionalJwt);
+  $app->get('/users/category/{CategoryID}', [$userController, 'getUsersByCategory'])->add($optionalJwt);
   $app->get('/search/guides', [$userController, 'searchGuides'])->add($optionalJwt);
-  $app->get('/users/{id}', [$userController, 'getUserById'])->add($optionalJwt);
+  $app->get('/users/{UserID}', [$userController, 'getUserById'])->add($optionalJwt);
   $app->get('/users/email/{email}', [$userController, 'getUserByEmail'])->add($optionalJwt);
   $app->get('/users/username/{userName}', [$userController, 'getUserByUserName'])->add($optionalJwt);
   $app->get('/users/referred/{referralCode}', [$userController, 'getUserByRefCode'])->add($optionalJwt);

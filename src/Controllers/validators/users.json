@@ -1,0 +1,25 @@
+{
+  "get_users_by_type": {
+    "UserType": {
+      "required": true,
+      "type": "string",
+      "regex": "/^(Guide|Seeker)$/"
+    }
+  },
+  "get_users_by_category": {
+    "CategoryID": {
+      "required": true,
+      "type": "integer",
+      "min": 0,
+      "max": 65535
+    }
+  },
+  "get_user_by_id": {
+    "UserID": {
+      "required": true,
+      "type": "integer",
+      "min": 0,
+      "max": 4294967295
+    }
+  }
+}

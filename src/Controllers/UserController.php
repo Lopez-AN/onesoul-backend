@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Models\Auth;
 use App\Models\Category;
 use App\Models\Subscription;
+use App\Utils\ParameterValidator;
 
 require_once ROOT . '/src/Utils/validateReCaptcha.php';
 require_once(ROOT . '/src/Utils/Paginator.php');
@@ -67,12 +68,17 @@ class UserController{
    * @statusCode 500: error del servidor
    **/
   public function getUsersByType(Request $request, Response $response, $args) {
+    $params['UserType'] = ucfirst($args['UserType']);
     $paginator = paginator($request);
-    $type = $args['type'];
     $jwt = $request->getAttribute('jwt');
 
+    $pValidation = ParameterValidator::validate($response, 'users','get_users_by_type', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
+    }
+
     try {
-      $users = $this->user->getUsersByType($paginator, $type);
+      $users = $this->user->getUsersByType($paginator, $params['UserType']);
       $users->data = $this->_filterByScope($users->data, $jwt);
       return $response->withStatus(200)->withJson($users);
     } catch (Throwable $e) {
@@ -95,12 +101,17 @@ class UserController{
    * @statusCode 500: error del servidor
    **/
   public function getUsersByCategory(Request $request, Response $response, $args) {
+    $params['CategoryID'] = intval($args['CategoryID']);
     $paginator = paginator($request);
-    $categoryID = intval($args['id']);
     $jwt = $request->getAttribute('jwt');
 
+    $pValidation = ParameterValidator::validate($response, 'users','get_users_by_category', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
+    }
+
     try {
-      $users = $this->user->getUsersByCategory($paginator, $categoryID);
+      $users = $this->user->getUsersByCategory($paginator, $params['CategoryID']);
       $users->data = $this->_filterByScope($users->data, $jwt);
       return $response->withStatus(200)->withJson($users);
     } catch (Throwable $e) {
@@ -151,11 +162,16 @@ class UserController{
    * @statusCode 500: error del servidor
    **/
   public function getUserById(Request $request, Response $response, $args) {
-    $userID = intval($args['id']);
+    $params['UserID'] = intval($args['UserID']);
     $jwt = $request->getAttribute('jwt');
 
+    $pValidation = ParameterValidator::validate($response, 'users','get_user_by_id', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
+    }
+
     try {
-      $user = $this->user->getUserById($userID);
+      $user = $this->user->getUserById($params['UserID']);
       if(!$user){
         return $response->withStatus(404)->withJson([
           "error" => [
