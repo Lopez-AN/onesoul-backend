@@ -96,11 +96,12 @@ class Subscription {
     $stmt = $this->db->prepare("SELECT sp.PlanID, sp.StripeID, sp.Name,
       sp.Description, sp.Beneficts, sp.Price, sp.CurrencyCode, sp.Duration,
       sf.FeatureCode, sf.Description AS FeatureDescription,
-      si.Value, si.Type, si.Description AS ItemDescription
+      si.Value, si.Type, si.Description AS ItemDescription,
+      sf.IsActive
       FROM SubscriptionPlans AS sp
       LEFT JOIN SubscriptionItems AS si ON sp.PlanID = si.PlanID
       LEFT JOIN SubscriptionFeatures AS sf ON si.FeatureCode = sf.FeatureCode
-      WHERE sp.PlanID = ? AND sf.IsActive = 1
+      WHERE sp.PlanID = ?
       ORDER BY sf.FeatureCode");
 
     $stmt->execute([$planID]);
@@ -125,7 +126,7 @@ class Subscription {
 
     # Agregar las features
     foreach ($rows as $row) {
-      if (!empty($row['FeatureCode'])) {
+      if (!empty($row['FeatureCode']) && !empty($row['IsActive']) && $row['IsActive']) {
         # Castear el valor según el tipo
         $value = $row['Value'];
         if (isset($value) && isset($row['Type'])) {
@@ -1089,47 +1090,14 @@ class Subscription {
         }
       }
 
+      $subcription = $this->getSubscriptionPlanByID($planID) ?:
+        throw new DatabaseException("Failed to retrieve the ".(!$exists ? 'created' : 'updated')." plan");
       $this->db->commit(); # Confirmo transacción
 
-      return [
-        "Code" => $exists ? "PLAN_UPDATED" : "PLAN_CREATED",
-        "Message" => $exists ? "Subscription plan updated successfully." : "Subscription plan created successfully."
-      ];
+      return $subcription;
     } catch (\PDOException $e) {
       $this->db->rollBack(); # Revierto en caso de error
       throw new DatabaseException($e->getMessage());
     }
-  }
-
-  /**
-   * Obtiene estado de una característica de suscripción
-   * @param  string $featureCode: código de característica
-   * @return array|false: datos de característica o false
-   */
-  public function updateFeatureStatus($featureCode, $isActive) {
-    try {
-      $this->db->beginTransaction(); # Iniciar transacción
-
-      $stmt = $this->db->prepare("UPDATE SubscriptionFeatures
-        SET IsActive = ?
-        WHERE FeatureCode = ?");
-      $stmt->execute([$isActive, $featureCode]);
-
-      $featureStatus = $this->getFeatureStatus ?:
-        throw new DatabaseException("Failed to retrieve the updated feature");
-
-      $this->db->commit(); # Confirmo transacción
-      return $featureStatus;
-    } catch (\PDOException $e) {
-      $this->db->rollBack(); # Revierto en caso de error
-      throw new DatabaseException($e->getMessage());
-    }
-  }
-
-  public function getFeatureStatus($featureCode) {
-    $stmt = $this->db->prepare("SELECT * FROM SubscriptionFeatures
-      WHERE FeatureCode = ?");
-    $stmt->execute([$featureCode]);
-    return $stmt->fetch(PDO::FETCH_ASSOC);
   }
 }

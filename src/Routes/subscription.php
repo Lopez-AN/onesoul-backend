@@ -31,9 +31,7 @@ return function (App $app) {
   $app->get('/subscription/plans/{id}', [$subscriptionController, 'getSubscriptionPlanByID']);
   $app->get('/subscription/plans/stripe/{stripeID}', [$subscriptionController, 'getSubscriptionPlanByStripeID']);
   $app->get('/subscription/{userID}', [$subscriptionController, 'getSubscriptionByUser'])->add($requiredJwt);
-  $app->get('/subscription/user/{subId}', [$subscriptionController, 'getUserSubscriptionByPlatformSubID'])->add($requiredJwt);
-  $app->patch('/subscription', [$subscriptionController, 'updateSubscriptionByUser'])->add($requiredJwt);
-  $app->put('/subscription/features/{featureCode}/status', [$subscriptionController, 'updateFeatureStatus'])->add($requiredJwt);
+  $app->get('/subscription/platform_id/{subId}', [$subscriptionController, 'getUserSubscriptionByPlatformSubID'])->add($requiredJwt);
   $app->get('/subscription/payments/{userID}', [$subscriptionController, 'getPaymentsByUser'])->add($requiredJwt);
   $app->post('/subscription/plans/{id}', [$subscriptionController, 'updateSubscriptionPlan'])->add($requiredJwt);
 };

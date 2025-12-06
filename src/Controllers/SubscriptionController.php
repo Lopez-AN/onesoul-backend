@@ -225,128 +225,6 @@ class SubscriptionController {
   }
 
   /**
-   * Crea sesión de checkout para nueva suscripción (requiere autenticación)
-   * @param  Request $request: objeto de solicitud HTTP (requiere JWT, body JSON)
-   * @param  Response $response: objeto de respuesta HTTP
-   * @return Response: JSON con URL de checkout o error
-   * @statusCode 200: sesión creada exitosamente
-   * @statusCode 400: parámetros inválidos o usuario ya tiene suscripción
-   * @statusCode 401: JWT inválido
-   * @statusCode 403: sin permisos para modificar este usuario
-   * @statusCode 500: error del servidor
-   */
-  public function updateSubscriptionByUser(Request $request, Response $response,$args) {
-    $data = $request->getParsedBody();
-    $jwt = $request->getAttribute('jwt');
-    $userID = $jwt->data -> UserID;
-
-    $trialFlag = filter_var($trial, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
-    $trialDays = ($trialFlag === true) ? 90 : 0;
-
-    # Verificar si el body es un array/object válido
-    if (!is_array($data) && !is_object($data)) {
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "INVALID_JSON",
-          "desc" => "Request body must be valid JSON"
-        ]
-      ]);
-    }
-
-    $subDomain = $data['SubDomain'] ?? '';
-    $trial = $data['Trial'] ?? false;
-    $newPlanID = $data['PlanID'] ?? null;
-
-    if(is_null($newPlanID)){
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "INVALID_PARAMETERS",
-          "desc" => "Parameters are missing or invalid"
-        ]
-      ]);
-    }
-
-    # Validar formato de subdominio (solo letras A-Z, a-z)
-    if (!empty($subDomain)) {
-      if (!preg_match('/^[a-zA-Z]+$/', $subDomain)) {
-        return $response->withStatus(400)->withJson([
-          "error" => [
-            "code" => "INVALID_SUBDOMAIN",
-            "desc" => "Subdomain must contain only letters A-Z"
-          ]
-        ]);
-      }
-    }
-
-    try {
-      # Obtener el email del usuario
-      $user = $this->user->getUserById($userID);
-      if (empty($user['Email'])) {
-        return $response->withStatus(400)->withJson([
-          "error" => [
-            "code" => "USER_EMAIL_NOT_FOUND",
-            "desc" => "Could not retrieve user email"
-          ]
-        ]);
-      }
-
-      # Obtener el ID de Stripe desde el plan
-      $plan = $this->subscription->getSubscriptionPlanByID($newPlanID);
-      if (!$plan || empty($plan['StripeID'])) {
-        return $response->withStatus(400)->withJson([
-          "error" => [
-            "code" => "STRIPE_PLAN_MISSING",
-            "desc" => "Stripe ID not configured for this plan"
-          ]
-        ]);
-      }
-
-      $subscription = $this->subscription->getSubscriptionByUser($userID);
-      if ($subscription) {
-        return $response->withStatus(400)->withJson((object)[
-          "error" => [
-            "code" => "SUBSCRIPTION_ALREADY_EXISTS",
-            "desc" => "User already has an active or trialing subscription."
-          ]
-        ]);
-      }
-
-      # Crear sesión de checkout
-      $stripePriceId = $plan['StripeID'];
-      $userEmail = $user['Email'];
-
-      $firstName = $user['FirstName'] ?? '';
-      $lastName  = $user['LastName'] ?? '';
-
-      $userInfo = [
-        'name' => trim(($user['FirstName'] ?? '') . ' ' . ($user['LastName'] ?? '')),
-      ];
-
-      $checkout = $this->stripe->createCheckoutSession($stripePriceId, $userEmail, $userID, $newPlanID, $subDomain, $trialDays, $userInfo);
-
-      if (isset($checkout['error'])) {
-        return $response->withStatus(400)->withJson([
-          "error" => $checkout['error']
-        ]);
-      }
-
-      return $response->withStatus(200)->withJson([
-        "payment_required" => true,
-        "checkout_url" => $checkout['url'],
-        "session_id" => $checkout['sessionId']
-      ]);
-
-    } catch (\Throwable $e) {
-      return $response->withStatus(500)->withJson([
-        "error" => [
-          "code" => "INTERNAL_SERVER_ERROR",
-          "desc" => $e->getMessage()
-        ]
-      ]);
-    }
-  }
-
-  /**
    * Actualiza un plan de suscripción (requiere permisos de admin)
    * @param  Request $request: objeto de solicitud HTTP (requiere JWT admin, body JSON)
    * @param  Response $response: objeto de respuesta HTTP
@@ -501,9 +379,8 @@ class SubscriptionController {
         ]);
       }
       $customerID = $subscription['PlatformCustomerID'];
-
       $payments = $this->subscription->getPaymentsByUser($customerID, $paginator);
-      if ($payments) {
+      if (!$payments) {
         return $response->withStatus(404)->withJson([
           "error" => [
             "code" => "PAYMENTS_NOT_FOUND",

@@ -19,7 +19,6 @@ class Donation{
    * @param int $userID: ID del guía
    * @param object $paginator: objeto con propiedades 'limit' y 'offset'
    * @return object: {data: array, rows: {total: int, fetched: int}}
-   * @throws DatabaseException: si hay error en la consulta
    **/
   public function getDonations($userID, $paginator){
     $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS d.VoucherID, d.GuideID,
@@ -80,7 +79,6 @@ class Donation{
    * @param int $userID: ID del guía
    * @param object $paginator: objeto con propiedades 'limit' y 'offset'
    * @return object: {data: array, rows: {total: int, fetched: int}}
-   * @throws DatabaseException: si hay error en la consulta
    **/
   public function getMontlyDonations($userID, $paginator){
     $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS d.VoucherID, d.GuideID,
@@ -141,7 +139,6 @@ class Donation{
    * Obtiene una donación específica por ID de voucher
    * @param int $voucherID: ID único del voucher
    * @return array|bool: array con datos de donación o false si no existe
-   * @throws DatabaseException: si hay error en la consulta
    **/
   public function getDonationById($voucherID){
     $stmt = $this->db->prepare("SELECT d.VoucherID, d.GuideID,
@@ -191,7 +188,6 @@ class Donation{
    * Obtiene una donación por su RedeemCode (código de canje secreto)
    * @param string $redeemCode: código de canje (formato: XXXX-XXXX-XXXX)
    * @return array|bool: array con datos de donación o false si no existe
-   * @throws DatabaseException: si hay error en la consulta
    **/
   public function getDonationByRedeemCode($redeemCode){
     $stmt = $this->db->prepare("SELECT d.VoucherID, d.GuideID,
@@ -243,7 +239,7 @@ class Donation{
    * @param int $userID: ID del guía propietario
    * @param int $offeringID: ID del servicio asociado
    * @param int $quantity: cantidad de cupones a crear
-   * @throws DatabaseException: si hay error en inserción o duplicidad de códigos
+   * @throws DatabaseException
    **/
   public function createDonation($userID, $offeringID, $quantity){
     try{
@@ -285,19 +281,31 @@ class Donation{
    * Asigna una donación a una agencia (cambia estado de 'draft' a 'assigned')
    * @param int $agencyID: ID de la agencia a asignar
    * @param int $voucherID: ID del voucher a asignar
+   * @throws DatabaseException
    **/
   public function assignDonation($agencyID, $voucherID){
-    $stmt = $this->db->prepare("UPDATE DonationVouchers
-      SET AgencyID = ?, Status = 'assigned'
-      WHERE VoucherID = ?");
+    try{
+      $this->db->beginTransaction(); # Iniciar transacción
 
-    $stmt->execute([$agencyID, $voucherID]);
+      $stmt = $this->db->prepare("UPDATE DonationVouchers
+        SET AgencyID = ?, Status = 'assigned'
+        WHERE VoucherID = ?");
+
+      $stmt->execute([$agencyID, $voucherID]);
+      $donation = $this->getDonationById($voucherID) ?:
+        throw new DatabaseException("Failed to retrieve the assigned donation");
+
+      $this->db->commit(); # Confirmo transacción
+      return $donation;
+    } catch (PDOException $e) {
+      $this->db->rollBack(); # Revierto en caso de error
+      throw new DatabaseException($e->getMessage());
+    }
   }
 
   /**
    * Cancela una donación existente (cambia estado a 'canceled')
    * @param int $voucherID: ID del voucher a cancelar
-   * @throws DatabaseException: si hay error en la actualización
    **/
   public function cancelDonation($voucherID){
     $stmt = $this->db->prepare("UPDATE DonationVouchers
@@ -311,7 +319,6 @@ class Donation{
    * Selecciona cupones de forma aleatoria del pool disponible
    * @param int $quantity: cantidad de cupones a sortear (1-1000)
    * @return array: array de cupones sorteados con sus datos
-   * @throws DatabaseException: si hay error en la consulta
    **/
   public function raffleCoupons($quantity) {
     # seleccionar IDs aleatorios de los cupones "draft"
@@ -352,7 +359,6 @@ class Donation{
    * Obtiene lista paginada de todas las agencias
    * @param object $paginator: objeto con propiedades 'limit' y 'offset'
    * @return object: {data: array, rows: {total: int, fetched: int}}
-   * @throws DatabaseException: si hay error en la consulta
    **/
   public function getAgencies($paginator){
     $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS
@@ -379,7 +385,6 @@ class Donation{
    * Obtiene una agencia específica por ID
    * @param int $agencyID: ID de la agencia
    * @return array|bool: array con datos de agencia o false si no existe
-   * @throws DatabaseException: si hay error en la consulta
    **/
   public function getAgencyById($agencyID){
     $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS
@@ -396,7 +401,6 @@ class Donation{
    * Crea una nueva agencia
    * @param string $name: nombre de la agencia
    * @param string $contactEmail: email de contacto de la agencia
-   * @throws DatabaseException: si hay error en inserción
    **/
   public function createAgency($name, $contactEmail){
     $stmt = $this->db->prepare("INSERT INTO Agencies
@@ -408,7 +412,6 @@ class Donation{
   /**
    * Elimina una agencia existente
    * @param int $agencyID: ID de la agencia a eliminar
-   * @throws DatabaseException: si hay error en la eliminación
    **/
   public function deleteAgency($agencyID){
     $stmt = $this->db->prepare("DELETE FROM Agencies

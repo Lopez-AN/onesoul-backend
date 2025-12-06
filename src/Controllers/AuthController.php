@@ -705,10 +705,9 @@ class AuthController{
       $passwordHash = password_hash($password,PASSWORD_BCRYPT);
 
       # Registro al usuario
-      $userID = $this->auth->register($email, $userName, $passwordHash, $tycVersion,
+      $user = $this->auth->register($email, $userName, $passwordHash, $tycVersion,
         $privacyVersion, $receiveNewsletters, $clientIp, $userAgent);
 
-      $user = $this->user->getUserById($userID);
       $jwt = $this -> _JWTgen($user);
       $this->redis->del("otp:{$email}");
 
@@ -1158,13 +1157,12 @@ class AuthController{
       }
 
       # Registrar usuario SSO
-      $userID = $this->auth->registerSSO($oAuthID, $provider, $email,
+      $user = $this->auth->registerSSO($oAuthID, $provider, $email,
         $firstName, $lastName, $picture, $userName, $tycVersion, $privacyVersion,
         $receiveNewsletters, $clientIp, $userAgent
       );
 
-      $user = $this->user->getUserById($userID);
-      $jwt = $this -> _JWTgen($user);
+      $jwt = $this -> _JWTgen($user); # Genero el token
 
       # Limpiar OTP de Redis si existe
       if($altEmail && $this->redis->get("otp:{$altEmail}")){
@@ -1868,39 +1866,40 @@ class AuthController{
     }
 
     $userID = $jwt->data -> UserID;
-    $user = $this->user->getUserById($userID);
-    if(!$user){
-      return $response->withStatus(404)->withJson([
-        "error" => [
-          "code" => "USER_NOT_FOUND",
-          "desc" => "No user associated with the specified id was found"
-        ]
-      ]);
-    }
 
-    if($user['TwoFactorAuth']){
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "MFA_ALREADY_SET",
-          "desc" => "The user already have mfa configured"
-        ]
-      ]);
-    }
-
-    $secret = $data['Secret'] ?? '';
-    $code = $data['Code'] ?? '';
-
-    if(empty($secret) && empty($code)){
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "INVALID_PARAMETERS",
-          "desc" => "Parameters are missing or invalid"
-        ]
-      ]);
-    }
-
-    # Chequeo el codigo contra el secret
     try{
+      $user = $this->user->getUserById($userID);
+      if(!$user){
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "USER_NOT_FOUND",
+            "desc" => "No user associated with the specified id was found"
+          ]
+        ]);
+      }
+
+      if($user['TwoFactorAuth']){
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "MFA_ALREADY_SET",
+            "desc" => "The user already have mfa configured"
+          ]
+        ]);
+      }
+
+      $secret = $data['Secret'] ?? '';
+      $code = $data['Code'] ?? '';
+
+      if(empty($secret) && empty($code)){
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "INVALID_PARAMETERS",
+            "desc" => "Parameters are missing or invalid"
+          ]
+        ]);
+      }
+
+      # Chequeo el codigo contra el secret
       $g2fa = new \PragmaRX\Google2FA\Google2FA();
       if(!$g2fa -> verifyKey($secret, $code)){
         return $response->withStatus(401)->withJson([

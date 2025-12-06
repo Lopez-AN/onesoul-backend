@@ -42,7 +42,7 @@ class JwtTokenMiddleware implements MiddlewareInterface {
       $secret = $GLOBALS['config']['jwt']['secret'];
       # Decodificar SIN validar expiración
       $decoded = JWT::decode($token, new Key($secret, 'HS256'));
-      if($this->jwtValidationMode !== JwtValidationMode::NO_EXPIRE && $decoded -> expire <= time()){
+      if(!$GLOBALS['config']['debug_mode'] && $this->jwtValidationMode !== JwtValidationMode::NO_EXPIRE && $decoded -> expire <= time()){
         return $this->unauthorizedResponse(new \Slim\Psr7\Response(), 'INVALID_TOKEN', 'Expired token');
       }
       if(!$this->isValidJwtStructure($decoded)){

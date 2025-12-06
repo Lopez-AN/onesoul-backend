@@ -8,6 +8,7 @@ use App\Exceptions\DatabaseException;
 use Exception;
 use PHPMailer\PHPMailer\PHPMailer;
 use Predis\Client as RedisClient;
+use App\Models\User;
 
 class Auth{
   protected $db;
@@ -67,7 +68,7 @@ class Auth{
    * @return int: ID del usuario creado
    * @throws DatabaseException: si hay error en la transacción
    **/
-  public function register($email, $userName, $passwordHash,
+  public function register(User $userModel, $email, $userName, $passwordHash,
     $tycVersion, $privacyVersion, $receiveNewsletters, $clientIp, $userAgent
   ){
     try {
@@ -96,9 +97,11 @@ class Auth{
         VALUES (?, ?, ?, ?, 'PrivacyPolicy', 1)");
       $stmt->execute([$userID, $clientIp, $userAgent, $privacyVersion]);
 
-      $this->db->commit(); # Confirmo transacción
+      $user = $userModel->getUserById($userID) ?:
+        throw new DatabaseException("Failed to retrieve the registered user");
 
-      return $userID;
+      $this->db->commit(); # Confirmo transacción
+      return $user;
     } catch (PDOException $e) {
       $this->db->rollBack(); # Revierto en caso de error
       throw new DatabaseException($e->getMessage());
@@ -157,9 +160,12 @@ class Auth{
         $stmt->execute([$userID, $picture]);
       }
 
+      $user = $userModel->getUserById($userID) ?:
+        throw new DatabaseException("Failed to retrieve the registered user");
+
       $this->db->commit(); # Confirmo transacción
 
-      return $userID;
+      return $user;
     } catch (PDOException $e) {
       $this->db->rollBack(); # Revierto en caso de error
       throw new DatabaseException($e->getMessage());
