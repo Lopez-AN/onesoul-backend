@@ -57,6 +57,7 @@ class Auth{
 
   /**
    * Registra un nuevo usuario con transacción
+   * @param  User $userModel: model de usuario para traer el usuario creado
    * @param  string $email: correo electrónico del usuario
    * @param  string $userName: nombre de usuario
    * @param  string $passwordHash: contraseña hasheada
@@ -110,6 +111,7 @@ class Auth{
 
   /**
    * Registra un nuevo usuario con autenticación OAuth (SSO) con transacción
+   * @param  User $userModel: model de usuario para traer el usuario creado
    * @param  string $oAuthID: ID del usuario en el servicio OAuth
    * @param  string $oAuthService: nombre del servicio OAuth (google, facebook, apple)
    * @param  string $email: correo electrónico del usuario
@@ -125,7 +127,7 @@ class Auth{
    * @return int: ID del usuario creado
    * @throws DatabaseException: si hay error en la transacción
    **/
-  public function registerSSO($oAuthID, $oAuthService, $email, $firstName, $lastName, $picture, $userName,
+  public function registerSSO(User $userModel, $oAuthID, $oAuthService, $email, $firstName, $lastName, $picture, $userName,
     $tycVersion, $privacyVersion, $receiveNewsletters, $clientIp, $userAgent
   ){
     try {

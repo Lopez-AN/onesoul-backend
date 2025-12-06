@@ -705,7 +705,7 @@ class AuthController{
       $passwordHash = password_hash($password,PASSWORD_BCRYPT);
 
       # Registro al usuario
-      $user = $this->auth->register($email, $userName, $passwordHash, $tycVersion,
+      $user = $this->auth->register($this->user, $email, $userName, $passwordHash, $tycVersion,
         $privacyVersion, $receiveNewsletters, $clientIp, $userAgent);
 
       $jwt = $this -> _JWTgen($user);
@@ -1157,7 +1157,7 @@ class AuthController{
       }
 
       # Registrar usuario SSO
-      $user = $this->auth->registerSSO($oAuthID, $provider, $email,
+      $user = $this->auth->registerSSO($this->user, $oAuthID, $provider, $email,
         $firstName, $lastName, $picture, $userName, $tycVersion, $privacyVersion,
         $receiveNewsletters, $clientIp, $userAgent
       );
