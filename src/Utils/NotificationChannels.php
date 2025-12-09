@@ -5,8 +5,7 @@ use Exception;
 use App\Utils\EmailHelper;
 
 class NotificationChannels {
-  public function sendNotificationByChannel($channel, $message, $recipient, $attempt = 1)
-  {
+  public function sendNotificationByChannel($channel, $message, $recipient, $attempt = 1) {
     try {
       switch ($channel) {
         case 'IN_APP':
@@ -43,7 +42,7 @@ class NotificationChannels {
 
     $subject      = 'Notificación';
     $toName       = $recipient;
-    $templatePath = __DIR__ . '/../templates/basic.html';
+    $templatePath = __DIR__ . '/../Templates/basic.html';
 
     // Base replacements + defaults
     $repl = [
@@ -78,17 +77,17 @@ class NotificationChannels {
     return true;
   }
 
-  // Aplana valores a HTML seguro (arrays anidados, bools, objetos)
-  private function toHtml($value) {
-    if (is_array($value)) {
-      $parts = [];
-      foreach ($value as $v) { $parts[] = $this->toHtml($v); }
-      return implode('<br>', $parts);
-    }
-    if (is_bool($value))  return $value ? 'true' : 'false';
-    if (is_object($value)) return htmlspecialchars(json_encode($value, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES));
-    return (string)$value;
-  }
+  // // Aplana valores a HTML seguro (arrays anidados, bools, objetos)
+  // private function toHtml($value) {
+  //   if (is_array($value)) {
+  //     $parts = [];
+  //     foreach ($value as $v) { $parts[] = $this->toHtml($v); }
+  //     return implode('<br>', $parts);
+  //   }
+  //   if (is_bool($value))  return $value ? 'true' : 'false';
+  //   if (is_object($value)) return htmlspecialchars(json_encode($value, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES));
+  //   return (string)$value;
+  // }
 
 
   private function sendInApp($message, $recipient) { return true; }

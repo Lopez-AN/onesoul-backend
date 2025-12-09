@@ -1,11 +1,11 @@
 <?php
 
-require __DIR__ . '/../vendor/autoload.php';
-
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
 define('ROOT', dirname(__FILE__)."/..");
+
+require ROOT.'/vendor/autoload.php';
 
 # Leo la config
 $GLOBALS['config'] = @json_decode(file_get_contents(ROOT.'/config/config.json'),true);
@@ -14,17 +14,17 @@ if(!$GLOBALS['config']){
   exit("Error reading ~/config/config.json");
 }
 
-// Cargar la clase Database
-require ROOT . '/src/core/Database.php';
+# Cargar la clase Database
+require ROOT.'/src/Core/Database.php';
 
 use Slim\Factory\AppFactory;
 use Predis\Client as RedisClient;
 use DI\Container;
 
-// Crear contenedor explícitamente
+# Crear contenedor explícitamente
 $container = new Container();
 
-// Registrar Redis
+# Registrar Redis
 $container->set('redis', function() {
   return new RedisClient([
     'scheme' => 'tcp',
@@ -33,16 +33,16 @@ $container->set('redis', function() {
   ]);
 });
 
-// Registrar PDO como servicio único
+# Registrar PDO como servicio único
 $container->set('pdo', function() {
   return Database::getInstance()->getConnection();
 });
 
-// Pasar el contenedor a AppFactory
+# Pasar el contenedor a AppFactory
 AppFactory::setContainer($container);
 $app = AppFactory::create();
 
-// Evita bloqueos de imagenes
+# Evita bloqueos de imagenes
 $app->add(function ($request, $handler) {
   $response = $handler->handle($request);
   return $response->withAddedHeader(

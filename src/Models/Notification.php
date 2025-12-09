@@ -91,7 +91,7 @@ class Notification  {
   }
 
   # Obtener la próxima entrega
-  public function getNextDelivery($recipientID) {
+  public function getNextDelivery($recipientID = null) {
     $w = ""; # Condiciones extra
     $params = [];
     if(!is_null($recipientID)){

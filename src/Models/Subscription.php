@@ -401,7 +401,7 @@ class Subscription {
           $username,
           $email,
           "¡Suscripción activada en OneSoul! 🎉",
-          ROOT . "/src/templates/email_subscription.html",
+          ROOT . "/src/Templates/email_subscription.html",
             [
               '{USERNAME}' => $username,
               '{PLAN_NAME}' => $planInfo['Name'],

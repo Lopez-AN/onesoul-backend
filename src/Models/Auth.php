@@ -498,7 +498,7 @@ class Auth{
    * @return bool: true si se envió correctamente, false si falló
    **/
   private function _sendOtpMail($email, $otpCode, $username = false, $recovery = false){
-    $template = file_get_contents(ROOT."/src/templates/email_otp.html");
+    $template = file_get_contents(ROOT."/src/Templates/email_otp.html");
     $template = str_replace("{CODIGO}", $otpCode, $template);
     $template = str_replace("{USERNAME}", $username ?: $email, $template);
     $template = str_replace("{T_MODE1}", $recovery ? '' : ', bienvenido a OneSoul', $template);
@@ -530,7 +530,7 @@ class Auth{
       $mail->AltBody = $recovery ?
         "Hola $username, bienvenido a OneSoul\nSu código de verificaci&oacute;n es $otpCode" :
         "Hola $username\nSu código de recuperaci&oacute;n es $otpCode";
-      $mail->addEmbeddedImage(ROOT."/src/templates/logo2.png", 'logo');
+      $mail->addEmbeddedImage(ROOT."/src/Templates/logo2.png", 'logo');
 
       # Enviar el correo
       $mail->send();

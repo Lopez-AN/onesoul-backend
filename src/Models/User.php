@@ -682,7 +682,7 @@ class User {
     $referralUrl = $origin ."/onboard/register?refid=" . urlencode($referralCode);
 
     # Cargar plantilla HTML
-    $template = file_get_contents(ROOT."/src/templates/email_refCode.html");
+    $template = file_get_contents(ROOT."/src/Templates/email_refCode.html");
     $template = str_replace("{LINK}", $referralUrl, $template);
     $template = str_replace("{USERNAME}", $userName, $template);
 
@@ -709,7 +709,7 @@ class User {
       $mail->isHTML(true);
       $mail->Subject = "Te invitan a OneSoul.app";
       $mail->Body    = $template;
-      $mail->addEmbeddedImage(ROOT."/src/templates/logo2.png", 'logo');
+      $mail->addEmbeddedImage(ROOT."/src/Templates/logo2.png", 'logo');
 
       # Enviar el correo
       return $mail->send();

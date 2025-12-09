@@ -673,7 +673,7 @@ class BookingController {
             $username,
             $userEmail,
             "Reserva modificada en OneSoul",
-            ROOT . "/src/templates/email_booking_updated.html",
+            ROOT . "/src/Templates/email_booking_updated.html",
             [
               '{YEAR}' => date('Y'),
               '{USERNAME}' => $username,
@@ -704,7 +704,7 @@ class BookingController {
                   $guideName,
                   $guideEmail,
                   "Reserva modificada en OneSoul",
-                  ROOT . "/src/templates/email_booking_updated_guide.html",
+                  ROOT . "/src/Templates/email_booking_updated_guide.html",
                   [
                     '{YEAR}' => date('Y'),
                     '{GUIDE_NAME}' => $guideName,
@@ -843,7 +843,7 @@ class BookingController {
             $username,
             $userEmail,
             "La reserva {$booking['PublicID']} fue cancelada",
-            ROOT . "/src/templates/email_booking_canceled.html",
+            ROOT . "/src/Templates/email_booking_canceled.html",
             [
               '{YEAR}' => date('Y'),
               '{USERNAME}' => $username,
@@ -872,7 +872,7 @@ class BookingController {
                   $guideName,
                   $guideEmail,
                   "La reserva {$booking['PublicID']} fue cancelada",
-                  ROOT . "/src/templates/email_booking_canceled_guide.html",
+                  ROOT . "/src/Templates/email_booking_canceled_guide.html",
                   [
                     '{YEAR}' => date('Y'),
                     '{GUIDE_NAME}' => $guideName,
@@ -1000,7 +1000,7 @@ class BookingController {
             $username,
             $userEmail,
             "La reserva {$booking['PublicID']} fue confirmada",
-            ROOT . "/src/templates/email_booking_confirmed.html",
+            ROOT . "/src/Templates/email_booking_confirmed.html",
             [
               '{YEAR}' => date('Y'),
               '{USERNAME}' => $username,
@@ -1031,7 +1031,7 @@ class BookingController {
                   $guideName,
                   $guideEmail,
                   "La reserva {$booking['PublicID']} fue confirmada",
-                  ROOT . "/src/templates/email_booking_confirmed_guide.html",
+                  ROOT . "/src/Templates/email_booking_confirmed_guide.html",
                   [
                     '{YEAR}' => date('Y'),
                     '{GUIDE_NAME}' => $guideName,

@@ -25,7 +25,7 @@ class EmailHelper {
       $mail->setFrom($smtpAccount, 'Contacto OneSoul');
       $mail->addAddress($toEmail, $toName);
 
-      $mail->AddEmbeddedImage(ROOT.'/src/templates/logo.png', 'logo');
+      $mail->AddEmbeddedImage(ROOT.'/src/Templates/logo.png', 'logo');
       $mail->isHTML(true);
       $mail->Subject = $subject;
       $mail->Body = $html;
