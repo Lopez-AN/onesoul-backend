@@ -9,6 +9,11 @@ ini_set('display_errors', 1);
 
 define('ROOT', dirname(__FILE__)."/../..");
 
+if (php_sapi_name() !== 'cli') {
+  http_response_code(403);
+  die('Este script solo puede ejecutarse desde la línea de comandos');
+}
+
 require ROOT.'/vendor/autoload.php';
 
 # Leo la config
@@ -41,8 +46,16 @@ class NotificationWorker {
   }
 
   public function run() {
-    echo "📢 NotificationsWorker iniciado...\n";
+    echo "📢 NotificationWorker iniciado...\n";
 
+    if(isset($argv[1]) && is_numeric($argv[1])){
+      $this->notify(intval($argv[1]));
+    }else{
+      $this->notifyAll();
+    }
+  }
+
+  public function notifyAll(){
     while(1){
       $delivery = $this->notification->getNextDelivery();
       $channel = $delivery['Channel'] ?? null;
@@ -58,6 +71,15 @@ class NotificationWorker {
           $this->_whatsapp($delivery);
         break;
       }
+    }
+  }
+
+  public function notify($notificationID) {
+    echo "📢 NotificationWorker iniciado 2...\n";
+
+    $deliveries = $this->notification->getDeliveriesByNotificationId($notificationID);
+    foreach($deliveries as $d){
+      print_r($d);
     }
   }
 

@@ -118,7 +118,7 @@ class Notification  {
     return $stmt->fetch(PDO::FETCH_ASSOC);
   }
 
-  public function getDeliveriesByNotificationId($paginator, $notificationID, $recipientID = null) {
+  public function getDeliveriesByNotificationId($notificationID, $recipientID = null) {
     $w = ""; # Condiciones extra
     $params = [$notificationID];
     if(!is_null($recipientID)){
