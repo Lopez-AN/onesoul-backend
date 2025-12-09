@@ -4,7 +4,6 @@ namespace App\Models;
 
 use PDO;
 use App\Exceptions\DatabaseException;
-use App\Exceptions\ValidationException;
 use DateTime;
 
 class Booking {

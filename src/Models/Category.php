@@ -4,7 +4,6 @@ namespace App\Models;
 
 use PDO;
 use App\Exceptions\DatabaseException;
-use App\Exceptions\ValidationException;
 
 class Category {
   protected $db;
@@ -99,7 +98,7 @@ class Category {
     $stmt = $this->db->prepare($query);
     $stmt->execute($categories);
 
-    return $stmt->fetchAll();
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
   }
 
   /**

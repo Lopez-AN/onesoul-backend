@@ -87,7 +87,7 @@ class AuthController{
 
       # Busco por mail o username
       $user = !empty($email) ?
-        $this->user->getUserByEmail($email) : $this->user->getUserByUserName($username);
+        $this->user->getUserByEmail($email, false) : $this->user->getUserByUserName($username, false);
       if(empty($user)){
         return $response->withStatus(401)->withJson([
           "error" => [

@@ -11,7 +11,7 @@
       "required": true,
       "type": "integer",
       "min": 0,
-      "max": 65535
+      "max": 65000
     }
   },
   "get_user_by_id": {
@@ -19,7 +19,7 @@
       "required": true,
       "type": "integer",
       "min": 0,
-      "max": 4294967295
+      "max": 999999999
     }
   }
 }

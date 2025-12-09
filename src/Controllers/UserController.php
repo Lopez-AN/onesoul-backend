@@ -2,7 +2,6 @@
 
 namespace App\Controllers;
 
-use Exception;
 use Throwable;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
@@ -76,6 +75,7 @@ class UserController{
     if(!$pValidation->valid){
       return $pValidation->response;
     }
+    $params = $pValidation->values;
 
     try {
       $users = $this->user->getUsersByType($paginator, $params['UserType']);
@@ -109,6 +109,7 @@ class UserController{
     if(!$pValidation->valid){
       return $pValidation->response;
     }
+    $params = $pValidation->values;
 
     try {
       $users = $this->user->getUsersByCategory($paginator, $params['CategoryID']);
@@ -169,6 +170,7 @@ class UserController{
     if(!$pValidation->valid){
       return $pValidation->response;
     }
+    $params = $pValidation->values;
 
     try {
       $user = $this->user->getUserById($params['UserID']);
@@ -738,7 +740,7 @@ class UserController{
 
     try {
       # Ver si estan las propiedades del token jwt
-      $user = $this->user->getUserById($userID);
+      $user = $this->user->getUserById($userID, false);
       if (empty($user)) {
         return $response->withStatus(404)->withJson([
           "error" => [

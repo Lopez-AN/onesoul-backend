@@ -2,9 +2,12 @@
 
 namespace App\Controllers;
 
+use Throwable;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use App\Models\Notification;
+use App\Models\User;
+use App\Utils\ParameterValidator;
 
 #Definir zona horaria
 date_default_timezone_set('America/Argentina/Buenos_Aires');
@@ -12,73 +15,254 @@ date_default_timezone_set('America/Argentina/Buenos_Aires');
 class NotificationController{
 
   protected $notification;
+  protected $user;
 
-  public function __construct(Notification $notification){
+  public function __construct(Notification $notification, User $user){
     $this->notification = $notification;
+    $this->user = $user;
   }
 
-  public function createNotification(Request $request, Response $response) {
-    $data = $request->getParsedBody();
+  public function createNotification(Request $request, Response $response, $args) {
+    $params = $request->getParsedBody();
+    $jwt = $request->getAttribute('jwt');
 
-    $recipientUserID = $data['RecipientUserID'] ?? null;
-    $eventCode = $data['EventCode'] ?? null;
-    $payload = $data['Payload'] ?? [];
-    $idempotencyKey = $data['IdempotencyKey'] ?? null;
-
-    if (!$recipientUserID || !$eventCode) {
-      return $response->withStatus(400)->withJson([
+    # Este endpoint es para administradores
+    if (!$jwt->data->IsAdmin) {
+      return $response->withStatus(403)->withJson([
         "error" => [
-          "code" => "INVALID_PARAMS",
-          "desc" => "RecipientUserID y EventCode son obligatorios"
+          "code" => "UNAUTHORIZED",
+          "desc" => "You do not have permission to create notifications."
         ]
       ]);
     }
 
+    $pValidation = ParameterValidator::validate($response, 'notifications','create_notification', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
+    }
+    $params = $pValidation->values;
+
     try {
-      $notificationID = $this->notification->createNotification(
-        $recipientUserID, $eventCode, $payload, $idempotencyKey
+      # Traigo el usuario y sus settings
+      $recipient = $this->user->getUserById($params['RecipientUserID']);
+      if(!$recipient){
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "USER_NOT_FOUND",
+            "desc" => "No user associated with the specified recipient ID was found"
+          ]
+        ]);
+      }
+
+      $deliveries = $this->notification->createNotification(
+        $params['RecipientUserID'],
+        $params['EventCode'],
+        $params['Payload'],
+        $params['IdempotencyKey']
       );
 
-      return $response->withStatus(201)->withJson([
-        'success' => true,
-        'notification_id' => $notificationID
-      ]);
+      return $response->withJson($deliveries);
 
-    } catch (Exception $e) {
+    } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
-          "code" => "NOTIFICATION_ERROR", 
-          "desc" => $e->getMessage()]
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
       ]);
     }
   }
 
-  public function listInApp(Request $request, Response $response) {
+  public function getNextDelivery(Request $request, Response $response, $args) {
     $jwt = $request->getAttribute('jwt');
-    $userID = $jwt->data->UserID;
 
-    $notifications = $this->notification->getUnreadInAppByUser($userID);
+    # Si no es admin solo puede recibir deliverys propios
+    $recipientID = !$jwt->data->IsAdmin ? $jwt->data->UserID : null;
 
-    return $response->withJson([
-      'notifications' => $notifications
-    ]);
+    try {
+      # Traigo el usuario y sus settings
+      $delivery = $this->notification->getNextDelivery($recipientID);
+      return $response->withJson($delivery);
+    } catch (Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
   }
 
-  public function markInAppAsRead(Request $request, Response $response, $args) {
+  public function getInAppNotifications(Request $request, Response $response, $args) {
+    $queryParams = $request->getQueryParams();
+    $jwt = $request->getAttribute('jwt');
+
+    $userID = $jwt->data->UserID;
+    $params = [
+      "From" => $queryParams['from'] ?? null, # Id de notificacion minimo
+      "To" => $queryParams['to'] ?? null, # Id de notificacion maximo
+      "Limit" => $queryParams['limit'] ?? null, # Maxima cantidad de publicaciones a traer
+      "List" => $queryParams['list'] ?? 'all' # Tipo de listado (todos, no-leidos...)
+    ];
+
+    $pValidation = ParameterValidator::validate($response, 'notifications','get_in_app_notifications', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
+    }
+    $params = $pValidation->values;
+
+    try {
+      $notifications = $this->notification->getInAppNotifications(
+        $userID, $params['From'], $params['To'], $params['Limit'], $params['List']
+      );
+
+      return $response->withJson($notifications);
+    } catch (Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  public function markInAppNotifications(Request $request, Response $response, $args) {
+    $params = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
     $userID = $jwt->data->UserID;
-    $notifID = intval($args['id']);
 
-    $updated = $this->notification->markInAppAsRead($userID, $notifID);
+    $pValidation = ParameterValidator::validate($response, 'notifications','mark_in_app_notifications', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
+    }
+    $params = $pValidation->values;
 
-    if (!$updated) {
-      return $response->withStatus(404)->withJson([
-        'error' => [
-          'code' => 'NOT_FOUND', 
-          'desc' => 'Notificación no encontrada o ya leída']
+    try{
+      $updated = $this->notification->markInAppNotifications($userID, $params['From'], $params['To']);
+      return $response->withJson(['marked' => $updated]);
+    } catch (Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  public function getDeliveriesByNotificationId(Request $request, Response $response, $args) {
+    $params['NotificationID'] = $args['NotificationID'];
+    $paginator = paginator($request);
+    $jwt = $request->getAttribute('jwt');
+
+    # Si no es admin solo puede recibir deliverys propios
+    $recipientID = !$jwt->data->IsAdmin ? $jwt->data->UserID : null;
+
+    $pValidation = ParameterValidator::validate($response, 'notifications','get_deliveries_by_notification_id', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
+    }
+    $params = $pValidation->values;
+
+    try {
+      $deliveries = $this->notification->getDeliveriesByNotificationId($paginator, $params['NotificationID'], $recipientID);
+      if(!$deliveries){
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "DELIVERY_NOT_FOUND",
+            "desc" => "No delivery associated with the specified id was found"
+          ]
+        ]);
+      }
+
+      return $response->withJson($deliveries);
+    } catch (Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  public function getDeliveriesByChannel(Request $request, Response $response, $args) {
+    $params['Channel'] = strtoupper($args['Channel']);
+    $paginator = paginator($request);
+    $jwt = $request->getAttribute('jwt');
+
+    # Si no es admin solo puede recibir deliverys propios
+    $recipientID = !$jwt->data->IsAdmin ? $jwt->data->UserID : null;
+
+    $pValidation = ParameterValidator::validate($response, 'notifications','get_deliveries_by_channel', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
+    }
+    $params = $pValidation->values;
+
+    try {
+      $deliveries = $this->notification->getDeliveriesByChannel($paginator, $params['Channel'], $recipientID);
+      if(!$deliveries){
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "DELIVERY_NOT_FOUND",
+            "desc" => "No delivery associated with the specified id was found"
+          ]
+        ]);
+      }
+
+      return $response->withJson($deliveries);
+    } catch (Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  public function getDeliveriesByRecipient(Request $request, Response $response, $args) {
+    $params['RecipientID'] = $args['RecipientID'];
+    $paginator = paginator($request);
+    $jwt = $request->getAttribute('jwt');
+
+    # Validar solo el guia o un admin puede consultar sus booking
+    if ($jwt->data->UserID !== $params['RecipientID'] && !$jwt->data->IsAdmin) {
+      return $response->withStatus(403)->withJson([
+        "error" => [
+          "code" => "FORBIDDEN",
+          "desc" => "You are not authorized to view deliveries from this user."
+        ]
       ]);
     }
 
-    return $response->withJson(['success' => true]);
+    $pValidation = ParameterValidator::validate($response, 'notifications','get_deliveries_by_recipient', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
+    }
+    $params = $pValidation->values;
+
+    try {
+      $deliveries = $this->notification->getDeliveriesByRecipient($paginator, $params['RecipientID']);
+      if(!$deliveries){
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "DELIVERY_NOT_FOUND",
+            "desc" => "No delivery associated with the specified id was found"
+          ]
+        ]);
+      }
+
+      return $response->withJson($deliveries);
+    } catch (Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
   }
 }

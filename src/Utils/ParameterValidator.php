@@ -14,28 +14,49 @@ class ParameterValidator {
 
     $validation = $template->$endpoint;
     foreach($validation as $i => $v){
+      $values[$i] = $values[$i] ?? null; # Valores indefinidos los paso a null
+
+      # Controlo campos requeridos
+      if($v->required && is_null($values[$i])){
+        return (object)[
+          "valid" => false,
+          "response" => $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "INVALID_PARAMETERS",
+              "desc" => "$i is required"
+            ]
+          ])
+        ];
+      }
+
+      # Controlo segun tipo de campo
       switch($v->type){
         case 'string':
-          return ParameterValidator::validateString($response, $validation->$i, $i, $values[$i] ?? null);
+          $result = ParameterValidator::validateString($response, $v, $i, $values[$i]);
+          if (!$result->valid) return $result;
+          $values[$i] = $result->value ?? $values[$i];
+          break;
         case 'integer':
-          return ParameterValidator::validateInteger($response, $validation->$i, $i, $values[$i] ?? null);
+          $result = ParameterValidator::validateInteger($response, $v, $i, $values[$i]);
+          if (!$result->valid) return $result;
+          $values[$i] = $result->value ?? $values[$i];
+          break;
+        case 'boolean':
+          $result = ParameterValidator::validateBoolean($response, $v, $i, $values[$i]);
+          if (!$result->valid) return $result;
+          $values[$i] = $result->value ?? $values[$i];
+          break;
+        case 'object':
+          $result = ParameterValidator::validateObject($response, $v, $i, $values[$i]);
+          if (!$result->valid) return $result;
+          $values[$i] = $result->value ?? $values[$i];
+          break;
       }
     }
+    return (object)["valid" => true, "values" => $values];
   }
 
   static function validateString(Response $response, $validation, $parameter, $value){
-    if($validation->required && is_null($value)){
-      return (object)[
-        "valid" => false,
-        "response" => $response->withStatus(400)->withJson([
-          "error" => [
-            "code" => "INVALID_PARAMETERS",
-            "desc" => "$parameter is required"
-          ]
-        ])
-      ];
-    }
-
     if(!is_null($value) && !is_string($value)){
       return (object)[
         "valid" => false,
@@ -94,23 +115,11 @@ class ParameterValidator {
       }
     }
 
-    return (object)["valid" => true, "response" => null];
+    return (object)["valid" => true, "value" => $value];
   }
 
   static function validateInteger(Response $response, $validation, $parameter, $value){
-    if($validation->required && is_null($value)){
-      return (object)[
-        "valid" => false,
-        "response" => $response->withStatus(400)->withJson([
-          "error" => [
-            "code" => "INVALID_PARAMETERS",
-            "desc" => "$parameter is required"
-          ]
-        ])
-      ];
-    }
-
-    if(!is_null($value) && filter_var($value, FILTER_VALIDATE_INT) === false){
+    if(!is_null($value) && !preg_match('/^-?\d+$/', (string)$value)){
       return (object)[
         "valid" => false,
         "response" => $response->withStatus(400)->withJson([
@@ -120,6 +129,10 @@ class ParameterValidator {
           ]
         ])
       ];
+    }
+
+    if(!is_null($value)){
+      $value = intval($value);
     }
 
     if(!is_null($value) && property_exists($validation, 'min')){
@@ -149,7 +162,36 @@ class ParameterValidator {
         ];
       }
     }
+    return (object)["valid" => true, "value" => $value];
+  }
 
-    return (object)["valid" => true, "response" => null];
+  static function validateObject(Response $response, $validation, $parameter, $value){
+    if(!is_null($value) && !is_object($value) && !is_array($value)){
+      return (object)[
+        "valid" => false,
+        "response" => $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "INVALID_PARAMETERS",
+            "desc" => "$parameter must be an object or array"
+          ]
+        ])
+      ];
+    }
+    return (object)["valid" => true, "value" => $value];
+  }
+
+  static function validateBoolean(Response $response, $validation, $parameter, $value){
+    if(!is_null($value) && !is_bool($value)){
+      return (object)[
+        "valid" => false,
+        "response" => $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "INVALID_PARAMETERS",
+            "desc" => "$parameter must be a boolean (true or false)"
+          ]
+        ])
+      ];
+    }
+    return (object)["valid" => true, "value" => $value];
   }
 }

@@ -27,7 +27,7 @@ class User {
    * @note El filtrado de datos según scope (PUBLIC, USER, ADMIN) debe realizarse en el controller
    **/
   public function getUsers($paginator) {
-    $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
+    $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName,
     u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
     u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
     u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth,
@@ -82,7 +82,7 @@ class User {
    * @note El filtrado de datos según scope (PUBLIC, USER, ADMIN) debe realizarse en el controller
    **/
   public function getUsersByType($paginator, $userType) {
-    $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
+    $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName,
     u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
     u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
     u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth,
@@ -149,7 +149,7 @@ class User {
       FROM Categories c
       INNER JOIN category_tree ct ON c.ParentCategoryID = ct.CategoryID
     )
-    SELECT u.UserID, u.FirstName, u.LastName,
+    SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName,
     u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
     u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
     u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth,
@@ -209,7 +209,7 @@ class User {
   public function searchGuides($paginator, $query) {
     $searchQuery = "%$query%";
 
-    $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
+    $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName,
     u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
     u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
     u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth,
@@ -268,11 +268,14 @@ class User {
    * de aplicar el scope de acceso antes de enviar la respuesta al cliente.
    *
    * @param  int $userID: ID del usuario
+   * @param  bool $activeOnly: si esta en true solo trae usuarios activos
    * @return array|false: datos del usuario o false si no existe
    *
    * @note El filtrado de datos según scope (PUBLIC, USER, ADMIN) debe realizarse en el controller
    **/
-  public function getUserById($userID) {
+  public function getUserById($userID, $activeOnly = true) {
+    $wactive = $activeOnly ? " AND u.DeactivationDate IS NULL " : "";
+
     $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
     u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
     u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
@@ -303,7 +306,7 @@ class User {
       WHERE o.Status = 'Active'
       GROUP BY o.UserID
     ) AS sub ON sub.UserID = u.UserID
-    WHERE u.UserID = ?
+    WHERE u.UserID = ? $wactive
     GROUP BY u.UserID
     ORDER BY u.UserID");
 
@@ -320,11 +323,14 @@ class User {
    * de aplicar el scope de acceso antes de enviar la respuesta al cliente.
    *
    * @param  string $userName: nombre de usuario
+   * @param  bool $activeOnly: si esta en true solo trae usuarios activos
    * @return array|false: datos del usuario o false si no existe
    *
    * @note El filtrado de datos según scope (PUBLIC, USER, ADMIN) debe realizarse en el controller
    **/
-  public function getUserByUserName($userName) {
+  public function getUserByUserName($userName, $activeOnly = true) {
+    $wactive = $activeOnly ? " AND u.DeactivationDate IS NULL " : "";
+
     $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
     u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
     u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
@@ -355,7 +361,7 @@ class User {
       WHERE o.Status = 'Active'
       GROUP BY o.UserID
     ) AS sub ON sub.UserID = u.UserID
-    WHERE u.UserName = ?
+    WHERE u.UserName = ? $wactive
     GROUP BY u.UserID
     ORDER BY u.UserID");
 
@@ -372,11 +378,14 @@ class User {
    * de aplicar el scope de acceso antes de enviar la respuesta al cliente.
    *
    * @param  string $email: email del usuario
+   * @param  bool $activeOnly: si esta en true solo trae usuarios activos
    * @return array|false: datos del usuario o false si no existe
    *
    * @note El filtrado de datos según scope (PUBLIC, USER, ADMIN) debe realizarse en el controller
    **/
-  public function getUserByEmail($email) {
+  public function getUserByEmail($email, $activeOnly = true) {
+    $wactive = $activeOnly ? " AND u.DeactivationDate IS NULL " : "";
+
     $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
     u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
     u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
@@ -407,7 +416,7 @@ class User {
       WHERE o.Status = 'Active'
       GROUP BY o.UserID
     ) AS sub ON sub.UserID = u.UserID
-    WHERE u.Email = ?
+    WHERE u.Email = ? $wactive
     GROUP BY u.UserID
     ORDER BY u.UserID");
 
@@ -425,11 +434,14 @@ class User {
    *
    * @param  string $oAuthID: ID del OAuth
    * @param  string $oAuthService: servicio OAuth (Google, Facebook, etc)
+   * @param  bool $activeOnly: si esta en true solo trae usuarios activos
    * @return array|false: datos del usuario o false si no existe
    *
    * @note El filtrado de datos según scope (PUBLIC, USER, ADMIN) debe realizarse en el controller
    **/
-  public function getUserByOAuthID($oAuthID, $oAuthService) {
+  public function getUserByOAuthID($oAuthID, $oAuthService, $activeOnly = true) {
+    $wactive = $activeOnly ? " AND u.DeactivationDate IS NULL " : "";
+
     $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
     u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
     u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
@@ -460,7 +472,7 @@ class User {
       WHERE o.Status = 'Active'
       GROUP BY o.UserID
     ) AS sub ON sub.UserID = u.UserID
-    WHERE u.Oauth2ID = ? AND u.Oauth2Service = ?
+    WHERE u.Oauth2ID = ? AND u.Oauth2Service = ? $wactive
     GROUP BY u.UserID
     ORDER BY u.UserID");
 
@@ -477,11 +489,14 @@ class User {
    * de aplicar el scope de acceso antes de enviar la respuesta al cliente.
    *
    * @param  string $referralCode: código de referencia
+   * @param  bool $activeOnly: si esta en true solo trae usuarios activos
    * @return array|false: datos del usuario o false si no existe
    *
    * @note El filtrado de datos según scope (PUBLIC, USER, ADMIN) debe realizarse en el controller
    **/
-  public function getUserByRefCode($referralCode) {
+  public function getUserByRefCode($referralCode, $activeOnly = true) {
+    $wactive = $activeOnly ? " AND u.DeactivationDate IS NULL " : "";
+
     $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
     u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
     u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
@@ -512,7 +527,7 @@ class User {
       WHERE o.Status = 'Active'
       GROUP BY o.UserID
     ) AS sub ON sub.UserID = u.UserID
-    WHERE u.ReferralCode = ?
+    WHERE u.ReferralCode = ? $wactive
     GROUP BY u.UserID
     ORDER BY u.UserID");
 

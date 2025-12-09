@@ -3,18 +3,9 @@ namespace App\Utils;
 
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
-require_once dirname(__DIR__, 2) . '/vendor/autoload.php';
 
 class EmailHelper {
-  public static function send($toName, $toEmail, $subject, $templatePath, $replacements = [], $embedLogo = true)
-  {
-    if (!$toEmail || !file_exists($templatePath)) return;
-
-    $template = file_get_contents($templatePath);
-    foreach ($replacements as $key => $value) {
-      $template = str_replace($key, htmlspecialchars($value), $template);
-    }
-
+  public static function send($toName, $toEmail, $subject, $template) {
     $smtpAccount = $GLOBALS['config']['mailer']['account'];
     $smtpPassword = $GLOBALS['config']['mailer']['password'];
 
@@ -34,34 +25,20 @@ class EmailHelper {
       $mail->setFrom($smtpAccount, 'Contacto OneSoul');
       $mail->addAddress($toEmail, $toName);
 
-      // Embeder logo sólo si existe (sin ROOT)
-      $projectRoot = dirname(__DIR__, 2);
-      $logoCandidates = [
-        $projectRoot . '/src/templates/logo1.png',
-        $projectRoot . '/src/templates/logo2.png',
-      ];
-      foreach ($logoCandidates as $p) {
-        if (is_file($p)) {
-          $mail->AddEmbeddedImage($p, 'logo');
-          break;
-        }
-      }
-
-      // Cargar template (fallback simple si no existe)
-      $html = is_file($templatePath) ? file_get_contents($templatePath) : '<!doctype html><html><body>{{body}}</body></html>';
-
-      // Aplicar replacements
-      if (!empty($replacements)) {
-        $html = strtr($html, $replacements);
-      }
-
+      $mail->AddEmbeddedImage(ROOT.'/src/templates/logo.png', 'logo');
       $mail->isHTML(true);
       $mail->Subject = $subject;
       $mail->Body = $html;
 
       $mail->send();
+      return (object)[
+        "success" => true
+      ];
     } catch (Exception $e) {
-      error_log("Error al enviar email: " . $mail->ErrorInfo);
+      return (object)[
+        "success" => false,
+        "error" => $e
+      ];
     }
   }
 }

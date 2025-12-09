@@ -6,8 +6,6 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use App\Models\Category;
 use App\Exceptions\DatabaseException;
-use App\Exceptions\NotFoundException;
-use App\Exceptions\ValidationException;
 
 require_once(ROOT . '/src/Utils/Paginator.php');
 

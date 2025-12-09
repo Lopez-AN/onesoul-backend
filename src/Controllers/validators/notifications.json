@@ -1,0 +1,88 @@
+{
+  "create_notification": {
+    "RecipientUserID": {
+      "required": true,
+      "type": "integer",
+      "min": 0,
+      "max": 999999999
+    },
+    "EventCode": {
+      "required": true,
+      "type": "string",
+      "minlength": "1",
+      "maxlength": "80"
+    },
+    "IdempotencyKey": {
+      "required": true,
+      "type": "string",
+      "minlength": "1",
+      "maxlength": "120"
+    },
+    "Payload": {
+      "required": true,
+      "type": "object"
+    }
+  },
+  "get_in_app_notifications": {
+    "From": {
+      "required": false,
+      "type": "integer",
+      "min": 0,
+      "max": 999999999
+    },
+    "To": {
+      "required": false,
+      "type": "integer",
+      "min": 0,
+      "max": 999999999
+    },
+    "Limit": {
+      "required": false,
+      "type": "integer",
+      "min": 1,
+      "max": 1000
+    },
+    "List": {
+      "required": false,
+      "type": "string",
+      "regex": "/^(all|unread|read)$/"
+    }
+  },
+  "mark_in_app_notifications": {
+    "From": {
+      "required": true,
+      "type": "integer",
+      "min": 0,
+      "max": 999999999
+    },
+    "To": {
+      "required": true,
+      "type": "integer",
+      "min": 0,
+      "max": 999999999
+    }
+  },
+  "get_deliveries_by_notification_id": {
+    "NotificationID": {
+      "required": true,
+      "type": "integer",
+      "min": 0,
+      "max": 999999999
+    }
+  },
+  "get_deliveries_by_channel": {
+    "Channel": {
+      "required": true,
+      "type": "string",
+      "regex": "/^('IN_APP|EMAIL|SMS|WHATSAPP)$/"
+    }
+  },
+  "get_deliveries_by_recipient": {
+    "RecipientID": {
+      "required": true,
+      "type": "integer",
+      "min": 0,
+      "max": 999999999
+    }
+  }
+}
