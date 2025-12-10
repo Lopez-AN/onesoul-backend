@@ -7,6 +7,9 @@ define('ROOT', dirname(__FILE__)."/..");
 
 require ROOT.'/vendor/autoload.php';
 
+#Definir zona horaria
+date_default_timezone_set('America/Argentina/Buenos_Aires');
+
 # Leo la config
 $GLOBALS['config'] = @json_decode(file_get_contents(ROOT.'/config/config.json'),true);
 if(!$GLOBALS['config']){

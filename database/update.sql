@@ -10,7 +10,7 @@ ALTER TABLE `NotificationsEventType`
 DROP TABLE `NotificationJobs`;
 
 ALTER TABLE `NotificationsDelivery`
-	CHANGE COLUMN `Status` `Status` ENUM('Queued','Requeued','Sent','Failed','Skipped') NOT NULL DEFAULT 'Queued' COLLATE 'utf8mb4_unicode_ci' AFTER `ProviderMessageID`,
+	CHANGE COLUMN `Status` `Status` ENUM('Queued','Requeued','Processing','Sent','Failed') NOT NULL DEFAULT 'Queued' COLLATE 'utf8mb4_unicode_ci' AFTER `ProviderMessageID`;
 	ADD COLUMN `NextAttemptAt` TIMESTAMP NULL DEFAULT NULL COMMENT 'En caso de reintentos, cuando se reintentara este envio' AFTER `LastAttemptAt`;
 
 ALTER TABLE `NotificationsTemplate`
@@ -18,3 +18,7 @@ ALTER TABLE `NotificationsTemplate`
 
 ALTER TABLE `NotificationsEventChannel`
 	CHANGE COLUMN `DailyCap` `MaxAttemps` INT(11) NULL DEFAULT NULL AFTER `FallbackAfterSeconds`;
+
+ALTER TABLE `Notifications`
+	DROP COLUMN `Status`;
+

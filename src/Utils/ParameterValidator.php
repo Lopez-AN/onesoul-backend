@@ -9,6 +9,18 @@ use Psr\Http\Message\ResponseInterface as Response;
  */
 class ParameterValidator {
   static function validate(Response $response, $template, $endpoint, $values){
+    if (!is_array($values) && !is_object($values)) {
+      return (object)[
+        "valid" => false,
+        "response" => $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "INVALID_JSON",
+            "desc" => "Request body must be valid JSON"
+          ]
+        ])
+      ];
+    }
+
     $template = file_get_contents(ROOT."/src/Controllers/validators/$template.json");
     $template = $template ? @json_decode($template) : null;
 
@@ -48,6 +60,16 @@ class ParameterValidator {
           break;
         case 'object':
           $result = ParameterValidator::validateObject($response, $v, $i, $values[$i]);
+          if (!$result->valid) return $result;
+          $values[$i] = $result->value ?? $values[$i];
+          break;
+        case 'date':
+          $result = ParameterValidator::validateDate($response, $v, $i, $values[$i]);
+          if (!$result->valid) return $result;
+          $values[$i] = $result->value ?? $values[$i];
+          break;
+        case 'datetime':
+          $result = ParameterValidator::validateDateTime($response, $v, $i, $values[$i]);
           if (!$result->valid) return $result;
           $values[$i] = $result->value ?? $values[$i];
           break;
@@ -192,6 +214,96 @@ class ParameterValidator {
         ])
       ];
     }
+    return (object)["valid" => true, "value" => $value];
+  }
+
+  static function validateDate(Response $response, $validation, $parameter, $value){
+    if(!is_null($value) && !is_string($value)){
+      return (object)[
+        "valid" => false,
+        "response" => $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "INVALID_PARAMETERS",
+            "desc" => "$parameter must be a string in date format (YYYY-MM-DD)"
+          ]
+        ])
+      ];
+    }
+
+    if(!is_null($value)){
+      # Valida formato YYYY-MM-DD
+      if(!preg_match('/^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/', $value)){
+        return (object)[
+          "valid" => false,
+          "response" => $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "INVALID_PARAMETERS",
+              "desc" => "$parameter must be a valid date in format YYYY-MM-DD"
+            ]
+          ])
+        ];
+      }
+
+      # Valida que sea una fecha real
+      $date = \DateTime::createFromFormat('Y-m-d', $value);
+      if(!$date || $date->format('Y-m-d') !== $value){
+        return (object)[
+          "valid" => false,
+          "response" => $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "INVALID_PARAMETERS",
+              "desc" => "$parameter is not a valid date"
+            ]
+          ])
+        ];
+      }
+    }
+
+    return (object)["valid" => true, "value" => $value];
+  }
+
+  static function validateDateTime(Response $response, $validation, $parameter, $value){
+    if(!is_null($value) && !is_string($value)){
+      return (object)[
+        "valid" => false,
+        "response" => $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "INVALID_PARAMETERS",
+            "desc" => "$parameter must be a string in datetime format (YYYY-MM-DD HH:mm:ss)"
+          ]
+        ])
+      ];
+    }
+
+    if(!is_null($value)){
+      # Valida formato YYYY-MM-DD HH-mm-ss
+      if(!preg_match('/^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01]) ([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/', $value)){
+        return (object)[
+          "valid" => false,
+          "response" => $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "INVALID_PARAMETERS",
+              "desc" => "$parameter must be a valid datetime in format YYYY-MM-DD HH:mm:ss"
+            ]
+          ])
+        ];
+      }
+
+      # Valida que sea una fecha real
+      $date = \DateTime::createFromFormat('Y-m-d H:i:s', $value);
+      if(!$date || $date->format('Y-m-d H:i:s') !== $value){
+        return (object)[
+          "valid" => false,
+          "response" => $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "INVALID_PARAMETERS",
+              "desc" => "$parameter is not a valid datetime"
+            ]
+          ])
+        ];
+      }
+    }
+
     return (object)["valid" => true, "value" => $value];
   }
 }

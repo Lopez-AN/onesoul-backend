@@ -34,11 +34,11 @@ return function (App $app) {
   $app->get('/bookings/guide/{userID}', [$bookingController, 'getBookingsByGuide'])->add($requiredJwt);
   $app->get('/bookings/seeker/{userID}', [$bookingController, 'getBookingsBySeeker'])->add($requiredJwt);
   $app->post('/bookings', [$bookingController, 'createBooking'])->add($requiredJwt);
-  $app->patch('/bookings/{bookingID}', [$bookingController, 'updateBooking'])->add($requiredJwt);
-  $app->post('/bookings/{bookingID}/cancel', [$bookingController, 'cancelBooking'])->add($requiredJwt);
-  $app->post('/bookings/{bookingID}/confirm', [$bookingController, 'confirmBooking'])->add($requiredJwt);
-  $app->post('/bookings/{bookingID}/complete', [$bookingController, 'completeBooking'])->add($requiredJwt);
-  $app->post('/bookings/{bookingID}/rate', [$bookingController, 'rateBooking'])->add($requiredJwt);
+  $app->patch('/bookings/{BookingID}', [$bookingController, 'updateBooking'])->add($requiredJwt);
+  $app->post('/bookings/{BookingID}/cancel', [$bookingController, 'cancelBooking'])->add($requiredJwt);
+  $app->post('/bookings/{BookingID}/confirm', [$bookingController, 'confirmBooking'])->add($requiredJwt);
+  $app->post('/bookings/{BookingID}/complete', [$bookingController, 'completeBooking'])->add($requiredJwt);
+  $app->post('/bookings/{BookingID}/rate', [$bookingController, 'rateBooking'])->add($requiredJwt);
 
   // Reviews:
   $app->get('/reviews', [$bookingController, 'getReviews']);

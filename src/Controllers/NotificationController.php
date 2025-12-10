@@ -8,11 +8,7 @@ use Psr\Http\Message\ServerRequestInterface as Request;
 use App\Models\Notification;
 use App\Models\User;
 use App\Utils\ParameterValidator;
-
-#Definir zona horaria
-date_default_timezone_set('America/Argentina/Buenos_Aires');
-
-define("ALL_STATUS", false);
+use App\Enums\DeliveriesMode;
 
 class NotificationController{
 
@@ -95,54 +91,31 @@ class NotificationController{
     }
   }
 
-  public function getInAppNotifications(Request $request, Response $response, $args) {
-    $queryParams = $request->getQueryParams();
+  public function getDeliveryById(Request $request, Response $response, $args) {
+    $params['DeliveryID'] = $args['DeliveryID'];
     $jwt = $request->getAttribute('jwt');
 
-    $userID = $jwt->data->UserID;
-    $params = [
-      "From" => $queryParams['from'] ?? null, # Id de notificacion minimo
-      "To" => $queryParams['to'] ?? null, # Id de notificacion maximo
-      "Limit" => $queryParams['limit'] ?? null, # Maxima cantidad de publicaciones a traer
-      "List" => $queryParams['list'] ?? 'all' # Tipo de listado (todos, no-leidos...)
-    ];
+    # Si no es admin solo puede recibir deliverys propios
+    $recipientID = !$jwt->data->IsAdmin ? $jwt->data->UserID : null;
 
-    $pValidation = ParameterValidator::validate($response, 'notifications','get_in_app_notifications', $params);
+    $pValidation = ParameterValidator::validate($response, 'notifications','get_delivery_by_id', $params);
     if(!$pValidation->valid){
       return $pValidation->response;
     }
     $params = $pValidation->values;
 
     try {
-      $notifications = $this->notification->getInAppNotifications(
-        $userID, $params['From'], $params['To'], $params['Limit'], $params['List']
-      );
+      $deliveries = $this->notification->getDeliveryById($params['DeliveryID'], $recipientID);
+      if(!$deliveries){
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "DELIVERY_NOT_FOUND",
+            "desc" => "No delivery associated with the specified id was found"
+          ]
+        ]);
+      }
 
-      return $response->withJson($notifications);
-    } catch (Throwable $e) {
-      return $response->withStatus(500)->withJson([
-        "error" => [
-          "code" => "INTERNAL_SERVER_ERROR",
-          "desc" => $e->getMessage()
-        ]
-      ]);
-    }
-  }
-
-  public function markInAppNotifications(Request $request, Response $response, $args) {
-    $params = $request->getParsedBody();
-    $jwt = $request->getAttribute('jwt');
-    $userID = $jwt->data->UserID;
-
-    $pValidation = ParameterValidator::validate($response, 'notifications','mark_in_app_notifications', $params);
-    if(!$pValidation->valid){
-      return $pValidation->response;
-    }
-    $params = $pValidation->values;
-
-    try{
-      $updated = $this->notification->markInAppNotifications($userID, $params['From'], $params['To']);
-      return $response->withJson(['marked' => $updated]);
+      return $response->withJson($deliveries);
     } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -167,12 +140,12 @@ class NotificationController{
     $params = $pValidation->values;
 
     try {
-      $deliveries = $this->notification->getDeliveriesByNotificationId($params['NotificationID'], ALL_STATUS, $recipientID);
+      $deliveries = $this->notification->getDeliveriesByNotificationId($params['NotificationID'], DeliveriesMode::ALL, $recipientID);
       if(!$deliveries){
         return $response->withStatus(404)->withJson([
           "error" => [
-            "code" => "DELIVERY_NOT_FOUND",
-            "desc" => "No delivery associated with the specified id was found"
+            "code" => "NOTIFICATION_NOT_FOUND",
+            "desc" => "No notification associated with the specified id was found"
           ]
         ]);
       }
@@ -257,6 +230,64 @@ class NotificationController{
       }
 
       return $response->withJson($deliveries);
+    } catch (Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  public function getInAppNotifications(Request $request, Response $response, $args) {
+    $queryParams = $request->getQueryParams();
+    $jwt = $request->getAttribute('jwt');
+
+    $userID = $jwt->data->UserID;
+    $params = [
+      "From" => $queryParams['from'] ?? null, # Id de notificacion minimo
+      "To" => $queryParams['to'] ?? null, # Id de notificacion maximo
+      "Limit" => $queryParams['limit'] ?? null, # Maxima cantidad de publicaciones a traer
+      "List" => $queryParams['list'] ?? 'all' # Tipo de listado (todos, no-leidos...)
+    ];
+
+    $pValidation = ParameterValidator::validate($response, 'notifications','get_in_app_notifications', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
+    }
+    $params = $pValidation->values;
+
+    try {
+      $notifications = $this->notification->getInAppNotifications(
+        $userID, $params['From'], $params['To'], $params['Limit'], $params['List']
+      );
+
+      return $response->withJson($notifications);
+    } catch (Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  public function markInAppNotifications(Request $request, Response $response, $args) {
+    $params = $request->getParsedBody();
+    $jwt = $request->getAttribute('jwt');
+    $userID = $jwt->data->UserID;
+
+    $pValidation = ParameterValidator::validate($response, 'notifications','mark_in_app_notifications', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
+    }
+    $params = $pValidation->values;
+
+    try{
+      $updated = $this->notification->markInAppNotifications($userID, $params['From'], $params['To']);
+      return $response->withJson(['marked' => $updated]);
     } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [

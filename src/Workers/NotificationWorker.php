@@ -2,6 +2,7 @@
 
 use App\Utils\EmailHelper;
 use App\Models\Notification;
+use App\Enums\DeliveriesMode;
 
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
@@ -15,7 +16,8 @@ if (php_sapi_name() !== 'cli') {
 
 require ROOT.'/vendor/autoload.php';
 
-define("PENDING_ONLY", true);
+#Definir zona horaria
+date_default_timezone_set('America/Argentina/Buenos_Aires');
 
 # Leo la config
 $GLOBALS['config'] = @json_decode(file_get_contents(ROOT.'/config/config.json'),true);
@@ -50,7 +52,7 @@ class NotificationWorker {
     print("📢 NotificationWorker iniciado...\n");
 
     if(!is_null($notificationID)){
-      $deliveries = $this->notification->getDeliveriesByNotificationId(intval($notificationID), PENDING_ONLY);
+      $deliveries = $this->notification->getDeliveriesByNotificationId(intval($notificationID), DeliveriesMode::PENDING);
       foreach($deliveries as $delivery){
         $this->_sendChannel($delivery);
       }
@@ -92,20 +94,20 @@ class NotificationWorker {
         $delivery['RenderedBody']
       );
       if($result->sent){
-        $this->notification->markJobAsSent($delivery['DeliveryID']);
+        $this->notification->markDeliveryAsSent($delivery['DeliveryID']);
         print("[EMAIL] Delivery {$delivery['DeliveryID']} SUCCESS\n");
       }else{
         if($delivery['Attempts'] + 1 >= ($delivery['MaxAttemps'] ?? 3)){
-          $this->notification->markJobAsFailed($delivery['DeliveryID']);
+          $this->notification->markDeliveryAsFailed($delivery['DeliveryID']);
           print("[EMAIL] Delivery {$delivery['DeliveryID']} FAILED: {$result->error->getMessage()}\n");
         }else{
-          $this->notification->requeueJob($delivery['DeliveryID'], $delivery['FallbackAfterSeconds'] ?? 300);
+          $this->notification->requeueDelivery($delivery['DeliveryID'], $delivery['FallbackAfterSeconds'] ?? 300);
           print("[EMAIL] Delivery {$delivery['DeliveryID']} REQUEUED: {$result->error->getMessage()}\n");
         }
       }
     } catch (\Throwable $e) {
       # Lo marco como fallido
-      $this->notification->markJobAsFailed($delivery['DeliveryID']);
+      $this->notification->markDeliveryAsFailed($delivery['DeliveryID']);
       print("[EMAIL] Delivery {$delivery['DeliveryID']} FAILED: {$e->getMessage()}\n");
     }
   }

@@ -5,6 +5,7 @@ namespace App\Models;
 use PDO;
 use App\Exceptions\DatabaseException;
 use App\Exceptions\NotFoundException;
+use App\Enums\DeliveriesMode;
 
 class Notification  {
   protected $db;
@@ -49,8 +50,8 @@ class Notification  {
         $templateID = $e['TemplateID'];
         $isCritical = $e['IsCritical'];
 
-        # IN_APP siempre se envía, los otros dependen de preferencias (si no esta como critical)
-        if($channel !== 'IN_APP' && !$isCritical){
+        # IN_APP siempre se envía
+        if($channel !== 'IN_APP'){
           $canSend = match($channel) {
             'EMAIL' => (bool)$userSettings['Email'],
             'WHATSAPP' => (bool)$userSettings['WhatsApp'],
@@ -69,20 +70,28 @@ class Notification  {
         # Insertar delivery
         $stmt = $this->db->prepare("INSERT INTO NotificationsDelivery
           (NotificationID, Channel, TemplateID, RenderedSubject, RenderedBody, Status)
-          VALUES (?, ?, ?, ?, ?, 'Queued')");
+          VALUES (?, ?, ?, ?, ?, ?)");
         $stmt->execute([
           $notificationID,
           $channel,
           $templateID,
           $subject,
-          $body
+          $body,
+          /* Si el envio es critico le pongo estado processing
+            para que no lo tome el cron justo cuando hago el envio */
+          $isCritical && $channel !== 'IN_APP' ? 'Processing' : 'Queued'
         ]);
       }
 
-      $deliveries = $this->getDeliveriesByNotificationId($notificationID) ?:
+      $deliveries = $this->getDeliveriesByNotificationId($notificationID, DeliveriesMode::ALL) ?:
         throw new DatabaseException("Failed to retrieve the created deliveries");
-
       $this->db->commit(); # Confirmo transacción
+
+      # Si es envio critico lo envio en el momento
+      if($isCritical){
+        exec("php ".escapeshellarg(ROOT.'/src/Workers/NotificationWorker.php')." {$notificationID} > /dev/null 2>&1 &");
+      }
+
       return $deliveries;
     } catch (PDOException $e) {
       $this->db->rollBack(); # Revierto en caso de error
@@ -90,7 +99,7 @@ class Notification  {
     }
   }
 
-  # Obtener la próxima entrega
+  # Obtener la próxima entrega, (lo trae el worker por CRON)
   public function getNextDelivery($recipientID = null) {
     $w = ""; # Condiciones extra
     $params = [];
@@ -111,6 +120,7 @@ class Notification  {
       INNER JOIN NotificationsEventType as net
         ON net.ID = nec.EventTypeID
       WHERE nd.Status IN ('Queued', 'Requeued') AND nec.Enabled AND nec.Channel <> 'IN_APP'
+      /* Este metodo no trae deliveries pospuestos por requeue hasta que se cumpla el plazo */
       AND (nd.NextAttemptAt IS NULL OR  nd.NextAttemptAt < NOW()) $w
 		  ORDER BY nec.IsCritical DESC, n.CreatedAt ASC, nec.SendOrder ASC LIMIT 1");
 
@@ -118,15 +128,43 @@ class Notification  {
     return $stmt->fetch(PDO::FETCH_ASSOC);
   }
 
-  public function getDeliveriesByNotificationId($notificationID, $pendingOnly = false, $recipientID = null) {
+  public function getDeliveryById($deliveryID, $recipientID = null) {
+    $w = ""; # Condiciones extra
+    $params = [$deliveryID];
+    if(!is_null($recipientID)){
+      $w .= " AND n.RecipientUserID = ? ";
+      $params[] = $recipientID;
+    }
+
+    $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS nd.ID as DeliveryID,
+      n.RecipientUserID, nd.NotificationID, net.Code, n.IdempotencyKey, n.CreatedAt,
+      nd.Channel, nd.RenderedSubject, nd.RenderedBody, nd.Status, nec.IsCritical,
+      nec.FallbackAfterSeconds, nec.MaxAttempts, nd.Attempts, nd.NextAttemptAt, nd.LastAttemptAt
+      FROM Notifications as n
+      INNER JOIN NotificationsDelivery as nd
+        ON nd.NotificationID = n.ID
+      INNER JOIN NotificationsEventChannel as nec
+        ON nec.Channel = nd.Channel AND nec.EventTypeID = n.EventTypeID
+      INNER JOIN NotificationsEventType as net
+        ON net.ID = nec.EventTypeID
+      WHERE nec.Enabled AND nec.Channel <> 'IN_APP'
+      AND nd.ID = ? $w
+		  ORDER BY nec.IsCritical DESC, n.CreatedAt ASC, nec.SendOrder ASC");
+
+    $stmt->execute($params);
+    return $stmt->fetch(PDO::FETCH_ASSOC) ?? [];
+  }
+
+  public function getDeliveriesByNotificationId($notificationID, DeliveriesMode $deliveriesMode, $recipientID = null) {
     $w = ""; # Condiciones extra
     $params = [$notificationID];
     if(!is_null($recipientID)){
       $w .= " AND n.RecipientUserID = ? ";
       $params[] = $recipientID;
     }
-    if($pendingOnly){
-      $w .= " AND nd.Status IN ('Queued', 'Requeued') AND (nd.NextAttemptAt IS NULL OR nd.NextAttemptAt < NOW()) ";
+    if($deliveriesMode::PENDING){
+      $w .= " AND nd.Status IN ('Queued', 'Requeued', 'Processing') ";
+      $w .= " AND (nd.NextAttemptAt IS NULL OR nd.NextAttemptAt < NOW()) ";
     }
 
     $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS nd.ID as DeliveryID,
@@ -168,7 +206,6 @@ class Notification  {
       INNER JOIN NotificationsEventType as net
         ON net.ID = nec.EventTypeID
       WHERE nec.Enabled AND nec.Channel <> 'IN_APP'
-      AND (nd.NextAttemptAt IS NULL OR nd.NextAttemptAt < NOW())
       AND nd.Channel = ? $w
 		  ORDER BY nec.IsCritical DESC, n.CreatedAt ASC, nec.SendOrder ASC");
 
@@ -199,7 +236,6 @@ class Notification  {
       INNER JOIN NotificationsEventType as net
         ON net.ID = nec.EventTypeID
       WHERE nec.Enabled AND nec.Channel <> 'IN_APP'
-      AND (nd.NextAttemptAt IS NULL OR nd.NextAttemptAt < NOW())
       AND n.RecipientUserID = ?
 		  ORDER BY nec.IsCritical DESC, n.CreatedAt ASC, nec.SendOrder ASC");
 
@@ -312,7 +348,7 @@ class Notification  {
   }
 
   # Marcar como fallo definitivo
-  public function markJobAsFailed($deliveryID) {
+  public function markDeliveryAsFailed($deliveryID) {
     $stmt = $this->db->prepare("UPDATE NotificationsDelivery
       SET Status = 'Failed', Attempts = Attempts + 1, LastAttemptAt = NOW()
       WHERE ID = ?");
@@ -320,7 +356,7 @@ class Notification  {
   }
 
   # Reencolar job con delay y nuevo intento
-  public function requeueJob($deliveryID, $delay) {
+  public function requeueDelivery($deliveryID, $delay) {
     $stmt = $this->db->prepare("UPDATE NotificationsDelivery
       SET Status = 'Requeued', Attempts = Attempts + 1, LastAttemptAt = NOW(),
       NextAttemptAt = DATE_ADD(NOW(), INTERVAL ? SECOND)

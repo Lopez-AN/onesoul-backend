@@ -9,9 +9,6 @@ use App\Models\User;
 use App\Models\Offering;
 use Predis\Client as RedisClient;
 
-#Definir zona horaria
-date_default_timezone_set('America/Argentina/Buenos_Aires');
-
 class CalController{
 
   protected $cal;

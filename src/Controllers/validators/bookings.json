@@ -1,0 +1,65 @@
+{
+  "create_booking": {
+    "AssocUUID": {
+      "required": true,
+      "type": "string",
+      "regex": "/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/"
+    },
+    "Coupon": {
+      "required": false,
+      "type": "string",
+      "regex": "/^[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}$/"
+    },
+    "OfferingID": {
+      "required": true,
+      "type": "integer",
+      "min": 0,
+      "max": 999999999
+    },
+    "LocationID": {
+      "required": false,
+      "type": "integer",
+      "min": 0,
+      "max": 999999999
+    },
+    "Message": {
+      "required": true,
+      "type": "string",
+      "min": 10,
+      "maxlength": 1200
+    },
+    "SessionType": {
+      "required": true,
+      "type": "string",
+      "regex": "/^(in-person|virtual)$/"
+    },
+    "SubDomain": {
+      "required": false,
+      "type": "string",
+      "regex": "/^[a-zA-Z]{1,15}+$/"
+    },
+    "ScheduledDate": {
+      "required": true,
+      "type": "datetime"
+    }
+  },
+  "cancel_booking": {
+    "BookingID": {
+      "required": true,
+      "type": "integer",
+      "min": 0,
+      "max": 999999999
+    },
+    "Message": {
+      "required": true,
+      "type": "string",
+      "min": 10,
+      "maxlength": 1200
+    },
+    "SubDomain": {
+      "required": false,
+      "type": "string",
+      "regex": "/^[a-zA-Z]{1,15}+$/"
+    }
+  }
+}

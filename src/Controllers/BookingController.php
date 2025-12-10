@@ -2,8 +2,6 @@
 
 namespace App\Controllers;
 
-use Exception;
-use Throwable;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use App\Models\Booking;
@@ -13,12 +11,10 @@ use App\Models\Donation;
 use App\Models\User;
 use DateTime;
 use Firebase\JWT\JWT;
+use App\Utils\ParameterValidator;
 
 require_once(ROOT . '/src/Utils/PerspectiveText.php');
 require_once(ROOT . '/src/Utils/Paginator.php');
-
-#Definir zona horaria
-date_default_timezone_set('America/Argentina/Buenos_Aires');
 
 class BookingController {
   protected $booking;
@@ -202,59 +198,16 @@ class BookingController {
   }
 
   public function createBooking(Request $request, Response $response, $args) {
-    $data = $request->getParsedBody();
+    $params = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
-
-    # Verificar si el body es un array/object válido
-    if (!is_array($data) && !is_object($data)) {
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "INVALID_JSON",
-          "desc" => "Request body must be valid JSON"
-        ]
-      ]);
-    }
-
     $seekerID = $jwt->data->UserID;
-    $assocUUID = $data['AssocUUID'] ?? null;
-    $coupon = $data['Coupon'] ?? null;
-    $locationID = $data['LocationID'] ?? null;
-    $message = $data['Message'] ?? null;
-    $sessionType = $data['SessionType'] ?? null;
-    $offeringID = $data['OfferingID'] ?? null;
-    $subDomain = $data['SubDomain'] ?? null;
-    $scheduledDate = $data['ScheduledDate'] ?? null;
 
-    # Validación de parámetros
-    if (empty($assocUUID) || empty($message) || empty($offeringID) || !in_array($sessionType, ['in-person', 'virtual'])) {
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "INVALID_PARAMETERS",
-          "desc" => "Parameters are missing or invalid"
-        ]
-      ]);
+    # Validar parametros
+    $pValidation = ParameterValidator::validate($response, 'bookings','create_booking', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
     }
-
-    # Validar formato de subdominio si se especifico (solo letras A-Z, a-z)
-    if (!empty($subDomain)) {
-      if (!preg_match('/^[a-zA-Z]+$/', $subDomain)) {
-        return $response->withStatus(400)->withJson([
-          "error" => [
-            "code" => "INVALID_SUBDOMAIN",
-            "desc" => "Subdomain must contain only letters A-Z"
-          ]
-        ]);
-      }
-    }
-
-    if (strlen($message) > 1000) {
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "MESSAGE_TOO_LONG",
-          "desc" => "The message is too long (max 1000 characters)"
-        ]
-      ]);
-    }
+    $params = $pValidation->values;
 
     try {
       $seeker = $this->user->getUserById($seekerID);
@@ -279,7 +232,7 @@ class BookingController {
       }
 
       # Valida contenido con Perspective API
-      if ($this->_containsInappropriateContent($message)) {
+      if ($this->_containsInappropriateContent($params['Message'])) {
         return $response->withStatus(400)->withJson([
           "code" => "INAPPROPRIATE_CONTENT",
           "desc" => "Please remove inappropriate content and try again."
@@ -287,7 +240,7 @@ class BookingController {
       }
 
       # Obtener y validar offering
-      $offering = $this->offering->getOfferingById($offeringID);
+      $offering = $this->offering->getOfferingById($params['OfferingID']);
       if (!$offering) {
         return $response->withStatus(404)->WithJson([
           "error" => [
@@ -298,7 +251,7 @@ class BookingController {
       }
 
       # Verifico si el offering tiene la modalidad seleccionada
-      if($offering['SessionType'] !== 'both' && $offering['SessionType'] !== $sessionType){
+      if($offering['SessionType'] !== 'both' && $offering['SessionType'] !== $params['SessionType']){
         return $response->withStatus(400)->withJson([
           "error" => [
             "code" => "INVALID_SESSION_TYPE",
@@ -317,7 +270,7 @@ class BookingController {
         ]);
       }
 
-      if ($sessionType === 'in-person') {
+      if ($params['SessionType'] === 'in-person') {
         // if (!$locationID) {
         //   return $response->withStatus(400)->withJson([
         //     "error" => [
@@ -354,7 +307,7 @@ class BookingController {
       # Verificar si el guia tiene conexión con Cal.com
       if ($this->booking->userHasCal($guideID)) {
         # Buscar el invite en CalendlyWebhooks
-        $cal = $this->booking->findCalInvitee($assocUUID, $guideID);
+        $cal = $this->booking->findCalInvitee($params['AssocUUID'], $guideID);
         if (!$cal) {
           return $response->withStatus(400)->withJson([
             "error" => [
@@ -363,16 +316,16 @@ class BookingController {
             ]
           ]);
         }
-        $scheduledDate = DateTime::createFromFormat("Y-m-d H:i:s.u", $cal['StartTime']);
+        $params['ScheduledDate'] = DateTime::createFromFormat("Y-m-d H:i:s.u", $cal['StartTime']);
       }else{
-        $scheduledDate = null; # No hay fecha de reserva si no se usa cal.com
-        $assocUUID = null; # Si no se usa cal.com se descarga el uuid para no asociar nada
+        $params['ScheduledDate'] = null; # No hay fecha de reserva si no se usa cal.com
+        $params['AssocUUID'] = null; # Si no se usa cal.com se descarga el uuid para no asociar nada
       }
 
       # Valido un cupon
       $voucherID = null;
-      if($coupon){
-        $donation = $this->donation->getDonationByRedeemCode($coupon);
+      if($params['Coupon']){
+        $donation = $this->donation->getDonationByRedeemCode($params['Coupon']);
         if (!$donation) {
           return $response->withStatus(404)->withJson([
             "error" => [
@@ -417,7 +370,7 @@ class BookingController {
       }
 
       # Si hay voucher es precio 0
-      $price = $coupon ? 0 : $offering['Price'];
+      $price = $params['Coupon'] ? 0 : $offering['Price'];
       $conditions = $offering['Conditions'];
 
       $countryCode = $seeker['CountryCode'] ?? "AR";
@@ -427,64 +380,63 @@ class BookingController {
       # PREPARAR datos para el modelo
       $data = [
         'PublicID' => $publicID,
-        'OfferingID' => $offeringID,
+        'OfferingID' => $params['OfferingID'],
         'SeekerID' => $seekerID,
-        'SessionType' => $sessionType,
-        'LocationID' => $locationID,
-        'ScheduledDate' => $scheduledDate,
-        'Message' => $message
+        'SessionType' => $params['SessionType'],
+        'LocationID' => $params['LocationID'],
+        'ScheduledDate' => $params['ScheduledDate'],
+        'Message' => $params['Message']
       ];
 
-      $origin = $subDomain ? "https://{$subDomain}.onesoul.app" : "https://onesoul.app";
-      $booking = $this->booking->createBooking($data, $subDomain, $assocUUID, $voucherID);
+      $origin = $params['SubDomain'] ? "https://{$params['SubDomain']}.onesoul.app" : "https://onesoul.app";
+      $booking = $this->booking->createBooking($data, $params['SubDomain'], $params['AssocUUID'], $voucherID);
 
-      # Notificación para el guía
-      $payloadGuide = [
-        "YEAR"          => date('Y'),
-        "GUIDE_NAME"    => $guide['UserName'] ?? 'Guía',
-        "BOOKING_ID"    => $booking['PublicID'],
-        "SERVICE_NAME"  => $offering['Title'] ?? 'Servicio',
-        "SEARCHER_NAME" => $seeker['FirstName'] && $seeker['LastName'] ?
-          $seeker['FirstName'].' '.$seeker['LastName'] : 'No indicado',
-        "SEARCHER_EMAIL"=> $seeker['Email'],
-        "SEARCHER_PHONE"=> $seeker['Phone'] ?? '-',
-        "MESSAGE"       => $message,
-        "SCHEDULED"     => $scheduledDate ? $scheduledDate -> format('d/m/Y H:i') : "A convenir",
-        "MODE"          => $booking['SessionType'] === 'in-person' ? 'Presencial' : 'Virtual',
-        "PRICE"         => $offering['Currency'].' '.$price,
-        "BOOKING_URL"   => "{$origin}/bookings/guide"
-      ];
-
-      $this->notification->createNotification(
-        $guideID,
-        "BOOKING.CREATED_FOR_GUIDE",
-        $payloadGuide,
-        "BOOKING." . $booking['BookingID'] . ".PENDING.GUIDE"
-      );
-
-      # Notificación para el buscador
-      $payloadSeeker = [
-        "YEAR"        => date('Y'),
-        "USERNAME"    => $seeker['UserName'],
-        "OFFERING"    => $offering['Title'],
-        "GUIDE_NAME"  => $guide['FirstName'].' '.$guide['LastName'],
-        "GUIDE_EMAIL" => $guide['Email'],
-        "GUIDE_PHONE" => $guide['Phone'],
-        "SCHEDULED"   => $scheduledDate ? $scheduledDate -> format('d/m/Y H:i') : "A convenir",
-        "MODE"        => $booking['SessionType'] === 'in-person' ? 'Presencial' : 'Virtual',
-        "PRICE"       => $offering['Currency'].' '.$price,
-        "CONDITIONS"  => $conditions,
-        "BOOKING_ID"  => $booking['PublicID'],
-        "MESSAGE"     => $message,
-        "BOOKING_URL" => "{$origin}/bookings/user"
-      ];
-
-      $this->notification->createNotification(
-        $seekerID,
-        "BOOKING.CREATED_FOR_SEEKER",
-        $payloadSeeker,
-        "BOOKING." . $booking['BookingID'] . ".PENDING.SEEKER"
-      );
+      try{
+        # Notificación para el guía
+        $payloadGuide = [
+          "YEAR"          => date('Y'),
+          "GUIDE_NAME"    => $guide['UserName'] ?? 'Guía',
+          "BOOKING_ID"    => $booking['PublicID'],
+          "SERVICE_NAME"  => $offering['Title'] ?? 'Servicio',
+          "SEARCHER_NAME" => $seeker['FirstName'] && $seeker['LastName'] ?
+            $seeker['FirstName'].' '.$seeker['LastName'] : 'No indicado',
+          "SEARCHER_EMAIL"=> $seeker['Email'],
+          "SEARCHER_PHONE"=> $seeker['Phone'] ?? '-',
+          "MESSAGE"       => $params['Message'],
+          "SCHEDULED"     => $params['ScheduledDate']?->format('d/m/Y H:i') ?? "A convenir",
+          "MODE"          => $booking['SessionType'] === 'in-person' ? 'Presencial' : 'Virtual',
+          "PRICE"         => $offering['Currency'].' '.$price,
+          "BOOKING_URL"   => "{$origin}/bookings/guide"
+        ];
+        $this->notification->createNotification(
+          $guideID,
+          "BOOKING.CREATED_FOR_GUIDE",
+          $payloadGuide,
+          "BOOKING." . $booking['BookingID'] . ".PENDING.GUIDE"
+        );
+        # Notificación para el buscador
+        $payloadSeeker = [
+          "YEAR"        => date('Y'),
+          "USERNAME"    => $seeker['UserName'],
+          "OFFERING"    => $offering['Title'],
+          "GUIDE_NAME"  => $guide['FirstName'].' '.$guide['LastName'],
+          "GUIDE_EMAIL" => $guide['Email'],
+          "GUIDE_PHONE" => $guide['Phone'],
+          "SCHEDULED"   => $params['ScheduledDate']?->format('d/m/Y H:i') ?? "A convenir",
+          "MODE"        => $booking['SessionType'] === 'in-person' ? 'Presencial' : 'Virtual',
+          "PRICE"       => $offering['Currency'].' '.$price,
+          "CONDITIONS"  => $conditions,
+          "BOOKING_ID"  => $booking['PublicID'],
+          "MESSAGE"     => $params['Message'],
+          "BOOKING_URL" => "{$origin}/bookings/user"
+        ];
+        $this->notification->createNotification(
+          $seekerID,
+          "BOOKING.CREATED_FOR_SEEKER",
+          $payloadSeeker,
+          "BOOKING." . $booking['BookingID'] . ".PENDING.SEEKER"
+        );
+      }catch(\Throwable $e){}
 
       return $response->withStatus(200)->withJson($booking);
     } catch (\Throwable $e) {
@@ -736,58 +688,28 @@ class BookingController {
   }
 
   public function cancelBooking(Request $request, Response $response, $args) {
+    $params = $request->getParsedBody();
+    $params['BookingID'] = $args['BookingID'];
     $jwt = $request->getAttribute('jwt');
-
-    $data = $request->getParsedBody();
     $userID = $jwt->data->UserID;
-    $bookingID = intval($args['bookingID']);
-    $message = $data['Message'] ?? null;
-    $subDomain = $data['SubDomain'] ?? '';
 
-    # Validar que defina el motivo de la anulación (se guarda en campo Message)
-    if (!$message) {
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "INVALID_PARAMETERS",
-          "desc" => "The reason is required for cancellation."
-        ]
-      ]);
+    # Validar parametros
+    $pValidation = ParameterValidator::validate($response, 'bookings','cancel_booking', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
     }
+    $params = $pValidation->values;
 
-    # Valida contenido con Perspective API
-    if(!empty($message)){
-      if ($this->_containsInappropriateContent($message)) {
+    try {
+      # Valida contenido con Perspective API
+      if ($this->_containsInappropriateContent($params['Message'])) {
         return $response->withStatus(400)->withJson([
           "code" => "INAPPROPRIATE_CONTENT",
           "desc" => "Please remove inappropriate content and try again."
         ]);
       }
 
-      if (strlen($message) > 1000) {
-        return $response->withStatus(400)->withJson([
-          "error" => [
-            "code" => "MESSAGE_TOO_LONG",
-            "desc" => "The message is too long (max 1000 characters)"
-          ]
-        ]);
-      }
-    }
-
-    # Validar formato de subdominio (solo letras A-Z, a-z)
-    if (!empty($subDomain)) {
-      if (!preg_match('/^[a-zA-Z]+$/', $subDomain)) {
-        return $response->withStatus(400)->withJson([
-          "error" => [
-            "code" => "INVALID_SUBDOMAIN",
-            "desc" => "Subdomain must contain only letters A-Z"
-          ]
-        ]);
-      }
-    }
-
-    try {
-      $booking = $this->booking->getBookingByID($bookingID);
-
+      $booking = $this->booking->getBookingByID($params['BookingID']);
       if (!$booking) {
         return $response->withStatus(404)->withJson([
           "error" => [
@@ -796,9 +718,11 @@ class BookingController {
           ]
         ]);
       }
+      $seekerID = $booking['UserID'];
+      $guideID = $booking['Guide'];
 
       # Validar si el user es el cliente o el guía o un administrador
-      if ($booking['UserID'] !== $userID && $booking['Guide'] !== $userID && !$jwt->data->IsAdmin){
+      if ($seekerID !== $userID && $guideID !== $userID && !$jwt->data->IsAdmin){
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "FORBIDDEN",
@@ -821,77 +745,54 @@ class BookingController {
         }
       }
 
-      $booking = $this->booking->cancelBooking($bookingID, $message, $subDomain);
+      $booking = $this->booking->cancelBooking($params['BookingID'], $params['Message'], $params['SubDomain']);
 
-      $origin = $subDomain ? "https://{$subDomain}.onesoul.app" : "https://onesoul.app";
+      $origin = $params['SubDomain'] ? "https://{$params['SubDomain']}.onesoul.app" : "https://onesoul.app";
 
-      # Obtener datos del usuario que hizo la reserva
-      $userInfo = $this->user->getUserById($booking['UserID']);
-      if ($userInfo) {
-        $user = $userInfo;
-        $username = $user['UserName'] ?? $user['DisplayName'] ?? 'Usuario';
-        $userEmail = $user['Email'] ?? null;
+      # Obtener info del buscador
+      $seeker = $this->user->getUserById($seekerID);
+      # Obtener info del servicio
+      $offering = $this->offering->getOfferingById($booking['OfferingID']);
+      # Obtener info del guia
+      $guide = $this->user->getUserById($guideID);
 
-        # Obtener info del servicio
-        $offering = $this->offering->getOfferingById($booking['OfferingID']);
-        $offeringName = $offering['Title'] ?? 'Servicio';
-
-        # Enviar email al buscador
-        if ($userEmail) {
-          // EmailHelper::send(
-          //   $username,
-          //   $userEmail,
-          //   "La reserva {$booking['PublicID']} fue cancelada",
-          //   ROOT . "/src/Templates/email_booking_canceled.html",
-          //   [
-          //     '{YEAR}' => date('Y'),
-          //     '{USERNAME}' => $username,
-          //     '{OFFERING}' => $offeringName,
-          //     '{BOOKING_ID}' => $booking['PublicID'],
-          //     '{MESSAGE}' => $message,
-          //     '{BOOKING_URL}' => "{$origin}/bookings/seeker",
-          //   ]
-          // );
-        }
-
-        # Enviar email al guía
-        if ($offering) {
-          $guideID = $offering['UserID'] ?? null;
-          $offeringName = $offering['Title'] ?? 'Servicio';
-          $searcherName = $userInfo['FirstName'] . ' ' . $userInfo['LastName'];
-
-          if ($guideID) {
-            $guideInfo = $this->user->getUserById($guideID);
-            if ($guideInfo) {
-              $guideName = $guideInfo['UserName'] ?? 'Guía';
-              $guideEmail = $guideInfo['Email'] ?? null;
-
-              if ($guideEmail) {
-                // EmailHelper::send(
-                //   $guideName,
-                //   $guideEmail,
-                //   "La reserva {$booking['PublicID']} fue cancelada",
-                //   ROOT . "/src/Templates/email_booking_canceled_guide.html",
-                //   [
-                //     '{YEAR}' => date('Y'),
-                //     '{GUIDE_NAME}' => $guideName,
-                //     '{SERVICE_NAME}' => $offeringName,
-                //     '{BOOKING_ID}' => $booking['PublicID'],
-                //     '{SEARCHER_NAME}' => $searcherName,
-                //     '{SEARCHER_EMAIL}' => $userEmail,
-                //     '{SEARCHER_PHONE}' => $userInfo['Phone'] ?? '-',
-                //     '{MESSAGE}' => $message,
-                //     '{BOOKING_URL}' => "{$origin}/bookings/guide"
-                //   ]
-                // );
-              }
-            }
-          }
-        }
-      }
+      try{
+        # Notificación para el guia
+        $payloadGuide = [
+          "YEAR"           => date('Y'),
+          "USERNAME"       => $seeker['UserName'],
+          "SERVICE_NAME"   => $offering['Title'],
+          "SEARCHER_NAME"  => $seeker['FirstName'].' '.$seeker['LastName'],
+          "SEARCHER_PHONE" => $seeker['Phone'] ?? '-',
+          "SEARCHER_EMAIL" => $seeker['Email'],
+          "BOOKING_ID"     => $booking['PublicID'],
+          "MESSAGE"        => $params['Message'],
+          "BOOKING_URL"    => "{$origin}/bookings/guide"
+        ];
+        $this->notification->createNotification(
+          $guideID,
+          "BOOKING.CANCELED_FOR_GUIDE",
+          $payloadGuide,
+          "BOOKING." . $booking['BookingID'] . ".CANCELED.GUIDE"
+        );
+        # Notificación para el buscador
+        $payloadSeeker = [
+          "YEAR"        => date('Y'),
+          "USERNAME"    => $seeker['UserName'],
+          "OFFERING"    => $offering['Title'],
+          "BOOKING_ID"  => $booking['PublicID'],
+          "MESSAGE"     => $params['Message'],
+          "BOOKING_URL" => "{$origin}/bookings/seeker"
+        ];
+        $this->notification->createNotification(
+          $seekerID,
+          "BOOKING.CANCELED_FOR_SEEKER",
+          $payloadSeeker,
+          "BOOKING." . $booking['BookingID'] . ".CANCELED.SEEKER"
+        );
+      }catch(\Throwable $e){}
 
       return $response->withStatus(200)->withJson($booking);
-
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [

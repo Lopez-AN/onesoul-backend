@@ -18,9 +18,6 @@ use Predis\Client as RedisClient;
 require_once ROOT . '/src/Utils/validateToken.php';
 require_once ROOT . '/src/Utils/validateReCaptcha.php';
 
-# Definir zona horaria
-date_default_timezone_set('America/Argentina/Buenos_Aires');
-
 class AuthController{
 
   protected $user;

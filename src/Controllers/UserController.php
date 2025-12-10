@@ -101,7 +101,7 @@ class UserController{
    * @statusCode 500: error del servidor
    **/
   public function getUsersByCategory(Request $request, Response $response, $args) {
-    $params['CategoryID'] = intval($args['CategoryID']);
+    $params['CategoryID'] = $args['CategoryID'];
     $paginator = paginator($request);
     $jwt = $request->getAttribute('jwt');
 
@@ -163,7 +163,7 @@ class UserController{
    * @statusCode 500: error del servidor
    **/
   public function getUserById(Request $request, Response $response, $args) {
-    $params['UserID'] = intval($args['UserID']);
+    $params['UserID'] = $args['UserID'];
     $jwt = $request->getAttribute('jwt');
 
     $pValidation = ParameterValidator::validate($response, 'users','get_user_by_id', $params);

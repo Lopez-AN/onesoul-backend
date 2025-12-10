@@ -26,6 +26,7 @@ return function (App $app) {
   $app->get('/notifications/in_app', [$notificationController, 'getInAppNotifications'])->add($requiredJwt);
   $app->patch('/notifications/in_app/mark', [$notificationController, 'markInAppNotifications'])->add($requiredJwt);
   $app->get('/delivery/next', [$notificationController, 'getNextDelivery'])->add($requiredJwt);
+  $app->get('/delivery/{DeliveryID}', [$notificationController, 'getDeliveryById'])->add($requiredJwt);
   $app->get('/deliveries/notification/{NotificationID}', [$notificationController, 'getDeliveriesByNotificationId'])->add($requiredJwt);
   $app->get('/deliveries/channel/{Channel}', [$notificationController, 'getDeliveriesByChannel'])->add($requiredJwt);
   $app->get('/deliveries/recipient/{RecipientID}', [$notificationController, 'getDeliveriesByRecipient'])->add($requiredJwt);
