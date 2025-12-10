@@ -15,3 +15,6 @@ ALTER TABLE `NotificationsDelivery`
 
 ALTER TABLE `NotificationsTemplate`
 	CHANGE COLUMN `Status` `Status` ENUM('Draft','Active','Archived') NOT NULL DEFAULT 'Active' COLLATE 'utf8mb4_unicode_ci' AFTER `Version`;
+
+ALTER TABLE `NotificationsEventChannel`
+	CHANGE COLUMN `DailyCap` `MaxAttemps` INT(11) NULL DEFAULT NULL AFTER `FallbackAfterSeconds`;

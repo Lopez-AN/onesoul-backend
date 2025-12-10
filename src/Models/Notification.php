@@ -102,7 +102,7 @@ class Notification  {
     $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS nd.ID as DeliveryID,
       n.RecipientUserID, nd.NotificationID, net.Code, n.IdempotencyKey, n.CreatedAt,
       nd.Channel, nd.RenderedSubject, nd.RenderedBody, nd.Status, nec.IsCritical,
-      nec.FallbackAfterSeconds, nec.DailyCap
+      nec.FallbackAfterSeconds, nec.MaxAttempts, nd.Attempts, nd.NextAttemptAt, nd.LastAttemptAt
       FROM Notifications as n
       INNER JOIN NotificationsDelivery as nd
         ON nd.NotificationID = n.ID
@@ -118,18 +118,21 @@ class Notification  {
     return $stmt->fetch(PDO::FETCH_ASSOC);
   }
 
-  public function getDeliveriesByNotificationId($notificationID, $recipientID = null) {
+  public function getDeliveriesByNotificationId($notificationID, $pendingOnly = false, $recipientID = null) {
     $w = ""; # Condiciones extra
     $params = [$notificationID];
     if(!is_null($recipientID)){
       $w .= " AND n.RecipientUserID = ? ";
       $params[] = $recipientID;
     }
+    if($pendingOnly){
+      $w .= " AND nd.Status IN ('Queued', 'Requeued') AND (nd.NextAttemptAt IS NULL OR nd.NextAttemptAt < NOW()) ";
+    }
 
     $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS nd.ID as DeliveryID,
       n.RecipientUserID, nd.NotificationID, net.Code, n.IdempotencyKey, n.CreatedAt,
       nd.Channel, nd.RenderedSubject, nd.RenderedBody, nd.Status, nec.IsCritical,
-      nec.FallbackAfterSeconds, nec.DailyCap
+      nec.FallbackAfterSeconds, nec.MaxAttempts, nd.Attempts, nd.NextAttemptAt, nd.LastAttemptAt
       FROM Notifications as n
       INNER JOIN NotificationsDelivery as nd
         ON nd.NotificationID = n.ID
@@ -137,23 +140,12 @@ class Notification  {
         ON nec.Channel = nd.Channel AND nec.EventTypeID = n.EventTypeID
       INNER JOIN NotificationsEventType as net
         ON net.ID = nec.EventTypeID
-      WHERE nec.Enabled
-      AND (nd.NextAttemptAt IS NULL OR nd.NextAttemptAt < NOW())
+      WHERE nec.Enabled AND nec.Channel <> 'IN_APP'
       AND nd.NotificationID = ? $w
 		  ORDER BY nec.IsCritical DESC, n.CreatedAt ASC, nec.SendOrder ASC");
 
     $stmt->execute($params);
-    $deliveries = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
-    $total = $stmt->fetch(PDO::FETCH_ASSOC);
-
-    return [
-      "data" => $deliveries,
-      "rows" => [
-        "total" => $total,
-        "fetched" => count($deliveries)
-      ]
-    ];
+    return $stmt->fetchAll(PDO::FETCH_ASSOC) ?? [];
   }
 
   public function getDeliveriesByChannel($paginator, $channel, $recipientID = null) {
@@ -167,7 +159,7 @@ class Notification  {
     $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS nd.ID as DeliveryID,
       n.RecipientUserID, nd.NotificationID, net.Code, n.IdempotencyKey, n.CreatedAt,
       nd.Channel, nd.RenderedSubject, nd.RenderedBody, nd.Status, nec.IsCritical,
-      nec.FallbackAfterSeconds, nec.DailyCap
+      nec.FallbackAfterSeconds, nec.MaxAttempts, nd.Attempts, nd.NextAttemptAt, nd.LastAttemptAt
       FROM Notifications as n
       INNER JOIN NotificationsDelivery as nd
         ON nd.NotificationID = n.ID
@@ -175,7 +167,7 @@ class Notification  {
         ON nec.Channel = nd.Channel AND nec.EventTypeID = n.EventTypeID
       INNER JOIN NotificationsEventType as net
         ON net.ID = nec.EventTypeID
-      WHERE nec.Enabled
+      WHERE nec.Enabled AND nec.Channel <> 'IN_APP'
       AND (nd.NextAttemptAt IS NULL OR nd.NextAttemptAt < NOW())
       AND nd.Channel = ? $w
 		  ORDER BY nec.IsCritical DESC, n.CreatedAt ASC, nec.SendOrder ASC");
@@ -198,7 +190,7 @@ class Notification  {
     $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS nd.ID as DeliveryID,
       n.RecipientUserID, nd.NotificationID, net.Code, n.IdempotencyKey, n.CreatedAt,
       nd.Channel, nd.RenderedSubject, nd.RenderedBody, nd.Status, nec.IsCritical,
-      nec.FallbackAfterSeconds, nec.DailyCap
+      nec.FallbackAfterSeconds, nec.MaxAttempts, nd.Attempts, nd.NextAttemptAt, nd.LastAttemptAt
       FROM Notifications as n
       INNER JOIN NotificationsDelivery as nd
         ON nd.NotificationID = n.ID
@@ -206,7 +198,7 @@ class Notification  {
         ON nec.Channel = nd.Channel AND nec.EventTypeID = n.EventTypeID
       INNER JOIN NotificationsEventType as net
         ON net.ID = nec.EventTypeID
-      WHERE nec.Enabled
+      WHERE nec.Enabled AND nec.Channel <> 'IN_APP'
       AND (nd.NextAttemptAt IS NULL OR nd.NextAttemptAt < NOW())
       AND n.RecipientUserID = ?
 		  ORDER BY nec.IsCritical DESC, n.CreatedAt ASC, nec.SendOrder ASC");
@@ -329,8 +321,8 @@ class Notification  {
 
   # Reencolar job con delay y nuevo intento
   public function requeueJob($deliveryID, $delay) {
-    $stmt = $this->db->prepare("UPDATE NotificationJobs
-      SET Status = 'Requeued', Attempts = Attempts + 1, LastAttemptAt = NOW()
+    $stmt = $this->db->prepare("UPDATE NotificationsDelivery
+      SET Status = 'Requeued', Attempts = Attempts + 1, LastAttemptAt = NOW(),
       NextAttemptAt = DATE_ADD(NOW(), INTERVAL ? SECOND)
       WHERE ID = ?");
     $stmt->execute([$delay, $deliveryID]);
@@ -352,7 +344,7 @@ class Notification  {
         $stmt->execute([$recipientID]);
         $email = $stmt->fetchColumn();
         if (!$email) {
-          throw new Exception("No se encontró email para el usuario {$recipientID}");
+          throw new NotFoundException("No email found for user {$recipientID}");
         }
         return $email;
 
@@ -362,19 +354,19 @@ class Notification  {
         $stmt->execute([$recipientID]);
         $phone = $stmt->fetchColumn();
         if (!$phone) {
-          throw new Exception("No se encontró número de WhatsApp para el usuario {$recipientID}");
+          throw new NotFoundException("No phone found for user {$recipientID}");
         }
         return $phone;
 
       default:
-      throw new Exception("Canal de notificación desconocido: {$channel}");
+      throw new NotFoundException("Unknown channel {$channel}");
     }
   }
 
   private function _getEventType($eventCode, $locale){
     $stmt = $this->db->prepare("SELECT nec.EventTypeID, net.Code,
       net.Description, nec.Channel, nec.Enabled, nec.IsCritical,
-      nec.FallbackAfterSeconds, nec.DailyCap,
+      nec.FallbackAfterSeconds, nec.MaxAttempts,
       nt.ID as TemplateID, nt.Locale,
       nt.Subject as TemplateSubject, nt.Body as TemplateBody
       FROM NotificationsEventChannel AS nec

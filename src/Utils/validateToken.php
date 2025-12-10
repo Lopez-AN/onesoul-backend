@@ -8,12 +8,6 @@
  *
  * @param  string $url: URL con parámetros para validar el token
  * @return object|false: datos decodificados o false si falla
- *
- * @example
- * $result = validateToken('https://www.google.com/recaptcha/api/siteverify?secret=XXX&response=YYY');
- * if ($result) {
- *   echo $result->success; // true o false
- * }
  **/
 function validateToken($url) {
   $ch = curl_init();

@@ -8,7 +8,6 @@ use App\Models\Subscription;
 use App\Models\User;
 use App\Models\Auth;
 use App\Models\StripeService;
-use App\Utils\EmailHelper;
 use Firebase\JWT\JWT;
 
 class SubscriptionController {

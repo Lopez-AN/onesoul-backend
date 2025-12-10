@@ -2,7 +2,6 @@
 
 use App\Utils\EmailHelper;
 use App\Models\Notification;
-#use App\Utils\NotificationChannels;
 
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
@@ -15,6 +14,8 @@ if (php_sapi_name() !== 'cli') {
 }
 
 require ROOT.'/vendor/autoload.php';
+
+define("PENDING_ONLY", true);
 
 # Leo la config
 $GLOBALS['config'] = @json_decode(file_get_contents(ROOT.'/config/config.json'),true);
@@ -33,7 +34,7 @@ try {
 
 # Instanciar y ejectuar el worker
 $worker = new NotificationWorker($pdo, new Notification($pdo));
-$worker->run();
+$worker->run($argv[1] ?? null);
 
 
 class NotificationWorker {
@@ -45,91 +46,73 @@ class NotificationWorker {
     $this->db = $db;
   }
 
-  public function run() {
-    echo "📢 NotificationWorker iniciado...\n";
+  public function run($notificationID = null) {
+    print("📢 NotificationWorker iniciado...\n");
 
-    if(isset($argv[1]) && is_numeric($argv[1])){
-      $this->notify(intval($argv[1]));
+    if(!is_null($notificationID)){
+      $deliveries = $this->notification->getDeliveriesByNotificationId(intval($notificationID), PENDING_ONLY);
+      foreach($deliveries as $delivery){
+        $this->_sendChannel($delivery);
+      }
     }else{
-      $this->notifyAll();
-    }
-  }
+      while(1){
+        $delivery = $this->notification->getNextDelivery();
+        # Si ya no hay mas envios o entro en un loop salgo
+        if(!$delivery || ($id ?? -1) === $delivery['DeliveryID']){
+          break;
+        }
+        $id = $delivery['DeliveryID'];
 
-  public function notifyAll(){
-    while(1){
-      $delivery = $this->notification->getNextDelivery();
-      $channel = $delivery['Channel'] ?? null;
-      if(is_null($channel)){
-        break;
-      }
-
-      switch($channel){
-        case 'EMAIL':
-          $this->_email($delivery);
-        break;
-        case 'WHATSAPP':
-          $this->_whatsapp($delivery);
-        break;
+        $this->_sendChannel($delivery);
       }
     }
   }
 
-  public function notify($notificationID) {
-    echo "📢 NotificationWorker iniciado 2...\n";
-
-    $deliveries = $this->notification->getDeliveriesByNotificationId($notificationID);
-    foreach($deliveries as $d){
-      print_r($d);
+  private function _sendChannel($delivery){
+    $channel = $delivery['Channel'] ?? null;
+    if(is_null($channel)){
+      return;
+    }
+    switch($channel){
+      case 'EMAIL':
+        $this->_email($delivery);
+      break;
+      case 'WHATSAPP':
+        $this->_whatsapp($delivery);
+      break;
     }
   }
 
   private function _email($delivery){
-    print_r($delivery);
+    try{
+      $emailAddress = $this->notification->getRecipientAddress($delivery['RecipientUserID'], "EMAIL");
+      $result = EmailHelper::send(
+        $emailAddress,
+        $delivery['RenderedSubject'],
+        $delivery['RenderedBody']
+      );
+      if($result->sent){
+        $this->notification->markJobAsSent($delivery['DeliveryID']);
+        print("[EMAIL] Delivery {$delivery['DeliveryID']} SUCCESS\n");
+      }else{
+        if($delivery['Attempts'] + 1 >= ($delivery['MaxAttemps'] ?? 3)){
+          $this->notification->markJobAsFailed($delivery['DeliveryID']);
+          print("[EMAIL] Delivery {$delivery['DeliveryID']} FAILED: {$result->error->getMessage()}\n");
+        }else{
+          $this->notification->requeueJob($delivery['DeliveryID'], $delivery['FallbackAfterSeconds'] ?? 300);
+          print("[EMAIL] Delivery {$delivery['DeliveryID']} REQUEUED: {$result->error->getMessage()}\n");
+        }
+      }
+    } catch (\Throwable $e) {
+      # Lo marco como fallido
+      $this->notification->markJobAsFailed($delivery['DeliveryID']);
+      print("[EMAIL] Delivery {$delivery['DeliveryID']} FAILED: {$e->getMessage()}\n");
+    }
   }
 
   private function _whatsapp($delivery){
-    print_r($delivery);
+    print("WHATSAPP NO IMPLEMENTADO\n");
+    $this->notification->markDeliveryAsSent($delivery['DeliveryID']);
   }
 }
-
-//   public function run() {
-
-
-//     while (true) {
-//       # Traer el próximo job pendiente
-//       $job = $this->notification->getNextJob();
-
-//       if (!$job) {
-//         sleep(1); # nada pendiente, esperar
-//         continue;
-//       }
-
-//       $jobId     = $job['JobID'];
-//       $channel   = $job['Channel'];
-//       $message   = $job['Message'];
-//       $recipient = $job['Recipient'];
-//       $attempt   = (int) $job['Attempt'];
-
-//       echo "🔔 Procesando Job #$jobId ($channel → $recipient, intento $attempt)\n";
-
-//       $ok = $this->channels->sendNotificationByChannel($channel, $message, $recipient, $attempt);
-
-//       if ($ok) {
-//         echo "✅ Enviado con éxito por $channel\n";
-//         $this->notification->markJobAsSuccess($jobId);
-//       } else {
-//         if ($attempt < 3) {
-//           $nextAttempt = $attempt + 1;
-//           $delay = pow(2, $attempt); # backoff: 2, 4, 8 segundos
-
-//           echo "⚠️ Falló, reintentando en $delay segundos (intento $nextAttempt)\n";
-//           $this->notification->requeueJob($jobId, $nextAttempt, $delay);
-//         } else {
-//           echo "❌ Falló definitivamente tras 3 intentos\n";
-//           $this->notification->markJobAsFailed($jobId);
-//         }
-//       }
-//     }
-//   }
-// }
 

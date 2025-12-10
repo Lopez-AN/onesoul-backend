@@ -2,10 +2,9 @@
 namespace App\Utils;
 
 use PHPMailer\PHPMailer\PHPMailer;
-use PHPMailer\PHPMailer\Exception;
 
 class EmailHelper {
-  public static function send($toName, $toEmail, $subject, $template) {
+  public static function send($toEmail, $subject, $template) {
     $smtpAccount = $GLOBALS['config']['mailer']['account'];
     $smtpPassword = $GLOBALS['config']['mailer']['password'];
 
@@ -23,20 +22,20 @@ class EmailHelper {
       $mail->Encoding = 'base64';
 
       $mail->setFrom($smtpAccount, 'Contacto OneSoul');
-      $mail->addAddress($toEmail, $toName);
+      $mail->addAddress($toEmail);
 
       $mail->AddEmbeddedImage(ROOT.'/src/Templates/logo.png', 'logo');
       $mail->isHTML(true);
       $mail->Subject = $subject;
-      $mail->Body = $html;
+      $mail->Body = $template;
 
       $mail->send();
       return (object)[
-        "success" => true
+        "sent" => true
       ];
-    } catch (Exception $e) {
+    } catch (\Throwable $e) {
       return (object)[
-        "success" => false,
+        "sent" => false,
         "error" => $e
       ];
     }

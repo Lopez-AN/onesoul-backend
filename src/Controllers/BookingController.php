@@ -11,7 +11,6 @@ use App\Models\Offering;
 use App\Models\Notification;
 use App\Models\Donation;
 use App\Models\User;
-use App\Utils\EmailHelper;
 use DateTime;
 use Firebase\JWT\JWT;
 
@@ -669,22 +668,22 @@ class BookingController {
 
         # Enviar email al buscador
         if ($userEmail) {
-          EmailHelper::send(
-            $username,
-            $userEmail,
-            "Reserva modificada en OneSoul",
-            ROOT . "/src/Templates/email_booking_updated.html",
-            [
-              '{YEAR}' => date('Y'),
-              '{USERNAME}' => $username,
-              '{OFFERING}' => $offeringName,
-              '{BOOKING_ID}' => $booking['PublicID'],
-              '{MESSAGE}' => $message ?? '(El guía no agregó comentarios)',
-              '{SCHEDULED}' => date('d/m/Y H:i', strtotime($booking['ScheduledDate'])),
-              '{MODE}' => $booking['SessionType'] === 'in-person' ? 'Presencial' : 'Virtual',
-              '{BOOKING_URL}' => "{$origin}/bookings/seeker",
-            ]
-          );
+          // EmailHelper::send(
+          //   $username,
+          //   $userEmail,
+          //   "Reserva modificada en OneSoul",
+          //   ROOT . "/src/Templates/email_booking_updated.html",
+          //   [
+          //     '{YEAR}' => date('Y'),
+          //     '{USERNAME}' => $username,
+          //     '{OFFERING}' => $offeringName,
+          //     '{BOOKING_ID}' => $booking['PublicID'],
+          //     '{MESSAGE}' => $message ?? '(El guía no agregó comentarios)',
+          //     '{SCHEDULED}' => date('d/m/Y H:i', strtotime($booking['ScheduledDate'])),
+          //     '{MODE}' => $booking['SessionType'] === 'in-person' ? 'Presencial' : 'Virtual',
+          //     '{BOOKING_URL}' => "{$origin}/bookings/seeker",
+          //   ]
+          // );
         }
 
         # Enviar email al guía
@@ -700,25 +699,25 @@ class BookingController {
               $guideEmail = $guideInfo['Email'] ?? null;
 
               if ($guideEmail) {
-                EmailHelper::send(
-                  $guideName,
-                  $guideEmail,
-                  "Reserva modificada en OneSoul",
-                  ROOT . "/src/Templates/email_booking_updated_guide.html",
-                  [
-                    '{YEAR}' => date('Y'),
-                    '{GUIDE_NAME}' => $guideName,
-                    '{SERVICE_NAME}' => $offeringName,
-                    '{SEARCHER_NAME}' => $searcherName,
-                    '{SEARCHER_EMAIL}' => $userEmail,
-                    '{BOOKING_ID}' => $booking['PublicID'],
-                    '{MESSAGE}' => $message,
-                    '{SEARCHER_PHONE}' => $userInfo['Phone'] ?? '-',
-                    '{SCHEDULED}' => date('d/m/Y H:i', strtotime($booking['ScheduledDate'])),
-                    '{MODE}' => $booking['SessionType'] === 'in-person' ? 'Presencial' : 'Virtual',
-                    '{BOOKING_URL}' => "{$origin}/bookings/guide"
-                  ]
-                );
+                // EmailHelper::send(
+                //   $guideName,
+                //   $guideEmail,
+                //   "Reserva modificada en OneSoul",
+                //   ROOT . "/src/Templates/email_booking_updated_guide.html",
+                //   [
+                //     '{YEAR}' => date('Y'),
+                //     '{GUIDE_NAME}' => $guideName,
+                //     '{SERVICE_NAME}' => $offeringName,
+                //     '{SEARCHER_NAME}' => $searcherName,
+                //     '{SEARCHER_EMAIL}' => $userEmail,
+                //     '{BOOKING_ID}' => $booking['PublicID'],
+                //     '{MESSAGE}' => $message,
+                //     '{SEARCHER_PHONE}' => $userInfo['Phone'] ?? '-',
+                //     '{SCHEDULED}' => date('d/m/Y H:i', strtotime($booking['ScheduledDate'])),
+                //     '{MODE}' => $booking['SessionType'] === 'in-person' ? 'Presencial' : 'Virtual',
+                //     '{BOOKING_URL}' => "{$origin}/bookings/guide"
+                //   ]
+                // );
               }
             }
           }
@@ -839,20 +838,20 @@ class BookingController {
 
         # Enviar email al buscador
         if ($userEmail) {
-          EmailHelper::send(
-            $username,
-            $userEmail,
-            "La reserva {$booking['PublicID']} fue cancelada",
-            ROOT . "/src/Templates/email_booking_canceled.html",
-            [
-              '{YEAR}' => date('Y'),
-              '{USERNAME}' => $username,
-              '{OFFERING}' => $offeringName,
-              '{BOOKING_ID}' => $booking['PublicID'],
-              '{MESSAGE}' => $message,
-              '{BOOKING_URL}' => "{$origin}/bookings/seeker",
-            ]
-          );
+          // EmailHelper::send(
+          //   $username,
+          //   $userEmail,
+          //   "La reserva {$booking['PublicID']} fue cancelada",
+          //   ROOT . "/src/Templates/email_booking_canceled.html",
+          //   [
+          //     '{YEAR}' => date('Y'),
+          //     '{USERNAME}' => $username,
+          //     '{OFFERING}' => $offeringName,
+          //     '{BOOKING_ID}' => $booking['PublicID'],
+          //     '{MESSAGE}' => $message,
+          //     '{BOOKING_URL}' => "{$origin}/bookings/seeker",
+          //   ]
+          // );
         }
 
         # Enviar email al guía
@@ -868,23 +867,23 @@ class BookingController {
               $guideEmail = $guideInfo['Email'] ?? null;
 
               if ($guideEmail) {
-                EmailHelper::send(
-                  $guideName,
-                  $guideEmail,
-                  "La reserva {$booking['PublicID']} fue cancelada",
-                  ROOT . "/src/Templates/email_booking_canceled_guide.html",
-                  [
-                    '{YEAR}' => date('Y'),
-                    '{GUIDE_NAME}' => $guideName,
-                    '{SERVICE_NAME}' => $offeringName,
-                    '{BOOKING_ID}' => $booking['PublicID'],
-                    '{SEARCHER_NAME}' => $searcherName,
-                    '{SEARCHER_EMAIL}' => $userEmail,
-                    '{SEARCHER_PHONE}' => $userInfo['Phone'] ?? '-',
-                    '{MESSAGE}' => $message,
-                    '{BOOKING_URL}' => "{$origin}/bookings/guide"
-                  ]
-                );
+                // EmailHelper::send(
+                //   $guideName,
+                //   $guideEmail,
+                //   "La reserva {$booking['PublicID']} fue cancelada",
+                //   ROOT . "/src/Templates/email_booking_canceled_guide.html",
+                //   [
+                //     '{YEAR}' => date('Y'),
+                //     '{GUIDE_NAME}' => $guideName,
+                //     '{SERVICE_NAME}' => $offeringName,
+                //     '{BOOKING_ID}' => $booking['PublicID'],
+                //     '{SEARCHER_NAME}' => $searcherName,
+                //     '{SEARCHER_EMAIL}' => $userEmail,
+                //     '{SEARCHER_PHONE}' => $userInfo['Phone'] ?? '-',
+                //     '{MESSAGE}' => $message,
+                //     '{BOOKING_URL}' => "{$origin}/bookings/guide"
+                //   ]
+                // );
               }
             }
           }
@@ -996,22 +995,22 @@ class BookingController {
 
         # Enviar email al buscador
         if ($userEmail) {
-          EmailHelper::send(
-            $username,
-            $userEmail,
-            "La reserva {$booking['PublicID']} fue confirmada",
-            ROOT . "/src/Templates/email_booking_confirmed.html",
-            [
-              '{YEAR}' => date('Y'),
-              '{USERNAME}' => $username,
-              '{OFFERING}' => $offeringName,
-              '{BOOKING_ID}' => $booking['PublicID'],
-              '{SCHEDULED}' => $booking['ScheduledDate'] ? $booking['ScheduledDate'] : 'A confirmar',
-              '{MODE}' => $booking['SessionType'],
-              '{MESSAGE}' => $message ?? '(El guía no agregó comentarios)',
-              '{BOOKING_URL}' => "{$origin}/bookings/seeker",
-            ]
-          );
+          // EmailHelper::send(
+          //   $username,
+          //   $userEmail,
+          //   "La reserva {$booking['PublicID']} fue confirmada",
+          //   ROOT . "/src/Templates/email_booking_confirmed.html",
+          //   [
+          //     '{YEAR}' => date('Y'),
+          //     '{USERNAME}' => $username,
+          //     '{OFFERING}' => $offeringName,
+          //     '{BOOKING_ID}' => $booking['PublicID'],
+          //     '{SCHEDULED}' => $booking['ScheduledDate'] ? $booking['ScheduledDate'] : 'A confirmar',
+          //     '{MODE}' => $booking['SessionType'],
+          //     '{MESSAGE}' => $message ?? '(El guía no agregó comentarios)',
+          //     '{BOOKING_URL}' => "{$origin}/bookings/seeker",
+          //   ]
+          // );
         }
 
         # Enviar email al guía
@@ -1027,25 +1026,25 @@ class BookingController {
               $guideEmail = $guideInfo['Email'] ?? null;
 
               if ($guideEmail) {
-                EmailHelper::send(
-                  $guideName,
-                  $guideEmail,
-                  "La reserva {$booking['PublicID']} fue confirmada",
-                  ROOT . "/src/Templates/email_booking_confirmed_guide.html",
-                  [
-                    '{YEAR}' => date('Y'),
-                    '{GUIDE_NAME}' => $guideName,
-                    '{SERVICE_NAME}' => $offeringName,
-                    '{BOOKING_ID}' => $booking['PublicID'],
-                    '{SCHEDULED}' => $booking['ScheduledDate'] ? $booking['ScheduledDate'] : 'A confirmar',
-                    '{MODE}' => $booking['SessionType'],
-                    '{SEARCHER_NAME}' => $searcherName,
-                    '{SEARCHER_EMAIL}' => $userEmail,
-                    '{SEARCHER_PHONE}' => $userInfo['Phone'] ?? '-',
-                    '{MESSAGE}' => $message ?? '(El guía no agregó comentarios)',
-                    '{BOOKING_URL}' => "{$origin}/bookings/guide"
-                  ]
-                );
+                // EmailHelper::send(
+                //   $guideName,
+                //   $guideEmail,
+                //   "La reserva {$booking['PublicID']} fue confirmada",
+                //   ROOT . "/src/Templates/email_booking_confirmed_guide.html",
+                //   [
+                //     '{YEAR}' => date('Y'),
+                //     '{GUIDE_NAME}' => $guideName,
+                //     '{SERVICE_NAME}' => $offeringName,
+                //     '{BOOKING_ID}' => $booking['PublicID'],
+                //     '{SCHEDULED}' => $booking['ScheduledDate'] ? $booking['ScheduledDate'] : 'A confirmar',
+                //     '{MODE}' => $booking['SessionType'],
+                //     '{SEARCHER_NAME}' => $searcherName,
+                //     '{SEARCHER_EMAIL}' => $userEmail,
+                //     '{SEARCHER_PHONE}' => $userInfo['Phone'] ?? '-',
+                //     '{MESSAGE}' => $message ?? '(El guía no agregó comentarios)',
+                //     '{BOOKING_URL}' => "{$origin}/bookings/guide"
+                //   ]
+                // );
               }
             }
           }

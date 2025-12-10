@@ -12,6 +12,8 @@ use App\Utils\ParameterValidator;
 #Definir zona horaria
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 
+define("ALL_STATUS", false);
+
 class NotificationController{
 
   protected $notification;
@@ -153,7 +155,6 @@ class NotificationController{
 
   public function getDeliveriesByNotificationId(Request $request, Response $response, $args) {
     $params['NotificationID'] = $args['NotificationID'];
-    $paginator = paginator($request);
     $jwt = $request->getAttribute('jwt');
 
     # Si no es admin solo puede recibir deliverys propios
@@ -166,7 +167,7 @@ class NotificationController{
     $params = $pValidation->values;
 
     try {
-      $deliveries = $this->notification->getDeliveriesByNotificationId($paginator, $params['NotificationID'], $recipientID);
+      $deliveries = $this->notification->getDeliveriesByNotificationId($params['NotificationID'], ALL_STATUS, $recipientID);
       if(!$deliveries){
         return $response->withStatus(404)->withJson([
           "error" => [

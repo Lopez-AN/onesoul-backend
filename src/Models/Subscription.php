@@ -397,19 +397,19 @@ class Subscription {
 
         # Enviar email
         if ($email) {
-          EmailHelper::send(
-          $username,
-          $email,
-          "¡Suscripción activada en OneSoul! 🎉",
-          ROOT . "/src/Templates/email_subscription.html",
-            [
-              '{USERNAME}' => $username,
-              '{PLAN_NAME}' => $planInfo['Name'],
-              '{PLAN_PRICE}' => number_format($planInfo['Price'], 2) . ' ' . $planInfo['CurrencyCode'],
-              '{PLAN_DURATION}' => $planInfo['Duration'] . " mes",
-              '{DASHBOARD_URL}' => $dashboardURL
-            ]
-          );
+          // EmailHelper::send(
+          // $username,
+          // $email,
+          // "¡Suscripción activada en OneSoul! 🎉",
+          // ROOT . "/src/Templates/email_subscription.html",
+          //   [
+          //     '{USERNAME}' => $username,
+          //     '{PLAN_NAME}' => $planInfo['Name'],
+          //     '{PLAN_PRICE}' => number_format($planInfo['Price'], 2) . ' ' . $planInfo['CurrencyCode'],
+          //     '{PLAN_DURATION}' => $planInfo['Duration'] . " mes",
+          //     '{DASHBOARD_URL}' => $dashboardURL
+          //   ]
+          // );
         }
       }
 
