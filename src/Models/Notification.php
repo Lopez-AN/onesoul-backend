@@ -274,7 +274,7 @@ class Notification  {
 
     $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS nd.NotificationID,
       nd.RenderedSubject as Subject, nd.RenderedBody as Body,
-      nd.Status
+      nd.Status, n.CreatedAt
       FROM Notifications as n
       INNER JOIN NotificationsDelivery as nd
         ON n.ID = nd.NotificationID

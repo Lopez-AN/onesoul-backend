@@ -395,16 +395,19 @@ class BookingController {
         # Notificación para el guía
         $payloadGuide = [
           "YEAR"          => date('Y'),
-          "GUIDE_NAME"    => $guide['UserName'] ?? 'Guía',
+          "GUIDE_NAME"    => $guide['UserName'],
           "BOOKING_ID"    => $booking['PublicID'],
-          "SERVICE_NAME"  => $offering['Title'] ?? 'Servicio',
-          "SEARCHER_NAME" => $seeker['FirstName'] && $seeker['LastName'] ?
+          "OFFERING_ID"   => $params['OfferingID'],
+          "OFFERING_TITLE"  => $offering['Title'],
+          'OFFERING_IMG'  => isset($offering['Media']['Images'][0]['Url'])
+            ? $offering['Media']['Images'][0]['Url'] : '',
+          "SEEKER_NAME" => $seeker['FirstName'] && $seeker['LastName'] ?
             $seeker['FirstName'].' '.$seeker['LastName'] : 'No indicado',
-          "SEARCHER_EMAIL"=> $seeker['Email'],
-          "SEARCHER_PHONE"=> $seeker['Phone'] ?? '-',
+          "SEEKER_EMAIL"=> $seeker['Email'],
+          "SEEKER_PHONE"=> $seeker['Phone'] ?? '-',
           "MESSAGE"       => $params['Message'],
           "SCHEDULED"     => $params['ScheduledDate']?->format('d/m/Y H:i') ?? "A convenir",
-          "MODE"          => $booking['SessionType'] === 'in-person' ? 'Presencial' : 'Virtual',
+          "SESSION_TYPE"  => $booking['SessionType'] === 'in-person' ? 'Presencial' : 'Virtual',
           "PRICE"         => $offering['Currency'].' '.$price,
           "BOOKING_URL"   => "{$origin}/bookings/guide"
         ];
@@ -416,19 +419,22 @@ class BookingController {
         );
         # Notificación para el buscador
         $payloadSeeker = [
-          "YEAR"        => date('Y'),
-          "USERNAME"    => $seeker['UserName'],
-          "OFFERING"    => $offering['Title'],
-          "GUIDE_NAME"  => $guide['FirstName'].' '.$guide['LastName'],
-          "GUIDE_EMAIL" => $guide['Email'],
-          "GUIDE_PHONE" => $guide['Phone'],
-          "SCHEDULED"   => $params['ScheduledDate']?->format('d/m/Y H:i') ?? "A convenir",
-          "MODE"        => $booking['SessionType'] === 'in-person' ? 'Presencial' : 'Virtual',
-          "PRICE"       => $offering['Currency'].' '.$price,
-          "CONDITIONS"  => $conditions,
-          "BOOKING_ID"  => $booking['PublicID'],
-          "MESSAGE"     => $params['Message'],
-          "BOOKING_URL" => "{$origin}/bookings/user"
+          "YEAR"         => date('Y'),
+          "SEEKER_USERNAME"     => $seeker['UserName'],
+          "OFFERING_ID"  => $params['OfferingID'],
+          "OFFERING_TITLE"    => $offering['Title'],
+          'OFFERING_IMG' => isset($offering['Media']['Images'][0]['Url'])
+            ? $offering['Media']['Images'][0]['Url'] : '',
+          "GUIDE_NAME"   => $guide['FirstName'].' '.$guide['LastName'],
+          "GUIDE_EMAIL"  => $guide['Email'],
+          "GUIDE_PHONE"  => $guide['Phone'],
+          "SCHEDULED"    => $params['ScheduledDate']?->format('d/m/Y H:i') ?? "A convenir",
+          "SESSION_TYPE" => $booking['SessionType'] === 'in-person' ? 'Presencial' : 'Virtual',
+          "PRICE"        => $offering['Currency'].' '.$price,
+          "CONDITIONS"   => $conditions,
+          "BOOKING_ID"   => $booking['PublicID'],
+          "MESSAGE"      => $params['Message'],
+          "BOOKING_URL"  => "{$origin}/bookings/user"
         ];
         $this->notification->createNotification(
           $seekerID,
@@ -760,11 +766,14 @@ class BookingController {
         # Notificación para el guia
         $payloadGuide = [
           "YEAR"           => date('Y'),
-          "USERNAME"       => $seeker['UserName'],
-          "SERVICE_NAME"   => $offering['Title'],
-          "SEARCHER_NAME"  => $seeker['FirstName'].' '.$seeker['LastName'],
-          "SEARCHER_PHONE" => $seeker['Phone'] ?? '-',
-          "SEARCHER_EMAIL" => $seeker['Email'],
+          "OFFERING_ID"   => $offering['OfferingID'],
+          "OFFERING_TITLE"   => $offering['Title'],
+          'OFFERING_IMG'  => isset($offering['Media']['Images'][0]['Url'])
+            ? $offering['Media']['Images'][0]['Url'] : null,
+          "SEEKER_USERNAME"       => $seeker['UserName'],
+          "SEEKER_NAME"  => $seeker['FirstName'].' '.$seeker['LastName'],
+          "SEEKER_EMAIL" => $seeker['Email'],
+          "SEEKER_PHONE" => $seeker['Phone'] ?? '-',
           "BOOKING_ID"     => $booking['PublicID'],
           "MESSAGE"        => $params['Message'],
           "BOOKING_URL"    => "{$origin}/bookings/guide"
@@ -778,8 +787,11 @@ class BookingController {
         # Notificación para el buscador
         $payloadSeeker = [
           "YEAR"        => date('Y'),
-          "USERNAME"    => $seeker['UserName'],
-          "OFFERING"    => $offering['Title'],
+          "SEEKER_USERNAME"    => $seeker['UserName'],
+          "OFFERING_ID"   => $offering['OfferingID'],
+          "OFFERING_TITLE"    => $offering['Title'],
+          'OFFERING_IMG'  => isset($offering['Media']['Images'][0]['Url'])
+            ? $offering['Media']['Images'][0]['Url'] : null,
           "BOOKING_ID"  => $booking['PublicID'],
           "MESSAGE"     => $params['Message'],
           "BOOKING_URL" => "{$origin}/bookings/seeker"
