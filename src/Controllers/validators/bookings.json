@@ -37,10 +37,6 @@
       "required": false,
       "type": "string",
       "regex": "/^[a-zA-Z]{1,15}+$/"
-    },
-    "ScheduledDate": {
-      "required": true,
-      "type": "datetime"
     }
   },
   "cancel_booking": {
