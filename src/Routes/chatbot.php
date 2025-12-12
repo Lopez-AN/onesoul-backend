@@ -15,7 +15,11 @@ return function (App $app) {
 
   $optionalJwt = new JwtTokenMiddleware($jwtMiddleware, JwtValidationMode::OPTIONAL);
 
-  $chatbotController = new ChatbotController();
+  $pdo = $app->getContainer()->get('pdo');
+  $redis = $app->getContainer()->get('redis'); # Base de datos en RAM
 
-  // $app->get('/categories', [$categoryController, 'getCategories']);
+  $chatbot = new Chatbot($pdo);
+  $chatbotController = new ChatbotController($chatbot, $redis);
+
+  $app->post('/chatbot/message', [$chatbotController, 'sendMessage']);
 };

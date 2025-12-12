@@ -14,6 +14,23 @@ class Notification  {
     $this->db = $db;
   }
 
+  /**
+   * Crea una nueva notificación y sus entregas asociadas en los canales configurados
+   *
+   * Inserta la notificación en la tabla Notifications y crea las entregas (deliveries)
+   * correspondientes según los canales habilitados para el tipo de evento. Los canales
+   * IN_APP siempre se envían, mientras que EMAIL, WHATSAPP y SMS dependen de las
+   * preferencias del usuario. Si la notificación es crítica, se envía inmediatamente
+   * mediante un worker en background.
+   *
+   * @param int $recipientUserID ID del usuario destinatario de la notificación
+   * @param string $eventCode Código del evento que dispara la notificación
+   * @param array $payload Datos variables para renderizar en las plantillas
+   * @param string $idempotencyKey Clave única para evitar notificaciones duplicadas
+   * @return array Lista de entregas (deliveries) creadas
+   * @throws NotFoundException Si el usuario o el tipo de evento no existen
+   * @throws DatabaseException Si falla alguna operación de base de datos
+   */
   public function createNotification($recipientUserID, $eventCode, $payload, $idempotencyKey) {
     try {
       $this->db->beginTransaction(); # Iniciar transacción
@@ -99,7 +116,17 @@ class Notification  {
     }
   }
 
-  # Obtener la próxima entrega, (lo trae el worker por CRON)
+  /**
+   * Obtiene la próxima entrega pendiente de envío
+   *
+   * Recupera la entrega con mayor prioridad que esté en estado 'Queued' o 'Requeued'
+   * y que haya cumplido su tiempo de espera (NextAttemptAt). Se ordenan por criticidad,
+   * fecha de creación y orden de envío. Excluye entregas IN_APP ya que se manejan
+   * de forma diferente. Utilizado por el worker de notificaciones vía CRON.
+   *
+   * @param int|null $recipientID ID del usuario destinatario (opcional, para filtrar por usuario)
+   * @return array|false Datos de la entrega o false si no hay entregas pendientes
+   */
   public function getNextDelivery($recipientID = null) {
     $w = ""; # Condiciones extra
     $params = [];
@@ -128,6 +155,13 @@ class Notification  {
     return $stmt->fetch(PDO::FETCH_ASSOC);
   }
 
+  /**
+   * Obtiene una entrega específica por su ID
+   *
+   * @param int $deliveryID ID de la entrega a consultar
+   * @param int|null $recipientID ID del usuario destinatario (opcional, para validar permisos)
+   * @return array Datos completos de la entrega o array vacío si no existe
+   */
   public function getDeliveryById($deliveryID, $recipientID = null) {
     $w = ""; # Condiciones extra
     $params = [$deliveryID];
@@ -155,6 +189,14 @@ class Notification  {
     return $stmt->fetch(PDO::FETCH_ASSOC) ?? [];
   }
 
+  /**
+   * Obtiene todas las entregas asociadas a una notificación específica
+   *
+   * @param int $notificationID ID de la notificación
+   * @param DeliveriesMode $deliveriesMode Modo de filtrado (ALL, PENDING, etc.)
+   * @param int|null $recipientID ID del usuario destinatario (opcional, para validar permisos)
+   * @return array Lista de entregas asociadas a la notificación
+   */
   public function getDeliveriesByNotificationId($notificationID, DeliveriesMode $deliveriesMode, $recipientID = null) {
     $w = ""; # Condiciones extra
     $params = [$notificationID];
@@ -186,6 +228,14 @@ class Notification  {
     return $stmt->fetchAll(PDO::FETCH_ASSOC) ?? [];
   }
 
+  /**
+   * Obtiene entregas filtradas por canal de comunicación con paginación
+   *
+   * @param object $paginator Objeto con parámetros de paginación
+   * @param string $channel Canal de comunicación (EMAIL, WHATSAPP, SMS)
+   * @param int|null $recipientID ID del usuario destinatario (opcional, para filtrar por usuario)
+   * @return array Array con 'data' (entregas) y 'rows' (total y cantidad obtenida)
+   */
   public function getDeliveriesByChannel($paginator, $channel, $recipientID = null) {
     $w = ""; # Condiciones extra
     $params = [$channel];
@@ -223,6 +273,13 @@ class Notification  {
     ];
   }
 
+  /**
+   * Obtiene todas las entregas de un usuario específico con paginación
+   *
+   * @param object $paginator Objeto con parámetros de paginación
+   * @param int $recipientID ID del usuario destinatario
+   * @return array Array con 'data' (entregas) y 'rows' (total y cantidad obtenida)
+   */
   public function getDeliveriesByRecipient($paginator, $recipientID) {
     $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS nd.ID as DeliveryID,
       n.RecipientUserID, nd.NotificationID, net.Code, n.IdempotencyKey, n.CreatedAt,
@@ -253,7 +310,19 @@ class Notification  {
     ];
   }
 
-  # Obtener In-App no leídas
+  /**
+   * Obtiene notificaciones in-app de un usuario con filtros opcionales
+   *
+   * Permite filtrar por rango de IDs, límite de resultados y estado de lectura.
+   * Las notificaciones se devuelven ordenadas por fecha de creación descendente.
+   *
+   * @param int $recipientID ID del usuario destinatario
+   * @param int|null $from ID mínimo de notificación (opcional)
+   * @param int|null $to ID máximo de notificación (opcional)
+   * @param int|null $limit Cantidad máxima de resultados (opcional, default 1000)
+   * @param string $list Filtro por estado: 'all', 'unread', 'read'
+   * @return array Array con 'data' (notificaciones) y 'rows' (total y cantidad obtenida)
+   */
   public function getInAppNotifications($recipientID, $from, $to, $limit, $list) {
     $w = ""; # Condiciones extra
     $params = [$recipientID];
@@ -303,7 +372,16 @@ class Notification  {
     ];
   }
 
-  # Marcar como leída
+  /**
+   * Marca notificaciones in-app como leídas
+   *
+   * Actualiza el estado de las entregas IN_APP a 'Sent' dentro del rango de IDs especificado
+   *
+   * @param int $recipientID ID del usuario destinatario
+   * @param int $from ID mínimo de notificación a marcar
+   * @param int $to ID máximo de notificación a marcar
+   * @return int Cantidad de notificaciones actualizadas
+   */
   public function markInAppNotifications($recipientID, $from, $to) {
     $stmt = $this->db->prepare("UPDATE NotificationsDelivery as nd
       INNER JOIN Notifications as n
@@ -315,6 +393,14 @@ class Notification  {
     return $stmt->rowCount();
   }
 
+  /**
+   * Obtiene la plantilla de notificación para un evento, canal y locale específicos
+   *
+   * @param int $eventTypeID ID del tipo de evento
+   * @param string $channel Canal de comunicación (EMAIL, WHATSAPP, SMS, IN_APP)
+   * @param string $locale Código de idioma (default: 'es')
+   * @return array|false Datos de la plantilla o false si no existe
+   */
   private function getTemplate($eventTypeID, $channel, $locale = 'es') {
     $stmt = $this->db->prepare("SELECT * FROM NotificationsTemplate
       WHERE EventTypeID = ? AND Channel = ? AND Locale = ?");
@@ -322,6 +408,16 @@ class Notification  {
     return $stmt->fetch();
   }
 
+  /**
+   * Renderiza una plantilla reemplazando variables con valores del payload
+   *
+   * Soporta sintaxis {{KEY}} y {KEY} para variables. También incluye variables
+   * predefinidas como {{YEAR}}. Los arrays se convierten en strings separados por comas.
+   *
+   * @param string $template Plantilla con variables a reemplazar
+   * @param array $payload Datos para reemplazar en la plantilla
+   * @return string|null Plantilla renderizada o null si la plantilla es vacía
+   */
   private function renderTemplate($template, $payload) {
     if (!$template) return null;
 
@@ -339,7 +435,15 @@ class Notification  {
     return $rendered;
   }
 
-  # Marcar como enviado
+  /**
+   * Marca una entrega como enviada exitosamente
+   *
+   * Actualiza el estado a 'Sent', incrementa el contador de intentos y registra
+   * la fecha/hora del último intento
+   *
+   * @param int $deliveryID ID de la entrega
+   * @return void
+   */
   public function markDeliveryAsSent($deliveryID) {
     $stmt = $this->db->prepare("UPDATE NotificationsDelivery
       SET Status = 'Sent', Attempts = Attempts + 1, LastAttemptAt = NOW()
@@ -347,7 +451,15 @@ class Notification  {
     $stmt->execute([$deliveryID]);
   }
 
-  # Marcar como fallo definitivo
+  /**
+   * Marca una entrega como fallida definitivamente
+   *
+   * Actualiza el estado a 'Failed', incrementa el contador de intentos y registra
+   * la fecha/hora del último intento. Se usa cuando se agotaron todos los reintentos.
+   *
+   * @param int $deliveryID ID de la entrega
+   * @return void
+   */
   public function markDeliveryAsFailed($deliveryID) {
     $stmt = $this->db->prepare("UPDATE NotificationsDelivery
       SET Status = 'Failed', Attempts = Attempts + 1, LastAttemptAt = NOW()
@@ -355,7 +467,16 @@ class Notification  {
     $stmt->execute([$deliveryID]);
   }
 
-  # Reencolar job con delay y nuevo intento
+  /**
+   * Reencola una entrega con un delay para reintento
+   *
+   * Actualiza el estado a 'Requeued', incrementa el contador de intentos, registra
+   * la fecha/hora del último intento y establece NextAttemptAt con el delay especificado
+   *
+   * @param int $deliveryID ID de la entrega
+   * @param int $delay Tiempo de espera en segundos antes del próximo intento
+   * @return void
+   */
   public function requeueDelivery($deliveryID, $delay) {
     $stmt = $this->db->prepare("UPDATE NotificationsDelivery
       SET Status = 'Requeued', Attempts = Attempts + 1, LastAttemptAt = NOW(),
@@ -368,9 +489,9 @@ class Notification  {
    * Obtiene la dirección de envío de un usuario según el canal
    *
    * @param int $recipientID ID del usuario destinatario
-   * @param string $channel Canal de notificación: "EMAIL", "PUSH", "WHATSAPP", etc.
-   * @return string Dirección o token de envío
-   * @throws Exception si no se encuentra la dirección
+   * @param string $channel Canal de notificación: "EMAIL", "WHATSAPP", etc.
+   * @return string Dirección o token de envío (email, teléfono, etc.)
+   * @throws NotFoundException Si no se encuentra la dirección para el canal especificado
    */
   public function getRecipientAddress($recipientID, $channel) {
     switch (strtoupper($channel)) {
@@ -399,6 +520,17 @@ class Notification  {
     }
   }
 
+  /**
+   * Obtiene los canales configurados y plantillas activas para un tipo de evento
+   *
+   * Recupera todos los canales habilitados para el evento especificado junto con
+   * sus plantillas activas en el locale indicado. Solo devuelve la versión más
+   * reciente de cada plantilla.
+   *
+   * @param string $eventCode Código del tipo de evento
+   * @param string $locale Código de idioma (ej: 'es', 'en')
+   * @return array Lista de canales con sus plantillas asociadas
+   */
   private function _getEventType($eventCode, $locale){
     $stmt = $this->db->prepare("SELECT nec.EventTypeID, net.Code,
       net.Description, nec.Channel, nec.Enabled, nec.IsCritical,
@@ -425,6 +557,15 @@ class Notification  {
     return $stmt->fetchAll();
   }
 
+  /**
+   * Obtiene las preferencias de notificación de un usuario
+   *
+   * Recupera los canales de comunicación habilitados por el usuario y su idioma
+   * preferido. Si no tiene preferencias configuradas, asume todos los canales habilitados.
+   *
+   * @param int $recipientUserID ID del usuario destinatario
+   * @return array|false Array con preferencias (Email, WhatsApp, SMS, Locale) o false si el usuario no existe
+   */
   private function _getUserNotificationSettings($recipientUserID){
     # Obtener preferencias de comunicacion del usuario
     $stmt = $this->db->prepare("SELECT un.Email, un.WhatsApp, un.SMS, us.PreferredLanguage

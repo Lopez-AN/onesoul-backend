@@ -19,7 +19,6 @@ return function (App $app) {
   $optionalJwt = new JwtTokenMiddleware($jwtMiddleware, JwtValidationMode::OPTIONAL);
   $requiredJwt = new JwtTokenMiddleware($jwtMiddleware, JwtValidationMode::REQUIRED);
 
-  // Obtener PDO del contenedor DI
   $pdo = $app->getContainer()->get('pdo');
   $redis = $app->getContainer()->get('redis'); # Base de datos en RAM
   $user = new User($pdo);

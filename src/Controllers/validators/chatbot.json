@@ -1,0 +1,10 @@
+{
+  "send_message": {
+    "Message": {
+      "required": true,
+      "type": "string",
+      "min": 10,
+      "maxlength": 1200
+    }
+  }
+}

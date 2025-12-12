@@ -20,6 +20,23 @@ class NotificationController{
     $this->user = $user;
   }
 
+  /**
+   * Crea una nueva notificación (endpoint administrativo)
+   *
+   * Permite a los administradores crear notificaciones manualmente para cualquier usuario.
+   * Valida que el usuario destinatario exista antes de crear la notificación.
+   *
+   * @param Request $request Objeto de request HTTP con los datos de la notificación en el body
+   * @param Response $response Objeto de response HTTP
+   * @param array $args Argumentos de ruta
+   * @return Response JSON con las entregas creadas o error
+   *
+   * @statusCode 200 Notificación creada exitosamente
+   * @statusCode 400 Parámetros inválidos
+   * @statusCode 403 Usuario no autorizado (requiere permisos de administrador)
+   * @statusCode 404 Usuario destinatario no encontrado
+   * @statusCode 500 Error interno del servidor
+   */
   public function createNotification(Request $request, Response $response, $args) {
     $params = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
@@ -71,6 +88,21 @@ class NotificationController{
     }
   }
 
+  /**
+   * Obtiene la próxima entrega pendiente de envío
+   *
+   * Utilizado por el worker de notificaciones. Los usuarios normales solo pueden
+   * obtener sus propias entregas, mientras que los administradores pueden obtener
+   * cualquier entrega pendiente.
+   *
+   * @param Request $request Objeto de request HTTP
+   * @param Response $response Objeto de response HTTP
+   * @param array $args Argumentos de ruta
+   * @return Response JSON con los datos de la entrega o null si no hay entregas pendientes
+   *
+   * @statusCode 200 Operación exitosa (puede devolver null si no hay entregas)
+   * @statusCode 500 Error interno del servidor
+   */
   public function getNextDelivery(Request $request, Response $response, $args) {
     $jwt = $request->getAttribute('jwt');
 
@@ -91,6 +123,22 @@ class NotificationController{
     }
   }
 
+  /**
+   * Obtiene una entrega específica por su ID
+   *
+   * Los usuarios normales solo pueden consultar sus propias entregas, mientras que
+   * los administradores pueden consultar cualquier entrega.
+   *
+   * @param Request $request Objeto de request HTTP
+   * @param Response $response Objeto de response HTTP
+   * @param array $args Argumentos de ruta con DeliveryID
+   * @return Response JSON con los datos de la entrega o error
+   *
+   * @statusCode 200 Entrega encontrada exitosamente
+   * @statusCode 400 Parámetros inválidos
+   * @statusCode 404 Entrega no encontrada
+   * @statusCode 500 Error interno del servidor
+   */
   public function getDeliveryById(Request $request, Response $response, $args) {
     $params['DeliveryID'] = $args['DeliveryID'];
     $jwt = $request->getAttribute('jwt');
@@ -126,6 +174,22 @@ class NotificationController{
     }
   }
 
+  /**
+   * Obtiene todas las entregas asociadas a una notificación
+   *
+   * Los usuarios normales solo pueden consultar entregas de sus propias notificaciones,
+   * mientras que los administradores pueden consultar cualquier notificación.
+   *
+   * @param Request $request Objeto de request HTTP
+   * @param Response $response Objeto de response HTTP
+   * @param array $args Argumentos de ruta con NotificationID
+   * @return Response JSON con la lista de entregas o error
+   *
+   * @statusCode 200 Entregas encontradas exitosamente
+   * @statusCode 400 Parámetros inválidos
+   * @statusCode 404 Notificación no encontrada
+   * @statusCode 500 Error interno del servidor
+   */
   public function getDeliveriesByNotificationId(Request $request, Response $response, $args) {
     $params['NotificationID'] = $args['NotificationID'];
     $jwt = $request->getAttribute('jwt');
@@ -161,6 +225,22 @@ class NotificationController{
     }
   }
 
+  /**
+   * Obtiene entregas filtradas por canal de comunicación
+   *
+   * Permite consultar todas las entregas de un canal específico (EMAIL, WHATSAPP, SMS).
+   * Los usuarios normales solo ven sus propias entregas, los administradores ven todas.
+   *
+   * @param Request $request Objeto de request HTTP con parámetros de paginación
+   * @param Response $response Objeto de response HTTP
+   * @param array $args Argumentos de ruta con Channel
+   * @return Response JSON con entregas paginadas o error
+   *
+   * @statusCode 200 Entregas encontradas exitosamente
+   * @statusCode 400 Parámetros inválidos (canal no válido)
+   * @statusCode 404 No se encontraron entregas para el canal especificado
+   * @statusCode 500 Error interno del servidor
+   */
   public function getDeliveriesByChannel(Request $request, Response $response, $args) {
     $params['Channel'] = strtoupper($args['Channel']);
     $paginator = paginator($request);
@@ -197,6 +277,23 @@ class NotificationController{
     }
   }
 
+  /**
+   * Obtiene todas las entregas de un usuario específico
+   *
+   * Los usuarios solo pueden consultar sus propias entregas, mientras que los
+   * administradores pueden consultar las entregas de cualquier usuario.
+   *
+   * @param Request $request Objeto de request HTTP con parámetros de paginación
+   * @param Response $response Objeto de response HTTP
+   * @param array $args Argumentos de ruta con RecipientID
+   * @return Response JSON con entregas paginadas o error
+   *
+   * @statusCode 200 Entregas encontradas exitosamente
+   * @statusCode 400 Parámetros inválidos
+   * @statusCode 403 Usuario no autorizado para ver entregas de otro usuario
+   * @statusCode 404 No se encontraron entregas para el usuario
+   * @statusCode 500 Error interno del servidor
+   */
   public function getDeliveriesByRecipient(Request $request, Response $response, $args) {
     $params['RecipientID'] = $args['RecipientID'];
     $paginator = paginator($request);
@@ -240,6 +337,21 @@ class NotificationController{
     }
   }
 
+  /**
+   * Obtiene las notificaciones in-app del usuario autenticado
+   *
+   * Permite filtrar por rango de IDs, límite de resultados y estado de lectura
+   * (leídas, no leídas, todas). Solo devuelve notificaciones del usuario actual.
+   *
+   * @param Request $request Objeto de request HTTP con query params opcionales (from, to, limit, list)
+   * @param Response $response Objeto de response HTTP
+   * @param array $args Argumentos de ruta
+   * @return Response JSON con notificaciones in-app y metadatos de paginación
+   *
+   * @statusCode 200 Notificaciones obtenidas exitosamente
+   * @statusCode 400 Parámetros inválidos
+   * @statusCode 500 Error interno del servidor
+   */
   public function getInAppNotifications(Request $request, Response $response, $args) {
     $queryParams = $request->getQueryParams();
     $jwt = $request->getAttribute('jwt');
@@ -274,6 +386,21 @@ class NotificationController{
     }
   }
 
+  /**
+   * Marca notificaciones in-app como leídas
+   *
+   * Actualiza el estado de las notificaciones in-app dentro del rango de IDs especificado
+   * para el usuario autenticado. Solo puede marcar sus propias notificaciones.
+   *
+   * @param Request $request Objeto de request HTTP con From y To en el body
+   * @param Response $response Objeto de response HTTP
+   * @param array $args Argumentos de ruta
+   * @return Response JSON con cantidad de notificaciones marcadas
+   *
+   * @statusCode 200 Notificaciones marcadas exitosamente
+   * @statusCode 400 Parámetros inválidos
+   * @statusCode 500 Error interno del servidor
+   */
   public function markInAppNotifications(Request $request, Response $response, $args) {
     $params = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
