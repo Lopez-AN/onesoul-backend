@@ -57,5 +57,48 @@
       "type": "string",
       "regex": "/^[a-zA-Z]{1,15}+$/"
     }
+  },
+  "confirm_booking": {
+    "BookingID": {
+      "required": true,
+      "type": "integer",
+      "min": 0,
+      "max": 999999999
+    },
+    "Message": {
+      "required": false,
+      "type": "string",
+      "min": 10,
+      "maxlength": 1200
+    },
+    "SubDomain": {
+      "required": false,
+      "type": "string",
+      "regex": "/^[a-zA-Z]{1,15}+$/"
+    }
+  },
+  "complete_booking": {
+    "BookingID": {
+      "required": true,
+      "type": "integer",
+      "min": 0,
+      "max": 999999999
+    },
+    "Message": {
+      "required": false,
+      "type": "string",
+      "min": 10,
+      "maxlength": 1200
+    },
+    "Rating": {
+      "required": true,
+      "type": "integer",
+      "min": 1,
+      "max": 5
+    },
+    "Fulfilled": {
+      "required": true,
+      "type": "boolean"
+    }
   }
 }
