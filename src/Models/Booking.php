@@ -203,7 +203,7 @@ class Booking {
         $data['SeekerID'],
         $data['SessionType'],
         $data['LocationID'],
-        $data['ScheduledDate'] -> format("YmdHis"),
+        $data['ScheduledDate']?->format("YmdHis") ?? null,
         $voucherID
       ]);
 
@@ -211,7 +211,7 @@ class Booking {
 
       $stmt = $this->db->prepare("INSERT INTO BookingStatus (BookingID, BookingEvent, ScheduledDate, Message)
         VALUES (?, 'Pending', ?, ?)");
-      $stmt->execute([$bookingID, $data['ScheduledDate'] -> format("YmdHis"), $data['Message']]);
+      $stmt->execute([$bookingID, $data['ScheduledDate']?->format("YmdHis") ?? null, $data['Message']]);
 
       if($voucherID){
         $stmt = $this->db->prepare("UPDATE DonationVouchers
