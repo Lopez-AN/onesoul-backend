@@ -12,7 +12,8 @@
     "aws/aws-sdk-php": "^3.339",
     "stripe/stripe-php": "^17.3",
     "predis/predis": "^3.2",
-    "php-di/php-di": "^7.1"
+    "php-di/php-di": "^7.1",
+    "twilio/sdk": "^8.9"
   },
   "autoload": {
     "psr-4": {

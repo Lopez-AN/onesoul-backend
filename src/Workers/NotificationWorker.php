@@ -4,6 +4,8 @@ use App\Utils\EmailHelper;
 use App\Models\Notification;
 use App\Enums\DeliveriesMode;
 
+use App\Services\TwilioService;
+
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
@@ -35,16 +37,18 @@ try {
 }
 
 # Instanciar y ejectuar el worker
-$worker = new NotificationWorker($pdo, new Notification($pdo));
+$worker = new NotificationWorker($pdo, new Notification($pdo), new TwilioService());
 $worker->run($argv[1] ?? null);
 
 
 class NotificationWorker {
   protected $notification;
+  protected $twilio;
   protected $db;
 
-  public function __construct(PDO $db, Notification $notification) {
+  public function __construct(PDO $db, Notification $notification, TwilioService $twilio) {
     $this->notification = $notification;
+    $this->twilio = $twilio;
     $this->db = $db;
   }
 
@@ -113,8 +117,35 @@ class NotificationWorker {
   }
 
   private function _whatsapp($delivery){
-    print("WHATSAPP NO IMPLEMENTADO\n");
-    $this->notification->markDeliveryAsSent($delivery['DeliveryID']);
+    try{
+      $phoneNumber = $this->notification->getRecipientAddress($delivery['RecipientUserID'], "WHATSAPP");
+
+      # Fix numeros argentinos
+      # ----------------------------
+      # Si el número empieza con +54 pero NO tiene +549, agregar el 9
+      if (preg_match('/^\+54(?!9)/', $phoneNumber)) {
+        $phoneNumber = preg_replace('/^\+54/', '+549', $phoneNumber);
+      }
+
+      $result = $this->twilio->sendWhatsApp($phoneNumber, $delivery['RenderedSubject'], $delivery['RenderedBody']);
+      print_r($result);
+      if($result->sent){
+        $this->notification->markDeliveryAsSent($delivery['DeliveryID']);
+        print("[WHATSAPP] Delivery {$delivery['DeliveryID']} SUCCESS\n");
+      }else{
+        if($delivery['Attempts'] + 1 >= ($delivery['MaxAttemps'] ?? 3)){
+          $this->notification->markDeliveryAsFailed($delivery['DeliveryID']);
+          print("[WHATSAPP] Delivery {$delivery['DeliveryID']} FAILED: {$result->error->getMessage()}\n");
+        }else{
+          $this->notification->requeueDelivery($delivery['DeliveryID'], $delivery['FallbackAfterSeconds'] ?? 300);
+          print("[WHATSAPP] Delivery {$delivery['DeliveryID']} REQUEUED: {$result->error->getMessage()}\n");
+        }
+      }
+    } catch (\Throwable $e) {
+      # Lo marco como fallido
+      $this->notification->markDeliveryAsFailed($delivery['DeliveryID']);
+      print("[WHATSAPP] Delivery {$delivery['DeliveryID']} FAILED: {$e->getMessage()}\n");
+    }
   }
 }
 

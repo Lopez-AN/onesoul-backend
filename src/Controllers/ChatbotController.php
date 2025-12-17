@@ -51,9 +51,12 @@ class ChatbotController {
     }
 
     $params = [
-      'query' => $params['Message'].' '.$GLOBALS['config']['chatbot']['prompt_append'],
+      'query' => $params['Message'],
+      'context' => $GLOBALS['config']['chatbot']['context'],
       'provider' => $GLOBALS['config']['chatbot']['provider'],
-      'temperature' => $GLOBALS['config']['chatbot']['temperature']
+      'model' => $GLOBALS['config']['chatbot']['model'],
+      'temperature' => $GLOBALS['config']['chatbot']['temperature'],
+      'max_tokens' => $GLOBALS['config']['chatbot']['max_tokens']
     ];
 
     $ch = curl_init($GLOBALS['config']['chatbot']['message_url']);
@@ -128,7 +131,7 @@ class ChatbotController {
       'grant_type' => 'client_credentials',
       'client_id' => $GLOBALS['config']['chatbot']['client_id'],
       'client_secret' => $GLOBALS['config']['chatbot']['secret'],
-      'scope' => $GLOBALS['config']['chatbot']['scope']
+      'scope' => $GLOBALS['config']['chatbot']['scope'],
     ];
 
     $ch = curl_init($GLOBALS['config']['chatbot']['token_url']);
