@@ -28,8 +28,7 @@ class User {
    **/
   public function getUsers($paginator) {
     $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName,
-    u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
-    u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
+    u.UserName, u.DisplayName, u.Email, u.Phone, u.DateOfBirth,
     u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth,
     u.MfaSecret, u.UserType, u.RegistrationDate, u.LastLogin, u.DeactivationDate,
     u.UserLevel, u.SignedContract, u.LegalDocuments, u.ShortDescription,
@@ -43,7 +42,25 @@ class User {
     (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
       FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
     (SELECT COUNT(DISTINCT r.ReviewID)
-      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
+      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews,
+    -- Subconsulta para locations
+    (SELECT JSON_ARRAYAGG(
+      JSON_OBJECT(
+        'Id', l.LocationID,
+        'Type', l.LocationType,
+        'IsPrimary', l.IsPrimary,
+        'CountryCode', l.CountryCode,
+        'State', l.State,
+        'City', l.City,
+        'Cp', l.Cp,
+        'LocationName', l.LocationName,
+        'AddressName', l.AddressName,
+        'AddressNumber', l.AddressNumber,
+        'Floor', l.Floor,
+        'Department', l.Department,
+        'IsActive', l.IsActive
+      )
+    ) FROM UserLocations as l WHERE l.UserID = u.UserID) as user_locations
     FROM Users AS u
     LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
     LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
@@ -57,6 +74,7 @@ class User {
       WHERE o.Status = 'Active'
       GROUP BY o.UserID
     ) AS sub ON sub.UserID = u.UserID
+    LEFT JOIN UserLocations as l ON u.UserID = l.UserID
     GROUP BY u.UserID
     ORDER BY u.UserID
     LIMIT ? OFFSET ?");
@@ -83,8 +101,7 @@ class User {
    **/
   public function getUsersByType($paginator, $userType) {
     $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName,
-    u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
-    u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
+    u.UserName, u.DisplayName, u.Email, u.Phone, u.DateOfBirth,
     u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth,
     u.MfaSecret, u.UserType, u.RegistrationDate, u.LastLogin, u.DeactivationDate,
     u.UserLevel, u.SignedContract, u.LegalDocuments, u.ShortDescription,
@@ -98,7 +115,25 @@ class User {
     (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
       FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
     (SELECT COUNT(DISTINCT r.ReviewID)
-      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
+      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews,
+    -- Subconsulta para locations
+    (SELECT JSON_ARRAYAGG(
+      JSON_OBJECT(
+        'Id', l.LocationID,
+        'Type', l.LocationType,
+        'IsPrimary', l.IsPrimary,
+        'CountryCode', l.CountryCode,
+        'State', l.State,
+        'City', l.City,
+        'Cp', l.Cp,
+        'LocationName', l.LocationName,
+        'AddressName', l.AddressName,
+        'AddressNumber', l.AddressNumber,
+        'Floor', l.Floor,
+        'Department', l.Department,
+        'IsActive', l.IsActive
+      )
+    ) FROM UserLocations as l WHERE l.UserID = u.UserID) as user_locations
     FROM Users AS u
     LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
     LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
@@ -150,8 +185,7 @@ class User {
       INNER JOIN category_tree ct ON c.ParentCategoryID = ct.CategoryID
     )
     SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName,
-    u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
-    u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
+    u.UserName, u.DisplayName, u.Email, u.Phone, u.DateOfBirth,
     u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth,
     u.MfaSecret, u.UserType, u.RegistrationDate, u.LastLogin, u.DeactivationDate,
     u.UserLevel, u.SignedContract, u.LegalDocuments, u.ShortDescription,
@@ -165,7 +199,25 @@ class User {
     (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
       FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
     (SELECT COUNT(DISTINCT r.ReviewID)
-      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
+      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews,
+    -- Subconsulta para locations
+    (SELECT JSON_ARRAYAGG(
+      JSON_OBJECT(
+        'Id', l.LocationID,
+        'Type', l.LocationType,
+        'IsPrimary', l.IsPrimary,
+        'CountryCode', l.CountryCode,
+        'State', l.State,
+        'City', l.City,
+        'Cp', l.Cp,
+        'LocationName', l.LocationName,
+        'AddressName', l.AddressName,
+        'AddressNumber', l.AddressNumber,
+        'Floor', l.Floor,
+        'Department', l.Department,
+        'IsActive', l.IsActive
+      )
+    ) FROM UserLocations as l WHERE l.UserID = u.UserID) as user_locations
     FROM Users AS u
     INNER JOIN UsersCategories AS uc ON uc.userID = u.userID
     INNER JOIN Categories AS c ON uc.CategoryID = c.CategoryID
@@ -210,8 +262,7 @@ class User {
     $searchQuery = "%$query%";
 
     $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName,
-    u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
-    u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
+    u.UserName, u.DisplayName, u.Email, u.Phone, u.DateOfBirth,
     u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth,
     u.MfaSecret, u.UserType, u.RegistrationDate, u.LastLogin, u.DeactivationDate,
     u.UserLevel, u.SignedContract, u.LegalDocuments, u.ShortDescription,
@@ -225,7 +276,25 @@ class User {
     (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
       FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
     (SELECT COUNT(DISTINCT r.ReviewID)
-      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
+      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews,
+    -- Subconsulta para locations
+    (SELECT JSON_ARRAYAGG(
+      JSON_OBJECT(
+        'Id', l.LocationID,
+        'Type', l.LocationType,
+        'IsPrimary', l.IsPrimary,
+        'CountryCode', l.CountryCode,
+        'State', l.State,
+        'City', l.City,
+        'Cp', l.Cp,
+        'LocationName', l.LocationName,
+        'AddressName', l.AddressName,
+        'AddressNumber', l.AddressNumber,
+        'Floor', l.Floor,
+        'Department', l.Department,
+        'IsActive', l.IsActive
+      )
+    ) FROM UserLocations as l WHERE l.UserID = u.UserID) as user_locations
     FROM Users AS u
     LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
     LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
@@ -277,8 +346,7 @@ class User {
     $wactive = $activeOnly ? " AND u.DeactivationDate IS NULL " : "";
 
     $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
-    u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
-    u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
+    u.UserName, u.DisplayName, u.Email, u.Phone, u.DateOfBirth,
     u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth,
     u.MfaSecret, u.UserType, u.RegistrationDate, u.LastLogin, u.DeactivationDate,
     u.UserLevel, u.SignedContract, u.LegalDocuments, u.ShortDescription,
@@ -292,7 +360,25 @@ class User {
     (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
       FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
     (SELECT COUNT(DISTINCT r.ReviewID)
-      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
+      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews,
+    -- Subconsulta para locations
+    (SELECT JSON_ARRAYAGG(
+      JSON_OBJECT(
+        'Id', l.LocationID,
+        'Type', l.LocationType,
+        'IsPrimary', l.IsPrimary,
+        'CountryCode', l.CountryCode,
+        'State', l.State,
+        'City', l.City,
+        'Cp', l.Cp,
+        'LocationName', l.LocationName,
+        'AddressName', l.AddressName,
+        'AddressNumber', l.AddressNumber,
+        'Floor', l.Floor,
+        'Department', l.Department,
+        'IsActive', l.IsActive
+      )
+    ) FROM UserLocations as l WHERE l.UserID = u.UserID) as user_locations
     FROM Users AS u
     LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
     LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
@@ -332,8 +418,7 @@ class User {
     $wactive = $activeOnly ? " AND u.DeactivationDate IS NULL " : "";
 
     $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
-    u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
-    u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
+    u.UserName, u.DisplayName, u.Email, u.Phone, u.DateOfBirth,
     u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth,
     u.MfaSecret, u.UserType, u.RegistrationDate, u.LastLogin, u.DeactivationDate,
     u.UserLevel, u.SignedContract, u.LegalDocuments, u.ShortDescription,
@@ -347,7 +432,25 @@ class User {
     (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
       FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
     (SELECT COUNT(DISTINCT r.ReviewID)
-      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
+      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews,
+    -- Subconsulta para locations
+    (SELECT JSON_ARRAYAGG(
+      JSON_OBJECT(
+        'Id', l.LocationID,
+        'Type', l.LocationType,
+        'IsPrimary', l.IsPrimary,
+        'CountryCode', l.CountryCode,
+        'State', l.State,
+        'City', l.City,
+        'Cp', l.Cp,
+        'LocationName', l.LocationName,
+        'AddressName', l.AddressName,
+        'AddressNumber', l.AddressNumber,
+        'Floor', l.Floor,
+        'Department', l.Department,
+        'IsActive', l.IsActive
+      )
+    ) FROM UserLocations as l WHERE l.UserID = u.UserID) as user_locations
     FROM Users AS u
     LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
     LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
@@ -387,8 +490,7 @@ class User {
     $wactive = $activeOnly ? " AND u.DeactivationDate IS NULL " : "";
 
     $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
-    u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
-    u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
+    u.UserName, u.DisplayName, u.Email, u.Phone, u.DateOfBirth,
     u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth,
     u.MfaSecret, u.UserType, u.RegistrationDate, u.LastLogin, u.DeactivationDate,
     u.UserLevel, u.SignedContract, u.LegalDocuments, u.ShortDescription,
@@ -402,7 +504,25 @@ class User {
     (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
       FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
     (SELECT COUNT(DISTINCT r.ReviewID)
-      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
+      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews,
+    -- Subconsulta para locations
+    (SELECT JSON_ARRAYAGG(
+      JSON_OBJECT(
+        'Id', l.LocationID,
+        'Type', l.LocationType,
+        'IsPrimary', l.IsPrimary,
+        'CountryCode', l.CountryCode,
+        'State', l.State,
+        'City', l.City,
+        'Cp', l.Cp,
+        'LocationName', l.LocationName,
+        'AddressName', l.AddressName,
+        'AddressNumber', l.AddressNumber,
+        'Floor', l.Floor,
+        'Department', l.Department,
+        'IsActive', l.IsActive
+      )
+    ) FROM UserLocations as l WHERE l.UserID = u.UserID) as user_locations
     FROM Users AS u
     LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
     LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
@@ -443,8 +563,7 @@ class User {
     $wactive = $activeOnly ? " AND u.DeactivationDate IS NULL " : "";
 
     $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
-    u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
-    u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
+    u.UserName, u.DisplayName, u.Email, u.Phone, u.DateOfBirth,
     u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth,
     u.MfaSecret, u.UserType, u.RegistrationDate, u.LastLogin, u.DeactivationDate,
     u.UserLevel, u.SignedContract, u.LegalDocuments, u.ShortDescription,
@@ -458,7 +577,25 @@ class User {
     (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
       FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
     (SELECT COUNT(DISTINCT r.ReviewID)
-      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
+      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews,
+    -- Subconsulta para locations
+    (SELECT JSON_ARRAYAGG(
+      JSON_OBJECT(
+        'Id', l.LocationID,
+        'Type', l.LocationType,
+        'IsPrimary', l.IsPrimary,
+        'CountryCode', l.CountryCode,
+        'State', l.State,
+        'City', l.City,
+        'Cp', l.Cp,
+        'LocationName', l.LocationName,
+        'AddressName', l.AddressName,
+        'AddressNumber', l.AddressNumber,
+        'Floor', l.Floor,
+        'Department', l.Department,
+        'IsActive', l.IsActive
+      )
+    ) FROM UserLocations as l WHERE l.UserID = u.UserID) as user_locations
     FROM Users AS u
     LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
     LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
@@ -498,8 +635,7 @@ class User {
     $wactive = $activeOnly ? " AND u.DeactivationDate IS NULL " : "";
 
     $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
-    u.UserName, u.DisplayName, u.Email, u.Phone, u.AddressName, u.AddressNumber,
-    u.Floor, u.Department, u.Cp, u.City, u.State, u.CountryCode, u.DateOfBirth,
+    u.UserName, u.DisplayName, u.Email, u.Phone, u.DateOfBirth,
     u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth,
     u.MfaSecret, u.UserType, u.RegistrationDate, u.LastLogin, u.DeactivationDate,
     u.UserLevel, u.SignedContract, u.LegalDocuments, u.ShortDescription,
@@ -513,7 +649,25 @@ class User {
     (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
       FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
     (SELECT COUNT(DISTINCT r.ReviewID)
-      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews
+      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews,
+    -- Subconsulta para locations
+    (SELECT JSON_ARRAYAGG(
+      JSON_OBJECT(
+        'Id', l.LocationID,
+        'Type', l.LocationType,
+        'IsPrimary', l.IsPrimary,
+        'CountryCode', l.CountryCode,
+        'State', l.State,
+        'City', l.City,
+        'Cp', l.Cp,
+        'LocationName', l.LocationName,
+        'AddressName', l.AddressName,
+        'AddressNumber', l.AddressNumber,
+        'Floor', l.Floor,
+        'Department', l.Department,
+        'IsActive', l.IsActive
+      )
+    ) FROM UserLocations as l WHERE l.UserID = u.UserID) as user_locations
     FROM Users AS u
     LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
     LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
@@ -552,7 +706,6 @@ class User {
       return false;
     }
 
-    $user['Floor'] = is_null($user['Floor']) ? null : (int)$user['Floor'];
     $user['UserLevel'] = !$user['UserLevel'] ? 1 : (int)$user['UserLevel'];
     $user['ValidatedEmail'] = (bool)$user['ValidatedEmail'];
     $user['ValidatedPhone'] = (bool)$user['ValidatedPhone'];
@@ -572,8 +725,13 @@ class User {
       "Virtual" => $user['hasVirtual'] === 1,
       "InPerson" => $user['hasInPerson'] === 1
     ];
-    unset($user['hasVirtual'],
-    $user['hasInPerson']);
+    unset($user['hasVirtual'], $user['hasInPerson']);
+
+    $locations = @json_decode($user['user_locations'], true);
+    if($locations){
+      $user['Locations'] = $locations;
+    }
+    unset($user['user_locations']);
 
     return $user;
   }
@@ -592,7 +750,6 @@ class User {
    **/
   private function _getUserGenericMulti($users, $total){
     $users = array_map(function ($e){
-      $e['Floor'] = is_null($e['Floor']) ? null : (int)$e['Floor'];
       $e['UserLevel'] = !$e['UserLevel'] ? 1 : (int)$e['UserLevel'];
       $e['ValidatedEmail'] = (bool)$e['ValidatedEmail'];
       $e['ValidatedPhone'] = (bool)$e['ValidatedPhone'];
@@ -614,6 +771,12 @@ class User {
       ];
 
       unset($e['hasVirtual'], $e['hasInPerson']);
+
+      $locations = @json_decode($e['user_locations'], true);
+      if($locations){
+        $e['Locations'] = $locations;
+      }
+      unset($e['user_locations']);
 
       return $e;
     }, $users);

@@ -12,21 +12,25 @@ class TwilioService{
     # Inicializo cliente de twilio
     $this->client = new Client($GLOBALS['config']['twilio']['sid'], $GLOBALS['config']['twilio']['token']);
   }
+
   /**
-   * Enviar WhatsApp
+   * Enviar WhatsApp usando Content Template (PRODUCCIÓN)
+   *
+   * @param string $to Número destino con código de país (+549...)
+   * @param string $templateSid SID del template aprobado (ej: HXxxxx...)
+   * @param array $variables Variables del template ['nombre', 'valor', ...]
+   * @param string $mediaUrl URL de imagen (opcional)
    */
-  public function sendWhatsApp($to, $subject, $body, $mediaUrl = null) {
+  public function sendWhatsAppTemplate($to, $templateSid, $variables = [], $mediaUrl = null) {
     try {
-      # Agregar prefijo whatsapp: si no lo tiene
       if (strpos($to, 'whatsapp:') !== 0) {
         $to = "whatsapp:$to";
       }
 
-      $templateSid = "HX657d04dbb5d124ca1c43b9b70d363b4c";
-
       $params = [
         'from' => "whatsapp:".$GLOBALS['config']['twilio']['number'],
-        'contentSid' => $templateSid
+        'contentSid' => $templateSid,
+        'contentVariables' => json_encode($variables)
       ];
 
       if ($mediaUrl) {
@@ -38,8 +42,7 @@ class TwilioService{
       return (object)[
         'sent' => true,
         'message_sid' => $result->sid,
-        'status' => $result->status,
-        'template_sid' => $templateSid
+        'status' => $result->status
       ];
     } catch (Exception $e) {
       return (object)[

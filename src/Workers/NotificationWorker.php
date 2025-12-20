@@ -127,8 +127,15 @@ class NotificationWorker {
         $phoneNumber = preg_replace('/^\+54/', '+549', $phoneNumber);
       }
 
-      $result = $this->twilio->sendWhatsApp($phoneNumber, $delivery['RenderedSubject'], $delivery['RenderedBody']);
-      print_r($result);
+      $template = $delivery['RenderedSubject'];
+      $params = json_decode($delivery['RenderedBody']);
+
+      $result = $this->twilio->sendWhatsAppTemplate(
+        $phoneNumber,
+        $template, # SID del template
+        $params # Parametros
+      );
+
       if($result->sent){
         $this->notification->markDeliveryAsSent($delivery['DeliveryID']);
         print("[WHATSAPP] Delivery {$delivery['DeliveryID']} SUCCESS\n");

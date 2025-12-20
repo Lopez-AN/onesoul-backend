@@ -86,8 +86,8 @@ class Notification  {
 
         # Insertar delivery
         $stmt = $this->db->prepare("INSERT INTO NotificationsDelivery
-          (NotificationID, Channel, TemplateID, RenderedSubject, RenderedBody, Status)
-          VALUES (?, ?, ?, ?, ?, ?)");
+          (NotificationID, Channel, TemplateID, RenderedSubject, RenderedBody, Status, LastAttemptAt)
+          VALUES (?, ?, ?, ?, ?, ?, ?)");
         $stmt->execute([
           $notificationID,
           $channel,
@@ -96,7 +96,8 @@ class Notification  {
           $body,
           /* Si el envio es critico le pongo estado processing
             para que no lo tome el cron justo cuando hago el envio */
-          $isCritical && $channel !== 'IN_APP' ? 'Processing' : 'Queued'
+          $isCritical && $channel !== 'IN_APP' ? 'Processing' : 'Queued',
+          $isCritical && $channel !== 'IN_APP' ? date('YmdHis') : null
         ]);
       }
 
@@ -136,20 +137,22 @@ class Notification  {
     }
 
     $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS nd.ID as DeliveryID,
-      n.RecipientUserID, nd.NotificationID, net.Code, n.IdempotencyKey, n.CreatedAt,
-      nd.Channel, nd.RenderedSubject, nd.RenderedBody, nd.Status, nec.IsCritical,
-      nec.FallbackAfterSeconds, nec.MaxAttempts, nd.Attempts, nd.NextAttemptAt, nd.LastAttemptAt
-      FROM Notifications as n
-      INNER JOIN NotificationsDelivery as nd
-        ON nd.NotificationID = n.ID
-      INNER JOIN NotificationsEventChannel as nec
-        ON nec.Channel = nd.Channel AND nec.EventTypeID = n.EventTypeID
-      INNER JOIN NotificationsEventType as net
-        ON net.ID = nec.EventTypeID
-      WHERE nd.Status IN ('Queued', 'Requeued') AND nec.Enabled AND nec.Channel <> 'IN_APP'
-      /* Este metodo no trae deliveries pospuestos por requeue hasta que se cumpla el plazo */
-      AND (nd.NextAttemptAt IS NULL OR  nd.NextAttemptAt < NOW()) $w
-		  ORDER BY nec.IsCritical DESC, n.CreatedAt ASC, nec.SendOrder ASC LIMIT 1");
+    n.RecipientUserID, nd.NotificationID, net.Code, n.IdempotencyKey, n.CreatedAt,
+    nd.Channel, nd.RenderedSubject, nd.RenderedBody, nd.Status, nec.IsCritical,
+    nec.FallbackAfterSeconds, nec.MaxAttempts, nd.Attempts, nd.NextAttemptAt, nd.LastAttemptAt
+    FROM Notifications as n
+    INNER JOIN NotificationsDelivery as nd
+      ON nd.NotificationID = n.ID
+    INNER JOIN NotificationsEventChannel as nec
+      ON nec.Channel = nd.Channel AND nec.EventTypeID = n.EventTypeID
+    INNER JOIN NotificationsEventType as net
+      ON net.ID = nec.EventTypeID
+    WHERE (nd.Status IN ('Queued', 'Requeued')
+    OR (nd.Status = 'Processing' AND NOW() > DATE_ADD(nd.LastAttemptAt, INTERVAL 120 SECOND)))
+    AND nec.Enabled AND nec.Channel <> 'IN_APP'
+    /* Este metodo no trae deliveries pospuestos por requeue hasta que se cumpla el plazo */
+    AND (nd.NextAttemptAt IS NULL OR nd.NextAttemptAt < NOW()) $w
+    ORDER BY nec.IsCritical DESC, n.CreatedAt ASC, nec.SendOrder ASC LIMIT 1");
 
     $stmt->execute($params);
     return $stmt->fetch(PDO::FETCH_ASSOC);
