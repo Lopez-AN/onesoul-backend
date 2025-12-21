@@ -2,13 +2,18 @@
 
 namespace App\Utils;
 
+define('STRICT_FIELD_VALIDATION', true);
+define('LOOSE_FIELD_VALIDATION', false);
+define('NULLIFY_MISSING_FIELDS', true);
+define('IGNORE_MISSING_FIELDS', false);
+
 use Psr\Http\Message\ResponseInterface as Response;
 
 /**
  * Clase centralizada para validación de parámetros
  */
 class ParameterValidator {
-  static function validate(Response $response, $template, $endpoint, $values){
+  static function validate(Response $response, $template, $endpoint, $values, $strict = false, $nullifyMissing = true){
     if (!is_array($values) && !is_object($values)) {
       return (object)[
         "valid" => false,
@@ -25,8 +30,48 @@ class ParameterValidator {
     $template = $template ? @json_decode($template) : null;
 
     $validation = $template->$endpoint;
+
+    if($strict === STRICT_FIELD_VALIDATION){
+      foreach($values as $i => $v){
+        if(!property_exists($validation, $i)){
+          return (object)[
+            "valid" => false,
+            "response" => $response->withStatus(400)->withJson([
+              "error" => [
+                "code" => "INVALID_UPDATE_KEY",
+                "desc" => "Key '$i' present in the JSON is not supported"
+              ]
+            ])
+          ];
+        }
+      }
+    }
+
     foreach($validation as $i => $v){
-      $values[$i] = $values[$i] ?? null; # Valores indefinidos los paso a null
+      $fieldExists = isset($values[$i]);
+
+      # Solo agregar null si nullifyMissing está activado
+      if($nullifyMissing && !$fieldExists){
+        $values[$i] = null;
+      }
+
+      # Controlo campos requeridos
+      if($v->required && (!$fieldExists || is_null($values[$i]))){
+        return (object)[
+          "valid" => false,
+          "response" => $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "INVALID_PARAMETERS",
+              "desc" => "$i is required"
+            ]
+          ])
+        ];
+      }
+
+      # Si el campo no existe no seguimos con el resto de validaciones
+      if(!$fieldExists){
+        continue;
+      }
 
       # Controlo campos requeridos
       if($v->required && is_null($values[$i])){
@@ -39,6 +84,11 @@ class ParameterValidator {
             ]
           ])
         ];
+      }
+
+      // Solo agrega si debe nullificar
+      if($nullifyMissing && !$fieldExists){
+        $values[$i] = null;
       }
 
       # Controlo segun tipo de campo
@@ -55,6 +105,11 @@ class ParameterValidator {
           break;
         case 'boolean':
           $result = ParameterValidator::validateBoolean($response, $v, $i, $values[$i]);
+          if (!$result->valid) return $result;
+          $values[$i] = $result->value ?? $values[$i];
+          break;
+        case 'email':
+          $result = ParameterValidator::validateEmail($response, $v, $i, $values[$i]);
           if (!$result->valid) return $result;
           $values[$i] = $result->value ?? $values[$i];
           break;
@@ -210,6 +265,20 @@ class ParameterValidator {
           "error" => [
             "code" => "INVALID_PARAMETERS",
             "desc" => "$parameter must be a boolean (true or false)"
+          ]
+        ])
+      ];
+    }
+    return (object)["valid" => true, "value" => $value];
+  }
+
+  static function validateEmail(Response $response, $validation, $parameter, $value){
+    if(!is_null($value) && (!is_string($value) || !filter_var($value, FILTER_VALIDATE_EMAIL))){
+      return (object)[
+        "valid" => false,
+        "response" => $response->withStatus(400)->withJson([
+          "error" => [
+            "desc" => "$parameter must be a valid email"
           ]
         ])
       ];

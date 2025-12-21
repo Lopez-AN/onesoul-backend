@@ -21,5 +21,171 @@
       "min": 0,
       "max": 999999999
     }
+  },
+  "get_user_by_email": {
+    "Email": {
+      "required": true,
+      "type": "email"
+    }
+  },
+  "get_user_by_username": {
+    "UserName": {
+      "required": true,
+      "type": "string",
+      "regex": "/^[a-zA-Z0-9_]{1,15}$/"
+    }
+  },
+  "get_user_by_referral_code": {
+    "ReferralCode": {
+      "required": true,
+      "type": "string",
+      "regex": "/^[A-Z0-9]{6}$/"
+    }
+  },
+  "update_user": {
+    "UserID": {
+      "required": true,
+      "type": "integer",
+      "min": 0,
+      "max": 999999999
+    },
+    "FirstName": {
+      "required": false,
+      "type": "string",
+      "minlength": 2,
+      "maxlength": 50
+    },
+    "LastName": {
+      "required": false,
+      "type": "string",
+      "minlength": 2,
+      "maxlength": 50
+    },
+    "DisplayName": {
+      "required": false,
+      "type": "string",
+      "minlength": 2,
+      "maxlength": 50
+    },
+    "Email": {
+      "required": false,
+      "type": "email",
+      "maxlength": 100
+    },
+    "Phone": {
+      "required": false,
+      "type": "string",
+      "minlength": 8,
+      "maxlength": 20,
+      "regex": "/^\\+[0-9]+$/"
+    },
+    "DateOfBirth": {
+      "required": false,
+      "type": "date"
+    },
+    "Gender": {
+      "required": false,
+      "type": "string",
+      "regex": "/^(M|F|O)$/"
+    },
+    "Biography": {
+      "required": false,
+      "type": "string",
+      "minlength": 10,
+      "maxlength": 5000
+    },
+    "UserType": {
+      "required": false,
+      "type": "string",
+      "regex": "/^(Guide|Seeker)$/"
+    },
+    "SignedContract": {
+      "required": false,
+      "type": "string",
+      "maxlength": 255,
+      "regex": "/^https?:\\/\\/.+/"
+    },
+    "LegalDocuments": {
+      "required": false,
+      "type": "string",
+      "maxlength": 255,
+      "regex": "/^https?:\\/\\/.+/"
+    },
+    "ShortDescription": {
+      "required": false,
+      "type": "string",
+      "minlength": 10,
+      "maxlength": 100
+    },
+    "Location": {
+      "required": false,
+      "type": "object"
+    }
+  },
+  "user_location": {
+    "LocationID": {
+      "required": false,
+      "type": "integer",
+      "min": 1,
+      "max": 99
+    },
+    "LocationName": {
+      "required": true,
+      "type": "string",
+      "min": 0,
+      "max": 30
+    },
+    "AddressName": {
+      "required": true,
+      "type": "string",
+      "minlength": 3,
+      "maxlength": 100
+    },
+    "AddressNumber": {
+      "required": true,
+      "type": "integer",
+      "min": 1,
+      "max": 99999
+    },
+    "Floor": {
+      "required": false,
+      "type": "integer",
+      "min": 0,
+      "max": 999
+    },
+    "Department": {
+      "required": false,
+      "type": "string",
+      "minlength": 1,
+      "maxlength": 4
+    },
+    "Cp": {
+      "required": true,
+      "type": "string",
+      "minlength": 3,
+      "maxlength": 10,
+      "regex": "/^[0-9A-Z\\s-]+$/"
+    },
+    "City": {
+      "required": true,
+      "type": "string",
+      "minlength": 2,
+      "maxlength": 50
+    },
+    "State": {
+      "required": true,
+      "type": "string",
+      "minlength": 2,
+      "maxlength": 50
+    },
+    "CountryCode": {
+      "required": true,
+      "type": "string",
+      "regex": "/^[A-Z]{2}$/"
+    },
+    "IsActive": {
+      "required": true,
+      "type": "boolean"
+    }
   }
 }

@@ -205,11 +205,17 @@ class UserController{
    * @statusCode 500: error del servidor
    **/
   public function getUserByEmail(Request $request, Response $response, $args) {
-    $email = $args['email'];
+    $params['Email'] = $args['Email'];
     $jwt = $request->getAttribute('jwt');
 
+    $pValidation = ParameterValidator::validate($response, 'users','get_user_by_email', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
+    }
+    $params = $pValidation->values;
+
     try {
-      $user = $this->user->getUserByEmail($email);
+      $user = $this->user->getUserByEmail($params['Email']);
       if(!$user){
         return $response->withStatus(404)->withJson([
           "error" => [
@@ -241,11 +247,17 @@ class UserController{
    * @statusCode 500: error del servidor
    **/
   public function getUserByUserName(Request $request, Response $response, $args) {
-    $userName = $args['userName'];
+    $params['UserName'] = $args['UserName'];
     $jwt = $request->getAttribute('jwt');
 
+    $pValidation = ParameterValidator::validate($response, 'users','get_user_by_username', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
+    }
+    $params = $pValidation->values;
+
     try {
-      $user = $this->user->getUserByUserName($userName);
+      $user = $this->user->getUserByUserName($params['UserName']);
       if(!$user){
         return $response->withStatus(404)->withJson([
           "error" => [
@@ -277,11 +289,17 @@ class UserController{
    * @statusCode 500: error del servidor
    **/
   public function getUserByRefCode(Request $request, Response $response, $args) {
-    $referralCode = $args['referralCode'];
+    $params['ReferralCode'] = $args['ReferralCode'];
     $jwt = $request->getAttribute('jwt');
 
+    $pValidation = ParameterValidator::validate($response, 'users','get_user_by_referral_code', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
+    }
+    $params = $pValidation->values;
+
     try {
-      $user = $this->user->getUserByRefCode($referralCode);
+      $user = $this->user->getUserByRefCode($params['ReferralCode']);
       if(!$user){
         return $response->withStatus(404)->withJson([
           "error" => [
@@ -540,29 +558,33 @@ class UserController{
    * @param  array $args: argumentos de ruta (id)
    * @return Response: JSON con usuario actualizado o error
    * @statusCode 200: usuario actualizado
-   * @statusCode 400: contenido inapropiado detectado
+   * @statusCode 400: contenido inapropiado detectado o parametros invalidos
    * @statusCode 401: JWT inválido
    * @statusCode 403: sin permisos
    * @statusCode 404: usuario no encontrado
    * @statusCode 500: error del servidor
    **/
   public function updateUser(Request $request, Response $response, $args) {
-    $userID = intval($args['id']);
-    $data = $request->getParsedBody();
+    $params = $request->getParsedBody();
+    $params['UserID'] = $args['UserID'];
     $jwt = $request->getAttribute('jwt');
 
-    # Verificar si el body es un array/object válido
-    if (!is_array($data) && !is_object($data)) {
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "INVALID_JSON",
-          "desc" => "Request body must be valid JSON"
-        ]
-      ]);
+    $pValidation = ParameterValidator::validate($response, 'users','update_user', $params, STRICT_FIELD_VALIDATION, IGNORE_MISSING_FIELDS);
+    if(!$pValidation->valid){
+      return $pValidation->response;
     }
+    $params = $pValidation->values;
+
+    if(!empty($params['Location'])){
+      $pValidation = ParameterValidator::validate($response, 'users','user_location', $params['Location'], STRICT_FIELD_VALIDATION);
+      if(!$pValidation->valid){
+        return $pValidation->response;
+      }
+    }
+    $params['Location'] = $pValidation->values;
 
     # Verificar si el usuario autenticado es el mismo que el que se intenta modificar, o si es un administrador
-    if ($jwt->data->UserID !== $userID && !$jwt->data->IsAdmin) {
+    if ($jwt->data->UserID !== $params['UserID'] && !$jwt->data->IsAdmin) {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "UNAUTHORIZED",
@@ -571,91 +593,49 @@ class UserController{
       ]);
     }
 
-    $email = $data['Email'] ?? null;
-    $biography = $data['Biography'] ?? null;
-    $shortDescription = $data['ShortDescription'] ?? null;
-
-    $user = $this->user->getUserById($userID);
-    if (empty($user)) {
-      return $response->withStatus(404)->withJson([
-        "error" => [
-          "code" => "USER_NOT_FOUND",
-          "desc" => "No user was found with the specified ID"
-        ]
-      ]);
-    }
-
-    # Lista de campos permitidos para actualizar
-    $allowedFields = [
-      'FirstName',
-      'LastName',
-      'DisplayName',
-      'Email',
-      'Phone',
-      'AddressName',
-      'AddressNumber',
-      'Floor',
-      'Department',
-      'Cp',
-      'City',
-      'State',
-      'CountryCode',
-      'DateOfBirth',
-      'Gender',
-      'Biography',
-      'UserType',
-      'SignedContract',
-      'LegalDocuments',
-      'ShortDescription'
-    ];
-
-    # Filtrar y preparar los campos a actualizar
-    $fields = [];
-    foreach ($data AS $key => $value) {
-      if (!in_array($key, $allowedFields)) {
-        return $response->withStatus(400)->withJson([
-          "error" => [
-            "code" => "INVALID_UPDATE_KEY",
-            "desc" => "Key '$key' present in the JSON is not supported"
-          ]
-        ]);
-      }
-      $fields[] = "$key = :$key";
-    }
-
-    # Valido que no se repita el email
-    if(!empty($email)){
-      $user = $this->user->getUserByEmail($email);
-      if($user && $user['UserID'] !== $userID){
-        return $response->withStatus(409)->withJson([
-          "error" => [
-            "code" => "DUPLICATED_EMAIL",
-            "desc" => "A user with the specified email already exists"
-          ]
-        ]);
-      }
-    }
-
     try {
+      $user = $this->user->getUserById($params['UserID']);
+      if (empty($user)) {
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "USER_NOT_FOUND",
+            "desc" => "No user was found with the specified ID"
+          ]
+        ]);
+      }
+
+      # Valido que no se repita el email
+      if(!empty($params['Email'])){
+        $user = $this->user->getUserByEmail($params['Email']);
+        if($user && $user['UserID'] !== $params['UserID']){
+          return $response->withStatus(409)->withJson([
+            "error" => [
+              "code" => "DUPLICATED_EMAIL",
+              "desc" => "A user with the specified email already exists"
+            ]
+          ]);
+        }
+      }
+
       # Valida contenido con Perspective API
-      if(!empty($biography) && $this->_containsInappropriateContent($biography)) {
+      if(!empty($params['Biography']) && $this->_containsInappropriateContent($params['Biography'])) {
         return $response->withStatus(400)->withJson([
           "code" => "INAPPROPRIATE_CONTENT",
             "desc" => "Please remove inappropriate content and try again."
         ]);
       }
 
-      if (!empty($shortDescription) && $this->_containsInappropriateContent($shortDescription)) {
+      if (!empty($params['ShortDescription']) && $this->_containsInappropriateContent($params['ShortDescription'])) {
         return $response->withStatus(400)->withJson([
           "code" => "INAPPROPRIATE_CONTENT",
             "desc" => "Please remove inappropriate content and try again."
         ]);
       }
 
-      $user = $this->user->updateUser($userID, $user['Email'], $fields, $data);
+      $user = $this->user->updateUser($params['UserID'], $user['Email'], $params);
 
       # --- Sincronizar con Stripe si corresponde ---
-      $subscription = $this->subscription->getSubscriptionByUser($userID);
+      $subscription = $this->subscription->getSubscriptionByUser($params['UserID']);
       if ($subscription && $subscription['PaymentPlatform'] === 'STRIPE' && in_array($subscription['Status'], ['ACTIVE', 'TRIALING'])) {
         try {
           \Stripe\Stripe::setApiKey($GLOBALS['config']['stripe']['STRIPE_SECRET_KEY']);

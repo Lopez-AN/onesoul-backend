@@ -46,9 +46,7 @@ class User {
     -- Subconsulta para locations
     (SELECT JSON_ARRAYAGG(
       JSON_OBJECT(
-        'Id', l.LocationID,
-        'Type', l.LocationType,
-        'IsPrimary', l.IsPrimary,
+        'LocationID', l.LocationID,
         'CountryCode', l.CountryCode,
         'State', l.State,
         'City', l.City,
@@ -119,9 +117,7 @@ class User {
     -- Subconsulta para locations
     (SELECT JSON_ARRAYAGG(
       JSON_OBJECT(
-        'Id', l.LocationID,
-        'Type', l.LocationType,
-        'IsPrimary', l.IsPrimary,
+        'LocationID', l.LocationID,
         'CountryCode', l.CountryCode,
         'State', l.State,
         'City', l.City,
@@ -203,9 +199,7 @@ class User {
     -- Subconsulta para locations
     (SELECT JSON_ARRAYAGG(
       JSON_OBJECT(
-        'Id', l.LocationID,
-        'Type', l.LocationType,
-        'IsPrimary', l.IsPrimary,
+        'LocationID', l.LocationID,
         'CountryCode', l.CountryCode,
         'State', l.State,
         'City', l.City,
@@ -280,9 +274,7 @@ class User {
     -- Subconsulta para locations
     (SELECT JSON_ARRAYAGG(
       JSON_OBJECT(
-        'Id', l.LocationID,
-        'Type', l.LocationType,
-        'IsPrimary', l.IsPrimary,
+        'LocationID', l.LocationID,
         'CountryCode', l.CountryCode,
         'State', l.State,
         'City', l.City,
@@ -364,9 +356,7 @@ class User {
     -- Subconsulta para locations
     (SELECT JSON_ARRAYAGG(
       JSON_OBJECT(
-        'Id', l.LocationID,
-        'Type', l.LocationType,
-        'IsPrimary', l.IsPrimary,
+        'LocationID', l.LocationID,
         'CountryCode', l.CountryCode,
         'State', l.State,
         'City', l.City,
@@ -436,9 +426,7 @@ class User {
     -- Subconsulta para locations
     (SELECT JSON_ARRAYAGG(
       JSON_OBJECT(
-        'Id', l.LocationID,
-        'Type', l.LocationType,
-        'IsPrimary', l.IsPrimary,
+        'LocationID', l.LocationID,
         'CountryCode', l.CountryCode,
         'State', l.State,
         'City', l.City,
@@ -508,9 +496,7 @@ class User {
     -- Subconsulta para locations
     (SELECT JSON_ARRAYAGG(
       JSON_OBJECT(
-        'Id', l.LocationID,
-        'Type', l.LocationType,
-        'IsPrimary', l.IsPrimary,
+        'LocationID', l.LocationID,
         'CountryCode', l.CountryCode,
         'State', l.State,
         'City', l.City,
@@ -581,9 +567,7 @@ class User {
     -- Subconsulta para locations
     (SELECT JSON_ARRAYAGG(
       JSON_OBJECT(
-        'Id', l.LocationID,
-        'Type', l.LocationType,
-        'IsPrimary', l.IsPrimary,
+        'LocationID', l.LocationID,
         'CountryCode', l.CountryCode,
         'State', l.State,
         'City', l.City,
@@ -653,9 +637,7 @@ class User {
     -- Subconsulta para locations
     (SELECT JSON_ARRAYAGG(
       JSON_OBJECT(
-        'Id', l.LocationID,
-        'Type', l.LocationType,
-        'IsPrimary', l.IsPrimary,
+        'LocationID', l.LocationID,
         'CountryCode', l.CountryCode,
         'State', l.State,
         'City', l.City,
@@ -884,21 +866,36 @@ class User {
   /**
    * Actualiza los datos de un usuario
    * @param  int $userID: ID del usuario a actualizar
-   * @param  array $fields: campos a actualizar en formato ["campo = ?", ...]
-   * @param  array $data: valores correspondientes a los campos
+   * @param  array $values: valores correspondientes a los campos
    * @return array: array con datos del usuario actualizado
    * @throws DatabaseException
    **/
-  public function updateUser($userID, $currentEmail, $fields, $data) {
+  public function updateUser($userID, $currentEmail, $values) {
     try {
       $this->db->beginTransaction(); # Iniciar transacción
 
+      # Veo si vino con location
+      $location = null;
+      if(!empty($values['Location'])){
+        $location = $values['Location'];
+        unset($values['Location']);
+      }
+
+      $fields = [];
+      foreach ($values AS $key => $value) {
+        if($key === 'UserID'){ # La pk no se actualiza
+          continue;
+        }
+        $fields[] = "$key = :$key";
+      }
+
       # Construir la consulta SQL para la actualización
       $sql = "UPDATE Users SET " . implode(", ", $fields) . " WHERE UserID = :UserID";
+
       $stmt = $this->db->prepare($sql);
 
       # Vincular parámetros y manejar valores NULL
-      foreach ($data AS $key => $value) {
+      foreach ($values AS $key => $value) {
         $stmt->bindValue(":$key", $value === null ? null : $value, $value === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
       }
 
@@ -907,13 +904,52 @@ class User {
       $stmt->execute(); # Ejecutar la consulta
 
       # Si cambio el mail se marca el email como no validado
-      if (isset($data['Email'])) {
-        if ($data['Email'] !== $currentEmail) {
+      if (isset($values['Email'])) {
+        if ($values['Email'] !== $currentEmail) {
           $stmt = $this->db->prepare("UPDATE Users SET ValidatedEmail = 0 WHERE UserID = ?");
           # Vincular el ID del usuario
           $stmt->execute([$userID]); # Ejecutar la consulta
         }
       }
+
+      if($location){
+        $stmt = $this->db->prepare("INSERT INTO UserLocations (
+          LocationID, UserID, LocationName, AddressName, AddressNumber,
+          Floor, Department, Cp, City, State, CountryCode, IsActive
+          ) VALUES (
+          :locationId, :userId, :locationName, :addressName, :addressNumber,
+          :floor, :department, :cp, :city, :state, :countryCode, :isActive
+          )
+          ON DUPLICATE KEY UPDATE
+            UserID = VALUES(UserID),
+            LocationName = VALUES(LocationName),
+            AddressName = VALUES(AddressName),
+            AddressNumber = VALUES(AddressNumber),
+            Floor = VALUES(Floor),
+            Department = VALUES(Department),
+            Cp = VALUES(Cp),
+            City = VALUES(City),
+            State = VALUES(State),
+            CountryCode = VALUES(CountryCode),
+            IsActive = VALUES(IsActive)
+        ");
+
+        $stmt->execute([
+          'locationId' => 0,
+          'userId' => $values['UserID'],
+          'locationName' => $location['LocationName'],
+          'addressName' => $location['AddressName'],
+          'addressNumber' => $location['AddressNumber'],
+          'floor' => $location['Floor'],
+          'department' => $location['Department'],
+          'cp' => $location['Cp'],
+          'city' => $location['City'],
+          'state' => $location['State'],
+          'countryCode' => $location['CountryCode'],
+          'isActive' => $location['IsActive'] ?? 1
+        ]);
+      }
+
       $user = $this->getUserById($userID) ?:
         throw new DatabaseException("Failed to retrieve the updated user");
 

@@ -24,37 +24,33 @@ ALTER TABLE `Notifications`
 
 -- Migracion de locations
 CREATE TABLE `UserLocations` (
-    `LocationID` INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
-    `UserID` INT(10) UNSIGNED NOT NULL,
-    `LocationType` ENUM('Personal', 'Service') NOT NULL DEFAULT 'Service'
-        COMMENT 'Tipo: Personal (residencia) o Service (donde ofrece servicios)',
-    `IsPrimary` TINYINT(1) NOT NULL DEFAULT 0
-        COMMENT 'Ubicación principal',
-    `LocationName` VARCHAR(100) NULL
-        COMMENT 'Nombre descriptivo (ej: "Oficina Centro", "Domicilio")',
-    `AddressName` VARCHAR(255) NULL,
-    `AddressNumber` SMALLINT(6) NULL,
-    `Floor` VARCHAR(4) NULL,
-    `Department` VARCHAR(4) NULL,
-    `Cp` VARCHAR(10) NULL,
-    `City` VARCHAR(60) NULL,
-    `State` VARCHAR(50) NULL,
-    `CountryCode` VARCHAR(2) NULL,
-    `IsActive` TINYINT(1) DEFAULT 1,
-    `CreatedAt` DATETIME DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (`LocationID`),
-    INDEX `idx_user` (`UserID`),
-    INDEX `idx_user_type` (`UserID`, `LocationType`),
-    INDEX `idx_user_primary` (`UserID`, `IsPrimary`),
-    FOREIGN KEY (`UserID`) REFERENCES `Users`(`UserID`) ON DELETE CASCADE ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-COMMENT='Ubicaciones de usuarios';
+	`LocationID` INT(10) UNSIGNED NOT NULL,
+	`UserID` INT(10) UNSIGNED NOT NULL,
+	`LocationName` VARCHAR(100) NULL DEFAULT NULL COMMENT 'Nombre descriptivo (ej: "Oficina Centro", "Domicilio")' COLLATE 'utf8mb4_unicode_ci',
+	`AddressName` VARCHAR(255) NULL DEFAULT NULL COLLATE 'utf8mb4_unicode_ci',
+	`AddressNumber` SMALLINT(6) NULL DEFAULT NULL,
+	`Floor` VARCHAR(4) NULL DEFAULT NULL COLLATE 'utf8mb4_unicode_ci',
+	`Department` VARCHAR(4) NULL DEFAULT NULL COLLATE 'utf8mb4_unicode_ci',
+	`Cp` VARCHAR(10) NULL DEFAULT NULL COLLATE 'utf8mb4_unicode_ci',
+	`City` VARCHAR(60) NULL DEFAULT NULL COLLATE 'utf8mb4_unicode_ci',
+	`State` VARCHAR(50) NULL DEFAULT NULL COLLATE 'utf8mb4_unicode_ci',
+	`CountryCode` VARCHAR(2) NULL DEFAULT NULL COLLATE 'utf8mb4_unicode_ci',
+	`IsActive` TINYINT(1) NULL DEFAULT '1',
+	`CreatedAt` DATETIME NULL DEFAULT current_timestamp(),
+	PRIMARY KEY (`LocationID`, `UserID`) USING BTREE,
+	INDEX `FK_UserLocations_Users` (`UserID`) USING BTREE,
+	CONSTRAINT `FK_UserLocations_Users` FOREIGN KEY (`UserID`) REFERENCES `Users` (`UserID`) ON UPDATE CASCADE ON DELETE CASCADE
+)
+COMMENT='Ubicaciones de usuarios'
+COLLATE='utf8mb4_unicode_ci'
+ENGINE=InnoDB
+;
 
-INSERT INTO UserLocations (UserID, LocationType, IsPrimary, AddressName, AddressNumber, Floor, Department, Cp, City, State, CountryCode)
+INSERT INTO UserLocations (LocationID, UserID, LocationName, AddressName, AddressNumber, Floor, Department, Cp, City, State, CountryCode)
 SELECT
+    0,
     UserID,
-    'Service',
-    1,
+    'Primaria',
     AddressName,
     AddressNumber,
     Floor,
@@ -66,11 +62,11 @@ SELECT
 FROM Users
 WHERE (AddressName IS NOT NULL OR City IS NOT NULL) AND UserType = 'Guide';
 
-INSERT INTO UserLocations (UserID, LocationType, IsPrimary, AddressName, AddressNumber, Floor, Department, Cp, City, State, CountryCode)
+INSERT INTO UserLocations (LocationID, UserID, LocationName, AddressName, AddressNumber, Floor, Department, Cp, City, State, CountryCode)
 SELECT
+    0,
     UserID,
-    'Personal',
-    1,
+    'Primaria',
     AddressName,
     AddressNumber,
     Floor,
@@ -91,3 +87,23 @@ ALTER TABLE `Users`
 	DROP COLUMN `City`,
 	DROP COLUMN `State`,
 	DROP COLUMN `CountryCode`;
+
+
+ALTER TABLE `Bookings`
+	DROP FOREIGN KEY `FK_LocationID`;
+
+DROP TABLE `OfferingLocations`;
+
+CREATE TABLE `OfferingLocations` (
+	`Id` INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+	`UserID` INT(10) UNSIGNED NOT NULL,
+	`LocationID` INT(10) UNSIGNED NOT NULL,
+	`OfferingID` INT(10) UNSIGNED NOT NULL,
+	PRIMARY KEY (`Id`) USING BTREE,
+	UNIQUE INDEX `UK_OFFERING_LOCATIONS` (`UserID`, `LocationID`, `OfferingID`) USING BTREE,
+	CONSTRAINT `FK_OfferingLocations_UserLocations` FOREIGN KEY (`UserID`, `LocationID`) REFERENCES `UserLocations` (`LocationID`, `UserID`) ON UPDATE RESTRICT ON DELETE RESTRICT
+)
+COMMENT='Guarda las ubicaciones disponibles para el servicio, debe existir en las ubicaciones del guía que lo cargo'
+COLLATE='utf8mb4_unicode_ci'
+ENGINE=InnoDB
+;

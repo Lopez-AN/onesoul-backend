@@ -32,14 +32,14 @@ return function (App $app) {
   $app->get('/users/category/{CategoryID}', [$userController, 'getUsersByCategory'])->add($optionalJwt);
   $app->get('/search/guides', [$userController, 'searchGuides'])->add($optionalJwt);
   $app->get('/users/{UserID}', [$userController, 'getUserById'])->add($optionalJwt);
-  $app->get('/users/email/{email}', [$userController, 'getUserByEmail'])->add($optionalJwt);
-  $app->get('/users/username/{userName}', [$userController, 'getUserByUserName'])->add($optionalJwt);
-  $app->get('/users/referred/{referralCode}', [$userController, 'getUserByRefCode'])->add($optionalJwt);
+  $app->get('/users/email/{Email}', [$userController, 'getUserByEmail'])->add($optionalJwt);
+  $app->get('/users/username/{UserName}', [$userController, 'getUserByUserName'])->add($optionalJwt);
+  $app->get('/users/referred/{ReferralCode}', [$userController, 'getUserByRefCode'])->add($optionalJwt);
   $app->get('/users/consent/{id}', [$userController, 'latestConsentByUser'])->add($requiredJwt);
   $app->get('/users/{id}/referrals', [$userController, 'referralsByUser'])->add($requiredJwt);
   $app->get('/users/{id}/rewards', [$userController, 'rewardsByUser'])->add($requiredJwt);
   $app->post('/users/invite/mail', [$userController, 'inviteByEmail'])->add($requiredJwt);
-  $app->patch('/users/{id}', [$userController, 'updateUser'])->add($requiredJwt);
+  $app->patch('/users/{UserID}', [$userController, 'updateUser'])->add($requiredJwt);
   $app->delete('/users/{id}', [$userController, 'disableUser'])->add($requiredJwt);
   $app->post('/users/categories/{id}', [$userController, 'updateUserCategories'])->add($requiredJwt);
   $app->post('/users/social/{id}', [$userController, 'updateUserSocialAccounts'])->add($requiredJwt);
