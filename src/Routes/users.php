@@ -40,6 +40,7 @@ return function (App $app) {
   $app->get('/users/{id}/rewards', [$userController, 'rewardsByUser'])->add($requiredJwt);
   $app->post('/users/invite/mail', [$userController, 'inviteByEmail'])->add($requiredJwt);
   $app->patch('/users/{UserID}', [$userController, 'updateUser'])->add($requiredJwt);
+  $app->patch('/users/{UserID}/settings', [$userController, 'updateSettings'])->add($requiredJwt);
   $app->delete('/users/{id}', [$userController, 'disableUser'])->add($requiredJwt);
   $app->post('/users/categories/{id}', [$userController, 'updateUserCategories'])->add($requiredJwt);
   $app->post('/users/social/{id}', [$userController, 'updateUserSocialAccounts'])->add($requiredJwt);

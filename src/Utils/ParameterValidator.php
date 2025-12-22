@@ -152,12 +152,13 @@ class ParameterValidator {
 
     if(!is_null($value) && property_exists($validation, 'regex')){
       if(!preg_match($validation->regex, $value)){
+        $regex = substr($validation->regex, 1, strlen($validation->regex) - 1);
         return (object)[
           "valid" => false,
           "response" => $response->withStatus(400)->withJson([
             "error" => [
               "code" => "INVALID_PARAMETERS",
-              "desc" => "$parameter does not match regex ({$validation->regex})"
+              "desc" => "$parameter does not match regex ({$regex})"
             ]
           ])
         ];

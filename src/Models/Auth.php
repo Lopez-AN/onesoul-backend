@@ -84,16 +84,18 @@ class Auth{
       $userID = $this->db->lastInsertId();
 
       # Insertar recibir novedades si eligio esta opcion
-      $stmt = $this->db->prepare("INSERT INTO UserSettings (UserID, ReceiveNewsletters) VALUES (?, ?)");
+      $stmt = $this->db->prepare("INSERT INTO UsersSettings
+        (UserID, PreferredLanguage, ViewMode, ReceiveNewsletters, TimeZone)
+        VALUES (?, 'es', 'Light', ?, 'America/Argentina/Buenos_Aires')");
       $stmt->execute([$userID, $receiveNewsletters]);
 
       # Insertar consentimiento
-      $stmt = $this->db->prepare("INSERT INTO UserLegalConsents
+      $stmt = $this->db->prepare("INSERT INTO UsersLegalConsents
         (UserID, UserIP, UserAgent, Version, DocumentType, Accepted)
         VALUES (?, ?, ?, ?, 'TermsAndConditions', 1)");
       $stmt->execute([$userID, $clientIp, $userAgent, $tycVersion]);
 
-      $stmt = $this->db->prepare("INSERT INTO UserLegalConsents
+      $stmt = $this->db->prepare("INSERT INTO UsersLegalConsents
         (UserID, UserIP, UserAgent, Version, DocumentType, Accepted)
         VALUES (?, ?, ?, ?, 'PrivacyPolicy', 1)");
       $stmt->execute([$userID, $clientIp, $userAgent, $privacyVersion]);
@@ -142,16 +144,18 @@ class Auth{
       $userID = $this->db->lastInsertId(); # Obtener el ID del usuario creado
 
       # Insertar recibir novedades si eligio esta opcion
-      $stmt = $this->db->prepare("INSERT INTO UserSettings (UserID, ReceiveNewsletters) VALUES (?, ?)");
+      $stmt = $this->db->prepare("INSERT INTO UsersSettings
+        (UserID, PreferredLanguage, ViewMode, ReceiveNewsletters, TimeZone)
+        VALUES (?, 'es', 'Light', ?, 'America/Argentina/Buenos_Aires')");
       $stmt->execute([$userID, $receiveNewsletters]);
 
       # Insertar consentimiento
-      $stmt = $this->db->prepare("INSERT INTO UserLegalConsents
+      $stmt = $this->db->prepare("INSERT INTO UsersLegalConsents
         (UserID, UserIP, UserAgent, Version, DocumentType, Accepted)
         VALUES (?, ?, ?, ?, 'TermsAndConditions', 1)");
       $stmt->execute([$userID, $clientIp, $userAgent, $tycVersion]);
 
-      $stmt = $this->db->prepare("INSERT INTO UserLegalConsents
+      $stmt = $this->db->prepare("INSERT INTO UsersLegalConsents
         (UserID, UserIP, UserAgent, Version, DocumentType, Accepted)
         VALUES (?, ?, ?, ?, 'PrivacyPolicy', 1)");
       $stmt->execute([$userID, $clientIp, $userAgent, $privacyVersion]);
@@ -298,7 +302,7 @@ class Auth{
    * @return bool: true si es válido, false si no
    **/
   public function validateMfaId($userID, $mfaId) {
-    $stmt = $this->db->prepare("SELECT * FROM UserBrowser WHERE UserID = ? AND MfaID = ?");
+    $stmt = $this->db->prepare("SELECT * FROM UsersBrowser WHERE UserID = ? AND MfaID = ?");
     $stmt->execute([$userID, $mfaId]);
     return $stmt->fetch(PDO::FETCH_ASSOC) !== false;
   }
@@ -323,9 +327,9 @@ class Auth{
     $ip = $clientIp;
     $expiry = date('Y-m-d H:i:s', strtotime('+90 days'));
 
-    # Insertar los datos del navegador en la tabla UserBrowser
-    $stmt = $this->db->prepare("
-      INSERT INTO UserBrowser (UserID, MfaID, Browser, Version, Os, Device, IP, Expiry)
+    # Insertar los datos del navegador en la tabla UsersBrowser
+    $stmt = $this->db->prepare("INSERT INTO UsersBrowser
+      (UserID, MfaID, Browser, Version, Os, Device, IP, Expiry)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ");
     $stmt->execute([$userID, $newMfaId, $browser, $version, $os, $device, $ip, $expiry]);

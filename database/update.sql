@@ -23,7 +23,7 @@ ALTER TABLE `Notifications`
 	DROP COLUMN `Status`;
 
 -- Migracion de locations
-CREATE TABLE `UserLocations` (
+CREATE TABLE `UsersLocations` (
 	`LocationID` INT(10) UNSIGNED NOT NULL,
 	`UserID` INT(10) UNSIGNED NOT NULL,
 	`LocationName` VARCHAR(100) NULL DEFAULT NULL COMMENT 'Nombre descriptivo (ej: "Oficina Centro", "Domicilio")' COLLATE 'utf8mb4_unicode_ci',
@@ -38,15 +38,15 @@ CREATE TABLE `UserLocations` (
 	`IsActive` TINYINT(1) NULL DEFAULT '1',
 	`CreatedAt` DATETIME NULL DEFAULT current_timestamp(),
 	PRIMARY KEY (`LocationID`, `UserID`) USING BTREE,
-	INDEX `FK_UserLocations_Users` (`UserID`) USING BTREE,
-	CONSTRAINT `FK_UserLocations_Users` FOREIGN KEY (`UserID`) REFERENCES `Users` (`UserID`) ON UPDATE CASCADE ON DELETE CASCADE
+	INDEX `FK_UsersLocations_Users` (`UserID`) USING BTREE,
+	CONSTRAINT `FK_UsersLocations_Users` FOREIGN KEY (`UserID`) REFERENCES `Users` (`UserID`) ON UPDATE CASCADE ON DELETE CASCADE
 )
 COMMENT='Ubicaciones de usuarios'
 COLLATE='utf8mb4_unicode_ci'
 ENGINE=InnoDB
 ;
 
-INSERT INTO UserLocations (LocationID, UserID, LocationName, AddressName, AddressNumber, Floor, Department, Cp, City, State, CountryCode)
+INSERT INTO UsersLocations (LocationID, UserID, LocationName, AddressName, AddressNumber, Floor, Department, Cp, City, State, CountryCode)
 SELECT
     0,
     UserID,
@@ -62,7 +62,7 @@ SELECT
 FROM Users
 WHERE (AddressName IS NOT NULL OR City IS NOT NULL) AND UserType = 'Guide';
 
-INSERT INTO UserLocations (LocationID, UserID, LocationName, AddressName, AddressNumber, Floor, Department, Cp, City, State, CountryCode)
+INSERT INTO UsersLocations (LocationID, UserID, LocationName, AddressName, AddressNumber, Floor, Department, Cp, City, State, CountryCode)
 SELECT
     0,
     UserID,
@@ -94,16 +94,23 @@ ALTER TABLE `Bookings`
 
 DROP TABLE `OfferingLocations`;
 
-CREATE TABLE `OfferingLocations` (
+CREATE TABLE `OfferingsLocations` (
 	`Id` INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
 	`UserID` INT(10) UNSIGNED NOT NULL,
 	`LocationID` INT(10) UNSIGNED NOT NULL,
 	`OfferingID` INT(10) UNSIGNED NOT NULL,
 	PRIMARY KEY (`Id`) USING BTREE,
-	UNIQUE INDEX `UK_OFFERING_LOCATIONS` (`UserID`, `LocationID`, `OfferingID`) USING BTREE,
-	CONSTRAINT `FK_OfferingLocations_UserLocations` FOREIGN KEY (`UserID`, `LocationID`) REFERENCES `UserLocations` (`LocationID`, `UserID`) ON UPDATE RESTRICT ON DELETE RESTRICT
+	UNIQUE INDEX `UK_OFFERINGS_LOCATIONS` (`UserID`, `LocationID`, `OfferingID`) USING BTREE,
+	CONSTRAINT `FK_OfferingsLocations_UsersLocations` FOREIGN KEY (`UserID`, `LocationID`) REFERENCES `UsersLocations` (`LocationID`, `UserID`) ON UPDATE RESTRICT ON DELETE RESTRICT
 )
 COMMENT='Guarda las ubicaciones disponibles para el servicio, debe existir en las ubicaciones del guía que lo cargo'
 COLLATE='utf8mb4_unicode_ci'
 ENGINE=InnoDB
 ;
+
+ALTER TABLE `UsersNotifications`
+	CHANGE COLUMN `WebPush` `PushWeb` TINYINT(1) NULL DEFAULT '1' COMMENT 'Notificaciones vía Web Push (navegador)' AFTER `SMS`;
+
+RENAME TABLE `UserSettings` TO `UsersSettings`;
+RENAME TABLE `UserBrowser` TO `UsersBrowser`;
+RENAME TABLE `UserLegalConsents` TO `UsersLegalConsents`;

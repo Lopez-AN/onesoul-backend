@@ -3,7 +3,7 @@
     "UserType": {
       "required": true,
       "type": "string",
-      "regex": "/^(Guide|Seeker)$/"
+      "regex": "~^(Guide|Seeker)$~"
     }
   },
   "get_users_by_category": {
@@ -32,14 +32,14 @@
     "UserName": {
       "required": true,
       "type": "string",
-      "regex": "/^[a-zA-Z0-9_]{1,15}$/"
+      "regex": "~^[a-zA-Z0-9_]{1,15}$~"
     }
   },
   "get_user_by_referral_code": {
     "ReferralCode": {
       "required": true,
       "type": "string",
-      "regex": "/^[A-Z0-9]{6}$/"
+      "regex": "~^[A-Z0-9]{6}$~"
     }
   },
   "update_user": {
@@ -77,7 +77,7 @@
       "type": "string",
       "minlength": 8,
       "maxlength": 20,
-      "regex": "/^\\+[0-9]+$/"
+      "regex": "~^\\+[0-9]+$~"
     },
     "DateOfBirth": {
       "required": false,
@@ -86,7 +86,7 @@
     "Gender": {
       "required": false,
       "type": "string",
-      "regex": "/^(M|F|O)$/"
+      "regex": "~^(M|F|O)$~"
     },
     "Biography": {
       "required": false,
@@ -97,19 +97,19 @@
     "UserType": {
       "required": false,
       "type": "string",
-      "regex": "/^(Guide|Seeker)$/"
+      "regex": "~^(Guide|Seeker)$~"
     },
     "SignedContract": {
       "required": false,
       "type": "string",
       "maxlength": 255,
-      "regex": "/^https?:\\/\\/.+/"
+      "regex": "~^https?:\\/\\/.+~"
     },
     "LegalDocuments": {
       "required": false,
       "type": "string",
       "maxlength": 255,
-      "regex": "/^https?:\\/\\/.+/"
+      "regex": "~^https?:\\/\\/.+~"
     },
     "ShortDescription": {
       "required": false,
@@ -164,7 +164,7 @@
       "type": "string",
       "minlength": 3,
       "maxlength": 10,
-      "regex": "/^[0-9A-Z\\s-]+$/"
+      "regex": "~^[0-9A-Z\\s-]+$~"
     },
     "City": {
       "required": true,
@@ -181,9 +181,52 @@
     "CountryCode": {
       "required": true,
       "type": "string",
-      "regex": "/^[A-Z]{2}$/"
+      "regex": "~^[A-Z]{2}$~"
     },
     "IsActive": {
+      "required": true,
+      "type": "boolean"
+    }
+  },
+  "user_settings": {
+    "ReceiveNewsletters": {
+      "required": true,
+      "type": "boolean"
+    },
+    "TimeZone": {
+      "required": true,
+      "type": "string",
+      "regex": "~^(?:[A-Za-z_]+)(?:/[A-Za-z0-9._+-]+)+$~"
+    },
+    "PreferredLanguage": {
+      "required": true,
+      "type": "string",
+      "regex": "~^[a-z]{2}$~"
+    },
+    "ViewMode": {
+      "required": true,
+      "type": "string",
+      "regex": "~^(Light|Dark)$~"
+    },
+    "Notifications": {
+      "required": false,
+      "type": "object"
+    }
+  },
+  "user_notifications": {
+    "WhatsApp": {
+      "required": true,
+      "type": "boolean"
+    },
+    "Sms": {
+      "required": true,
+      "type": "boolean"
+    },
+    "PushApp": {
+      "required": true,
+      "type": "boolean"
+    },
+    "PushWeb": {
       "required": true,
       "type": "boolean"
     }

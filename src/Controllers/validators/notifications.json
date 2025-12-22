@@ -45,7 +45,7 @@
     "List": {
       "required": false,
       "type": "string",
-      "regex": "/^(all|unread|read)$/"
+      "regex": "~^(all|unread|read)$~"
     }
   },
   "mark_in_app_notifications": {
@@ -82,7 +82,7 @@
     "Channel": {
       "required": true,
       "type": "string",
-      "regex": "/^(IN_APP|EMAIL|SMS|WHATSAPP)$/"
+      "regex": "~^(IN_APP|EMAIL|SMS|WHATSAPP)$~"
     }
   },
   "get_deliveries_by_recipient": {

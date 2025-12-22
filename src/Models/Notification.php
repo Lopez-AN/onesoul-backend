@@ -573,7 +573,7 @@ class Notification  {
     # Obtener preferencias de comunicacion del usuario
     $stmt = $this->db->prepare("SELECT un.Email, un.WhatsApp, un.SMS, us.PreferredLanguage
     FROM Users as u
-    INNER JOIN UserSettings as us
+    INNER JOIN UsersSettings as us
       ON u.UserID = us.UserID
     LEFT JOIN UsersNotifications as un
       ON u.UserID = un.UserID

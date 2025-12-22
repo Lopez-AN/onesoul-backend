@@ -580,8 +580,8 @@ class UserController{
       if(!$pValidation->valid){
         return $pValidation->response;
       }
+      $params['Location'] = $pValidation->values;
     }
-    $params['Location'] = $pValidation->values;
 
     # Verificar si el usuario autenticado es el mismo que el que se intenta modificar, o si es un administrador
     if ($jwt->data->UserID !== $params['UserID'] && !$jwt->data->IsAdmin) {
@@ -632,7 +632,7 @@ class UserController{
         ]);
       }
 
-      $user = $this->user->updateUser($params['UserID'], $user['Email'], $params);
+      $user = $this->user->updateUser($params['UserID'], $params);
 
       # --- Sincronizar con Stripe si corresponde ---
       $subscription = $this->subscription->getSubscriptionByUser($params['UserID']);
@@ -679,6 +679,73 @@ class UserController{
           error_log("Error actualizando usuario en Stripe: " . $e->getMessage());
         }
       }
+
+      # Retornar el usuario actualizado
+      return $response->withStatus(200)->withJson($user);
+    } catch (Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  /**
+   * Actualiza los settings del usuario
+   * @param  Request $request: objeto de request HTTP (requiere JWT, body con campos a actualizar)
+   * @param  Response $response: objeto de response HTTP
+   * @param  array $args: argumentos de ruta (id)
+   * @return Response: JSON con usuario actualizado o error
+   * @statusCode 200: usuario actualizado
+   * @statusCode 400: contenido inapropiado detectado o parametros invalidos
+   * @statusCode 401: JWT inválido
+   * @statusCode 403: sin permisos
+   * @statusCode 404: usuario no encontrado
+   * @statusCode 500: error del servidor
+   **/
+  public function updateSettings(Request $request, Response $response, $args) {
+    $params = $request->getParsedBody();
+    $params['UserID'] = $args['UserID'];
+    $jwt = $request->getAttribute('jwt');
+
+    $pValidation = ParameterValidator::validate($response, 'users','user_settings', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
+    }
+    $params = $pValidation->values;
+
+    if(!empty($params['Notifications'])){
+      $pValidation = ParameterValidator::validate($response, 'users','user_notifications', $params['Notifications'], STRICT_FIELD_VALIDATION);
+      if(!$pValidation->valid){
+        return $pValidation->response;
+      }
+      $params['Notifications'] = $pValidation->values;
+    }
+
+    # Verificar si el usuario autenticado es el mismo que el que se intenta modificar, o si es un administrador
+    if ($jwt->data->UserID !== $params['UserID'] && !$jwt->data->IsAdmin) {
+      return $response->withStatus(403)->withJson([
+        "error" => [
+          "code" => "UNAUTHORIZED",
+          "desc" => "You do not have permission to modify this user"
+        ]
+      ]);
+    }
+
+    try {
+      $user = $this->user->getUserById($params['UserID']);
+      if (empty($user)) {
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "USER_NOT_FOUND",
+            "desc" => "No user was found with the specified ID"
+          ]
+        ]);
+      }
+
+      $user = $this->user->updateSettings($params['UserID'], $params, $params['Notifications']);
 
       # Retornar el usuario actualizado
       return $response->withStatus(200)->withJson($user);

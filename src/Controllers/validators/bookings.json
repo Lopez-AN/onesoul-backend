@@ -3,12 +3,12 @@
     "AssocUUID": {
       "required": true,
       "type": "string",
-      "regex": "/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/"
+      "regex": "~^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$~"
     },
     "Coupon": {
       "required": false,
       "type": "string",
-      "regex": "/^[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}$/"
+      "regex": "~^[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}$~"
     },
     "OfferingID": {
       "required": true,
@@ -31,12 +31,12 @@
     "SessionType": {
       "required": true,
       "type": "string",
-      "regex": "/^(in-person|virtual)$/"
+      "regex": "~^(in-person|virtual)$~"
     },
     "SubDomain": {
       "required": false,
       "type": "string",
-      "regex": "/^[a-zA-Z]{1,15}+$/"
+      "regex": "~^[a-zA-Z]{1,15}+$~"
     }
   },
   "cancel_booking": {
@@ -55,7 +55,7 @@
     "SubDomain": {
       "required": false,
       "type": "string",
-      "regex": "/^[a-zA-Z]{1,15}+$/"
+      "regex": "~^[a-zA-Z]{1,15}+$~"
     }
   },
   "confirm_booking": {
@@ -74,7 +74,7 @@
     "SubDomain": {
       "required": false,
       "type": "string",
-      "regex": "/^[a-zA-Z]{1,15}+$/"
+      "regex": "~^[a-zA-Z]{1,15}+$~"
     }
   },
   "complete_booking": {

@@ -58,7 +58,25 @@ class User {
         'Department', l.Department,
         'IsActive', l.IsActive
       )
-    ) FROM UserLocations as l WHERE l.UserID = u.UserID) as user_locations
+    ) FROM UsersLocations as l WHERE l.UserID = u.UserID) as user_locations,
+    -- Subconsulta para settings
+    (SELECT JSON_ARRAYAGG(
+      JSON_OBJECT(
+        'ReceiveNewsletters', s.ReceiveNewsletters,
+        'TimeZone', s.TimeZone,
+        'PreferredLanguage', s.PreferredLanguage,
+        'ViewMode', s.ViewMode
+      )
+    ) FROM UsersSettings as s WHERE s.UserID = u.UserID) as user_settings,
+    -- Subconsulta para settings
+    (SELECT JSON_ARRAYAGG(
+      JSON_OBJECT(
+        'WhatsApp', n.WhatsApp,
+        'Sms', n.SMS,
+        'PushWeb', n.PushWeb,
+        'PushApp', n.PushApp
+      )
+    ) FROM UsersNotifications as n WHERE n.UserID = u.UserID) as user_notifications
     FROM Users AS u
     LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
     LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
@@ -72,7 +90,6 @@ class User {
       WHERE o.Status = 'Active'
       GROUP BY o.UserID
     ) AS sub ON sub.UserID = u.UserID
-    LEFT JOIN UserLocations as l ON u.UserID = l.UserID
     GROUP BY u.UserID
     ORDER BY u.UserID
     LIMIT ? OFFSET ?");
@@ -129,7 +146,25 @@ class User {
         'Department', l.Department,
         'IsActive', l.IsActive
       )
-    ) FROM UserLocations as l WHERE l.UserID = u.UserID) as user_locations
+    ) FROM UsersLocations as l WHERE l.UserID = u.UserID) as user_locations,
+    -- Subconsulta para settings
+    (SELECT JSON_ARRAYAGG(
+      JSON_OBJECT(
+        'ReceiveNewsletters', s.ReceiveNewsletters,
+        'TimeZone', s.TimeZone,
+        'PreferredLanguage', s.PreferredLanguage,
+        'ViewMode', s.ViewMode
+      )
+    ) FROM UsersSettings as s WHERE s.UserID = u.UserID) as user_settings,
+    -- Subconsulta para settings
+    (SELECT JSON_ARRAYAGG(
+      JSON_OBJECT(
+        'WhatsApp', n.WhatsApp,
+        'Sms', n.SMS,
+        'PushWeb', n.PushWeb,
+        'PushApp', n.PushApp
+      )
+    ) FROM UsersNotifications as n WHERE n.UserID = u.UserID) as user_notifications
     FROM Users AS u
     LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
     LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
@@ -211,7 +246,25 @@ class User {
         'Department', l.Department,
         'IsActive', l.IsActive
       )
-    ) FROM UserLocations as l WHERE l.UserID = u.UserID) as user_locations
+    ) FROM UsersLocations as l WHERE l.UserID = u.UserID) as user_locations,
+    -- Subconsulta para settings
+    (SELECT JSON_ARRAYAGG(
+      JSON_OBJECT(
+        'ReceiveNewsletters', s.ReceiveNewsletters,
+        'TimeZone', s.TimeZone,
+        'PreferredLanguage', s.PreferredLanguage,
+        'ViewMode', s.ViewMode
+      )
+    ) FROM UsersSettings as s WHERE s.UserID = u.UserID) as user_settings,
+    -- Subconsulta para settings
+    (SELECT JSON_ARRAYAGG(
+      JSON_OBJECT(
+        'WhatsApp', n.WhatsApp,
+        'Sms', n.SMS,
+        'PushWeb', n.PushWeb,
+        'PushApp', n.PushApp
+      )
+    ) FROM UsersNotifications as n WHERE n.UserID = u.UserID) as user_notifications
     FROM Users AS u
     INNER JOIN UsersCategories AS uc ON uc.userID = u.userID
     INNER JOIN Categories AS c ON uc.CategoryID = c.CategoryID
@@ -286,7 +339,25 @@ class User {
         'Department', l.Department,
         'IsActive', l.IsActive
       )
-    ) FROM UserLocations as l WHERE l.UserID = u.UserID) as user_locations
+    ) FROM UsersLocations as l WHERE l.UserID = u.UserID) as user_locations,
+    -- Subconsulta para settings
+    (SELECT JSON_ARRAYAGG(
+      JSON_OBJECT(
+        'ReceiveNewsletters', s.ReceiveNewsletters,
+        'TimeZone', s.TimeZone,
+        'PreferredLanguage', s.PreferredLanguage,
+        'ViewMode', s.ViewMode
+      )
+    ) FROM UsersSettings as s WHERE s.UserID = u.UserID) as user_settings,
+    -- Subconsulta para settings
+    (SELECT JSON_ARRAYAGG(
+      JSON_OBJECT(
+        'WhatsApp', n.WhatsApp,
+        'Sms', n.SMS,
+        'PushWeb', n.PushWeb,
+        'PushApp', n.PushApp
+      )
+    ) FROM UsersNotifications as n WHERE n.UserID = u.UserID) as user_notifications
     FROM Users AS u
     LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
     LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
@@ -368,7 +439,25 @@ class User {
         'Department', l.Department,
         'IsActive', l.IsActive
       )
-    ) FROM UserLocations as l WHERE l.UserID = u.UserID) as user_locations
+    ) FROM UsersLocations as l WHERE l.UserID = u.UserID) as user_locations,
+    -- Subconsulta para settings
+    (SELECT JSON_ARRAYAGG(
+      JSON_OBJECT(
+        'ReceiveNewsletters', s.ReceiveNewsletters,
+        'TimeZone', s.TimeZone,
+        'PreferredLanguage', s.PreferredLanguage,
+        'ViewMode', s.ViewMode
+      )
+    ) FROM UsersSettings as s WHERE s.UserID = u.UserID) as user_settings,
+    -- Subconsulta para settings
+    (SELECT JSON_ARRAYAGG(
+      JSON_OBJECT(
+        'WhatsApp', n.WhatsApp,
+        'Sms', n.SMS,
+        'PushWeb', n.PushWeb,
+        'PushApp', n.PushApp
+      )
+    ) FROM UsersNotifications as n WHERE n.UserID = u.UserID) as user_notifications
     FROM Users AS u
     LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
     LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
@@ -438,7 +527,25 @@ class User {
         'Department', l.Department,
         'IsActive', l.IsActive
       )
-    ) FROM UserLocations as l WHERE l.UserID = u.UserID) as user_locations
+    ) FROM UsersLocations as l WHERE l.UserID = u.UserID) as user_locations,
+    -- Subconsulta para settings
+    (SELECT JSON_ARRAYAGG(
+      JSON_OBJECT(
+        'ReceiveNewsletters', s.ReceiveNewsletters,
+        'TimeZone', s.TimeZone,
+        'PreferredLanguage', s.PreferredLanguage,
+        'ViewMode', s.ViewMode
+      )
+    ) FROM UsersSettings as s WHERE s.UserID = u.UserID) as user_settings,
+    -- Subconsulta para settings
+    (SELECT JSON_ARRAYAGG(
+      JSON_OBJECT(
+        'WhatsApp', n.WhatsApp,
+        'Sms', n.SMS,
+        'PushWeb', n.PushWeb,
+        'PushApp', n.PushApp
+      )
+    ) FROM UsersNotifications as n WHERE n.UserID = u.UserID) as user_notifications
     FROM Users AS u
     LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
     LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
@@ -508,7 +615,25 @@ class User {
         'Department', l.Department,
         'IsActive', l.IsActive
       )
-    ) FROM UserLocations as l WHERE l.UserID = u.UserID) as user_locations
+    ) FROM UsersLocations as l WHERE l.UserID = u.UserID) as user_locations,
+    -- Subconsulta para settings
+    (SELECT JSON_ARRAYAGG(
+      JSON_OBJECT(
+        'ReceiveNewsletters', s.ReceiveNewsletters,
+        'TimeZone', s.TimeZone,
+        'PreferredLanguage', s.PreferredLanguage,
+        'ViewMode', s.ViewMode
+      )
+    ) FROM UsersSettings as s WHERE s.UserID = u.UserID) as user_settings,
+    -- Subconsulta para settings
+    (SELECT JSON_ARRAYAGG(
+      JSON_OBJECT(
+        'WhatsApp', n.WhatsApp,
+        'Sms', n.SMS,
+        'PushWeb', n.PushWeb,
+        'PushApp', n.PushApp
+      )
+    ) FROM UsersNotifications as n WHERE n.UserID = u.UserID) as user_notifications
     FROM Users AS u
     LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
     LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
@@ -579,7 +704,25 @@ class User {
         'Department', l.Department,
         'IsActive', l.IsActive
       )
-    ) FROM UserLocations as l WHERE l.UserID = u.UserID) as user_locations
+    ) FROM UsersLocations as l WHERE l.UserID = u.UserID) as user_locations,
+    -- Subconsulta para settings
+    (SELECT JSON_ARRAYAGG(
+      JSON_OBJECT(
+        'ReceiveNewsletters', s.ReceiveNewsletters,
+        'TimeZone', s.TimeZone,
+        'PreferredLanguage', s.PreferredLanguage,
+        'ViewMode', s.ViewMode
+      )
+    ) FROM UsersSettings as s WHERE s.UserID = u.UserID) as user_settings,
+    -- Subconsulta para settings
+    (SELECT JSON_ARRAYAGG(
+      JSON_OBJECT(
+        'WhatsApp', n.WhatsApp,
+        'Sms', n.SMS,
+        'PushWeb', n.PushWeb,
+        'PushApp', n.PushApp
+      )
+    ) FROM UsersNotifications as n WHERE n.UserID = u.UserID) as user_notifications
     FROM Users AS u
     LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
     LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
@@ -649,7 +792,25 @@ class User {
         'Department', l.Department,
         'IsActive', l.IsActive
       )
-    ) FROM UserLocations as l WHERE l.UserID = u.UserID) as user_locations
+    ) FROM UsersLocations as l WHERE l.UserID = u.UserID) as user_locations,
+    -- Subconsulta para settings
+    (SELECT JSON_ARRAYAGG(
+      JSON_OBJECT(
+        'ReceiveNewsletters', s.ReceiveNewsletters,
+        'TimeZone', s.TimeZone,
+        'PreferredLanguage', s.PreferredLanguage,
+        'ViewMode', s.ViewMode
+      )
+    ) FROM UsersSettings as s WHERE s.UserID = u.UserID) as user_settings,
+    -- Subconsulta para settings
+    (SELECT JSON_ARRAYAGG(
+      JSON_OBJECT(
+        'WhatsApp', n.WhatsApp,
+        'Sms', n.SMS,
+        'PushWeb', n.PushWeb,
+        'PushApp', n.PushApp
+      )
+    ) FROM UsersNotifications as n WHERE n.UserID = u.UserID) as user_notifications
     FROM Users AS u
     LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
     LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
@@ -715,6 +876,22 @@ class User {
     }
     unset($user['user_locations']);
 
+    $settings = @json_decode($user['user_settings'], true);
+    if($settings){
+      $user['Settings'] = array_pop($settings);
+      $user['Settings']['ReceiveNewsletters'] = (bool)$user['Settings']['ReceiveNewsletters'];
+    }
+    unset($user['user_settings']);
+
+    $notifications = @json_decode($user['user_notifications'], true);
+    if(isset($user['Settings']) && $notifications){
+      $user['Settings']['Notifications'] = array_pop($notifications);
+      foreach($user['Settings']['Notifications'] as $i => &$v){
+        $v = (bool)$v;
+      }
+      unset($user['user_notifications']);
+    }
+
     return $user;
   }
 
@@ -760,6 +937,22 @@ class User {
       }
       unset($e['user_locations']);
 
+      $settings = @json_decode($e['user_settings'], true);
+      if($settings){
+        $e['Settings'] = array_pop($settings);
+        $e['Settings']['ReceiveNewsletters'] = (bool)$e['Settings']['ReceiveNewsletters'];
+      }
+      unset($e['user_settings']);
+
+      $notifications = @json_decode($e['user_notifications'], true);
+      if(isset($e['Settings']) && $notifications){
+        $e['Settings']['Notifications'] = array_pop($notifications);
+        foreach($e['Settings']['Notifications'] as $i => &$v){
+          $v = (bool)$v;
+        }
+        unset($e['user_notifications']);
+      }
+
       return $e;
     }, $users);
 
@@ -779,7 +972,7 @@ class User {
    * @return array|false: datos del consentimiento
    **/
   public function latestConsentByUser($userID) {
-    $stmt = $this->db->prepare("SELECT * FROM UserLegalConsents
+    $stmt = $this->db->prepare("SELECT * FROM UsersLegalConsents
       WHERE UserID = ? GROUP BY DocumentType ORDER BY ConsentDate DESC");
     $stmt->execute([$userID]);
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -870,7 +1063,7 @@ class User {
    * @return array: array con datos del usuario actualizado
    * @throws DatabaseException
    **/
-  public function updateUser($userID, $currentEmail, $values) {
+  public function updateUser($userID, $values) {
     try {
       $this->db->beginTransaction(); # Iniciar transacción
 
@@ -913,7 +1106,7 @@ class User {
       }
 
       if($location){
-        $stmt = $this->db->prepare("INSERT INTO UserLocations (
+        $stmt = $this->db->prepare("INSERT INTO UsersLocations (
           LocationID, UserID, LocationName, AddressName, AddressNumber,
           Floor, Department, Cp, City, State, CountryCode, IsActive
           ) VALUES (
@@ -947,6 +1140,49 @@ class User {
           'state' => $location['State'],
           'countryCode' => $location['CountryCode'],
           'isActive' => $location['IsActive'] ?? 1
+        ]);
+      }
+
+      $user = $this->getUserById($userID) ?:
+        throw new DatabaseException("Failed to retrieve the updated user");
+
+      $this->db->commit(); # Confirmo transacción
+      return $user;
+    } catch (PDOException $e) {
+      $this->db->rollBack(); # Revierto en caso de error
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  /**
+   * Actualiza los ajustes del usuario
+   * @param  int $userID: ID del usuario a actualizar
+   * @param  array $settings: valores correspondientes a los ajustes generales
+   * @param  array $notifications: valores correspondientes a las notificaciones
+   * @return array: array con datos del usuario actualizado
+   * @throws DatabaseException
+   **/
+  public function updateSettings($userID, $settings, $notifications) {
+    try {
+      $this->db->beginTransaction(); # Iniciar transacción
+
+      $stmt = $this->db->prepare("UPDATE UsersNotifications
+        SET WhatsApp = ?, SMS = ?, PushApp = ?, PushWeb = ?
+        WHERE UserID = ?");
+      $stmt->execute([
+        (int)$notifications['WhatsApp'], (int)$notifications['Sms'],
+        (int)$notifications['PushApp'], (int)$notifications['PushWeb'],
+        $userID
+      ]);
+
+      if($settings){
+        $stmt = $this->db->prepare("UPDATE UsersSettings
+          SET PreferredLanguage = ?, ViewMode = ?, ReceiveNewsletters = ?, TimeZone = ?
+          WHERE UserID = ?");
+        $stmt->execute([
+          $settings['PreferredLanguage'], $settings['ViewMode'],
+          (int)$settings['ReceiveNewsletters'], $settings['TimeZone'],
+          $userID
         ]);
       }
 
