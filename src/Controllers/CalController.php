@@ -8,6 +8,7 @@ use App\Models\Cal;
 use App\Models\User;
 use App\Models\Offering;
 use Predis\Client as RedisClient;
+use App\Utils\ParameterValidator;
 
 class CalController{
 
@@ -100,9 +101,10 @@ class CalController{
 
       # ---- BORRADO WEBHOOK ----
       if($webhook !== null){ # Si tiene webhook registrado procedo
-        $accessToken = $this -> _refreshCalUserToken($response, $refreshToken, $accessToken);
+        $result = $this -> _refreshCalUserToken($response, $refreshToken, $accessToken);
         # Si tengo un access token valido procedo a borrar el webhook
-        if($accessToken){
+        if($result->valid){
+          $accessToken = $result->access_token;
           $headers = [
             "Authorization: Bearer $accessToken"
           ];
@@ -128,23 +130,14 @@ class CalController{
    * @param Request $request: objeto de la petición HTTP (contiene 'state' y 'code' en query)
    * @param Response $response: objeto de la respuesta HTTP
    * @param array $args: argumentos de la ruta definidos en el enrutador
-   * @return Response: redirección a URL de frontend o JSON con error
-   * @statusCode 302: redirección exitosa a frontend
-   * @statusCode 400: parámetros inválidos o payload expirado
-   * @statusCode 401: firma inválida o token inválido
-   * @statusCode 500: error en Cal.com API o base de datos
+   * @return Response: redirección a URL de frontend (o onesoul.app como fallback)
    **/
   public function callback(Request $request, Response $response, array $args) {
     $state = $_GET['state'] ?? ''; # Obtengo el state firmado
     $code = $_GET['code'] ?? ''; # Obtengo el code enviado por Cal.com
 
     if(empty($state) || empty($code)){
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "INVALID_PARAMETERS",
-          "desc" => "Parameters are missing or invalid"
-        ]
-      ]);
+      return $response->withHeader('Location', 'https://onesoul.app')->withStatus(302);
     }
 
     try {
@@ -153,39 +146,31 @@ class CalController{
       # Desencripto y verifico firma
       $calc = hash_hmac('sha256', $dataB64, $GLOBALS['config']['sig_secret']);
 
-      # Error 401 si la firma es invalida
-      if (!hash_equals($calc, $macHex)) {
-        return $response->withStatus(401)->withJson([
-          "error" => [
-            "code" => "EXPIRED_REQUEST",
-            "desc" => "The payload has expired"
-          ]
-        ]);
+      # Decodifico el payload
+      $payload = @json_decode(base64_decode($dataB64));
+      $userID = $payload?->uid ?? null; # ID del usuario onesoul
+      $redirect = $payload?->redirect ?? null; # url del frontend a donde debe redirigir luego de autenticar
+
+      # Payload invalido
+      if(!$payload || is_null($userID) || is_null($redirect)){
+        return $response->withHeader('Location', 'https://onesoul.app')->withStatus(302);
       }
 
-      # Decodifico el payload y verifico que no este caducado
-      $payload = json_decode(base64_decode($dataB64));
-      if (!$payload || time() > $payload->exp + 7200){
-        return $response->withStatus(400)->withJson([
-          "error" => [
-            "code" => "EXPIRED_REQUEST",
-            "desc" => "The payload has expired"
-          ]
-        ]);
+      # Error si la firma es invalida
+      if (!hash_equals($calc, $macHex)) {
+        return $response->withHeader('Location', $redirect)->withStatus(302);
       }
-      $userID = $payload->uid; # ID del usuario onesoul
-      $redirect = $payload->redirect; # url del frontend a donde debe redirigir luego de autenticar
+
+      # Error si el payload esta caducado
+      if (!$payload || time() > $payload->exp + 7200){
+        return $response->withHeader('Location', $redirect)->withStatus(302);
+      }
 
       # 1) Obtengo la info del usuario
       # --------------------------------------------
       $user = $this->user->getUserById($userID);
       if(!$user){
-        return $response->withStatus(404)->withJson([
-          "error" => [
-            "code" => "USER_NOT_FOUND",
-            "desc" => "No user associated with this Cal.com account was found"
-          ]
-        ]);
+        return $response->withHeader('Location', $redirect)->withStatus(302);
       }
 
       # 2) Obtener los token del usuario
@@ -207,46 +192,37 @@ class CalController{
 
       $result = $this->_calRequest($response, "POST", "app", "/api/auth/oauth/token", $headers, $postData);
       if(!$result->valid){
-        return $result->response;
+        return $response->withHeader('Location', $redirect)->withStatus(302);
       }
 
       $refreshToken = $result->response->refresh_token;
-      $accessToken = $this -> _refreshCalUserToken($response, $refreshToken);
-      if(!$accessToken){
-        return $response->withStatus(401)->withJson([
-          "error" => [
-            "code" => "CAL_INVALID_TOKEN",
-            "desc" => "Invalid Cal.com refresh token"
-          ]
-        ]);
+      $result = $this -> _refreshCalUserToken($response, $refreshToken);
+      if(!$result->valid){
+        return $response->withHeader('Location', $redirect)->withStatus(302);
       }
+      $accessToken = $result->access_token;
 
       # 3) Actualizar metadatos Cal.com
       # --------------------------------------------
       $result = $this -> _updateCalUser($response, $accessToken, $user);
       if(!$result->valid){
-        return $result->response;
+        return $response->withHeader('Location', $redirect)->withStatus(302);
       }
 
       # 4) Chequear schedules y event-types
       # --------------------------------------------
       $result = $this -> _checkUserSchedule($response, $accessToken);
       if(!$result->valid){
-        return $result->response;
+        return $response->withHeader('Location', $redirect)->withStatus(302);
       }
 
       $result = $this -> _checkUserEventTypes($response, $accessToken);
       if(!$result->valid){
-        return $result->response;
+        return $response->withHeader('Location', $redirect)->withStatus(302);
       }
 
       if(empty($result->response->data->eventTypeGroups) || empty($result->response->data->eventTypeGroups[0]->eventTypes)){
-        return $response->withStatus(500)->withJson([
-          "error" => [
-            "code" => "CAL_PROFILE_ERROR",
-            "desc" => "This Cal.com profile doesnt have any schedules"
-          ]
-        ]);
+        return $response->withHeader('Location', $redirect)->withStatus(302);
       }
 
       $calUserID = $result->response->data->eventTypeGroups[0]->eventTypes[0]->userId;
@@ -271,7 +247,7 @@ class CalController{
       # Consulto webhooks existentes
       $result = $this->_calRequest($response, "GET", "api", "/v2/webhooks", $headers);
       if(!$result->valid){
-        return $result->response;
+        return $response->withHeader('Location', $redirect)->withStatus(302);
       }
 
       # Busco si ya tiene un webhook con onesoul en ese caso no creo otro
@@ -302,7 +278,7 @@ class CalController{
         "secret" => $GLOBALS['config']['cal']['secret']
       ]));
       if(!$result->valid){
-        return $result->response;
+        return $response->withHeader('Location', $redirect)->withStatus(302);
       }
 
       $webhook = $result->response->data;
@@ -310,12 +286,7 @@ class CalController{
       $this->cal->updateCalUserWebhook($calUserID, $webhook->id);
       return $response->withHeader('Location', $redirect)->withStatus(302);
     } catch (\Throwable $e) {
-      return $response->withStatus(500)->withJson([
-        "error" => [
-          "code" => "INTERNAL_SERVER_ERROR",
-          "desc" => $e->getMessage()
-        ]
-      ]);
+      return $response->withHeader('Location', $redirect)->withStatus(302);
     }
   }
 
@@ -329,11 +300,17 @@ class CalController{
    * @statusCode 200: información de estado devuelta en JSON
    **/
   public function checkUser(Request $request, Response $response, array $args) {
-    $userID = intval($args['id']);
+    $params['UserID'] = intval($args['UserID']);
+
+    $pValidation = ParameterValidator::validate($response, 'cal','checkuser', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
+    }
+    $params = $pValidation->values;
 
     # Lo busco en la base
     try{
-      $user = $this->cal->getCalUser($userID);
+      $user = $this->cal->getCalUser($params['UserID']);
       if(!$user){
         return $response->withJson(["Status" => "NOT_FOUND"]);
       }
@@ -373,12 +350,13 @@ class CalController{
 
       # Si no lo encontro consultar al usuario con sus tokens
       # -----------------------------------------
-      $accessToken = $this -> _refreshCalUserToken($response, $refreshToken, $accessToken);
+      $result = $this -> _refreshCalUserToken($response, $refreshToken, $accessToken);
       # Si no se puede consultar al usuario por token lo doy de baja ya que esta inaccesible
-      if(!$accessToken){
+      if(!$result->valid){
         $this->cal->deleteCalUser($calUserID);
         return $response->withJson(["Status" => "UNLINKED"]);
       }
+      $accessToken = $result->access_token;
 
       $headers = [
         "Authorization: Bearer $accessToken"
@@ -418,7 +396,7 @@ class CalController{
 
   /**
    * Obtiene un schedule por UUID
-   * @param Request $request: objeto de la petición HTTP (parámetro 'uuid' = assocUUID)
+   * @param Request $request: objeto de la petición HTTP
    * @param Response $response: objeto de la respuesta HTTP
    * @param array $args: argumentos de la ruta definidos en el enrutador
    * @return Response: JSON con los datos del schedule
@@ -427,13 +405,18 @@ class CalController{
    * @statusCode 404: schedule no encontrado
    **/
   public function getScheduleByAssocUUID(Request $request, Response $response, array $args) {
-    $assocUUID = $args['uuid'];
-
+    $params['AssocUUID'] = $args['AssocUUID'];
     $jwt = $request->getAttribute('jwt');
     $userID = $jwt->data->UserID;
 
+    $pValidation = ParameterValidator::validate($response, 'cal','get_schedule_by_uuid', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
+    }
+    $params = $pValidation->values;
+
     try{
-      $schedule = $this->cal->getScheduleByAssocUUID($assocUUID);
+      $schedule = $this->cal->getScheduleByAssocUUID($params['AssocUUID']);
       if(!$schedule){
         return $response->withStatus(404)->withJson([
           "error" => [
@@ -453,6 +436,157 @@ class CalController{
       }
 
       return $response->withJson($schedule);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  /**
+   * Obtiene la disponibilidad de un guia
+   * @param Request $request: objeto de la petición HTTP
+   * @param Response $response: objeto de la respuesta HTTP
+   * @param array $args: argumentos de la ruta definidos en el enrutador
+   * @return Response: JSON con los datos del schedule
+   * @statusCode 200: información de estado devuelta en JSON
+   * @statusCode 403: no autorizado a ver la disponibilidad
+   * @statusCode 404: usuario no encontrado
+   **/
+  public function getAvailability(Request $request, Response $response, array $args) {
+    $params['UserID'] = $args['UserID'];
+
+    $pValidation = ParameterValidator::validate($response, 'cal','get_availability', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
+    }
+    $params = $pValidation->values;
+
+    try{
+      $user = $this->cal->getCalUser($params['UserID']);
+      if(!$user){
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "CAL_USER_NOT_FOUND",
+            "desc" => "No user associated with the specified id was found."
+          ]
+        ]);
+      }
+      $accessToken = $user['AccessToken'];
+      $refreshToken = $user['RefreshToken'];
+
+      # Refresco el token
+      $result = $this -> _refreshCalUserToken($response, $refreshToken, $accessToken);
+      if(!$result->valid){
+        return $result->response;
+      }
+      $accessToken = $result->access_token;
+
+      $result = $this -> _checkUserSchedule($response, $accessToken);
+      if(!$result->valid){
+        return $result->response;
+      }
+
+      $availability = [];
+      foreach($result->response->availability as $v){
+        foreach($v->days as $d){
+          $availability[$d] = [
+            "startTime" => $v->startTime,
+            "endTime" => $v->endTime
+          ];
+        }
+      }
+
+      return $response->withJson(["id" => $result->response->id, "availability" => $availability]);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  /**
+   * Modifica la disponibilidad de un guia
+   * @param Request $request: objeto de la petición HTTP
+   * @param Response $response: objeto de la respuesta HTTP
+   * @param array $args: argumentos de la ruta definidos en el enrutador
+   * @return Response: JSON con los datos del schedule
+   * @statusCode 200: información de estado devuelta en JSON
+   * @statusCode 403: no autorizado a cambiar el schedule
+   * @statusCode 404: schedule no encontrado
+   **/
+  public function updateAvailability(Request $request, Response $response, array $args) {
+    $params = $request->getParsedBody();
+    $params['UserID'] = $args['UserID'];
+    $jwt = $request->getAttribute('jwt');
+    $userID = $jwt->data->UserID;
+
+    $pValidation = ParameterValidator::validate($response, 'cal','update_availability',
+      $params, STRICT_FIELD_VALIDATION, IGNORE_MISSING_FIELDS);
+    if(!$pValidation->valid){
+      return $pValidation->response;
+    }
+    $params = $pValidation->values;
+
+    foreach($params as $i => $v){
+      if($i === 'UserID'){
+        continue;
+      }
+      $pValidation = ParameterValidator::validate($response, 'cal','update_availability_day', $params[$i]);
+      if(!$pValidation->valid){
+        return $pValidation->response;
+      }
+      $params[$i] = $pValidation->values;
+    }
+
+    if($userID !== $params['UserID'] && !$jwt->data->IsAdmin){
+      return $response->withStatus(403)->withJson([
+        "error" => [
+          "code" => "FORBIDDEN",
+          "desc" => "You are not authorized to change this guide availability."
+        ]
+      ]);
+    }
+
+    try{
+      $user = $this->cal->getCalUser($params['UserID']);
+      if(!$user){
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "AUTH_TOKEN_REFRESH_FAILED",
+            "desc" => "Failed to refresh access token"
+          ]
+        ]);
+      }
+      $accessToken = $user['AccessToken'];
+      $refreshToken = $user['RefreshToken'];
+
+      # Refresco el token
+      $result = $this -> _refreshCalUserToken($response, $refreshToken, $accessToken);
+      if(!$result->valid){
+        return $result->response;
+      }
+      $accessToken = $result->access_token;
+
+      $schedule = $this -> _checkUserSchedule($response, $accessToken);
+      if(!$schedule->valid){
+        return $schedule->response;
+      }
+      $scheduleID = $schedule->response->id;
+
+      unset($params['UserID']);
+      $result = $this -> _updateUserSchedule($response, $accessToken, $scheduleID, $params);
+      if(!$result->valid){
+        return $result->response;
+      }
+
+      return $response->withJson($availability);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -574,7 +708,7 @@ class CalController{
             "desc" => $curlErrno
               ? "cURL error: $curlError"
               : "Cal.com returned HTTP $httpCode",
-            "cal_response" => $curlResp # opcional, útil para debug
+            "cal_response" => json_decode($curlResp) ?: "" # opcional, útil para debug
           ]
         ])
       ];
@@ -586,22 +720,29 @@ class CalController{
   /**
    * Refresca el access token OAuth con Cal.com
    * Valida y renueva tokens cuando expiran usando refresh token
-   * @param Response $response: objeto de respuesta (para requests)
+   * @param Response $response: objeto de respuesta (para cal request)
    * @param string $refreshToken: token para renovación
    * @param string|bool $accessToken: token actual (opcional, por defecto false)
-   * @return string|bool: token de acceso renovado o false si falla
+   * @return object: {valid: bool, response: Response|object}
    **/
   private function _refreshCalUserToken($response, $refreshToken, $accessToken = false){
     $calUserID = $this -> _getUserFromToken($refreshToken);
     if(!$calUserID){
-      return false;
+      return (object)[
+        "valid" => false,
+        "response" => $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "CAL_TOKEN_REFRESH_FAILED",
+            "desc" => "Invalid refresh token"
+          ]
+        ])
+      ];
     }
 
     # Si se proporciono token se verifica su validez
     if($accessToken){
       # Extraigo la expiracion del access_token
       $tokenExpiresAt = json_decode(base64_decode(explode(".",$accessToken)[1])) -> exp;
-
       # 1) Si accesstoken no expiro, lo pruebo
       if (time() < $tokenExpiresAt) {
         $headers = [
@@ -609,9 +750,14 @@ class CalController{
         ];
         $result = $this->_calRequest($response, "GET", "api", "/v2/me", $headers);
         if($result->valid){ # Si se acepto el token no hace falta refrescarlo
-          return $accessToken;
+          return (object)[
+            "valid" => true,
+            "access_token" => $accessToken
+          ];
         }
       }
+
+      $accessToken = null;
     }
 
     # 2) Si el access token expiro o no se proporciono lo renuevo con el refresh token
@@ -630,17 +776,21 @@ class CalController{
       ]);
 
       $result = $this->_calRequest($response, "POST", "app", "/api/auth/oauth/refreshToken", $headers, $postData);
-      if($result->valid){
-        # Grabo los nuevos tokens
-        $this->cal->updateCalUserTokens($calUserID, $result->response->access_token, $result->response->access_token);
-        return $result->response->access_token;
+      if(!$result->valid){
+        return $result;
       }
-      return false;
+
+      # Grabo los nuevos tokens
+      $this->cal->updateCalUserTokens($calUserID, $result->response->access_token, $result->response->refresh_token);
+      return (object)[
+        "valid" => true,
+        "access_token" => $result->response->access_token
+      ];
     }
   }
 
   /**
-   * Busca si el usuario tiene un schedule de OneSoul asignado
+   * Busca si el usuario tiene un schedule de OneSoul asignado y si no lo tiene le creo uno por defecto
    * @param Response $response: objeto de respuesta (para retornar errores)
    * @param string $accessToken: token para acceder a la API del usuario
    * @return object: {valid: bool, response: Response|object}
@@ -648,7 +798,8 @@ class CalController{
   private function _checkUserSchedule($response, $accessToken){
     $headers = [
       "Authorization: Bearer $accessToken",
-      "Content-Type: application/json"
+      "Content-Type: application/json",
+      "cal-api-version: 2024-06-11"
     ];
 
     $result = $this->_calRequest($response, "GET", "api", "/v2/schedules", $headers);
@@ -658,6 +809,7 @@ class CalController{
     $schedules = $result;
 
     $exists = in_array('OneSoul', array_column($result->response->data, 'name'));
+    # Si no existe lo creo
     if(!$exists){
       $result = $this->_calRequest($response, "POST", "api", "/v2/schedules", $headers, json_encode([
         "name" => "OneSoul",
@@ -675,7 +827,59 @@ class CalController{
       $schedules = $result->response;
     }
 
-    return (object)["valid" => true, "response" => $schedules];
+    $availability = array_filter($schedules->response->data, function($e){
+      return $e->name === "OneSoul";
+    });
+
+    if(empty($availability)){
+      return (object) [
+        "valid" => false,
+        "response" => $response->withStatus($httpCode)->withJson([
+          "error" => [
+            "code" => "CAL_SCHEDULE_ERROR",
+            "desc" => "Error retrieving cal.com user schedule named 'OneSoul'"
+          ]
+        ])
+      ];
+    }
+
+    # Control duplicaciones (no debe haber mas de un schedule onesoul)
+    if(count($availability) > 1){
+      for($x = 1; $x < count($availability); $x++){
+        $this->_calRequest($response, "DELETE", "api", "/v2/schedules/{$availability[$x]->id}", $headers);
+      }
+    }
+
+    return (object)["valid" => true, "response" => array_shift($availability)];
+  }
+
+
+  /**
+   * Actualiza el schedule de OneSoul si no existe lo crea
+   * @param Response $response: objeto de respuesta (para retornar errores)
+   * @param string $accessToken: token para acceder a la API del usuario
+   * @param integer $scheduleID: ID del schedule de cal
+   * @param array[] $availability: array dias y horarios
+   * @return object: {valid: bool, response: Response|object}
+   **/
+  private function _updateUserSchedule($response, $accessToken, $scheduleID, $availability){
+    $headers = [
+      "Authorization: Bearer $accessToken",
+      "Content-Type: application/json",
+      "cal-api-version: 2024-06-11"
+    ];
+
+    $result = $this->_calRequest($response, "PATCH", "api", "/v2/schedules/$scheduleID", $headers, json_encode([
+      "name" => "OneSoul",
+      "timeZone" => "America/Argentina/Buenos_Aires",
+      "isDefault" => true,
+      "availability" => $availability
+    ]));
+    if(!$result->valid){
+      return $result;
+    }
+
+    return (object)["valid" => true, "response" => $result->response];
   }
 
   /**
