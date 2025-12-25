@@ -586,7 +586,7 @@ class CalController{
         return $result->response;
       }
 
-      return $response->withJson($availability);
+      return $response->withJson($result->response);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -862,12 +862,17 @@ class CalController{
    * @param array[] $availability: array dias y horarios
    * @return object: {valid: bool, response: Response|object}
    **/
-  private function _updateUserSchedule($response, $accessToken, $scheduleID, $availability){
+  private function _updateUserSchedule($response, $accessToken, $scheduleID, $values){
     $headers = [
       "Authorization: Bearer $accessToken",
       "Content-Type: application/json",
       "cal-api-version: 2024-06-11"
     ];
+
+    $availability = [];
+    foreach($values as $i => $v){
+      $availability[] = (object)array_merge(["days" => [$i]] ,(array)$v);
+    }
 
     $result = $this->_calRequest($response, "PATCH", "api", "/v2/schedules/$scheduleID", $headers, json_encode([
       "name" => "OneSoul",
@@ -917,9 +922,21 @@ class CalController{
           "slug" => "onesoul{$t[0]}min",
           "bookingFields" => [
             [
-              "type" => "notes",
-              "required" => false,
-              "label" => "Comentario opcional"
+                "name" => "name",
+                "type" => "text",
+                "label" => "Nombre de usuario",
+                "required" => true,
+                "editable" => "system",
+                "disableOnPrefill" => true
+            ],
+            [
+                "name" => "email",
+                "type" => "email",
+                "label" => "Email",
+                "defaultLabel" => "email_address",
+                "required" => true,
+                "editable" => "system",
+                "disableOnPrefill" => true
             ]
           ],
           "disableGuests" => true
