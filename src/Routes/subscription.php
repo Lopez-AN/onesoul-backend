@@ -34,4 +34,5 @@ return function (App $app) {
   $app->get('/subscription/platform_id/{subId}', [$subscriptionController, 'getUserSubscriptionByPlatformSubID'])->add($requiredJwt);
   $app->get('/subscription/payments/{userID}', [$subscriptionController, 'getPaymentsByUser'])->add($requiredJwt);
   $app->post('/subscription/plans/{id}', [$subscriptionController, 'updateSubscriptionPlan'])->add($requiredJwt);
+  $app->get('/subscription/schedule/apply/{ChangeID}', [$subscriptionController, 'applyScheduledChange'])->add($requiredJwt);
 };

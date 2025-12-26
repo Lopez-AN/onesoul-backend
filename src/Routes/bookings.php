@@ -29,10 +29,11 @@ return function (App $app) {
   $bookingController = new BookingController($booking, $offering, $user, $notification, $donation);
 
   // Bookings protegidos
-  $app->get('/bookings/{bookingID}', [$bookingController, 'getBookingByID'])->add($requiredJwt);
-  $app->get('/bookings/public/{publicID}', [$bookingController, 'getBookingByPublicID'])->add($requiredJwt);
-  $app->get('/bookings/guide/{userID}', [$bookingController, 'getBookingsByGuide'])->add($requiredJwt);
-  $app->get('/bookings/seeker/{userID}', [$bookingController, 'getBookingsBySeeker'])->add($requiredJwt);
+  $app->get('/bookings/{BookingID}', [$bookingController, 'getBookingByID'])->add($requiredJwt);
+  $app->get('/bookings/public/{PublicID}', [$bookingController, 'getBookingByPublicID'])->add($requiredJwt);
+  $app->get('/bookings/guide/{GuideID}', [$bookingController, 'getBookingsByGuide'])->add($requiredJwt);
+  $app->get('/bookings/seeker/{SeekerID}', [$bookingController, 'getBookingsBySeeker'])->add($requiredJwt);
+  $app->get('/bookings/seeker/info/{BookingID}', [$bookingController, 'getSeekerInfo'])->add($requiredJwt);
   $app->post('/bookings', [$bookingController, 'createBooking'])->add($requiredJwt);
   $app->patch('/bookings/{BookingID}', [$bookingController, 'updateBooking'])->add($requiredJwt);
   $app->post('/bookings/{BookingID}/cancel', [$bookingController, 'cancelBooking'])->add($requiredJwt);

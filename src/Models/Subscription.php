@@ -382,7 +382,8 @@ class Subscription {
         WHERE ReferredUserID = ? AND ReferralStatus = 'Pending'");
       $stmt->execute([$userID]);
 
-      $subscription = $this->getSubscriptionByUser($userID);
+      $subscription = $this->getSubscriptionByUser($userID) ?:
+        throw new DatabaseException("Failed to retrieve the created subscription");
 
       # Enviar email si hay datos del usuario
       if (!empty($userData['UserName']) && !empty($userData['Email'])) {
@@ -413,12 +414,11 @@ class Subscription {
         }
       }
 
-      return [
-        'Subscription' => $subscription
-      ];
+      # Aplica los cambios de la subscripcion
+      $this->_subscriptionChangeActions($userID);
 
       $this->db->commit(); # Confirmo transacción
-      return $booking;
+      return $subscription;
     } catch (\PDOException $e) {
       $this->db->rollBack(); # Revierto en caso de error
       throw new DatabaseException($e->getMessage());
@@ -613,14 +613,13 @@ class Subscription {
       if (!$change) throw new DatabaseException("Change not found: $changeId");
 
       # actualizar Subscriptions
-      $stmtUp = $this->db->prepare(
-        "UPDATE Subscriptions
+      $stmt = $this->db->prepare("UPDATE Subscriptions
         SET PlanID = :newPlanID, NextBillingDate = :nextBillingDate
         WHERE PlatformSubscriptionID = :platformSubscriptionID
         AND Status IN ('ACTIVE','TRIALING')"
       );
 
-      $stmtUp->execute([
+      $stmt->execute([
         ':newPlanID' => $change['NewPlanID'],
         ':nextBillingDate' => $effectiveDate,
         ':platformSubscriptionID' => $change['PlatformSubscriptionID']
@@ -630,8 +629,15 @@ class Subscription {
       $stmt = $this->db->prepare("UPDATE SubscriptionChanges SET Status = 'APPLIED', AppliedAt = NOW() WHERE id = :id");
       $stmt->execute([':id' => $changeId]);
 
+      $subscription = $this->getUserSubscriptionByPlatformSubID($change['PlatformSubscriptionID']) ?:
+        throw new DatabaseException("Failed to retrieve the updated subscription");
+      $userID = $subscription['UserID'];
+
+      # Aplica los cambios de la subscripcion
+      $this->_subscriptionChangeActions($userID);
+
       $this->db->commit();
-      return true;
+      return $subscription;
     } catch (\PDOException $e) {
       $this->db->rollBack();
       throw new DatabaseException($e->getMessage());
@@ -661,8 +667,7 @@ class Subscription {
       $current = $this->getUserSubscriptionByPlatformSubID($platformSubscriptionID);
       $oldPlanID = $current ? $current['PlanID'] : null;
 
-      $stmt = $this->db->prepare(
-        "UPDATE Subscriptions
+      $stmt = $this->db->prepare("UPDATE Subscriptions
         SET PlanID = :planID, NextBillingDate = :nextBillingDate
         WHERE PlatformSubscriptionID = :platformSubscriptionID
         AND Status IN ('ACTIVE','TRIALING')"
@@ -678,12 +683,12 @@ class Subscription {
 
       if (!$skipHistory) {
         # registrar en historico como APPLIED
-        $stmtHist = $this->db->prepare("INSERT INTO SubscriptionChanges
+        $stmt = $this->db->prepare("INSERT INTO SubscriptionChanges
               (PlatformSubscriptionID, UserID, OldPlanID, NewPlanID, EffectiveDate, Status, CreatedAt, AppliedAt)
               VALUES (:platformSubscriptionID, :userID, :oldPlanID, :newPlanID, :effectiveDate, 'APPLIED', NOW(), NOW())"
         );
 
-        $stmtHist->execute([
+        $stmt->execute([
           ':platformSubscriptionID' => $platformSubscriptionID,
           ':userID' => $current['UserID'] ?? null,
           ':oldPlanID' => $oldPlanID,
@@ -692,15 +697,20 @@ class Subscription {
         ]);
       }
 
-      $this->db->commit(); # Confirmo transacción
-
       if ($affected === 0) {
         error_log("Warning: updateSubscriptionByUser no afectó filas para PlatformSubscriptionID={$platformSubscriptionID}.
         Estado actual DB: " . json_encode($current));
       }
 
-      $subscription = $this->getUserSubscriptionByPlatformSubID($platformSubscriptionID);
-      return ['Subscription' => $subscription];
+      $subscription = $this->getUserSubscriptionByPlatformSubID($platformSubscriptionID) ?:
+        throw new DatabaseException("Failed to retrieve the updated subscription");
+      $userID = $subscription['UserID'];
+
+      # Aplica los cambios de la subscripcion
+      $this->_subscriptionChangeActions($userID);
+
+      $this->db->commit(); # Confirmo transacción
+      return $subcription;
     } catch (\PDOException $e) {
       $this->db->rollBack(); # Revierto en caso de error
       throw new DatabaseException($e->getMessage());
@@ -738,6 +748,7 @@ class Subscription {
         throw new DatabaseException("Failed to retrieve the updated payment");
 
       $this->db->commit(); # Confirmo transacción
+
       return $payment;
     } catch (\PDOException $e) {
       $this->db->rollBack(); # Revierto en caso de error
@@ -826,7 +837,15 @@ class Subscription {
         AND Status = 'PENDING'");
       $stmt->execute([$platformSubscriptionID]);
 
+      $subscription = $this->getUserSubscriptionByPlatformSubID($platformSubscriptionID) ?:
+        throw new DatabaseException("Failed to retrieve the updated subscription");
+      $userID = $subscription['UserID'];
+
+      # Aplica los cambios de la subscripcion
+      $this->_subscriptionChangeActions($userID);
+
       $this->db->commit(); # Confirmo transacción
+
     } catch (\PDOException $e) {
       $this->db->rollBack(); # Revierto en caso de error
       throw new DatabaseException($e->getMessage());
@@ -1098,6 +1117,24 @@ class Subscription {
     } catch (\PDOException $e) {
       $this->db->rollBack(); # Revierto en caso de error
       throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  private function _subscriptionChangeActions($userID){
+    # Controlo si no se excedio de los offerings maximos
+    $pubMax = $this->getUserSubscriptionFeature($userID, 'PUB_MAX');
+
+    $stmt = $this->db->prepare("SELECT COUNT(*) as active FROM Offerings
+      WHERE UserID = ? AND Status = 'Active'");
+    $stmt->execute([$userID]);
+    $active = $stmt->fetch();
+    $active = $active ? $active['active'] : 0;
+
+    if($active > $pubMax['Value']){
+      $stmt = $this->db->prepare("UPDATE Offerings
+        SET Status = 'Inactive'
+        WHERE UserID = ? AND Status = 'Active'");
+      $stmt->execute([$userID]);
     }
   }
 }

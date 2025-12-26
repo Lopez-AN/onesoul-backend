@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Models\Auth;
 use App\Models\StripeService;
 use Firebase\JWT\JWT;
+use App\Utils\ParameterValidator;
 
 class SubscriptionController {
   protected $subscription;
@@ -389,6 +390,41 @@ class SubscriptionController {
       }
 
       return $response->withStatus(200)->withJson($payments);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  public function applyScheduledChange(Request $request, Response $response, $args) {
+    $params['ChangeID'] = $args['ChangeID'];
+    $paginator = paginator($request);
+    $jwt = $request->getAttribute('jwt');
+
+    $pValidation = ParameterValidator::validate($response, 'subscriptions','apply_scheduled_change', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
+    }
+    $params = $pValidation->values;
+
+    # Validar si el user es el cliente o el guía
+    if (!$jwt->data->IsAdmin) {
+      return $response->withStatus(403)->withJson([
+        "error" => [
+          "code" => "FORBIDDEN",
+          "desc" => "You must be an administrator to do this."
+        ]
+      ]);
+    }
+
+    try {
+      $subscription = $this->subscription->applyScheduledChange($params['ChangeID']);
+
+      return $response->withStatus(200)->withJson($subscription);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [

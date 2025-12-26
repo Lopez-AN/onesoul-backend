@@ -33,14 +33,31 @@ class BookingController {
     $this->donation = $donation;
   }
 
+  /**
+   * Obtiene los datos de una reserva específica por su ID numérico
+   * Valida que el usuario autenticado sea el cliente o el guía asociado
+   * @param Request $request: objeto de la petición HTTP entrante con JWT
+   * @param Response $response: objeto de la respuesta HTTP
+   * @param array $args: argumentos de ruta, debe incluir 'bookingID'
+   * @return Response: JSON con datos de la reserva o error
+   * @statusCode 200: éxito - reserva encontrada y usuario autorizado
+   * @statusCode 401: usuario no autorizado para ver esta reserva
+   * @statusCode 404: reserva no encontrada
+   * @statusCode 500: error interno del servidor
+   **/
   public function getBookingByID(Request $request, Response $response, $args) {
-    $bookingID = intval($args['bookingID']);
+    $params['BookingID'] = $args['BookingID'];
     $jwt = $request->getAttribute('jwt');
-
     $userID = $jwt->data->UserID;
 
+    $pValidation = ParameterValidator::validate($response, 'bookings','get_booking_by_id', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
+    }
+    $params = $pValidation->values;
+
     try {
-      $booking = $this->booking->getBookingByID($bookingID);
+      $booking = $this->booking->getBookingByID($params['BookingID']);
       if (!$booking) {
         return $response->withStatus(404)->withJson([
           "error" => [
@@ -71,14 +88,31 @@ class BookingController {
     }
   }
 
+  /**
+   * Obtiene los datos de una reserva específica por su ID público (PublicID)
+   * Valida que el usuario autenticado sea el cliente o el guía asociado
+   * @param Request $request: objeto de la petición HTTP entrante con JWT
+   * @param Response $response: objeto de la respuesta HTTP
+   * @param array $args: argumentos de ruta, debe incluir 'publicID'
+   * @return Response: JSON con datos de la reserva o error
+   * @statusCode 200: éxito - reserva encontrada y usuario autorizado
+   * @statusCode 401: usuario no autorizado para ver esta reserva
+   * @statusCode 404: reserva no encontrada
+   * @statusCode 500: error interno del servidor
+   **/
   public function getBookingByPublicID(Request $request, Response $response, $args) {
-    $publicID = $args['publicID'];
+    $params['PublicID'] = $args['PublicID'];
     $jwt = $request->getAttribute('jwt');
-
     $userID = $jwt->data->UserID;
 
+    $pValidation = ParameterValidator::validate($response, 'bookings','get_booking_by_public_id', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
+    }
+    $params = $pValidation->values;
+
     try {
-      $booking = $this->booking->getBookingByPublicID($publicID);
+      $booking = $this->booking->getBookingByPublicID($params['PublicID']);
       if (!$booking) {
         return $response->withStatus(404)->withJson([
           "error" => [
@@ -109,16 +143,35 @@ class BookingController {
     }
   }
 
+  /**
+   * Obtiene todas las reservas asociadas a un guía específico
+   * Solo el guía o un administrador puede acceder a esta información
+   * Soporta paginación y filtrado por estado (abierto/cerrado)
+   * @param Request $request: objeto de la petición HTTP entrante con JWT y query params opcionales (status)
+   * @param Response $response: objeto de la respuesta HTTP
+   * @param array $args: argumentos de ruta, debe incluir 'userID' del guía
+   * @return Response: JSON con lista de reservas paginadas o error
+   * @statusCode 200: éxito - lista de reservas del guía
+   * @statusCode 403: usuario no autorizado (no es el guía ni admin)
+   * @statusCode 404: no se encontraron reservas para este guía
+   * @statusCode 500: error interno del servidor
+   **/
   public function getBookingsByGuide(Request $request, Response $response, $args) {
+    $params['GuideID'] = $args['GuideID'];
     $paginator = paginator($request);
-    $params = $request->getQueryParams();
-    $guideID = intval($args['userID']);
+    $queryParams = $request->getQueryParams();
 
     $jwt = $request->getAttribute('jwt');
     $userID = $jwt->data->UserID;
+
+    $pValidation = ParameterValidator::validate($response, 'bookings','get_bookings_by_guide', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
+    }
+    $params = $pValidation->values;
 
     # Validar solo el guia o un admin puede consultar sus booking
-    if ($userID !== $guideID && !$jwt->data->IsAdmin) {
+    if ($userID !== $params['GuideID'] && !$jwt->data->IsAdmin) {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "FORBIDDEN",
@@ -129,19 +182,10 @@ class BookingController {
 
     try {
       # Filtro solo abiertos
-      $onlyOpen = isset($params['status']) && $params['status'] === 'open';
+      $onlyOpen = isset($queryParams['status']) && $queryParams['status'] === 'open';
 
       # Llamar al modelo
-      $bookings = $this->booking->getBookingsByGuide($guideID, $paginator, $onlyOpen);
-      if ($bookings === null) {
-        return $response->withStatus(404)->withJson([
-          "error" => [
-            "code" => "BOOKING_NOT_FOUND",
-            "desc" => "No Bookings found for this specific user."
-          ]
-        ]);
-      }
-
+      $bookings = $this->booking->getBookingsByGuide($params['GuideID'], $paginator, $onlyOpen);
       return $response->withStatus(200)->withJson($bookings);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
@@ -153,16 +197,35 @@ class BookingController {
     }
   }
 
+  /**
+   * Obtiene todas las reservas asociadas a un buscador específico (cliente)
+   * Solo el buscador o un administrador puede acceder a esta información
+   * Soporta paginación y filtrado por estado (abierto/cerrado)
+   * @param Request $request: objeto de la petición HTTP entrante con JWT y query params opcionales (status)
+   * @param Response $response: objeto de la respuesta HTTP
+   * @param array $args: argumentos de ruta, debe incluir 'userID' del buscador
+   * @return Response: JSON con lista de reservas paginadas o error
+   * @statusCode 200: éxito - lista de reservas del buscador
+   * @statusCode 403: usuario no autorizado (no es el buscador ni admin)
+   * @statusCode 404: no se encontraron reservas para este buscador
+   * @statusCode 500: error interno del servidor
+   **/
   public function getBookingsBySeeker(Request $request, Response $response, $args) {
+    $params['SeekerID'] = $args['SeekerID'];
     $paginator = paginator($request);
-    $params = $request->getQueryParams();
-    $seekerID = intval($args['userID']);
+    $queryParams = $request->getQueryParams();
 
     $jwt = $request->getAttribute('jwt');
     $userID = $jwt->data->UserID;
 
+    $pValidation = ParameterValidator::validate($response, 'bookings','get_bookings_by_seeker', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
+    }
+    $params = $pValidation->values;
+
     # Validar solo el buscador o un admin puede consultar sus booking
-    if ($userID !== $seekerID && !$jwt->data->IsAdmin) {
+    if ($userID !== $params['SeekerID'] && !$jwt->data->IsAdmin) {
       return $response->withStatus(403)->withJson([
         "error" => [
           "code" => "FORBIDDEN",
@@ -173,19 +236,10 @@ class BookingController {
 
     try {
       # Filtro solo abiertos
-      $onlyOpen = isset($params['status']) && $params['status'] === 'open';
+      $onlyOpen = isset($queryParams['status']) && $queryParams['status'] === 'open';
 
       # Llamar al modelo
-      $bookings = $this->booking->getBookingsBySeeker($seekerID, $paginator, $onlyOpen);
-      if ($bookings === null) {
-        return $response->withStatus(404)->withJson([
-          "error" => [
-            "code" => "BOOKING_NOT_FOUND",
-            "desc" => "No Bookings found for this specific user."
-          ]
-        ]);
-      }
-
+      $bookings = $this->booking->getBookingsBySeeker($params['SeekerID'], $paginator, $onlyOpen);
       return $response->withStatus(200)->withJson($bookings);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
@@ -197,6 +251,97 @@ class BookingController {
     }
   }
 
+  /**
+   * Obtiene información detallada del cliente (seeker) asociado a una reserva
+   * Retorna datos personales, de contacto, ubicación y rating del buscador
+   * @param Request $request: objeto de la petición HTTP entrante con JWT
+   * @param Response $response: objeto de la respuesta HTTP
+   * @param array $args: argumentos de ruta, debe incluir 'BookingID'
+   * @return Response: JSON con información del seeker (UserID, nombre, email, teléfono, ubicación, rating) o error
+   * @statusCode 200: éxito - información del seeker obtenida correctamente
+   * @statusCode 400: parámetros inválidos (BookingID)
+   * @statusCode 404: reserva no encontrada o usuario asociado no encontrado
+   * @statusCode 500: error interno del servidor
+   **/
+  public function getSeekerInfo(Request $request, Response $response, $args) {
+    $params['BookingID'] = $args['BookingID'];
+
+    $jwt = $request->getAttribute('jwt');
+    $userID = $jwt->data->UserID;
+
+    $pValidation = ParameterValidator::validate($response, 'bookings','get_seeker_info', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
+    }
+    $params = $pValidation->values;
+
+    try {
+      $booking = $this->booking->getBookingByID($params['BookingID']);
+      if (!$booking) {
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "BOOKING_NOT_FOUND",
+            "desc" => "Booking not found"
+          ]
+        ]);
+      }
+
+      $seeker = $this->user->getUserById($booking['UserID']);
+      if(!$seeker){
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "USER_NOT_FOUND",
+            "desc" => "Seeker associated with the booking not found"
+          ]
+        ]);
+      }
+
+      $info = [
+        "UserID" => $seeker['UserID'],
+        "FirstName" => $seeker['FirstName'],
+        "LastName" => $seeker['LastName'],
+        "UserName" => $seeker['UserName'],
+        "DisplayName" => $seeker['DisplayName'],
+        "RegistrationDate" => $seeker['RegistrationDate'],
+        "ShortDescription" => $seeker['ShortDescription'],
+        "ImgURL" => $seeker['ImgURL'],
+        "Rating" => $seeker['Rating'],
+        "TotalReviews" => $seeker['TotalReviews'],
+        "Email" => $seeker['Email'],
+        "Phone" => $seeker['Phone'],
+        "CountryCode" => $seeker['Locations'][0]['CountryCode'],
+        "State" => $seeker['Locations'][0]['State'],
+        "City" => $seeker['Locations'][0]['City'],
+        "Cp" => $seeker['Locations'][0]['Cp']
+      ];
+
+      return $response->withStatus(200)->withJson($info);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  /**
+   * Crea una nueva reserva de un servicio (offering)
+   * Valida email/teléfono del usuario, verifica offering, modalidad, cupones y conexión Cal.com
+   * Genera notificaciones para guía y buscador
+   * @param Request $request: objeto de la petición HTTP entrante con JWT y datos en body (OfferingID, SessionType, Message, etc.)
+   * @param Response $response: objeto de la respuesta HTTP
+   * @param array $args: argumentos de ruta (no utilizado en este método)
+   * @return Response: JSON con datos de la reserva creada o error
+   * @statusCode 200: éxito - reserva creada correctamente
+   * @statusCode 400: parámetros inválidos, contenido inapropiado, modalidad no válida, cupón inválido o invitee de Cal.com no encontrado
+   * @statusCode 401: guía intentando reservar su propio servicio
+   * @statusCode 404: usuario, offering, cupón o guía no encontrado
+   * @statusCode 409: cupón no asignado a una agencia
+   * @statusCode 410: cupón ya utilizado, expirado o cancelado
+   * @statusCode 500: error interno del servidor
+   **/
   public function createBooking(Request $request, Response $response, $args) {
     $params = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
@@ -457,6 +602,20 @@ class BookingController {
     }
   }
 
+  /**
+   * Actualiza datos de una reserva existente (mensaje, tipo de sesión, ubicación, fecha)
+   * Solo el cliente, guía o administrador pueden actualizar
+   * No permite actualizar reservas canceladas, confirmadas, completadas o calificadas
+   * @param Request $request: objeto de la petición HTTP entrante con JWT y datos en body (SessionType, Message, LocationID, ScheduledDate, SubDomain)
+   * @param Response $response: objeto de la respuesta HTTP
+   * @param array $args: argumentos de ruta, debe incluir 'bookingID'
+   * @return Response: JSON con datos de la reserva actualizada o error
+   * @statusCode 200: éxito - reserva actualizada correctamente
+   * @statusCode 400: parámetros inválidos, JSON inválido, contenido inapropiado, subdominio inválido, mensaje muy largo, modalidad no válida o reserva ya finalizada/cancelada
+   * @statusCode 403: usuario no autorizado para actualizar esta reserva
+   * @statusCode 404: reserva u offering no encontrado
+   * @statusCode 500: error interno del servidor
+   **/
   public function updateBooking(Request $request, Response $response, $args) {
     $bookingID = intval($args['bookingID']);
     $data = $request->getParsedBody();
@@ -695,6 +854,21 @@ class BookingController {
     }
   }
 
+  /**
+   * Cancela una reserva existente
+   * Solo el cliente, guía o administrador pueden cancelar
+   * No permite cancelar reservas ya canceladas, completadas o calificadas
+   * Genera notificaciones para guía y buscador
+   * @param Request $request: objeto de la petición HTTP entrante con JWT y datos en body (Message, SubDomain)
+   * @param Response $response: objeto de la respuesta HTTP
+   * @param array $args: argumentos de ruta, debe incluir 'BookingID'
+   * @return Response: JSON con datos de la reserva cancelada o error
+   * @statusCode 200: éxito - reserva cancelada correctamente
+   * @statusCode 400: contenido inapropiado o reserva ya finalizada/cancelada
+   * @statusCode 401: usuario no autorizado para cancelar esta reserva
+   * @statusCode 404: reserva no encontrada
+   * @statusCode 500: error interno del servidor
+   **/
   public function cancelBooking(Request $request, Response $response, $args) {
     $params = $request->getParsedBody();
     $params['BookingID'] = $args['BookingID'];
@@ -817,6 +991,21 @@ class BookingController {
     }
   }
 
+  /**
+   * Confirma una reserva existente
+   * Solo el guía o administrador pueden confirmar
+   * No permite confirmar reservas ya canceladas, confirmadas, completadas o calificadas
+   * Genera notificaciones para guía y buscador
+   * @param Request $request: objeto de la petición HTTP entrante con JWT y datos en body (Message, SubDomain)
+   * @param Response $response: objeto de la respuesta HTTP
+   * @param array $args: argumentos de ruta, debe incluir 'BookingID'
+   * @return Response: JSON con datos de la reserva confirmada o error
+   * @statusCode 200: éxito - reserva confirmada correctamente
+   * @statusCode 400: contenido inapropiado o reserva ya finalizada/cancelada/confirmada
+   * @statusCode 401: usuario no autorizado para confirmar (no es el guía ni admin)
+   * @statusCode 404: reserva no encontrada
+   * @statusCode 500: error interno del servidor
+   **/
   public function confirmBooking(Request $request, Response $response, $args) {
     $params = $request->getParsedBody();
     $params['BookingID'] = $args['BookingID'];
@@ -945,6 +1134,21 @@ class BookingController {
     }
   }
 
+  /**
+   * Marca una reserva como completada
+   * Solo el guía o administrador pueden completar
+   * Solo permite completar reservas en estado 'Confirmed'
+   * Genera notificaciones para guía y buscador
+   * @param Request $request: objeto de la petición HTTP entrante con JWT y datos en body (Message, Rating, Fulfilled, SubDomain)
+   * @param Response $response: objeto de la respuesta HTTP
+   * @param array $args: argumentos de ruta, debe incluir 'BookingID'
+   * @return Response: JSON con datos de la reserva completada o error
+   * @statusCode 200: éxito - reserva completada correctamente
+   * @statusCode 400: contenido inapropiado o reserva no está en estado 'Confirmed'
+   * @statusCode 401: usuario no autorizado para completar (no es el guía ni admin)
+   * @statusCode 404: reserva no encontrada
+   * @statusCode 500: error interno del servidor
+   **/
   public function completeBooking(Request $request, Response $response, $args) {
     $params = $request->getParsedBody();
     $params['BookingID'] = $args['BookingID'];
@@ -1074,6 +1278,20 @@ class BookingController {
     }
   }
 
+  /**
+   * Permite al cliente calificar una reserva completada
+   * Solo el cliente o administrador pueden calificar
+   * Solo permite calificar reservas en estado 'Completed'
+   * @param Request $request: objeto de la petición HTTP entrante con JWT y datos en body (Message, Rating, Fulfilled)
+   * @param Response $response: objeto de la respuesta HTTP
+   * @param array $args: argumentos de ruta, debe incluir 'bookingID'
+   * @return Response: JSON con datos de la reserva calificada o error
+   * @statusCode 200: éxito - reserva calificada correctamente
+   * @statusCode 400: parámetros inválidos, rating fuera de rango (1-5), mensaje muy largo, contenido inapropiado, fulfilled no booleano o reserva no está en estado 'Completed'
+   * @statusCode 401: usuario no autorizado para calificar (no es el cliente ni admin)
+   * @statusCode 404: reserva u offering no encontrado
+   * @statusCode 500: error interno del servidor
+   **/
   public function rateBooking(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
     $bookingID = intval($args['bookingID']);
@@ -1193,12 +1411,19 @@ class BookingController {
     }
   }
 
-  /*
-  REVIEWS
-  */
-
-  public function getReviews(Request $request, Response $response, $args)
-  {
+  /**
+   * Obtiene todas las reseñas del sistema
+   * Permite filtrado por rango de fechas, calificación y límite de resultados
+   * @param Request $request: objeto de la petición HTTP entrante con query params opcionales (from, to, rating, limit)
+   * @param Response $response: objeto de la respuesta HTTP
+   * @param array $args: argumentos de ruta (no utilizado en este método)
+   * @return Response: JSON con lista de reseñas o error
+   * @statusCode 200: éxito - lista de reseñas
+   * @statusCode 400: formato de fecha inválido (debe ser YYYYMMDD) o rating inválido (debe estar entre 1 y 5)
+   * @statusCode 404: no se encontraron reseñas
+   * @statusCode 500: error interno del servidor
+   **/
+  public function getReviews(Request $request, Response $response, $args) {
     $queryParams = $request->getQueryParams();
 
     $from = $queryParams['from'] ?? null;
@@ -1252,6 +1477,18 @@ class BookingController {
     }
   }
 
+  /**
+   * Obtiene todas las reseñas recibidas por un guía específico
+   * Permite filtrado por rango de fechas, calificación y límite de resultados
+   * @param Request $request: objeto de la petición HTTP entrante con query params opcionales (from, to, rating, limit)
+   * @param Response $response: objeto de la respuesta HTTP
+   * @param array $args: argumentos de ruta, debe incluir 'userID' del guía
+   * @return Response: JSON con lista de reseñas del guía o error
+   * @statusCode 200: éxito - lista de reseñas del guía
+   * @statusCode 400: formato de fecha inválido (debe ser YYYYMMDD) o rating inválido (debe estar entre 1 y 5)
+   * @statusCode 404: no se encontraron reseñas para este guía
+   * @statusCode 500: error interno del servidor
+   **/
   public function getReviewsByGuide(Request $request, Response $response, $args){
     $userID = intval($args['userID']);
     $queryParams = $request->getQueryParams();
@@ -1307,6 +1544,18 @@ class BookingController {
     }
   }
 
+  /**
+   * Obtiene todas las reseñas realizadas por un buscador específico (cliente)
+   * Permite filtrado por rango de fechas, calificación y límite de resultados
+   * @param Request $request: objeto de la petición HTTP entrante con query params opcionales (from, to, rating, limit)
+   * @param Response $response: objeto de la respuesta HTTP
+   * @param array $args: argumentos de ruta, debe incluir 'userID' del buscador
+   * @return Response: JSON con lista de reseñas del buscador o error
+   * @statusCode 20/0: éxito - lista de reseñas del buscador
+   * @statusCode 400: formato de fecha inválido (debe ser YYYYMMDD) o rating inválido (debe estar entre 1 y 5)
+   * @statusCode 404: no se encontraron reseñas para este buscador
+   * @statusCode 500: error interno del servidor
+   **/
   public function getReviewsBySeeker(Request $request, Response $response, $args) {
     $userID = intval($args['userID']);
     $queryParams = $request->getQueryParams();
@@ -1362,6 +1611,18 @@ class BookingController {
     }
   }
 
+  /**
+   * Obtiene todas las reseñas asociadas a un usuario (como guía y como buscador)
+   * Permite filtrado por rango de fechas, calificación y límite de resultados
+   * @param Request $request: objeto de la petición HTTP entrante con query params opcionales (from, to, rating, limit)
+   * @param Response $response: objeto de la respuesta HTTP
+   * @param array $args: argumentos de ruta, debe incluir 'userID' del usuario
+   * @return Response: JSON con lista de reseñas del usuario o error
+   * @statusCode 200: éxito - lista de reseñas del usuario
+   * @statusCode 400: formato de fecha inválido (debe ser YYYYMMDD) o rating inválido (debe estar entre 1 y 5)
+   * @statusCode 404: no se encontraron reseñas para este usuario
+   * @statusCode 500: error interno del servidor
+   **/
   public function getReviewsByUser(Request $request, Response $response, $args){
     $userID = intval($args['userID']);
     $queryParams = $request->getQueryParams();
@@ -1417,6 +1678,16 @@ class BookingController {
     }
   }
 
+  /**
+   * Obtiene los datos de una reseña específica por su ID
+   * @param Request $request: objeto de la petición HTTP entrante
+   * @param Response $response: objeto de la respuesta HTTP
+   * @param array $args: argumentos de ruta, debe incluir 'reviewID'
+   * @return Response: JSON con datos de la reseña o error
+   * @statusCode 200: éxito - reseña encontrada
+   * @statusCode 404: reseña no encontrada
+   * @statusCode 500: error interno del servidor
+   **/
   public function getReviewsByID(Request $request, Response $response, $args) {
     $reviewID = intval($args['reviewID']);
 
@@ -1443,6 +1714,18 @@ class BookingController {
     }
   }
 
+  /**
+   * Obtiene todas las reseñas de un servicio (offering) específico
+   * Permite filtrado por rango de fechas, calificación y límite de resultados
+   * @param Request $request: objeto de la petición HTTP entrante con query params opcionales (from, to, rating, limit)
+   * @param Response $response: objeto de la respuesta HTTP
+   * @param array $args: argumentos de ruta, debe incluir 'offeringID'
+   * @return Response: JSON con lista de reseñas del offering o error
+   * @statusCode 200: éxito - lista de reseñas del offering
+   * @statusCode 400: formato de fecha inválido (debe ser YYYYMMDD) o rating inválido (debe estar entre 1 y 5)
+   * @statusCode 404: no se encontraron reseñas para este offering
+   * @statusCode 500: error interno del servidor
+   **/
   public function getReviewsByOffering(Request $request, Response $response, $args) {
     $offeringID = intval($args['offeringID']);
     $queryParams = $request->getQueryParams();
@@ -1497,10 +1780,24 @@ class BookingController {
     }
   }
 
+  /**
+   * Valida si un texto contiene contenido inapropiado usando Perspective API
+   * Método privado auxiliar para filtrado de contenido
+   * @param string $text: texto a validar
+   * @return bool: true si contiene contenido inapropiado, false en caso contrario
+   **/
   private function _containsInappropriateContent($text) {
     return validateContentWithPerspective($text);
   }
 
+  /**
+   * Genera un ID público único para una reserva
+   * Formato: {COUNTRYCODE}-{YYMMDD}-{TYPE}-{HASH}
+   * Ejemplo: AR-2412-B-A1B2C3D4
+   * @param string $countryCode: código del país (ej: AR, US, MX)
+   * @param string $type: tipo de entidad (ej: B para booking)
+   * @return string: ID público único en formato estandarizado
+   **/
   private function _generatePublicId ($countryCode, $type) {
     $dateCode = date('ym'); # AñoMes
     $random = substr(bin2hex(random_bytes(5)), 0, 8); # Hash corto

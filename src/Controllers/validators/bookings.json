@@ -1,4 +1,43 @@
 {
+  "get_booking_by_id": {
+    "BookingID": {
+      "required": true,
+      "type": "integer",
+      "min": 0,
+      "max": 999999999
+    }
+  },
+  "get_booking_by_public_id": {
+    "PublicID": {
+      "required": true,
+      "type": "string",
+      "regex": "~^[A-Z]{2}-[1-9]{2}(0|1)[0-9]-[A-Z]-[0-9A-F]{5,8}$~"
+    }
+  },
+  "get_bookings_by_guide": {
+    "GuideID": {
+      "required": true,
+      "type": "integer",
+      "min": 0,
+      "max": 999999999
+    }
+  },
+  "get_bookings_by_seeker": {
+    "SeekerID": {
+      "required": true,
+      "type": "integer",
+      "min": 0,
+      "max": 999999999
+    }
+  },
+  "get_seeker_info": {
+    "BookingID": {
+      "required": true,
+      "type": "integer",
+      "min": 0,
+      "max": 999999999
+    }
+  },
   "create_booking": {
     "AssocUUID": {
       "required": true,
