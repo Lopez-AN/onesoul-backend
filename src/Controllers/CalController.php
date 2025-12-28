@@ -363,11 +363,11 @@ class CalController{
       ];
       $result = $this->_calRequest($response, "GET", "api", "/v2/event-types", $headers);
       if(!$result->valid){
-        return $response->withJson(["Status" => "API_ERROR", "CalData" => "Cant retrieve the user info"]);
+        return $response->withJson(["Status" => "API_ERROR", "Error" => "Cant retrieve the user info"]);
       }
 
       if(empty($result->response->data->eventTypeGroups) || empty($result->response->data->eventTypeGroups[0]->eventTypes)){
-        return $response->withJson(["Status" => "API_ERROR", "CalData" => "Cant retrieve the user schedule"]);
+        return $response->withJson(["Status" => "API_ERROR", "Error" => "Cant retrieve the user schedule"]);
       }
 
       $bookerUrl = $result->response->data->eventTypeGroups[0]->bookerUrl;
@@ -390,7 +390,7 @@ class CalController{
         "TimeZone" => $newTimeZone
       ]]);
     } catch (\Throwable $e) {
-      return $response->withJson(["Status" => "API_ERROR", "CalData" => $e->getMessage()]);
+      return $response->withJson(["Status" => "API_ERROR", "Error" => $e->getMessage()]);
     }
   }
 
@@ -494,13 +494,13 @@ class CalController{
       foreach($result->response->availability as $v){
         foreach($v->days as $d){
           $availability[$d] = [
-            "startTime" => $v->startTime,
-            "endTime" => $v->endTime
+            "StartTime" => $v->startTime,
+            "EndTime" => $v->endTime
           ];
         }
       }
 
-      return $response->withJson(["id" => $result->response->id, "availability" => $availability]);
+      return $response->withJson(["Id" => $result->response->id, "Availability" => $availability]);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -868,6 +868,13 @@ class CalController{
       "Content-Type: application/json",
       "cal-api-version: 2024-06-11"
     ];
+
+    $values = array_map(function($e){
+      return [
+        "startTime" => $e['StartTime'],
+        "endTime" => $e['EndTime']
+      ];
+    }, $values);
 
     $availability = [];
     foreach($values as $i => $v){

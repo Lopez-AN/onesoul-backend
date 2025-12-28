@@ -1299,11 +1299,6 @@ class UserController{
         $e['LastName'],
         $e['Email'],
         $e['Phone'],
-        $e['AddressName'],
-        $e['AddressNumber'],
-        $e['Floor'],
-        $e['Department'],
-        $e['Cp'],
         $e['DateOfBirth'],
         $e['Gender'],
         $e['ValidatedEmail'],
@@ -1318,7 +1313,18 @@ class UserController{
         $e['ReferralCode'],
         $e['Oauth2ID'],
         $e['Oauth2Service'],
-        $e['IsAdmin']);
+        $e['IsAdmin'],
+        $e['Settings']);
+
+        $e['Locations'] = array_map(function($l){
+          unset($l['AddressName'],
+            $l['AddressNumber'],
+            $l['Floor'],
+            $l['Department'],
+            $l['Cp']
+          );
+          return $l;
+        }, $e['Locations']);
       }
       return $e;
     }, $users);

@@ -124,25 +124,25 @@
   },
   "user_location": {
     "LocationID": {
-      "required": false,
+      "required": true,
       "type": "integer",
       "min": 1,
       "max": 99
     },
     "LocationName": {
-      "required": true,
+      "required": false,
       "type": "string",
       "min": 0,
       "max": 30
     },
     "AddressName": {
-      "required": true,
+      "required": false,
       "type": "string",
       "minlength": 3,
       "maxlength": 100
     },
     "AddressNumber": {
-      "required": true,
+      "required": false,
       "type": "integer",
       "min": 1,
       "max": 99999
@@ -160,31 +160,31 @@
       "maxlength": 4
     },
     "Cp": {
-      "required": true,
+      "required": false,
       "type": "string",
       "minlength": 3,
       "maxlength": 10,
       "regex": "~^[0-9A-Z\\s-]+$~"
     },
     "City": {
-      "required": true,
+      "required": false,
       "type": "string",
       "minlength": 2,
       "maxlength": 50
     },
     "State": {
-      "required": true,
+      "required": false,
       "type": "string",
       "minlength": 2,
       "maxlength": 50
     },
     "CountryCode": {
-      "required": true,
+      "required": false,
       "type": "string",
       "regex": "~^[A-Z]{2}$~"
     },
     "IsActive": {
-      "required": true,
+      "required": false,
       "type": "boolean"
     }
   },
