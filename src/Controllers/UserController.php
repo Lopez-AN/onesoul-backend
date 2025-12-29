@@ -1275,6 +1275,59 @@ class UserController{
   }
 
   /**
+   * Obtiene las preferencias y preferencias de notificaciónes del usuario
+   * @param  Request $request: objeto de request HTTP
+   * @param  Response $response: objeto de response HTTP
+   * @param  array $args: argumentos de ruta (UserID)
+   * @return Response: JSON con cuentas sociales o error
+   * @statusCode 200: éxito
+   * @statusCode 404: usuario no encontrado
+   * @statusCode 403: no tiene permiso de ver los parametros de este usuario
+   * @statusCode 500: error del servidor
+   **/
+  public function getSettings(Request $request, Response $response, $args) {
+    $params['UserID'] = $args['UserID'];
+    $jwt = $request->getAttribute('jwt');
+
+    $pValidation = ParameterValidator::validate($response, 'users','get_user_settings', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
+    }
+    $params = $pValidation->values;
+
+    # Verificar si el usuario autenticado es el mismo o si es un administrador
+    if ($jwt->data->UserID !== $params['UserID'] && !$jwt->data->IsAdmin) {
+      return $response->withStatus(403)->withJson([
+        "error" => [
+          "code" => "UNAUTHORIZED",
+          "desc" => "You do not have permission to view the settings of this user."
+        ]
+      ]);
+    }
+
+    try {
+      $settings = $this->user->getSettings($params['UserID']);
+      if (empty($settings)) {
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "USER_NOT_FOUND",
+            "desc" => "No user associated with the specified id was found"
+          ]
+        ]);
+      }
+
+      return $response->withStatus(200)->withJson($settings);
+    } catch (Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  /**
    * Filtra los usuarios segun si es un admin, o el mismo usuario,
    * para mostrar o no campos privados o internos
    * @param  array $users: usuarios a filtrar
@@ -1313,8 +1366,7 @@ class UserController{
         $e['ReferralCode'],
         $e['Oauth2ID'],
         $e['Oauth2Service'],
-        $e['IsAdmin'],
-        $e['Settings']);
+        $e['IsAdmin']);
 
         $e['Locations'] = array_map(function($l){
           unset($l['AddressName'],

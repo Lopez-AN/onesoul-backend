@@ -559,12 +559,14 @@ class AuthController{
     }
 
     $userPlan = $this->subscription->getSubscriptionByUser($user['UserID']);
+    $userSettings = $this->user->getSettings($user['UserID']);
 
     return $response->withStatus(200)->withJson([
       'Token' => $jwt,
       'MfaID' => $newMfaId,
       'UserData' => $user,
-      'UserPlan' => $userPlan
+      'UserPlan' => $userPlan,
+      'UserSettings' => $userSettings,
     ]);
   }
 
@@ -709,13 +711,16 @@ class AuthController{
       $this->redis->del("otp:{$email}");
 
       if($referrerUserID){
-        $this-> _handleReferralReward($referrerUserID, $userID);
+        $this-> _handleReferralReward($referrerUserID, $user['UserID']);
       }
+
+      $userSettings = $this->user->getSettings($user['UserID']);
 
       return $response->withStatus(200)->withJson([
         'Token' => $jwt,
         'UserData' => $user,
-        'UserPlan' => null
+        'UserPlan' => null,
+        'UserSettings' => $userSettings
       ]);
     } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
@@ -1168,13 +1173,16 @@ class AuthController{
 
       # Manejar recompensa de referral
       if($referrerUserID){
-        $this->_handleReferralReward($referrerUserID, $userID);
+        $this->_handleReferralReward($referrerUserID, $user['UserID']);
       }
+
+      $userSettings = $this->user->getSettings($user['UserID']);
 
       return $response->withStatus(200)->withJson([
         'Token' => $jwt,
         'UserData' => $user,
-        'UserPlan' => null
+        'UserPlan' => null,
+        'UserSettings' => $userSettings
       ]);
 
     } catch (Throwable $e) {

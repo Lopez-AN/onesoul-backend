@@ -70,9 +70,9 @@ class Notification  {
         # IN_APP siempre se envía
         if($channel !== 'IN_APP'){
           $canSend = match($channel) {
-            'EMAIL' => (bool)$userSettings['Email'],
-            'WHATSAPP' => (bool)$userSettings['WhatsApp'],
-            'SMS' => (bool)$userSettings['SMS'],
+            'EMAIL' => $userSettings['Email'],
+            'WHATSAPP' => $userSettings['WhatsApp'],
+            'SMS' => $userSettings['Sms'],
             default => false
           };
 
@@ -571,7 +571,8 @@ class Notification  {
    */
   private function _getUserNotificationSettings($recipientUserID){
     # Obtener preferencias de comunicacion del usuario
-    $stmt = $this->db->prepare("SELECT un.Email, un.WhatsApp, un.SMS, us.PreferredLanguage
+    $stmt = $this->db->prepare("SELECT un.Email, un.WhatsApp, un.Sms,
+      un.PushApp, un.PushWeb, us.PreferredLanguage
     FROM Users as u
     INNER JOIN UsersSettings as us
       ON u.UserID = us.UserID
@@ -586,9 +587,11 @@ class Notification  {
 
     # Si no tiene preferencias, asumimos todo habilitado
     return [
-      'Email' => $preferences['Email'] ?? 1,
-      'WhatsApp' => $preferences['WhatsApp'] ?? 1,
-      'SMS' => $preferences['SMS'] ?? 1,
+      'Email' => (bool)$preferences['Email'] ?? 1,
+      'WhatsApp' => (bool)$preferences['WhatsApp'] ?? 1,
+      'Sms' => (bool)$preferences['Sms'] ?? 1,
+      'PushApp' => (bool)$preferences['PushApp'] ?? 1,
+      'PushWeb' => (bool)$preferences['PushWeb'] ?? 1,
       'Locale' => $preferences['PreferredLanguage']
     ];
   }

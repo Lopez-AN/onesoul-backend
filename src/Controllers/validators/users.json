@@ -42,6 +42,14 @@
       "regex": "~^[A-Z0-9]{6}$~"
     }
   },
+  "get_user_settings": {
+    "UserID": {
+      "required": true,
+      "type": "integer",
+      "min": 0,
+      "max": 999999999
+    }
+  },
   "update_user": {
     "UserID": {
       "required": true,

@@ -109,7 +109,10 @@ ENGINE=InnoDB
 ;
 
 ALTER TABLE `UsersNotifications`
-	CHANGE COLUMN `WebPush` `PushWeb` TINYINT(1) NULL DEFAULT '1' COMMENT 'Notificaciones vía Web Push (navegador)' AFTER `SMS`;
+	CHANGE COLUMN `WebPush` `PushWeb` TINYINT(1) NULL DEFAULT '1'  COMMENT 'Notificaciones vía Web Push (navegador)' AFTER `SMS`;
+
+ALTER TABLE `UsersNotifications`
+	CHANGE COLUMN `SMS` `Sms` TINYINT(1) NULL DEFAULT '1' COMMENT 'Notificaciones por SMS' AFTER `WhatsApp`;
 
 RENAME TABLE `UserSettings` TO `UsersSettings`;
 RENAME TABLE `UserBrowser` TO `UsersBrowser`;
