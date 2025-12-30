@@ -117,3 +117,6 @@ ALTER TABLE `UsersNotifications`
 RENAME TABLE `UserSettings` TO `UsersSettings`;
 RENAME TABLE `UserBrowser` TO `UsersBrowser`;
 RENAME TABLE `UserLegalConsents` TO `UsersLegalConsents`;
+
+ALTER TABLE `UsersSettings`
+	CHANGE COLUMN `PreferredLanguage` `Locale` VARCHAR(5) NULL DEFAULT 'es' COMMENT 'Idioma preferido en código I18N' COLLATE 'utf8mb4_unicode_ci' AFTER `UserID`;

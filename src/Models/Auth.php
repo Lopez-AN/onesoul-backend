@@ -85,7 +85,7 @@ class Auth{
 
       # Insertar recibir novedades si eligio esta opcion
       $stmt = $this->db->prepare("INSERT INTO UsersSettings
-        (UserID, PreferredLanguage, ViewMode, ReceiveNewsletters, TimeZone)
+        (UserID, Locale, ViewMode, ReceiveNewsletters, TimeZone)
         VALUES (?, 'es', 'Light', ?, 'America/Argentina/Buenos_Aires')");
       $stmt->execute([$userID, $receiveNewsletters]);
 
@@ -145,7 +145,7 @@ class Auth{
 
       # Insertar recibir novedades si eligio esta opcion
       $stmt = $this->db->prepare("INSERT INTO UsersSettings
-        (UserID, PreferredLanguage, ViewMode, ReceiveNewsletters, TimeZone)
+        (UserID, Locale, ViewMode, ReceiveNewsletters, TimeZone)
         VALUES (?, 'es', 'Light', ?, 'America/Argentina/Buenos_Aires')");
       $stmt->execute([$userID, $receiveNewsletters]);
 

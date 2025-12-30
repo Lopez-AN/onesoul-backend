@@ -559,7 +559,8 @@ class AuthController{
     }
 
     $userPlan = $this->subscription->getSubscriptionByUser($user['UserID']);
-    $userSettings = $this->user->getSettings($user['UserID']);
+    $userSettings = $this->user->getSettings($user['UserID']) ?:
+      throw new DatabaseException("Failed to retrieve the user settings");
 
     return $response->withStatus(200)->withJson([
       'Token' => $jwt,
@@ -714,7 +715,8 @@ class AuthController{
         $this-> _handleReferralReward($referrerUserID, $user['UserID']);
       }
 
-      $userSettings = $this->user->getSettings($user['UserID']);
+      $userSettings = $this->user->getSettings($user['UserID']) ?:
+        throw new DatabaseException("Failed to retrieve the user settings");
 
       return $response->withStatus(200)->withJson([
         'Token' => $jwt,
@@ -1176,7 +1178,8 @@ class AuthController{
         $this->_handleReferralReward($referrerUserID, $user['UserID']);
       }
 
-      $userSettings = $this->user->getSettings($user['UserID']);
+      $userSettings = $this->user->getSettings($user['UserID']) ?:
+        throw new DatabaseException("Failed to retrieve the user settings");
 
       return $response->withStatus(200)->withJson([
         'Token' => $jwt,
@@ -1643,12 +1646,15 @@ class AuthController{
         ]);
       }
       $userPlan = $this->subscription->getSubscriptionByUser($userID);
+      $userSettings = $this->user->getSettings($userID) ?:
+        throw new DatabaseException("Failed to retrieve the user settings");
 
       $jwt = $this -> _JWTgen($user);
       return $response->withStatus(200)->withJson([
         'Token' => $jwt,
         'UserData' => $user,
-        'UserPlan' => $userPlan
+        'UserPlan' => $userPlan,
+        'UserSettings' => $userSettings
       ]);
     } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([

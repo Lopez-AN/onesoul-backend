@@ -968,7 +968,7 @@ class User {
   public function getSettings($userID){
     # Obtener preferencias de comunicacion del usuario
     $stmt = $this->db->prepare("SELECT us.ReceiveNewsletters, us.TimeZone,
-      us.PreferredLanguage, us.ViewMode, un.Email,
+      us.Locale, us.ViewMode, un.Email,
       un.WhatsApp, un.Sms, un.PushWeb, un.PushApp
     FROM Users as u
     INNER JOIN UsersSettings as us
@@ -984,7 +984,7 @@ class User {
 
     return [
       'ReceiveNewsletters' => (bool)$preferences['ReceiveNewsletters'],
-      'Locale' => $preferences['PreferredLanguage'] ?? 'es',
+      'Locale' => $preferences['Locale'] ?? 'es',
       'ViewMode' => $preferences['ViewMode'] ?? 'Light',
       'TimeZone' => $preferences['TimeZone'] ?? 'America/Argentina/Buenos_Aires',
       'Notifications' => [
@@ -1020,10 +1020,10 @@ class User {
 
       if($settings){
         $stmt = $this->db->prepare("UPDATE UsersSettings
-          SET PreferredLanguage = ?, ViewMode = ?, ReceiveNewsletters = ?, TimeZone = ?
+          SET Locale = ?, ViewMode = ?, ReceiveNewsletters = ?, TimeZone = ?
           WHERE UserID = ?");
         $stmt->execute([
-          $settings['PreferredLanguage'], $settings['ViewMode'],
+          $settings['Locale'], $settings['ViewMode'],
           (int)$settings['ReceiveNewsletters'], $settings['TimeZone'],
           $userID
         ]);

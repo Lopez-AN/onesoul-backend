@@ -745,10 +745,10 @@ class UserController{
         ]);
       }
 
-      $user = $this->user->updateSettings($params['UserID'], $params, $params['Notifications']);
+      $settings = $this->user->updateSettings($params['UserID'], $params, $params['Notifications']);
 
       # Retornar el usuario actualizado
-      return $response->withStatus(200)->withJson($user);
+      return $response->withStatus(200)->withJson($settings);
     } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [

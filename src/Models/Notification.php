@@ -572,7 +572,7 @@ class Notification  {
   private function _getUserNotificationSettings($recipientUserID){
     # Obtener preferencias de comunicacion del usuario
     $stmt = $this->db->prepare("SELECT un.Email, un.WhatsApp, un.Sms,
-      un.PushApp, un.PushWeb, us.PreferredLanguage
+      un.PushApp, un.PushWeb, us.Locale
     FROM Users as u
     INNER JOIN UsersSettings as us
       ON u.UserID = us.UserID
@@ -592,7 +592,7 @@ class Notification  {
       'Sms' => (bool)$preferences['Sms'] ?? 1,
       'PushApp' => (bool)$preferences['PushApp'] ?? 1,
       'PushWeb' => (bool)$preferences['PushWeb'] ?? 1,
-      'Locale' => $preferences['PreferredLanguage']
+      'Locale' => $preferences['Locale']
     ];
   }
 }
