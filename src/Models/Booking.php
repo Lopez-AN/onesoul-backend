@@ -15,14 +15,38 @@ class Booking {
 
   public function getBookingByID($bookingID) {
     $stmt = $this->db->prepare("SELECT b.BookingID, b.PublicID,
-      b.UserID, u.DisplayName AS Seeker, b.ReviewID, b.PaymentID,
-      b.Mode as SessionType, b.LocationID, b.CreationDate, b.ScheduledDate, b.ModificationDate,
-      o.UserID AS Guide, u2.DisplayName, b.OfferingID, o.Title AS TitleOffering,
-      b.ScheduledDate
+      b.ReviewID, b.PaymentID, b.Mode as SessionType, b.LocationID, b.CreationDate,
+      b.ScheduledDate, b.ModificationDate, o.UserID AS Guide, u.DisplayName,
+      b.OfferingID, o.Title AS TitleOffering, b.ScheduledDate,
+      -- Subconsulta para seeker
+      (
+        SELECT JSON_ARRAYAGG(
+        JSON_OBJECT(
+          'UserID', u.UserID,
+          'UserName', u.UserName,
+          'DisplayName', u.DisplayName,
+          'ImgURL', m.URL
+        ))
+        FROM Media AS m
+        WHERE m.UserID = b.UserID
+      ) AS seeker_info,
+      -- Subconsulta para eventos
+      (
+        SELECT JSON_ARRAYAGG(
+        JSON_OBJECT(
+          'EventDate', s.BookingEventDate,
+          'Event', s.BookingEvent,
+          'ScheduledDate', s.ScheduledDate,
+          'Message', s.Message
+        ))
+        FROM BookingStatus as s
+        WHERE s.BookingID = b.BookingID
+        ORDER BY BookingEventDate DESC
+      ) AS booking_events
       FROM Bookings AS b
       INNER JOIN Offerings AS o ON b.OfferingID = o.OfferingID
-      INNER JOIN Users AS u ON b.UserID = u.UserID
-      INNER JOIN Users AS u2 ON o.UserID = u2.UserID
+      INNER JOIN Users AS u ON o.UserID = u.UserID
+      INNER JOIN Media AS m ON m.UserID = b.UserID
       WHERE b.BookingID = ?"
     );
     $stmt->execute([$bookingID]);
@@ -33,14 +57,38 @@ class Booking {
 
   public function getBookingByPublicID($publicID) {
     $stmt = $this->db->prepare("SELECT b.BookingID, b.PublicID,
-      b.UserID, u.DisplayName AS Seeker, b.ReviewID, b.PaymentID,
-      b.Mode as SessionType, b.LocationID, b.CreationDate, b.ScheduledDate, b.ModificationDate,
-      o.UserID AS Guide, u2.DisplayName, b.OfferingID, o.Title AS TitleOffering,
-      b.ScheduledDate
+      b.ReviewID, b.PaymentID, b.Mode as SessionType, b.LocationID, b.CreationDate,
+      b.ScheduledDate, b.ModificationDate, o.UserID AS Guide, u.DisplayName,
+      b.OfferingID, o.Title AS TitleOffering, b.ScheduledDate,
+      -- Subconsulta para seeker
+      (
+        SELECT JSON_ARRAYAGG(
+        JSON_OBJECT(
+          'UserID', u.UserID,
+          'UserName', u.UserName,
+          'DisplayName', u.DisplayName,
+          'ImgURL', m.URL
+        ))
+        FROM Media AS m
+        WHERE m.UserID = b.UserID
+      ) AS seeker_info,
+      -- Subconsulta para eventos
+      (
+        SELECT JSON_ARRAYAGG(
+        JSON_OBJECT(
+          'EventDate', s.BookingEventDate,
+          'Event', s.BookingEvent,
+          'ScheduledDate', s.ScheduledDate,
+          'Message', s.Message
+        ))
+        FROM BookingStatus as s
+        WHERE s.BookingID = b.BookingID
+        ORDER BY BookingEventDate DESC
+      ) AS booking_events
       FROM Bookings AS b
       INNER JOIN Offerings AS o ON b.OfferingID = o.OfferingID
-      INNER JOIN Users AS u ON b.UserID = u.UserID
-      INNER JOIN Users AS u2 ON o.UserID = u2.UserID
+      INNER JOIN Users AS u ON o.UserID = u.UserID
+      INNER JOIN Media AS m ON m.UserID = b.UserID
       WHERE b.PublicID = ?");
     $stmt->execute([$publicID]);
     $booking = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -54,14 +102,38 @@ class Booking {
 
     # Consulta completa paginada
     $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS b.BookingID, b.PublicID,
-      b.UserID, u.DisplayName AS Seeker, b.ReviewID, b.PaymentID,
-      b.Mode as SessionType, b.LocationID, b.CreationDate, b.ScheduledDate, b.ModificationDate,
-      o.UserID AS Guide, u2.DisplayName, b.OfferingID, o.Title AS TitleOffering,
-      b.ScheduledDate
+      b.ReviewID, b.PaymentID, b.Mode as SessionType, b.LocationID, b.CreationDate,
+      b.ScheduledDate, b.ModificationDate, o.UserID AS Guide, u.DisplayName,
+      b.OfferingID, o.Title AS TitleOffering, b.ScheduledDate,
+      -- Subconsulta para seeker
+      (
+        SELECT JSON_ARRAYAGG(
+        JSON_OBJECT(
+          'UserID', u.UserID,
+          'UserName', u.UserName,
+          'DisplayName', u.DisplayName,
+          'ImgURL', m.URL
+        ))
+        FROM Media AS m
+        WHERE m.UserID = b.UserID
+      ) AS seeker_info,
+      -- Subconsulta para eventos
+      (
+        SELECT JSON_ARRAYAGG(
+        JSON_OBJECT(
+          'EventDate', s.BookingEventDate,
+          'Event', s.BookingEvent,
+          'ScheduledDate', s.ScheduledDate,
+          'Message', s.Message
+        ))
+        FROM BookingStatus as s
+        WHERE s.BookingID = b.BookingID
+        ORDER BY BookingEventDate DESC
+      ) AS booking_events
       FROM Bookings AS b
       INNER JOIN Offerings AS o ON b.OfferingID = o.OfferingID
-      INNER JOIN Users AS u ON b.UserID = u.UserID
-      INNER JOIN Users AS u2 ON o.UserID = u2.UserID
+      INNER JOIN Users AS u ON o.UserID = u.UserID
+      INNER JOIN Media AS m ON m.UserID = b.UserID
       WHERE o.UserID = ? {$filterOpen}
       GROUP BY b.BookingID
       ORDER BY b.CreationDate DESC
@@ -73,7 +145,7 @@ class Booking {
     $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
     $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    return $this -> _getBookingsGenericMulti($bookings, $total['total'], $onlyOpen);
+    return $this -> _getBookingsGenericMulti($bookings, $total['total']);
   }
 
   public function getBookingsBySeeker($seekerID, $paginator, $onlyOpen) {
@@ -82,14 +154,38 @@ class Booking {
 
     # Consulta completa paginada
     $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS b.BookingID, b.PublicID,
-      b.UserID, u.DisplayName AS Seeker, b.ReviewID, b.PaymentID,
-      b.Mode as SessionType, b.LocationID, b.CreationDate, b.ScheduledDate, b.ModificationDate,
-      o.UserID AS Guide, u2.DisplayName, b.OfferingID, o.Title AS TitleOffering,
-      b.ScheduledDate
+      b.ReviewID, b.PaymentID, b.Mode as SessionType, b.LocationID, b.CreationDate,
+      b.ScheduledDate, b.ModificationDate, o.UserID AS Guide, u.DisplayName,
+      b.OfferingID, o.Title AS TitleOffering, b.ScheduledDate,
+      -- Subconsulta para seeker
+      (
+        SELECT JSON_ARRAYAGG(
+        JSON_OBJECT(
+          'UserID', u.UserID,
+          'UserName', u.UserName,
+          'DisplayName', u.DisplayName,
+          'ImgURL', m.URL
+        ))
+        FROM Media AS m
+        WHERE m.UserID = b.UserID
+      ) AS seeker_info,
+      -- Subconsulta para eventos
+      (
+        SELECT JSON_ARRAYAGG(
+        JSON_OBJECT(
+          'EventDate', s.BookingEventDate,
+          'Event', s.BookingEvent,
+          'ScheduledDate', s.ScheduledDate,
+          'Message', s.Message
+        ))
+        FROM BookingStatus as s
+        WHERE s.BookingID = b.BookingID
+        ORDER BY BookingEventDate DESC
+      ) AS booking_events
       FROM Bookings AS b
       INNER JOIN Offerings AS o ON b.OfferingID = o.OfferingID
-      INNER JOIN Users AS u ON b.UserID = u.UserID
-      INNER JOIN Users AS u2 ON o.UserID = u2.UserID
+      INNER JOIN Users AS u ON o.UserID = u.UserID
+      INNER JOIN Media AS m ON m.UserID = b.UserID
       WHERE b.UserID = ? {$filterOpen}
       GROUP BY b.BookingID
       ORDER BY b.CreationDate DESC
@@ -110,25 +206,20 @@ class Booking {
    * Trae los eventos e información para el booking.
    *
    * @param  array|null $booking: datos del booking obtenido de la BD o null
-   * @return array|false: datos de la publicación normalizados o false si no existe
+   * @return array|false: datos del booking normalizados o false si no existe
    **/
   private function _getBookingsGeneric($booking){
     if (empty($booking)) {
       return false;
     }
 
-    # Obtener los eventos de la reserva (BookingStatus)
-    $stmt = $this->db->prepare("SELECT BookingEventDate, BookingEvent,
-      ScheduledDate, Message
-      FROM BookingStatus
-      WHERE BookingID = ?
-      ORDER BY BookingEventDate DESC");
+    $seeker = @json_decode($booking['seeker_info'], true);
+    $booking['Seeker'] = $seeker ? array_shift($seeker) : null;
+    unset($booking['seeker_info']);
 
-    $stmt->execute([$booking['BookingID']]);
-    $events = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $booking['Events'] = @json_decode($booking['booking_events'], true);
+    unset($booking['booking_events']);
 
-    # Añadir los eventos al booking
-    $booking['Events'] = $events;
     return $booking;
   }
 
@@ -140,23 +231,15 @@ class Booking {
    *
    * @param  array $offerings: array de bookings obtenidas de la BD
    * @param  int $total: cantidad total de registros disponibles
-   * @param  int $onlyOpen: solo bookings abiertos
    * @return object: { data: [], rows: { total: int, fetched: int } }
    **/
-  private function _getBookingsGenericMulti($bookings, $total, $onlyOpen){
-    $filterOpen = $onlyOpen ?
-      " AND LastBookingEvent NOT IN ('Canceled', 'Completed', 'Rated') " : "";
-
-    # Agregar eventos a cada booking
+  private function _getBookingsGenericMulti($bookings, $total){
     foreach ($bookings as &$b) {
-      $stmt = $this->db->prepare("SELECT BookingEventDate,
-        BookingEvent, ScheduledDate, Message
-        FROM BookingStatus
-        WHERE BookingID = ?
-        ORDER BY BookingEventDate DESC");
+      $b['Seeker'] = @json_decode($b['seeker_info'], true);
+      unset($b['seeker_info']);
 
-      $stmt->execute([$b['BookingID']]);
-      $b['Events'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+      $b['Events'] = @json_decode($b['booking_events'], true);
+      unset($b['booking_events']);
     }
 
     return [
@@ -436,17 +519,18 @@ class Booking {
   public function getReviews($limit, $from = null, $to = null, $rating = null) {
     try {
       $query = "SELECT SQL_CALC_FOUND_ROWS r.ReviewID, r.CreationDate, r.SeekerID AS SeekerID,
-              IF(u.DisplayName IS NULL, CONCAT(u.FirstName, ' ', u.LastName), u.DisplayName) AS Reviewer,
-              u.CountryCode, r.ReviewText, r.Rating,
-              r.OfferingID, o.Title AS TitleOffering,
-              r.GuideID AS GuideID,
-              IF(u2.DisplayName IS NULL, CONCAT(u2.FirstName, ' ', u2.LastName), u2.DisplayName) AS Guide,
-              m.URL as ReviewerProfilePhoto
-              FROM Reviews AS r
-              INNER JOIN Offerings AS o ON r.OfferingID = o.OfferingID
-              INNER JOIN Users AS u ON r.SeekerID = u.UserID
-              INNER JOIN Users AS u2 ON r.GuideID = u2.UserID
-              LEFT JOIN Media AS m ON r.SeekerID = m.UserID";
+        IF(u.DisplayName IS NULL, CONCAT(u.FirstName, ' ', u.LastName), u.DisplayName) AS Reviewer,
+        l.CountryCode, r.ReviewText, r.Rating,
+        r.OfferingID, o.Title AS TitleOffering,
+        r.GuideID AS GuideID,
+        IF(u2.DisplayName IS NULL, CONCAT(u2.FirstName, ' ', u2.LastName), u2.DisplayName) AS Guide,
+        m.URL as ReviewerProfilePhoto, r.Reply
+        FROM Reviews AS r
+        INNER JOIN Offerings AS o ON r.OfferingID = o.OfferingID
+        INNER JOIN Users AS u ON r.SeekerID = u.UserID
+        INNER JOIN Users AS u2 ON r.GuideID = u2.UserID
+        INNER JOIN UsersLocations as l ON l.UserID = u.UserID AND l.LocationID = 0
+        LEFT JOIN Media AS m ON r.SeekerID = m.UserID";
 
       # Construimos el WHERE condicionalmente
       $whereClauses = [];
@@ -501,17 +585,18 @@ class Booking {
   {
     try {
       $query = "SELECT SQL_CALC_FOUND_ROWS r.ReviewID, r.CreationDate, r.SeekerID AS SeekerID,
-              IF(u.DisplayName IS NULL, CONCAT(u.FirstName, ' ', u.LastName), u.DisplayName) AS Reviewer,
-              u.CountryCode, r.ReviewText, r.Rating,
-              r.OfferingID, o.Title AS TitleOffering,
-              r.GuideID AS GuideID,
-              IF(u2.DisplayName IS NULL, CONCAT(u2.FirstName, ' ', u2.LastName), u2.DisplayName) AS Guide,
-              m.URL as ReviewerProfilePhoto
-              FROM Reviews AS r
-              INNER JOIN Offerings AS o ON r.OfferingID = o.OfferingID
-              INNER JOIN Users AS u ON r.SeekerID = u.UserID
-              INNER JOIN Users AS u2 ON r.GuideID = u2.UserID
-              LEFT JOIN Media AS m ON r.SeekerID = m.UserID";
+        IF(u.DisplayName IS NULL, CONCAT(u.FirstName, ' ', u.LastName), u.DisplayName) AS Reviewer,
+        l.CountryCode, r.ReviewText, r.Rating,
+        r.OfferingID, o.Title AS TitleOffering,
+        r.GuideID AS GuideID,
+        IF(u2.DisplayName IS NULL, CONCAT(u2.FirstName, ' ', u2.LastName), u2.DisplayName) AS Guide,
+        m.URL as ReviewerProfilePhoto, r.Reply
+        FROM Reviews AS r
+        INNER JOIN Offerings AS o ON r.OfferingID = o.OfferingID
+        INNER JOIN Users AS u ON r.SeekerID = u.UserID
+        INNER JOIN Users AS u2 ON r.GuideID = u2.UserID
+        INNER JOIN UsersLocations as l ON l.UserID = u.UserID AND l.LocationID = 0
+        LEFT JOIN Media AS m ON r.SeekerID = m.UserID";
 
       # Construimos el WHERE condicionalmente
       $whereClauses = ["r.GuideID = :userID"];
@@ -568,17 +653,18 @@ class Booking {
   {
     try {
       $query = "SELECT SQL_CALC_FOUND_ROWS r.ReviewID, r.CreationDate, r.SeekerID AS SeekerID,
-              IF(u.DisplayName IS NULL, CONCAT(u.FirstName, ' ', u.LastName), u.DisplayName) AS Reviewer,
-              u.CountryCode, r.ReviewText, r.Rating,
-              r.OfferingID, o.Title AS TitleOffering,
-              r.GuideID AS GuideID,
-              IF(u2.DisplayName IS NULL, CONCAT(u2.FirstName, ' ', u2.LastName), u2.DisplayName) AS Guide,
-              m.URL as ReviewerProfilePhoto
-              FROM Reviews AS r
-              INNER JOIN Offerings AS o ON r.OfferingID = o.OfferingID
-              INNER JOIN Users AS u ON r.SeekerID = u.UserID
-              INNER JOIN Users AS u2 ON r.GuideID = u2.UserID
-              LEFT JOIN Media AS m ON r.SeekerID = m.UserID";
+        IF(u.DisplayName IS NULL, CONCAT(u.FirstName, ' ', u.LastName), u.DisplayName) AS Reviewer,
+        l.CountryCode, r.ReviewText, r.Rating,
+        r.OfferingID, o.Title AS TitleOffering,
+        r.GuideID AS GuideID,
+        IF(u2.DisplayName IS NULL, CONCAT(u2.FirstName, ' ', u2.LastName), u2.DisplayName) AS Guide,
+        m.URL as ReviewerProfilePhoto, r.Reply
+        FROM Reviews AS r
+        INNER JOIN Offerings AS o ON r.OfferingID = o.OfferingID
+        INNER JOIN Users AS u ON r.SeekerID = u.UserID
+        INNER JOIN Users AS u2 ON r.GuideID = u2.UserID
+        INNER JOIN UsersLocations as l ON l.UserID = u.UserID AND l.LocationID = 0
+        LEFT JOIN Media AS m ON r.SeekerID = m.UserID";
 
       # Construimos el WHERE condicionalmente
       $whereClauses = ["r.SeekerID = :userID"];
@@ -649,18 +735,19 @@ class Booking {
       $type = $isGuide ? 'r.GuideID' : 'r.SeekerID';
 
       $query = "SELECT SQL_CALC_FOUND_ROWS r.ReviewID, r.CreationDate, r.SeekerID AS SeekerID,
-                IF(u.DisplayName IS NULL, CONCAT(u.FirstName, ' ', u.LastName), u.DisplayName) AS Reviewer,
-                u.CountryCode, r.ReviewText, r.Rating,
-                r.OfferingID, o.Title AS TitleOffering,
-                r.GuideID AS GuideID,
-                IF(u2.DisplayName IS NULL, CONCAT(u2.FirstName, ' ', u2.LastName), u2.DisplayName) AS Guide,
-                m.URL as ReviewerProfilePhoto
-                FROM Reviews AS r
-                INNER JOIN Offerings AS o ON r.OfferingID = o.OfferingID
-                INNER JOIN Users AS u ON r.SeekerID = u.UserID
-                INNER JOIN Users AS u2 ON r.GuideID = u2.UserID
-                LEFT JOIN Media AS m ON r.SeekerID = m.UserID
-                WHERE $type = :userID";
+        IF(u.DisplayName IS NULL, CONCAT(u.FirstName, ' ', u.LastName), u.DisplayName) AS Reviewer,
+        l.CountryCode, r.ReviewText, r.Rating,
+        r.OfferingID, o.Title AS TitleOffering,
+        r.GuideID AS GuideID,
+        IF(u2.DisplayName IS NULL, CONCAT(u2.FirstName, ' ', u2.LastName), u2.DisplayName) AS Guide,
+        m.URL as ReviewerProfilePhoto, r.Reply
+        FROM Reviews AS r
+        INNER JOIN Offerings AS o ON r.OfferingID = o.OfferingID
+        INNER JOIN Users AS u ON r.SeekerID = u.UserID
+        INNER JOIN Users AS u2 ON r.GuideID = u2.UserID
+        INNER JOIN UsersLocations as l ON l.UserID = u.UserID AND l.LocationID = 0
+        LEFT JOIN Media AS m ON r.SeekerID = m.UserID
+        WHERE $type = :userID";
 
       if ($from) $query .= " AND r.CreationDate >= :fromDate";
       if ($to) $query .= " AND r.CreationDate <= :toDate";
@@ -708,18 +795,20 @@ class Booking {
   {
     try {
       $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS r.ReviewID, r.CreationDate, r.SeekerID AS SeekerID,
-              IF(u.DisplayName IS NULL, CONCAT(u.FirstName, ' ', u.LastName), u.DisplayName) AS Reviewer,
-              u.CountryCode, r.ReviewText, r.Rating,
-              r.OfferingID, o.Title AS TitleOffering,
-              r.GuideID AS GuideID,
-              IF(u2.DisplayName IS NULL, CONCAT(u2.FirstName, ' ', u2.LastName), u2.DisplayName) AS Guide,
-              m.URL as ReviewerProfilePhoto
-              FROM Reviews AS r
-              INNER JOIN Offerings AS o ON r.OfferingID = o.OfferingID
-              INNER JOIN Users AS u ON r.SeekerID = u.UserID
-              INNER JOIN Users AS u2 ON r.GuideID = u2.UserID
-              LEFT JOIN Media AS m ON r.SeekerID = m.UserID
-              WHERE r.ReviewID = :reviewID");
+        IF(u.DisplayName IS NULL, CONCAT(u.FirstName, ' ', u.LastName), u.DisplayName) AS Reviewer,
+        l.CountryCode, r.ReviewText, r.Rating,
+        r.OfferingID, o.Title AS TitleOffering,
+        r.GuideID AS GuideID,
+        IF(u2.DisplayName IS NULL, CONCAT(u2.FirstName, ' ', u2.LastName), u2.DisplayName) AS Guide,
+        m.URL as ReviewerProfilePhoto, r.Reply
+        FROM Reviews AS r
+        INNER JOIN Offerings AS o ON r.OfferingID = o.OfferingID
+        INNER JOIN Users AS u ON r.SeekerID = u.UserID
+        INNER JOIN Users AS u2 ON r.GuideID = u2.UserID
+        INNER JOIN UsersLocations as l ON l.UserID = u.UserID AND l.LocationID = 0
+        LEFT JOIN Media AS m ON r.SeekerID = m.UserID
+        WHERE r.ReviewID = :reviewID");
+
       $stmt->bindParam(':reviewID', $reviewID, PDO::PARAM_INT);
       $stmt->execute();
 
@@ -740,17 +829,18 @@ class Booking {
   {
     try {
       $query = "SELECT SQL_CALC_FOUND_ROWS r.ReviewID, r.CreationDate, r.SeekerID AS SeekerID,
-              IF(u.DisplayName IS NULL, CONCAT(u.FirstName, ' ', u.LastName), u.DisplayName) AS Reviewer,
-              u.CountryCode, r.ReviewText, r.Rating,
-              r.OfferingID, o.Title AS TitleOffering,
-              r.GuideID AS GuideID,
-              IF(u2.DisplayName IS NULL, CONCAT(u2.FirstName, ' ', u2.LastName), u2.DisplayName) AS Guide,
-              m.URL as ReviewerProfilePhoto
-              FROM Reviews AS r
-              INNER JOIN Offerings AS o ON r.OfferingID = o.OfferingID
-              INNER JOIN Users AS u ON r.SeekerID = u.UserID
-              INNER JOIN Users AS u2 ON r.GuideID = u2.UserID
-              LEFT JOIN Media AS m ON r.SeekerID = m.UserID";
+        IF(u.DisplayName IS NULL, CONCAT(u.FirstName, ' ', u.LastName), u.DisplayName) AS Reviewer,
+        l.CountryCode, r.ReviewText, r.Rating,
+        r.OfferingID, o.Title AS TitleOffering,
+        r.GuideID AS GuideID,
+        IF(u2.DisplayName IS NULL, CONCAT(u2.FirstName, ' ', u2.LastName), u2.DisplayName) AS Guide,
+        m.URL as ReviewerProfilePhoto, r.Reply
+        FROM Reviews AS r
+        INNER JOIN Offerings AS o ON r.OfferingID = o.OfferingID
+        INNER JOIN Users AS u ON r.SeekerID = u.UserID
+        INNER JOIN Users AS u2 ON r.GuideID = u2.UserID
+        INNER JOIN UsersLocations as l ON l.UserID = u.UserID AND l.LocationID = 0
+        LEFT JOIN Media AS m ON r.SeekerID = m.UserID";
 
       # Construimos el WHERE condicionalmente
       $whereClauses = ["r.OfferingID = :offeringID"];

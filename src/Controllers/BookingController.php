@@ -67,8 +67,8 @@ class BookingController {
         ]);
       }
 
-      # Validar si el user es el cliente o el guía
-      if ($booking['UserID'] !== $userID && $booking['Guide'] !== $userID) {
+      # Validar si el user es el buscador o el guía
+      if ($booking['Seeker']['UserID'] !== $userID && $booking['Guide'] !== $userID) {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "FORBIDDEN",
@@ -122,8 +122,8 @@ class BookingController {
         ]);
       }
 
-      # Validar si el user es el cliente o el guía
-      if ($booking['UserID'] !== $userID && $booking['Guide'] !== $userID) {
+      # Validar si el user es el buscador o el guía
+      if ($booking['Seeker']['UserID'] !== $userID && $booking['Guide'] !== $userID) {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "FORBIDDEN",
