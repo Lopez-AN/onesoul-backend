@@ -286,7 +286,7 @@ class BookingController {
         ]);
       }
 
-      $seeker = $this->user->getUserById($booking['UserID']);
+      $seeker = $this->user->getUserById($booking['Seeker']['UserID']);
       if(!$seeker){
         return $response->withStatus(404)->withJson([
           "error" => [
@@ -690,7 +690,7 @@ class BookingController {
       }
 
       # Validar si el user es el cliente o el guía o un administrador
-      if ($booking['UserID'] !== $userID && $booking['Guide'] !== $userID && !$jwt->data->IsAdmin){
+      if ($booking['Seeker']['UserID'] !== $userID && $booking['Guide'] !== $userID && !$jwt->data->IsAdmin){
         return $response->withStatus(403)->withJson([
           "error" => [
             "code" => "FORBIDDEN",
@@ -776,7 +776,7 @@ class BookingController {
       $origin = $subDomain ? "https://{$subDomain}.onesoul.app" : "https://onesoul.app";
 
       # Obtener datos del usuario que hizo la reserva
-      $userInfo = $this->user->getUserById($booking['UserID']);
+      $userInfo = $this->user->getUserById($booking['Seeker']['UserID']);
       if ($userInfo) {
         $user = $userInfo;
         $username = $user['UserName'] ?? $user['DisplayName'] ?? 'Usuario';
@@ -900,7 +900,7 @@ class BookingController {
           ]
         ]);
       }
-      $seekerID = $booking['UserID'];
+      $seekerID = $booking['Seeker']['UserID'];
       $guideID = $booking['Guide'];
 
       # Validar si el user es el cliente o el guía o un administrador
@@ -1037,7 +1037,7 @@ class BookingController {
           ]
         ]);
       }
-      $seekerID = $booking['UserID'];
+      $seekerID = $booking['Seeker']['UserID'];
       $guideID = $booking['Guide'];
 
       # Validar si es el guía o un administrador
@@ -1180,7 +1180,7 @@ class BookingController {
           ]
         ]);
       }
-      $seekerID = $booking['UserID'];
+      $seekerID = $booking['Seeker']['UserID'];
       $guideID = $booking['Guide'];
 
       # Validar si es el guía o un administrador
@@ -1360,7 +1360,7 @@ class BookingController {
       }
 
     # Validar si el user es el cliente  o un administrador
-    if ($booking['UserID'] !== $userID && !$jwt->data->IsAdmin){
+    if ($booking['Seeker']['UserID'] !== $userID && !$jwt->data->IsAdmin){
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "FORBIDDEN",
@@ -1383,7 +1383,7 @@ class BookingController {
         }
       }
 
-      $seekerID = $booking['UserID'];
+      $seekerID = $booking['Seeker']['UserID'];
       $guideID = $booking['Guide'];
       $offeringID = $booking['OfferingID'];
 

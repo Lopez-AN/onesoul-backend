@@ -28,6 +28,8 @@ class Booking {
           'ImgURL', m.URL
         ))
         FROM Media AS m
+        INNER JOIN Users as u
+          ON m.userID = u.userID
         WHERE m.UserID = b.UserID
       ) AS seeker_info,
       -- Subconsulta para eventos
@@ -70,6 +72,8 @@ class Booking {
           'ImgURL', m.URL
         ))
         FROM Media AS m
+        INNER JOIN Users as u
+          ON m.userID = u.userID
         WHERE m.UserID = b.UserID
       ) AS seeker_info,
       -- Subconsulta para eventos
@@ -115,6 +119,8 @@ class Booking {
           'ImgURL', m.URL
         ))
         FROM Media AS m
+        INNER JOIN Users as u
+          ON m.userID = u.userID
         WHERE m.UserID = b.UserID
       ) AS seeker_info,
       -- Subconsulta para eventos
@@ -167,6 +173,8 @@ class Booking {
           'ImgURL', m.URL
         ))
         FROM Media AS m
+        INNER JOIN Users as u
+          ON m.userID = u.userID
         WHERE m.UserID = b.UserID
       ) AS seeker_info,
       -- Subconsulta para eventos
@@ -235,8 +243,8 @@ class Booking {
    **/
   private function _getBookingsGenericMulti($bookings, $total){
     foreach ($bookings as &$b) {
-      $b['Seeker'] = @json_decode($b['seeker_info'], true);
-      unset($b['seeker_info']);
+      $seeker = @json_decode($b['seeker_info'], true);
+      $b['Seeker'] = $seeker ? array_shift($seeker) : null;
 
       $b['Events'] = @json_decode($b['booking_events'], true);
       unset($b['booking_events']);
