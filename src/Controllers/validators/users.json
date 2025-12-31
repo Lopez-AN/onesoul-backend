@@ -134,7 +134,7 @@
     "LocationID": {
       "required": true,
       "type": "integer",
-      "min": 1,
+      "min": 0,
       "max": 99
     },
     "LocationName": {
