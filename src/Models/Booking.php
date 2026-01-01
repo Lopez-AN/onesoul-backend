@@ -16,8 +16,8 @@ class Booking {
   public function getBookingByID($bookingID) {
     $stmt = $this->db->prepare("SELECT b.BookingID, b.PublicID,
       b.ReviewID, b.PaymentID, b.Mode as SessionType, b.LocationID, b.CreationDate,
-      b.ScheduledDate, b.ModificationDate, o.UserID AS Guide, u.DisplayName,
-      b.OfferingID, o.Title AS TitleOffering, b.ScheduledDate,
+      b.ScheduledDate, b.ModificationDate, o.UserID AS Guide, u.DisplayName, b.OfferingID,
+      o.Title AS TitleOffering, b.ScheduledDate, b.Currency, b.Amount, b.VoucherID,
       -- Subconsulta para seeker
       (
         SELECT JSON_ARRAYAGG(
@@ -60,8 +60,8 @@ class Booking {
   public function getBookingByPublicID($publicID) {
     $stmt = $this->db->prepare("SELECT b.BookingID, b.PublicID,
       b.ReviewID, b.PaymentID, b.Mode as SessionType, b.LocationID, b.CreationDate,
-      b.ScheduledDate, b.ModificationDate, o.UserID AS Guide, u.DisplayName,
-      b.OfferingID, o.Title AS TitleOffering, b.ScheduledDate,
+      b.ScheduledDate, b.ModificationDate, o.UserID AS Guide, u.DisplayName, b.OfferingID,
+      o.Title AS TitleOffering, b.ScheduledDate, b.Currency, b.Amount, b.VoucherID,
       -- Subconsulta para seeker
       (
         SELECT JSON_ARRAYAGG(
@@ -107,8 +107,8 @@ class Booking {
     # Consulta completa paginada
     $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS b.BookingID, b.PublicID,
       b.ReviewID, b.PaymentID, b.Mode as SessionType, b.LocationID, b.CreationDate,
-      b.ScheduledDate, b.ModificationDate, o.UserID AS Guide, u.DisplayName,
-      b.OfferingID, o.Title AS TitleOffering, b.ScheduledDate,
+      b.ScheduledDate, b.ModificationDate, o.UserID AS Guide, u.DisplayName, b.OfferingID,
+      o.Title AS TitleOffering, b.ScheduledDate, b.Currency, b.Amount, b.VoucherID,
       -- Subconsulta para seeker
       (
         SELECT JSON_ARRAYAGG(
@@ -161,8 +161,8 @@ class Booking {
     # Consulta completa paginada
     $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS b.BookingID, b.PublicID,
       b.ReviewID, b.PaymentID, b.Mode as SessionType, b.LocationID, b.CreationDate,
-      b.ScheduledDate, b.ModificationDate, o.UserID AS Guide, u.DisplayName,
-      b.OfferingID, o.Title AS TitleOffering, b.ScheduledDate,
+      b.ScheduledDate, b.ModificationDate, o.UserID AS Guide, u.DisplayName, b.OfferingID,
+      o.Title AS TitleOffering, b.ScheduledDate, b.Currency, b.Amount, b.VoucherID,
       -- Subconsulta para seeker
       (
         SELECT JSON_ARRAYAGG(
@@ -286,8 +286,9 @@ class Booking {
       $this->db->beginTransaction(); # Iniciar transacción
 
       $stmt = $this->db->prepare("INSERT INTO Bookings
-        (OfferingID, PublicID, UserID, Mode, LocationID, CreationDate, ScheduledDate, VoucherID)
-        VALUES (?, ?, ?, ?, ?, NOW(), ?, ?)");
+        (OfferingID, PublicID, UserID, Mode, LocationID,
+        CreationDate, ScheduledDate, VoucherID, Currency, Amount)
+        VALUES (?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?)");
       $stmt->execute([
         $data['OfferingID'],
         $data['PublicID'],
@@ -295,7 +296,9 @@ class Booking {
         $data['SessionType'],
         $data['LocationID'],
         $data['ScheduledDate']?->format("YmdHis") ?? null,
-        $voucherID
+        $voucherID,
+        $data['Currency'],
+        $data['Amount']
       ]);
 
       $bookingID = $this->db->lastInsertId();

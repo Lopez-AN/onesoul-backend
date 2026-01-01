@@ -101,7 +101,7 @@ class NotificationWorker {
         $this->notification->markDeliveryAsSent($delivery['DeliveryID']);
         print("[EMAIL] Delivery {$delivery['DeliveryID']} SUCCESS\n");
       }else{
-        if($delivery['Attempts'] + 1 >= ($delivery['MaxAttemps'] ?? 3)){
+        if($delivery['Attempts'] + 1 >= ($delivery['MaxAttempts'] ?? 3)){
           $this->notification->markDeliveryAsFailed($delivery['DeliveryID']);
           print("[EMAIL] Delivery {$delivery['DeliveryID']} FAILED: {$result->error->getMessage()}\n");
         }else{
@@ -140,7 +140,7 @@ class NotificationWorker {
         $this->notification->markDeliveryAsSent($delivery['DeliveryID']);
         print("[WHATSAPP] Delivery {$delivery['DeliveryID']} SUCCESS\n");
       }else{
-        if($delivery['Attempts'] + 1 >= ($delivery['MaxAttemps'] ?? 3)){
+        if($delivery['Attempts'] + 1 >= ($delivery['MaxAttempts'] ?? 3)){
           $this->notification->markDeliveryAsFailed($delivery['DeliveryID']);
           print("[WHATSAPP] Delivery {$delivery['DeliveryID']} FAILED: {$result->error->getMessage()}\n");
         }else{

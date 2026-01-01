@@ -530,7 +530,9 @@ class BookingController {
         'SessionType' => $params['SessionType'],
         'LocationID' => $params['LocationID'],
         'ScheduledDate' => $params['ScheduledDate'],
-        'Message' => $params['Message']
+        'Message' => $params['Message'],
+        'Currency' => $offering['Currency'],
+        'Amount' => $params['Coupon'] ? 0 : $offering['Price']
       ];
 
       $origin = $params['SubDomain'] ? "https://{$params['SubDomain']}.onesoul.app" : "https://onesoul.app";
@@ -545,7 +547,7 @@ class BookingController {
           "BOOKING_URL"   => "{$origin}/bookings/guide",
           "SCHEDULED"     => $params['ScheduledDate']?->format('d/m/Y H:i') ?? "A convenir",
           "SESSION_TYPE"  => $booking['SessionType'] === 'in-person' ? 'Presencial' : 'Virtual',
-          "PRICE"         => $offering['Currency'].' '.$price,
+          "PRICE"         => $params['Coupon'] ? $offering['Currency'].' '.$price : 'Sesión de donación',
           "OFFERING_ID"   => $params['OfferingID'],
           "OFFERING_TITLE"  => $offering['Title'],
           'OFFERING_IMG'  => isset($offering['Media']['Images'][0]['Url'])
@@ -574,7 +576,7 @@ class BookingController {
           "BOOKING_URL"  => "{$origin}/bookings/user",
           "SCHEDULED"    => $params['ScheduledDate']?->format('d/m/Y H:i') ?? "A convenir",
           "SESSION_TYPE" => $booking['SessionType'] === 'in-person' ? 'Presencial' : 'Virtual',
-          "PRICE"        => $offering['Currency'].' '.$price,
+          "PRICE"        => $params['Coupon'] ? $offering['Currency'].' '.$price : 'Sesión de donación',
           "CONDITIONS"   => $conditions,
           "OFFERING_ID"  => $params['OfferingID'],
           "OFFERING_TITLE"    => $offering['Title'],

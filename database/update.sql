@@ -1,6 +1,3 @@
-ALTER TABLE `NotificationsTemplate`
-	DROP COLUMN `Status`;
-
 ALTER TABLE `NotificationsDelivery`
 	ADD COLUMN `LastAttemptAt` TIMESTAMP NULL DEFAULT NULL AFTER `SentAt`;
 
@@ -11,13 +8,15 @@ DROP TABLE `NotificationJobs`;
 
 ALTER TABLE `NotificationsDelivery`
 	CHANGE COLUMN `Status` `Status` ENUM('Queued','Requeued','Processing','Sent','Failed') NOT NULL DEFAULT 'Queued' COLLATE 'utf8mb4_unicode_ci' AFTER `ProviderMessageID`;
+
+ALTER TABLE `NotificationsDelivery`
 	ADD COLUMN `NextAttemptAt` TIMESTAMP NULL DEFAULT NULL COMMENT 'En caso de reintentos, cuando se reintentara este envio' AFTER `LastAttemptAt`;
 
 ALTER TABLE `NotificationsTemplate`
 	CHANGE COLUMN `Status` `Status` ENUM('Draft','Active','Archived') NOT NULL DEFAULT 'Active' COLLATE 'utf8mb4_unicode_ci' AFTER `Version`;
 
 ALTER TABLE `NotificationsEventChannel`
-	CHANGE COLUMN `DailyCap` `MaxAttemps` INT(11) NULL DEFAULT NULL AFTER `FallbackAfterSeconds`;
+	CHANGE COLUMN `DailyCap` `MaxAttempts` INT(11) NULL DEFAULT NULL AFTER `FallbackAfterSeconds`;
 
 ALTER TABLE `Notifications`
 	DROP COLUMN `Status`;
@@ -120,3 +119,9 @@ RENAME TABLE `UserLegalConsents` TO `UsersLegalConsents`;
 
 ALTER TABLE `UsersSettings`
 	CHANGE COLUMN `PreferredLanguage` `Locale` VARCHAR(5) NULL DEFAULT 'es' COMMENT 'Idioma preferido en código I18N' COLLATE 'utf8mb4_unicode_ci' AFTER `UserID`;
+
+ALTER TABLE `Bookings`
+	ADD COLUMN `Currency` CHAR(3) NULL DEFAULT NULL COMMENT 'Moneda de la reserva' AFTER `VoucherID`;
+
+ALTER TABLE `Bookings`
+	ADD COLUMN `Amount` FLOAT NULL DEFAULT NULL COMMENT 'Monto de la reserva' AFTER `Currency`;
