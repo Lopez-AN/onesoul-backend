@@ -619,7 +619,7 @@ class BookingController {
    * @statusCode 500: error interno del servidor
    **/
   public function updateBooking(Request $request, Response $response, $args) {
-    $bookingID = intval($args['bookingID']);
+    $bookingID = intval($args['BookingID']);
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
     $userID = $jwt->data->UserID;
@@ -705,7 +705,7 @@ class BookingController {
       if (!empty($booking['Events'])) {
         $latestEvent = $booking['Events'][0];
 
-        if (in_array($latestEvent['BookingEvent'], ['Canceled', 'Confirmed', 'Completed', 'Rated'])) {
+        if (in_array($latestEvent['Event'], ['Canceled', 'Confirmed', 'Completed', 'Rated'])) {
           return $response->withStatus(400)->withJson([
             "error" => [
               "code" => "BOOKING_ALREADY_CANCELED_OR_CONFIRMED",
@@ -919,7 +919,7 @@ class BookingController {
       if (!empty($booking['Events'])) {
         $latestEvent = $booking['Events'][0];
 
-        if (in_array($latestEvent['BookingEvent'], ['Canceled', 'Completed', 'Rated'])) {
+        if (in_array($latestEvent['Event'], ['Canceled', 'Completed', 'Rated'])) {
           return $response->withStatus(400)->withJson([
             "error" => [
               "code" => "BOOKING_ALREADY_CANCELED_OR_CONFIRMED",
@@ -1056,7 +1056,7 @@ class BookingController {
       if (!empty($booking['Events'])) {
         $latestEvent = $booking['Events'][0];
 
-        if (in_array($latestEvent['BookingEvent'], ['Canceled', 'Confirmed', 'Completed', 'Rated'])) {
+        if (in_array($latestEvent['Event'], ['Canceled', 'Confirmed', 'Completed', 'Rated'])) {
           return $response->withStatus(400)->withJson([
             "error" => [
               "code" => "BOOKING_ALREADY_CANCELED_OR_CONFIRMED",
@@ -1199,7 +1199,7 @@ class BookingController {
       if (!empty($booking['Events'])) {
         $latestEvent = $booking['Events'][0];
 
-        if ($latestEvent['BookingEvent'] !== 'Confirmed') {
+        if ($latestEvent['Event'] !== 'Confirmed') {
           return $response->withStatus(400)->withJson([
             "error" => [
               "code" => "BOOKING_NOT_CONFIRMED",
@@ -1296,7 +1296,7 @@ class BookingController {
    **/
   public function rateBooking(Request $request, Response $response, $args) {
     $data = $request->getParsedBody();
-    $bookingID = intval($args['bookingID']);
+    $bookingID = intval($args['BookingID']);
     $message = $data['Message'] ?? null;
     $rating = $data['Rating'] ?? null;
     $fulfilled = $data['Fulfilled'] ?? null;
@@ -1375,7 +1375,7 @@ class BookingController {
       if (!empty($booking['Events'])) {
         $latestEvent = $booking['Events'][0];
 
-        if ($latestEvent['BookingEvent'] !== 'Completed') {
+        if ($latestEvent['Event'] !== 'Completed') {
           return $response->withStatus(400)->withJson([
             "error" => [
               "code" => "BOOKING_NOT_COMPLETED",
@@ -1492,7 +1492,7 @@ class BookingController {
    * @statusCode 500: error interno del servidor
    **/
   public function getReviewsByGuide(Request $request, Response $response, $args){
-    $userID = intval($args['userID']);
+    $userID = intval($args['UserID']);
     $queryParams = $request->getQueryParams();
 
     $from = $queryParams['from'] ?? null;
@@ -1559,7 +1559,7 @@ class BookingController {
    * @statusCode 500: error interno del servidor
    **/
   public function getReviewsBySeeker(Request $request, Response $response, $args) {
-    $userID = intval($args['userID']);
+    $userID = intval($args['UserID']);
     $queryParams = $request->getQueryParams();
 
     $from = $queryParams['from'] ?? null;
@@ -1626,7 +1626,7 @@ class BookingController {
    * @statusCode 500: error interno del servidor
    **/
   public function getReviewsByUser(Request $request, Response $response, $args){
-    $userID = intval($args['userID']);
+    $userID = intval($args['UserID']);
     $queryParams = $request->getQueryParams();
 
     $from = $queryParams['from'] ?? null;
@@ -1691,7 +1691,7 @@ class BookingController {
    * @statusCode 500: error interno del servidor
    **/
   public function getReviewsByID(Request $request, Response $response, $args) {
-    $reviewID = intval($args['reviewID']);
+    $reviewID = intval($args['ReviewID']);
 
     try {
       $review = $this->booking->getReviewsByID($reviewID);
@@ -1729,7 +1729,7 @@ class BookingController {
    * @statusCode 500: error interno del servidor
    **/
   public function getReviewsByOffering(Request $request, Response $response, $args) {
-    $offeringID = intval($args['offeringID']);
+    $offeringID = intval($args['OfferingID']);
     $queryParams = $request->getQueryParams();
 
     $from = $queryParams['from'] ?? null;

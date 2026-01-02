@@ -43,9 +43,9 @@ return function (App $app) {
 
   // Reviews:
   $app->get('/reviews', [$bookingController, 'getReviews']);
-  $app->get('/reviews/{reviewID}', [$bookingController, 'getReviewsByID']);
-  $app->get('/reviews/guide/{userID}', [$bookingController, 'getReviewsByGuide']);
-  $app->get('/reviews/seeker/{userID}', [$bookingController, 'getReviewsBySeeker']);
-  $app->get('/reviews/user/{userID}', [$bookingController, 'getReviewsByUser']);
-  $app->get('/reviews/offering/{offeringID}', [$bookingController, 'getReviewsByOffering']);
+  $app->get('/reviews/{ReviewID}', [$bookingController, 'getReviewsByID']);
+  $app->get('/reviews/guide/{UserID}', [$bookingController, 'getReviewsByGuide']);
+  $app->get('/reviews/seeker/{UserID}', [$bookingController, 'getReviewsBySeeker']);
+  $app->get('/reviews/user/{UserID}', [$bookingController, 'getReviewsByUser']);
+  $app->get('/reviews/offering/{OfferingID}', [$bookingController, 'getReviewsByOffering']);
 };

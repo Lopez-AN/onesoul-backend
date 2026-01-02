@@ -913,32 +913,34 @@ class User {
         }
       }
 
-      # Chequeo si ya tiene la ubicacion base creada
-      $stmt = $this->db->prepare("SELECT * FROM UsersLocations
-        WHERE UserID = ? AND LocationID = 0");
-      $stmt->execute([$user['UserID']]);
+      if($location){
+        # Chequeo si ya tiene la ubicacion base creada
+        $stmt = $this->db->prepare("SELECT * FROM UsersLocations
+          WHERE UserID = ? AND LocationID = 0");
+        $stmt->execute([$user['UserID']]);
 
-      $checkLocation = $stmt->fetch();
+        $checkLocation = $stmt->fetch();
 
-      $locationKeys = array_keys($location) ;
-      $locationValues = array_values($location) ;
+        $locationKeys = array_keys($location) ;
+        $locationValues = array_values($location) ;
 
-      # Inserto si no existe
-      if(!$checkLocation){
-        $placeholder = array_fill(0,count($locationKeys),"?");
+        # Inserto si no existe
+        if(!$checkLocation){
+          $placeholder = array_fill(0,count($locationKeys),"?");
 
-        $stmt = $this->db->prepare("INSERT INTO UsersLocations (UserID, LocationID, " . implode(", ", $locationKeys) .
-        ") VALUES (?, 0, ". implode(", ", $placeholder) . ")");
-        array_unshift($locationValues, $user['UserID']);
-        $stmt->execute($locationValues);
-      # Updateo
-      }else{
-        foreach($locationKeys as $k){
-          $s[] = "$k = ?";
+          $stmt = $this->db->prepare("INSERT INTO UsersLocations (UserID, LocationID, " . implode(", ", $locationKeys) .
+          ") VALUES (?, 0, ". implode(", ", $placeholder) . ")");
+          array_unshift($locationValues, $user['UserID']);
+          $stmt->execute($locationValues);
+        # Updateo
+        }else{
+          foreach($locationKeys as $k){
+            $s[] = "$k = ?";
+          }
+          $stmt = $this->db->prepare("UPDATE UsersLocations SET ". implode(", ",$s). " WHERE UserID = ? AND LocationID = 0");
+          $locationValues[] = $user['UserID'];
+          $stmt->execute($locationValues);
         }
-        $stmt = $this->db->prepare("UPDATE UsersLocations SET ". implode(", ",$s). " WHERE UserID = ? AND LocationID = 0");
-        $locationValues[] = $user['UserID'];
-        $stmt->execute($locationValues);
       }
 
       $user = $this->getUserById($user['UserID']) ?:

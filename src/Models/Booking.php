@@ -43,7 +43,6 @@ class Booking {
         ))
         FROM BookingStatus as s
         WHERE s.BookingID = b.BookingID
-        ORDER BY BookingEventDate DESC
       ) AS booking_events
       FROM Bookings AS b
       INNER JOIN Offerings AS o ON b.OfferingID = o.OfferingID
@@ -87,7 +86,6 @@ class Booking {
         ))
         FROM BookingStatus as s
         WHERE s.BookingID = b.BookingID
-        ORDER BY BookingEventDate DESC
       ) AS booking_events
       FROM Bookings AS b
       INNER JOIN Offerings AS o ON b.OfferingID = o.OfferingID
@@ -134,7 +132,6 @@ class Booking {
         ))
         FROM BookingStatus as s
         WHERE s.BookingID = b.BookingID
-        ORDER BY BookingEventDate DESC
       ) AS booking_events
       FROM Bookings AS b
       INNER JOIN Offerings AS o ON b.OfferingID = o.OfferingID
@@ -188,7 +185,6 @@ class Booking {
         ))
         FROM BookingStatus as s
         WHERE s.BookingID = b.BookingID
-        ORDER BY BookingEventDate DESC
       ) AS booking_events
       FROM Bookings AS b
       INNER JOIN Offerings AS o ON b.OfferingID = o.OfferingID
@@ -228,6 +224,10 @@ class Booking {
     $booking['Events'] = @json_decode($booking['booking_events'], true);
     unset($booking['booking_events']);
 
+    usort($booking['Events'], function($a, $b){
+      return $a['EventDate'] < $b['EventDate'] ? 1 : -1;
+    });
+
     return $booking;
   }
 
@@ -242,12 +242,16 @@ class Booking {
    * @return object: { data: [], rows: { total: int, fetched: int } }
    **/
   private function _getBookingsGenericMulti($bookings, $total){
-    foreach ($bookings as &$b) {
-      $seeker = @json_decode($b['seeker_info'], true);
-      $b['Seeker'] = $seeker ? array_shift($seeker) : null;
+    foreach ($bookings as &$e) {
+      $seeker = @json_decode($e['seeker_info'], true);
+      $e['Seeker'] = $seeker ? array_shift($seeker) : null;
 
-      $b['Events'] = @json_decode($b['booking_events'], true);
-      unset($b['booking_events']);
+      $e['Events'] = @json_decode($e['booking_events'], true);
+      unset($e['booking_events']);
+
+      usort($e['Events'], function($a, $b){
+        return $a['EventDate'] < $b['EventDate'] ? 1 : -1;
+      });
     }
 
     return [
