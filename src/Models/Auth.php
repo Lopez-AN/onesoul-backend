@@ -7,16 +7,13 @@ use PDOException;
 use App\Exceptions\DatabaseException;
 use Exception;
 use PHPMailer\PHPMailer\PHPMailer;
-use Predis\Client as RedisClient;
 use App\Models\User;
 
 class Auth{
   protected $db;
-  protected $redis;
 
-  public function __construct(PDO $db, RedisClient $redis){
+  public function __construct(PDO $db){
     $this->db = $db;
-    $this->redis = $redis;
   }
 
   /**
@@ -89,6 +86,12 @@ class Auth{
         VALUES (?, 'es', 'Light', ?, 'America/Argentina/Buenos_Aires')");
       $stmt->execute([$userID, $receiveNewsletters]);
 
+      # Por defecto canales notificacion activados
+      $stmt = $this->db->prepare("INSERT INTO UsersNotifications
+        (UserID, Email, WhatsApp, Sms, PushWeb, InApp)
+        VALUES (?, 1, 1, 1, 1, 1)");
+      $stmt->execute([$userID]);
+
       # Insertar consentimiento
       $stmt = $this->db->prepare("INSERT INTO UsersLegalConsents
         (UserID, UserIP, UserAgent, Version, DocumentType, Accepted)
@@ -148,6 +151,12 @@ class Auth{
         (UserID, Locale, ViewMode, ReceiveNewsletters, TimeZone)
         VALUES (?, 'es', 'Light', ?, 'America/Argentina/Buenos_Aires')");
       $stmt->execute([$userID, $receiveNewsletters]);
+
+      # Por defecto canales notificacion activados
+      $stmt = $this->db->prepare("INSERT INTO UsersNotifications
+        (UserID, Email, WhatsApp, Sms, PushWeb, InApp)
+        VALUES (?, 1, 1, 1, 1, 1)");
+      $stmt->execute([$userID]);
 
       # Insertar consentimiento
       $stmt = $this->db->prepare("INSERT INTO UsersLegalConsents
@@ -436,25 +445,20 @@ class Auth{
   }
 
   /**
-   * Envía código OTP por email a usuario no registrado (almacena en Redis)
+   * Genera y graba en base de datos un código OTP para validar una cuenta
+   * @param  int $userID: ID del usuario
    * @param  string $email: correo del usuario
+   * @param  string $userName: nombre de usuario
+   * @param  bool $recovery: true si es para recuperación, false si es para registro
    * @return bool: true si se envió correctamente, false si falló
    **/
-  public function sendOtpMailNoUser($email){
+  public function setOtpCodeDB($userID){
+    # Genero un nuevo codigo OTP y lo grabo en el usuario
     $otpCode = rand(100000, 999999); # Codigo que se enviara por mail
-    $hashedOtp = password_hash((string)$otpCode, PASSWORD_BCRYPT); # Hasheo el OTP code
+    $stmt = $this->db->prepare("UPDATE Users SET OTPCode = ?, OTPDate = ? WHERE UserID = ?");
+    $stmt->execute([$otpCode, date("YmdHis"), $userID]);
 
-    # Json que guardo en redis
-    $otpData = [
-      'otp_hash' => $hashedOtp,
-      'attempts' => 0, # Contador de intentos
-      'validated' => false, # Indica si ya se valido el email
-      'created_at' => time(),
-      'expires_at' => time() + $GLOBALS['config']['otp_exptime'] # Expiracion
-    ];
-
-    $this->redis->setex("otp:{$email}", 86400, json_encode($otpData));
-    return $this -> _sendOtpMail($email, $otpCode);
+    return $otpCode;
   }
 
   /**

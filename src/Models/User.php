@@ -860,12 +860,12 @@ class User {
 
   /**
    * Actualiza los datos de un usuario
-   * @param  int $userID: ID del usuario a actualizar
+   * @param  array $user: datos actuales del usuario
    * @param  array $values: valores correspondientes a los campos
    * @return array: array con datos del usuario actualizado
    * @throws DatabaseException
    **/
-  public function updateUser($userID, $values) {
+  public function updateUser($user, $values) {
     try {
       $this->db->beginTransaction(); # Iniciar transacción
 
@@ -885,9 +885,7 @@ class User {
       }
 
       # Construir la consulta SQL para la actualización
-      $sql = "UPDATE Users SET " . implode(", ", $fields) . " WHERE UserID = :UserID";
-
-      $stmt = $this->db->prepare($sql);
+      $stmt = $this->db->prepare("UPDATE Users SET " . implode(", ", $fields) . " WHERE UserID = :UserID");
 
       # Vincular parámetros y manejar valores NULL
       foreach ($values AS $key => $value) {
@@ -895,15 +893,15 @@ class User {
       }
 
       # Vincular el ID del usuario
-      $stmt->bindValue(':UserID', $userID, PDO::PARAM_INT);
+      $stmt->bindValue(':UserID', $user['UserID'], PDO::PARAM_INT);
       $stmt->execute(); # Ejecutar la consulta
 
       # Si cambio el mail se marca el email como no validado
       if (isset($values['Email'])) {
-        if ($values['Email'] !== $currentEmail) {
+        if ($values['Email'] !== $user['Email']) {
           $stmt = $this->db->prepare("UPDATE Users SET ValidatedEmail = 0 WHERE UserID = ?");
           # Vincular el ID del usuario
-          $stmt->execute([$userID]); # Ejecutar la consulta
+          $stmt->execute([$user['UserID']]); # Ejecutar la consulta
         }
       }
 
@@ -945,7 +943,7 @@ class User {
         ]);
       }
 
-      $user = $this->getUserById($userID) ?:
+      $user = $this->getUserById($user['UserID']) ?:
         throw new DatabaseException("Failed to retrieve the updated user");
 
       $this->db->commit(); # Confirmo transacción

@@ -40,7 +40,7 @@ class Notification  {
         throw new NotFoundException("Recipient ($recipientUserID) not found", 404);
 
       # Traigo los canales de difusion
-      $eventChannels = $this->_getEventType($eventCode, $userSettings['Locale']) ?:
+      $eventChannels = $this->getEventType($eventCode, $userSettings['Locale']) ?:
         throw new NotFoundException("Event $eventCode not found", 404);
       $eventTypeID = $eventChannels[0]['EventTypeID'];
 
@@ -60,7 +60,6 @@ class Notification  {
         $idempotencyKey
       ]);
       $notificationID = $this->db->lastInsertId();
-
       # Itero cada canal de difusion y si esta activado envio lo agrego al queue
       foreach($eventChannels as $e){
         $channel = $e['Channel'];
@@ -103,6 +102,7 @@ class Notification  {
 
       $deliveries = $this->getDeliveriesByNotificationId($notificationID, DeliveriesMode::ALL) ?:
         throw new DatabaseException("Failed to retrieve the created deliveries");
+
       $this->db->commit(); # Confirmo transacción
 
       # Si es envio critico lo envio en el momento
@@ -421,7 +421,7 @@ class Notification  {
    * @param array $payload Datos para reemplazar en la plantilla
    * @return string|null Plantilla renderizada o null si la plantilla es vacía
    */
-  private function renderTemplate($template, $payload) {
+  public function renderTemplate($template, $payload) {
     if (!$template) return null;
 
     $rendered = $template;
@@ -534,7 +534,7 @@ class Notification  {
    * @param string $locale Código de idioma (ej: 'es', 'en')
    * @return array Lista de canales con sus plantillas asociadas
    */
-  private function _getEventType($eventCode, $locale){
+  public function getEventType($eventCode, $locale){
     $stmt = $this->db->prepare("SELECT nec.EventTypeID, net.Code,
       net.Description, nec.Channel, nec.Enabled, nec.IsCritical,
       nec.FallbackAfterSeconds, nec.MaxAttempts,

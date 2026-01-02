@@ -9,10 +9,12 @@ use Psr\Http\Message\ServerRequestInterface as Request;
 use App\Models\Auth;
 use App\Models\User;
 use App\Models\Subscription;
+use App\Models\Notification;
 use Firebase\JWT\JWT;
 use Firebase\JWT\JWK;
 use Stripe\Stripe;
 use DateTime;
+use App\Utils\EmailHelper;
 use Predis\Client as RedisClient;
 
 require_once ROOT . '/src/Utils/validateToken.php';
@@ -22,12 +24,16 @@ class AuthController{
 
   protected $user;
   protected $auth;
+  protected $notification;
   protected $subscription;
   protected $redis;
 
-  public function __construct(Auth $auth, User $user, Subscription $subscription, RedisClient $redisClient){
+  public function __construct(Auth $auth, User $user, Notification $notification,
+    Subscription $subscription, RedisClient $redisClient
+  ){
     $this->auth = $auth;
     $this->user = $user;
+    $this->notification = $notification;
     $this->subscription = $subscription;
     $this->redis = $redisClient;
   }
@@ -1245,7 +1251,18 @@ class AuthController{
             ]
           ]);
         }
-        $result = $this->auth->sendOtpMailNoUser($email);
+        $otpCode = $this->_setOtpCodeRedis($email);
+
+        $event = $this->notification->getEventType("SEND_OTP", "es");
+        if(!empty($event)){
+          $payload = [
+            "YEAR"         => date('Y'),
+            "OTP_CODE"     => $otpCode,
+            "USERNAME"     => $email
+          ];
+          $template = $this->notification->renderTemplate($event[0]['TemplateBody'], $payload);
+          EmailHelper::send($email, $event[0]['TemplateSubject'], $template);
+        }
       }else{ # MODO CON TOKEN (usa la base, para usuarios existentes)
         $user = $this->user->getUserById($jwt->data -> UserID);
         if(empty($user)){
@@ -1256,18 +1273,23 @@ class AuthController{
             ]
           ]);
         }
-        $result = $this->auth->sendOtpMailExistingUser($user['UserID'], $user['Email'], $user['UserName']);
+        $otpCode = $this->auth->setOtpCodeDB($user['UserID']);
+
+        # Notificación para el buscador
+        $payload = [
+          "YEAR"         => date('Y'),
+          "OTP_CODE"     => $otpCode,
+          "USERNAME"     => $user['UserName']
+        ];
+        $this->notification->createNotification(
+          $user['UserID'],
+          "SEND_OTP",
+          $payload,
+          "SEND_OTP." . time() . ".VALIDATE"
+        );
       }
 
-      if(!$result){
-        return $response->withStatus(500)->withJson([
-          "error" => [
-            "code" => "OTP_NOT_SENT",
-            "desc" => "Cannot send the OTP email, try again later"
-          ]
-        ]);
-      }
-      return $response->withStatus(200)->withJson("OTP code sent successfully");
+      return $response->withStatus(200)->withJson("OTP code sent");
     } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -2443,5 +2465,27 @@ class AuthController{
         ]);
       }
     }
+  }
+
+  /**
+   * Genera y graba en Redis un código OTP para validar una cuenta
+   * @param  string $email: correo del usuario
+   **/
+  private function _setOtpCodeRedis($email) {
+    $otpCode = rand(100000, 999999); # Codigo que se enviara por mail
+    $hashedOtp = password_hash((string)$otpCode, PASSWORD_BCRYPT); # Hasheo el OTP code
+
+    # Json que guardo en redis
+    $otpData = [
+      'otp_hash' => $hashedOtp,
+      'attempts' => 0, # Contador de intentos
+      'validated' => false, # Indica si ya se valido el email
+      'created_at' => time(),
+      'expires_at' => time() + $GLOBALS['config']['otp_exptime'] # Expiracion
+    ];
+
+    $this->redis->setex("otp:{$email}", 86400, json_encode($otpData));
+
+    return $otpCode;
   }
 }

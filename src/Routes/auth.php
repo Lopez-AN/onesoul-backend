@@ -4,6 +4,7 @@ use Slim\App;
 use App\Controllers\AuthController;
 use App\Models\User;
 use App\Models\Auth;
+use App\Models\Notification;
 use App\Models\Subscription;
 use Tuupola\Middleware\JwtAuthentication;
 use App\Middleware\JwtTokenMiddleware;
@@ -23,9 +24,10 @@ return function (App $app) {
   $pdo = $app->getContainer()->get('pdo');
   $redis = $app->getContainer()->get('redis'); # Base de datos en RAM
   $user = new User($pdo);
-  $auth = new Auth($pdo, $redis);
+  $notification = new Notification($pdo);
+  $auth = new Auth($pdo);
   $subscription = new Subscription($pdo);
-  $authController = new AuthController($auth, $user, $subscription, $redis);
+  $authController = new AuthController($auth, $user, $notification, $subscription, $redis);
 
   $app->post('/login', [$authController, 'login']);
   $app->post('/login/facebook', [$authController, 'loginFacebook']);

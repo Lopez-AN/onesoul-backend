@@ -632,7 +632,7 @@ class UserController{
         ]);
       }
 
-      $user = $this->user->updateUser($params['UserID'], $params);
+      $user = $this->user->updateUser($user, $params);
 
       # --- Sincronizar con Stripe si corresponde ---
       $subscription = $this->subscription->getSubscriptionByUser($params['UserID']);
