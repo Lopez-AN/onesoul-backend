@@ -576,7 +576,7 @@ class UserController{
     $params = $pValidation->values;
 
     if(!empty($params['Location'])){
-      $pValidation = ParameterValidator::validate($response, 'users','user_location', $params['Location'], STRICT_FIELD_VALIDATION);
+      $pValidation = ParameterValidator::validate($response, 'users','user_location', $params['Location'], STRICT_FIELD_VALIDATION, IGNORE_MISSING_FIELDS);
       if(!$pValidation->valid){
         return $pValidation->response;
       }

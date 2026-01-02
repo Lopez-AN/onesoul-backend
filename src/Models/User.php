@@ -710,6 +710,10 @@ class User {
 
     $locations = @json_decode($user['user_locations'], true);
     $user['Locations'] = $locations ? $locations : [];
+    $user['Locations'] = array_map(function($a){
+      $a['IsActive'] = (bool)$a['IsActive'];
+      return $a;
+    }, $user['Locations']);
     unset($user['user_locations']);
 
     return $user;
@@ -753,6 +757,10 @@ class User {
 
       $locations = @json_decode($e['user_locations'], true);
       $e['Locations'] = $locations ? $locations : [];
+      $e['Locations'] = array_map(function($a){
+        $a['IsActive'] = (bool)$a['IsActive'];
+        return $a;
+      }, $e['Locations']);
       unset($e['user_locations']);
 
       return $e;
@@ -905,42 +913,32 @@ class User {
         }
       }
 
-      if($location){
-        $stmt = $this->db->prepare("INSERT INTO UsersLocations (
-          LocationID, UserID, LocationName, AddressName, AddressNumber,
-          Floor, Department, Cp, City, State, CountryCode, IsActive
-          ) VALUES (
-          :locationId, :userId, :locationName, :addressName, :addressNumber,
-          :floor, :department, :cp, :city, :state, :countryCode, :isActive
-          )
-          ON DUPLICATE KEY UPDATE
-            UserID = VALUES(UserID),
-            LocationName = VALUES(LocationName),
-            AddressName = VALUES(AddressName),
-            AddressNumber = VALUES(AddressNumber),
-            Floor = VALUES(Floor),
-            Department = VALUES(Department),
-            Cp = VALUES(Cp),
-            City = VALUES(City),
-            State = VALUES(State),
-            CountryCode = VALUES(CountryCode),
-            IsActive = VALUES(IsActive)
-        ");
+      # Chequeo si ya tiene la ubicacion base creada
+      $stmt = $this->db->prepare("SELECT * FROM UsersLocations
+        WHERE UserID = ? AND LocationID = 0");
+      $stmt->execute([$user['UserID']]);
 
-        $stmt->execute([
-          'locationId' => 0,
-          'userId' => $values['UserID'],
-          'locationName' => $location['LocationName'],
-          'addressName' => $location['AddressName'],
-          'addressNumber' => $location['AddressNumber'],
-          'floor' => $location['Floor'],
-          'department' => $location['Department'],
-          'cp' => $location['Cp'],
-          'city' => $location['City'],
-          'state' => $location['State'],
-          'countryCode' => $location['CountryCode'],
-          'isActive' => $location['IsActive'] ?? 1
-        ]);
+      $checkLocation = $stmt->fetch();
+
+      $locationKeys = array_keys($location) ;
+      $locationValues = array_values($location) ;
+
+      # Inserto si no existe
+      if(!$checkLocation){
+        $placeholder = array_fill(0,count($locationKeys),"?");
+
+        $stmt = $this->db->prepare("INSERT INTO UsersLocations (UserID, LocationID, " . implode(", ", $locationKeys) .
+        ") VALUES (?, 0, ". implode(", ", $placeholder) . ")");
+        array_unshift($locationValues, $user['UserID']);
+        $stmt->execute($locationValues);
+      # Updateo
+      }else{
+        foreach($locationKeys as $k){
+          $s[] = "$k = ?";
+        }
+        $stmt = $this->db->prepare("UPDATE UsersLocations SET ". implode(", ",$s). " WHERE UserID = ? AND LocationID = 0");
+        $locationValues[] = $user['UserID'];
+        $stmt->execute($locationValues);
       }
 
       $user = $this->getUserById($user['UserID']) ?:

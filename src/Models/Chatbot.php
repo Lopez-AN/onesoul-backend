@@ -4,7 +4,6 @@ namespace App\Models;
 
 use PDO;
 use PDOException;
-use App\Exceptions\DatabaseException;
 use Exception;
 use PHPMailer\PHPMailer\PHPMailer;
 

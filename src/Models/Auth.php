@@ -428,23 +428,6 @@ class Auth{
   }
 
   /**
-   * Envía código OTP por email a usuario existente
-   * @param  int $userID: ID del usuario
-   * @param  string $email: correo del usuario
-   * @param  string $userName: nombre de usuario
-   * @param  bool $recovery: true si es para recuperación, false si es para registro
-   * @return bool: true si se envió correctamente, false si falló
-   **/
-  public function sendOtpMailExistingUser($userID, $email, $userName, $recovery = false){
-    # Genero un nuevo codigo OTP y lo grabo en el usuario
-    $otpCode = rand(100000, 999999); # Codigo que se enviara por mail
-    $stmt = $this->db->prepare("UPDATE Users SET OTPCode = ?, OTPDate = ? WHERE UserID = ?");
-    $stmt->execute([$otpCode, date("YmdHis"), $userID]);
-
-    return $this -> _sendOtpMail($email, $otpCode, $userName, $recovery);
-  }
-
-  /**
    * Genera y graba en base de datos un código OTP para validar una cuenta
    * @param  int $userID: ID del usuario
    * @param  string $email: correo del usuario
@@ -495,57 +478,6 @@ class Auth{
     $stmt = $this->db->prepare("UPDATE Users SET OTPCode = NULL, OTPDate = NULL, OTPAttemps = NULL
     WHERE UserID = ?");
     $stmt->execute([$userID]);
-  }
-
-  /**
-   * Envía código OTP por email (privado)
-   * @param  string $email: correo del usuario
-   * @param  int $otpCode: código OTP a enviar
-   * @param  string|false $username: nombre de usuario o email si no hay username
-   * @param  bool $recovery: true si es para recuperación, false si es para registro
-   * @return bool: true si se envió correctamente, false si falló
-   **/
-  private function _sendOtpMail($email, $otpCode, $username = false, $recovery = false){
-    $template = file_get_contents(ROOT."/src/Templates/email_otp.html");
-    $template = str_replace("{CODIGO}", $otpCode, $template);
-    $template = str_replace("{USERNAME}", $username ?: $email, $template);
-    $template = str_replace("{T_MODE1}", $recovery ? '' : ', bienvenido a OneSoul', $template);
-    $template = str_replace("{T_MODE2}", $recovery ? 'recuperaci&oacute;n' : 'registro', $template);
-
-    $smtpAccount = $GLOBALS['config']['mailer']['account'];
-    $smtpPassword = $GLOBALS['config']['mailer']['password'];
-
-    # Configuración de PHPMailer
-    $mail = new PHPMailer(true);
-    try {
-      # Configuración del servidor SMTP
-      $mail->isSMTP();
-      $mail->Host = 'smtp.gmail.com';
-      $mail->SMTPAuth = true;
-      $mail->Username = $smtpAccount;
-      $mail->Password = $smtpPassword;
-      $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-      $mail->Port = 587;
-
-      # Configuración del remitente y destinatario
-      $mail->setFrom($smtpAccount,'Contacto OneSoul');
-      $mail->addAddress($email, $username);
-
-      # Contenido del correo
-      $mail->isHTML(true);
-      $mail->Subject = $recovery ? "Recupera tu cuenta de OneSoul" : "Complete su registro en OneSoul";
-      $mail->Body    = $template;
-      $mail->AltBody = $recovery ?
-        "Hola $username, bienvenido a OneSoul\nSu código de verificaci&oacute;n es $otpCode" :
-        "Hola $username\nSu código de recuperaci&oacute;n es $otpCode";
-      $mail->addEmbeddedImage(ROOT."/src/Templates/logo2.png", 'logo');
-
-      # Enviar el correo
-      $mail->send();
-      return true;
-    } catch (Exception $e) {
-      return false;
-    }
   }
 }
 

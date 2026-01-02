@@ -4,6 +4,7 @@ namespace App\Controllers;
 
 use Exception;
 use Throwable;
+use App\Exceptions\DatabaseException;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use App\Models\Auth;
@@ -16,6 +17,7 @@ use Stripe\Stripe;
 use DateTime;
 use App\Utils\EmailHelper;
 use Predis\Client as RedisClient;
+use App\Utils\ParameterValidator;
 
 require_once ROOT . '/src/Utils/validateToken.php';
 require_once ROOT . '/src/Utils/validateReCaptcha.php';
@@ -1256,12 +1258,14 @@ class AuthController{
         $event = $this->notification->getEventType("SEND_OTP", "es");
         if(!empty($event)){
           $payload = [
+            "ACTION"       => "Valida tu cuenta de correo",
             "YEAR"         => date('Y'),
             "OTP_CODE"     => $otpCode,
             "USERNAME"     => $email
           ];
+          $subject = $this->notification->renderTemplate($event[0]['TemplateSubject'], $payload);
           $template = $this->notification->renderTemplate($event[0]['TemplateBody'], $payload);
-          EmailHelper::send($email, $event[0]['TemplateSubject'], $template);
+          EmailHelper::send($email, $subject, $template);
         }
       }else{ # MODO CON TOKEN (usa la base, para usuarios existentes)
         $user = $this->user->getUserById($jwt->data -> UserID);
@@ -1277,6 +1281,7 @@ class AuthController{
 
         # Notificación para el buscador
         $payload = [
+          "ACTION"       => "Valida tu cuenta de correo",
           "YEAR"         => date('Y'),
           "OTP_CODE"     => $otpCode,
           "USERNAME"     => $user['UserName']
@@ -1313,43 +1318,27 @@ class AuthController{
    * @statusCode 500: error del servidor
    **/
   public function validateOTP(Request $request, Response $response, $args) {
-    $data = $request->getParsedBody();
+    $params = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
 
-    # Verificar si el body es un array/object válido
-    if (!is_array($data) && !is_object($data)) {
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "INVALID_JSON",
-          "desc" => "Request body must be valid JSON"
-        ]
-      ]);
+    $pValidation = ParameterValidator::validate($response, 'auth','validate_otp', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
     }
+    $params = $pValidation->values;
 
-    $otpCode = $data['OTPCode'] ?? '';
-    $email = filter_var($data['Email'] ?? '', FILTER_VALIDATE_EMAIL);
-    $recaptchaToken = $data['RecaptchaToken'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
-
-    if(empty($otpCode) || empty($recaptchaToken)) {
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "INVALID_PARAMETERS",
-          "desc" => "Parameters are missing or invalid"
-        ]
-      ]);
-    }
 
     try {
       # Valido recaptcha
-      $validation = validateReCaptcha($response,  $recaptchaToken, $clientIp);
+      $validation = validateReCaptcha($response, $params['RecaptchaToken'], $clientIp);
       if (!$validation->valid) {
         return $validation->response;
       }
 
       # MODO SIN TOKEN (usa redis, para usuarios no existentes)
       if(!$jwt){
-        if(!$email){ # Si no hay token tiene que haber email
+        if(!$params['Email']){ # Si no hay token tiene que haber email
           return $response->withStatus(401)->withJson([
             "error" => [
               "code" => "INVALID_PARAMETERS",
@@ -1357,10 +1346,10 @@ class AuthController{
             ]
           ]);
         }
-        return $this->_validateOTPRedis($response, $email, $otpCode);
+        return $this->_validateOTPRedis($response, $params['Email'], $params['OTPCode']);
       }
       # MODO CON TOKEN (usa la base, para usuarios existentes)
-      return $this->_validateOTP($response, $jwt->data->UserID, $otpCode);
+      return $this->_validateOTP($response, $jwt->data->UserID, $params['OTPCode']);
     } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -1750,42 +1739,34 @@ class AuthController{
    * @statusCode 500: error del servidor
    **/
   public function requestPasswordReset(Request $request, Response $response, $args) {
-    $data = $request->getParsedBody();
+    $params = $request->getParsedBody();
 
-    # Verificar si el body es un array/object válido
-    if (!is_array($data) && !is_object($data)) {
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "INVALID_JSON",
-          "desc" => "Request body must be valid JSON"
-        ]
-      ]);
+    $pValidation = ParameterValidator::validate($response, 'auth','request_password_reset', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
     }
+    $params = $pValidation->values;
 
-    $email = $data['Email'] ?? '';
-    $userName = $data['UserName'] ?? '';
-    $recaptchaToken = $data['RecaptchaToken'] ?? '';
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
-
-    if((empty($email) && empty($userName)) || empty($recaptchaToken)){
+    if((empty($params['Email']) && empty($params['UserName']))){
       return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "INVALID_PARAMETERS",
-          "desc" => "Parameters are missing or invalid"
+          "desc" => "You must provide either username or email"
         ]
       ]);
     }
 
     try {
       # Valido recaptcha
-      $validation = validateReCaptcha($response,  $recaptchaToken, $clientIp);
+      $validation = validateReCaptcha($response, $params['RecaptchaToken'], $clientIp);
       if (!$validation->valid) {
         return $validation->response;
       }
 
       # Busco por mail o username
-      $user = !empty($email) ?
-        $this->user->getUserByEmail($email) : $this->user->getUserByUserName($userName);
+      $user = !empty($params['Email']) ?
+        $this->user->getUserByEmail($params['Email']) : $this->user->getUserByUserName($params['UserName']);
       if(empty($user)){
         return $response->withStatus(404)->withJson([
           "error" => [
@@ -1795,19 +1776,23 @@ class AuthController{
         ]);
       }
 
-      # Envio el mail OTP
-      $result = $this->auth->sendOtpMailExistingUser($user['UserID'], $user['Email'], $user['UserName'], true);
-      if(!$result){
-        return $response->withStatus(500)->withJson([
-          "error" => [
-            "code" => "OTP_NOT_SENT",
-            "desc" => "Cannot send the OTP email, try again later"
-          ]
-        ]);
-      }
-      return $response->withStatus(200)->withJson([
-        "Message" => "OTP code sent successfully"
-      ]);
+      $otpCode = $this->auth->setOtpCodeDB($user['UserID']);
+
+      # Notificación para el buscador
+      $payload = [
+        "ACTION"      => "Recuperación de contraseña",
+        "YEAR"         => date('Y'),
+        "OTP_CODE"     => $otpCode,
+        "USERNAME"     => $user['UserName']
+      ];
+      $this->notification->createNotification(
+        $user['UserID'],
+        "SEND_OTP",
+        $payload,
+        "SEND_OTP." . time() . ".VALIDATE"
+      );
+
+      return $response->withStatus(200)->withJson("OTP code sent");
     } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [

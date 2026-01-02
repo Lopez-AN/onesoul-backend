@@ -131,12 +131,6 @@
     }
   },
   "user_location": {
-    "LocationID": {
-      "required": true,
-      "type": "integer",
-      "min": 0,
-      "max": 99
-    },
     "LocationName": {
       "required": false,
       "type": "string",
