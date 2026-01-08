@@ -1,6 +1,6 @@
 -- --------------------------------------------------------
--- Host:                         testing.cpcvuoast9uv.us-east-1.rds.amazonaws.com
--- Server version:               10.6.22-MariaDB-log - managed by https://aws.amazon.com/rds/
+-- Host:                         127.0.0.1
+-- Server version:               10.11.13-MariaDB-log - managed by https://aws.amazon.com/rds/
 -- Server OS:                    Linux
 -- HeidiSQL Version:             12.7.0.6850
 -- --------------------------------------------------------
@@ -26,7 +26,6 @@ CREATE TABLE IF NOT EXISTS `ActivePaymentMethods` (
   `PaymentMethodID` tinyint(3) unsigned DEFAULT NULL COMMENT 'Identificador del método de pago',
   `IsActive` tinyint(1) DEFAULT 1 COMMENT 'Un indicador para determinar si el método de pago está activo.',
   PRIMARY KEY (`ID`),
-  KEY `ActivePaymentMethods_ibfk_2` (`PaymentMethodID`),
   CONSTRAINT `ActivePaymentMethods_ibfk_2` FOREIGN KEY (`PaymentMethodID`) REFERENCES `PaymentMethods` (`PaymentMethodID`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Guarda información sobre los métodos de pago disponibles en cada país.';
 
@@ -487,7 +486,7 @@ CREATE TABLE IF NOT EXISTS `NotificationsTemplate` (
   `Version` int(11) NOT NULL DEFAULT 1,
   `Status` enum('Draft','Active','Archived') NOT NULL DEFAULT 'Active',
   PRIMARY KEY (`ID`),
-  UNIQUE KEY `ux_template` (`EventTypeID`,`Channel`,`Locale`,`Version`) USING BTREE,
+  UNIQUE KEY `ux_template` (`EventTypeID`,`Channel`,`Locale`,`Version`),
   CONSTRAINT `fk_template_event` FOREIGN KEY (`EventTypeID`) REFERENCES `NotificationsEventType` (`ID`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -1145,7 +1144,7 @@ CREATE TABLE IF NOT EXISTS `UsersNotifications` (
   `Sms` tinyint(1) DEFAULT 1 COMMENT 'Notificaciones por SMS',
   `PushWeb` tinyint(1) DEFAULT 1 COMMENT 'Notificaciones vía Web Push (navegador)',
   `InApp` tinyint(1) DEFAULT 1 COMMENT 'Mensajería interna: campana / popups',
-  PRIMARY KEY (`UserID`) USING BTREE,
+  PRIMARY KEY (`UserID`),
   CONSTRAINT `UsersNotifications_ibfk_1` FOREIGN KEY (`UserID`) REFERENCES `Users` (`UserID`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Define las preferencias de notificaciones de los usuarios.';
 
@@ -1164,6 +1163,22 @@ CREATE TABLE IF NOT EXISTS `UsersSettings` (
   PRIMARY KEY (`UserID`),
   CONSTRAINT `UsersSettings_ibfk_1` FOREIGN KEY (`UserID`) REFERENCES `Users` (`UserID`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Almacena las configuraciones específicas de cada usuario.';
+
+-- Data exporting was unselected.
+
+-- Dumping structure for table soul.WebPushSubscription
+CREATE TABLE IF NOT EXISTS `WebPushSubscription` (
+  `ID` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `UserID` int(10) unsigned NOT NULL,
+  `Endpoint` text NOT NULL,
+  `P256dhKey` varchar(255) NOT NULL,
+  `AuthKey` varchar(255) NOT NULL,
+  `CreatedAt` timestamp NOT NULL DEFAULT current_timestamp(),
+  `IsActive` tinyint(1) DEFAULT 1,
+  PRIMARY KEY (`ID`),
+  UNIQUE KEY `ux_user_endpoint` (`UserID`,`Endpoint`(255)),
+  CONSTRAINT `fk_wps_user` FOREIGN KEY (`UserID`) REFERENCES `Users` (`UserID`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Data exporting was unselected.
 

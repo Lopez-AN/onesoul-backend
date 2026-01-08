@@ -1,0 +1,18 @@
+{
+  "get_currency_exchange_rates": {
+    "Code": {
+      "required": false,
+      "type": "string",
+      "regex": "~^[A-Z]{3}$~"
+    },
+    "currency": {
+      "required": false,
+      "type": "string",
+      "regex": "~^[A-Z]{3}$~"
+    },
+    "date": {
+      "required": false,
+      "type": "date"
+    }
+  }
+}

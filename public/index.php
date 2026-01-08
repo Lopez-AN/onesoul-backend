@@ -69,5 +69,6 @@ $errorMiddleware = $app->addErrorMiddleware(true, true, true);
 (require ROOT . '/src/Routes/cal.php')($app);
 (require ROOT . '/src/Routes/notification.php')($app);
 (require ROOT . '/src/Routes/chatbot.php')($app);
+(require ROOT . '/src/Routes/currency.php')($app);
 
 $app->run();

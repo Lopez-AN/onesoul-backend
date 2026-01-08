@@ -3,38 +3,12 @@
 use App\Utils\EmailHelper;
 use App\Models\Notification;
 use App\Enums\DeliveriesMode;
-
 use App\Services\TwilioService;
-
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
 
 define('ROOT', dirname(__FILE__)."/../..");
 
-if (php_sapi_name() !== 'cli') {
-  http_response_code(403);
-  die('Este script solo puede ejecutarse desde la línea de comandos');
-}
-
-require ROOT.'/vendor/autoload.php';
-
-#Definir zona horaria
-date_default_timezone_set('America/Argentina/Buenos_Aires');
-
-# Leo la config
-$GLOBALS['config'] = @json_decode(file_get_contents(ROOT.'/config/config.json'),true);
-if(!$GLOBALS['config']){
-  http_response_code(500);
-  exit("Error reading ~/config/config.json");
-}
-
-# Conexión a la base de datos usando la config
-try {
-  require ROOT.'/src/Core/Database.php';
-  $pdo = Database::getInstance()->getConnection();
-} catch (PDOException $e) {
-  die("❌ Cannot connect to MySQL: " . $e->getMessage() . "\n");
-}
+# Inicializa config, database (pdo), etc
+require ROOT . '/src/Workers/initWorker.php';
 
 # Instanciar y ejectuar el worker
 $worker = new NotificationWorker($pdo, new Notification($pdo), new TwilioService());

@@ -5,7 +5,6 @@ namespace App\Models;
 use PDO;
 use PDOException;
 use Exception;
-use PHPMailer\PHPMailer\PHPMailer;
 
 class Chatbot {
   protected $db;
