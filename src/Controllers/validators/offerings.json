@@ -1,0 +1,81 @@
+{
+  "create_offering": {
+    "Title": {
+      "required": true,
+      "type": "string",
+      "minlength": 10,
+      "maxlength": 100
+    },
+    "ShortDescription": {
+      "required": true,
+      "type": "string",
+      "minlength": 20,
+      "maxlength": 300
+    },
+    "Description": {
+      "required": true,
+      "type": "string",
+      "minlength": 50,
+      "maxlength": 3000
+    },
+    "CategoryID": {
+      "required": true,
+      "type": "integer",
+      "min": 0,
+      "max": 999999999
+    },
+    "Tags": {
+      "required": true,
+      "type": "object"
+    },
+    "Price": {
+      "required": true,
+      "type": "float",
+      "min": 0,
+      "max": 9999999,
+      "presicion": 2
+    },
+    "SessionType": {
+      "required": true,
+      "type": "string",
+      "regex": "~^(in-person|virtual|both)$~"
+    },
+    "Duration": {
+      "required": true,
+      "type": "integer",
+      "min": 30,
+      "max": 300
+    },
+    "Conditions": {
+      "required": false,
+      "type": "string",
+      "maxlength": 300
+    },
+    "LocationID": {
+      "required": true,
+      "type": "integer",
+      "min": 0,
+      "max": 999
+    }
+  },
+  "offering_faqs": {
+    "Position": {
+      "required": true,
+      "type": "integer",
+      "min": 0,
+      "max": 99
+    },
+    "Question": {
+      "required": true,
+      "type": "string",
+      "minlength": 10,
+      "maxlength": 75
+    },
+    "Answer": {
+      "required": true,
+      "type": "string",
+      "minlength": 10,
+      "maxlength": 500
+    }
+  }
+}

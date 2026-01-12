@@ -20,4 +20,5 @@ return function (App $app) {
   $currencyController = new CurrencyController($currency);
 
   $app->get('/currency/exchange/{Code}', [$currencyController, 'getCurrencyExchangeRates']);
+  $app->get('/currency/country/{CountryCode}', [$currencyController, 'getCountryDefaultCurrency']);
 };

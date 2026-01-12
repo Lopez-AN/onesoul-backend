@@ -5,9 +5,12 @@ namespace App\Controllers;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use App\Models\Offering;
+use App\Models\User;
 use App\Models\Subscription;
+use App\Models\Currency;
 use Firebase\JWT\JWT;
 use App\Enums\MediaType;
+use App\Utils\ParameterValidator;
 
 require_once(ROOT . '/src/Utils/Paginator.php');
 require_once(ROOT . '/src/Utils/OptimizeImg.php');
@@ -21,11 +24,15 @@ define("MAX_VIDEO_SIZE", 50 * 1024 * 1024);
 
 class OfferingController {
   protected $offering;
+  protected $user;
   protected $subscription;
+  protected $currency;
 
-  public function __construct(Offering $offering, Subscription $subscription)  {
+  public function __construct(Offering $offering, User $user, Subscription $subscription, Currency $currency)  {
     $this->offering = $offering;
+    $this->user = $user;
     $this->subscription = $subscription;
+    $this->currency = $currency;
   }
 
   /**
@@ -175,18 +182,22 @@ class OfferingController {
    * @statusCode 500: error del servidor
    **/
   public function createOffering(Request $request, Response $response, $args)  {
-    $data = $request->getParsedBody();
+    $params = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
     $userID = $jwt->data->UserID;
 
-    # Verificar si el body es un array/object válido
-    if (!is_array($data) && !is_object($data)) {
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "INVALID_JSON",
-          "desc" => "Request body must be valid JSON"
-        ]
-      ]);
+    $pValidation = ParameterValidator::validate($response, 'offerings','create_offering', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
+    }
+    $params = $pValidation->values;
+
+    foreach($params['Faqs'] as $i => $faq){
+      $pValidation = ParameterValidator::validate($response, 'offerings','offering_faqs', $faq);
+      if(!$pValidation->valid){
+        return $pValidation->response;
+      }
+      $params['Faqs'][$i] = $pValidation->values;
     }
 
     # Verificar si el usuario autenticado es un Guia o un administrador
@@ -200,46 +211,34 @@ class OfferingController {
     }
 
     # Campos hardcodeados por ahora
-    $data['UserID'] = $userID;
-    $data['SKU'] = null;
-    $data['Stock'] = null;
-    $data['ServiceType'] = 'Service';
-    $data['Conditions'] ?? null;
+    $params['UserID'] = $userID;
+    $params['SKU'] = null;
+    $params['Stock'] = null;
+    $params['ServiceType'] = 'Service';
 
-    # Validar datos obligatorios
-    if (!isset($data['Title'], $data['ShortDescription'], $data['Description'], $data['CategoryID'],
-      $data['Price'], $data['SessionType'], $data['Duration']) || !is_array($data['Tags'])
-    ){
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "INVALID_PARAMETERS",
-          "desc" => "Parameters are missing or invalid"
-        ]
-      ]);
-    }
-
-    if(!empty($faqs)){
-      if(!is_array($faqs)){
-        return $response->withStatus(400)->withJson([
+    try {
+      $guide = $this->user->getUserById($userID);
+      if(!$guide){
+        return $response->withStatus(404)->withJson([
           "error" => [
-            "code" => "INVALID_PARAMETERS",
-            "desc" => "Parameters are missing or invalid"
+            "code" => "USER_NOT_FOUND",
+            "desc" => "No user was found with the specified Id."
           ]
         ]);
       }
-      foreach($faqs as $f){
-        if(!isset($f['Position'], $f['Question'], $f['Answer'])){
-          return $response->withStatus(400)->withJson([
-            "error" => [
-              "code" => "INVALID_PARAMETERS",
-              "desc" => "Parameters are missing or invalid"
-            ]
-          ]);
-        }
-      }
-    }
 
-    try {
+      $location = $this->user->getUserLocation($userID, $params['LocationID']);
+      if(!$location){
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "USER_LOCATION_NOT_FOUND",
+            "desc" => "Cannot retrieve a guide location with provided ID."
+          ]
+        ]);
+      }
+
+      $params['Currency'] = $guide['Currency'];
+
       # Valido si el usuario puede crear publicaciones y no supero el limite
       $pubMax = $this->subscription->getUserSubscriptionFeature($userID, 'PUB_MAX');
       if(!$pubMax){
@@ -261,14 +260,14 @@ class OfferingController {
 
       # Validación de contenido inapropiado
       $contentToCheck = implode(" ", [
-        $data['Title'] ?? '',
-        $data['Description'] ?? '',
-        $data['ShortDescription'] ?? '',
-        $data['Conditions'] ?? '',
-        implode(" ", $data['Tags']),
+        $params['Title'] ?? '',
+        $params['Description'] ?? '',
+        $params['ShortDescription'] ?? '',
+        $params['Conditions'] ?? '',
+        implode(" ", $params['Tags']),
         implode(" ", array_map(function($e){
           return $e['Question']." ".$e['Answer'];
-        }, $data['Faqs'] ?? []))
+        }, $params['Faqs'] ?? []))
       ]);
 
       if($this->_containsInappropriateContent($contentToCheck)){
@@ -278,7 +277,7 @@ class OfferingController {
         ]);
       }
 
-      $offering = $this->offering->createOffering($data);
+      $offering = $this->offering->createOffering($params);
       return $response->withStatus(200)->withJson($offering);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([

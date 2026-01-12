@@ -58,7 +58,8 @@ class User {
         'Department', l.Department,
         'IsActive', l.IsActive
       )
-    ) FROM UsersLocations as l WHERE l.UserID = u.UserID) as user_locations
+    ) FROM UsersLocations as l WHERE l.UserID = u.UserID) as user_locations,
+    IF(ct.CurrencyCode IS NULL,'ARS',ct.CurrencyCode) as Currency
     FROM Users AS u
     LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
     LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
@@ -72,6 +73,8 @@ class User {
       WHERE o.Status = 'Active'
       GROUP BY o.UserID
     ) AS sub ON sub.UserID = u.UserID
+    LEFT JOIN UsersLocations as l ON u.UserID = l.UserID AND l.LocationID = 0
+    LEFT JOIN Countries as ct ON l.CountryCode = ct.CountryCode
     GROUP BY u.UserID
     ORDER BY u.UserID
     LIMIT ? OFFSET ?");
@@ -128,7 +131,8 @@ class User {
         'Department', l.Department,
         'IsActive', l.IsActive
       )
-    ) FROM UsersLocations as l WHERE l.UserID = u.UserID) as user_locations
+    ) FROM UsersLocations as l WHERE l.UserID = u.UserID) as user_locations,
+    IF(ct.CurrencyCode IS NULL,'ARS',ct.CurrencyCode) as Currency
     FROM Users AS u
     LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
     LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
@@ -142,6 +146,8 @@ class User {
       WHERE o.Status = 'Active'
       GROUP BY o.UserID
     ) AS sub ON sub.UserID = u.UserID
+    LEFT JOIN UsersLocations as l ON u.UserID = l.UserID AND l.LocationID = 0
+    LEFT JOIN Countries as ct ON l.CountryCode = ct.CountryCode
     WHERE u.UserType = ?
     GROUP BY u.UserID
     ORDER BY u.UserID
@@ -210,7 +216,8 @@ class User {
         'Department', l.Department,
         'IsActive', l.IsActive
       )
-    ) FROM UsersLocations as l WHERE l.UserID = u.UserID) as user_locations
+    ) FROM UsersLocations as l WHERE l.UserID = u.UserID) as user_locations,
+    IF(ct.CurrencyCode IS NULL,'ARS',ct.CurrencyCode) as Currency
     FROM Users AS u
     INNER JOIN UsersCategories AS uc ON uc.userID = u.userID
     INNER JOIN Categories AS c ON uc.CategoryID = c.CategoryID
@@ -225,6 +232,8 @@ class User {
       WHERE o.Status = 'Active'
       GROUP BY o.UserID
     ) AS sub ON sub.UserID = u.UserID
+    LEFT JOIN UsersLocations as l ON u.UserID = l.UserID AND l.LocationID = 0
+    LEFT JOIN Countries as ct ON l.CountryCode = ct.CountryCode
     WHERE u.DeactivationDate is null
     GROUP BY u.UserID
     ORDER BY u.UserID
@@ -285,7 +294,8 @@ class User {
         'Department', l.Department,
         'IsActive', l.IsActive
       )
-    ) FROM UsersLocations as l WHERE l.UserID = u.UserID) as user_locations
+    ) FROM UsersLocations as l WHERE l.UserID = u.UserID) as user_locations,
+    IF(ct.CurrencyCode IS NULL,'ARS',ct.CurrencyCode) as Currency
     FROM Users AS u
     LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
     LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
@@ -299,6 +309,8 @@ class User {
       WHERE o.Status = 'Active'
       GROUP BY o.UserID
     ) AS sub ON sub.UserID = u.UserID
+    LEFT JOIN UsersLocations as l ON u.UserID = l.UserID AND l.LocationID = 0
+    LEFT JOIN Countries as ct ON l.CountryCode = ct.CountryCode
     WHERE u.UserType = 'Guide' AND (
       u.UserName LIKE ? OR
       u.DisplayName LIKE ? OR
@@ -367,7 +379,8 @@ class User {
         'Department', l.Department,
         'IsActive', l.IsActive
       )
-    ) FROM UsersLocations as l WHERE l.UserID = u.UserID) as user_locations
+    ) FROM UsersLocations as l WHERE l.UserID = u.UserID) as user_locations,
+    IF(ct.CurrencyCode IS NULL,'ARS',ct.CurrencyCode) as Currency
     FROM Users AS u
     LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
     LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
@@ -381,6 +394,8 @@ class User {
       WHERE o.Status = 'Active'
       GROUP BY o.UserID
     ) AS sub ON sub.UserID = u.UserID
+    LEFT JOIN UsersLocations as l ON u.UserID = l.UserID AND l.LocationID = 0
+    LEFT JOIN Countries as ct ON l.CountryCode = ct.CountryCode
     WHERE u.UserID = ? $wactive
     GROUP BY u.UserID
     ORDER BY u.UserID");
@@ -437,7 +452,8 @@ class User {
         'Department', l.Department,
         'IsActive', l.IsActive
       )
-    ) FROM UsersLocations as l WHERE l.UserID = u.UserID) as user_locations
+    ) FROM UsersLocations as l WHERE l.UserID = u.UserID) as user_locations,
+    IF(ct.CurrencyCode IS NULL,'ARS',ct.CurrencyCode) as Currency
     FROM Users AS u
     LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
     LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
@@ -451,6 +467,8 @@ class User {
       WHERE o.Status = 'Active'
       GROUP BY o.UserID
     ) AS sub ON sub.UserID = u.UserID
+    LEFT JOIN UsersLocations as l ON u.UserID = l.UserID AND l.LocationID = 0
+    LEFT JOIN Countries as ct ON l.CountryCode = ct.CountryCode
     WHERE u.UserName = ? $wactive
     GROUP BY u.UserID
     ORDER BY u.UserID");
@@ -507,7 +525,8 @@ class User {
         'Department', l.Department,
         'IsActive', l.IsActive
       )
-    ) FROM UsersLocations as l WHERE l.UserID = u.UserID) as user_locations
+    ) FROM UsersLocations as l WHERE l.UserID = u.UserID) as user_locations,
+    IF(ct.CurrencyCode IS NULL,'ARS',ct.CurrencyCode) as Currency
     FROM Users AS u
     LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
     LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
@@ -521,6 +540,8 @@ class User {
       WHERE o.Status = 'Active'
       GROUP BY o.UserID
     ) AS sub ON sub.UserID = u.UserID
+    LEFT JOIN UsersLocations as l ON u.UserID = l.UserID AND l.LocationID = 0
+    LEFT JOIN Countries as ct ON l.CountryCode = ct.CountryCode
     WHERE u.Email = ? $wactive
     GROUP BY u.UserID
     ORDER BY u.UserID");
@@ -578,7 +599,8 @@ class User {
         'Department', l.Department,
         'IsActive', l.IsActive
       )
-    ) FROM UsersLocations as l WHERE l.UserID = u.UserID) as user_locations
+    ) FROM UsersLocations as l WHERE l.UserID = u.UserID) as user_locations,
+    IF(ct.CurrencyCode IS NULL,'ARS',ct.CurrencyCode) as Currency
     FROM Users AS u
     LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
     LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
@@ -592,6 +614,8 @@ class User {
       WHERE o.Status = 'Active'
       GROUP BY o.UserID
     ) AS sub ON sub.UserID = u.UserID
+    LEFT JOIN UsersLocations as l ON u.UserID = l.UserID AND l.LocationID = 0
+    LEFT JOIN Countries as ct ON l.CountryCode = ct.CountryCode
     WHERE u.Oauth2ID = ? AND u.Oauth2Service = ? $wactive
     GROUP BY u.UserID
     ORDER BY u.UserID");
@@ -648,7 +672,8 @@ class User {
         'Department', l.Department,
         'IsActive', l.IsActive
       )
-    ) FROM UsersLocations as l WHERE l.UserID = u.UserID) as user_locations
+    ) FROM UsersLocations as l WHERE l.UserID = u.UserID) as user_locations,
+    IF(ct.CurrencyCode IS NULL,'ARS',ct.CurrencyCode) as Currency
     FROM Users AS u
     LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
     LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
@@ -662,6 +687,8 @@ class User {
       WHERE o.Status = 'Active'
       GROUP BY o.UserID
     ) AS sub ON sub.UserID = u.UserID
+    LEFT JOIN UsersLocations as l ON u.UserID = l.UserID AND l.LocationID = 0
+    LEFT JOIN Countries as ct ON l.CountryCode = ct.CountryCode
     WHERE u.ReferralCode = ? $wactive
     GROUP BY u.UserID
     ORDER BY u.UserID");
@@ -1046,6 +1073,23 @@ class User {
     $stmt = $this->db->prepare("UPDATE Users SET DeactivationDate = ? WHERE UserID = ?");
     $stmt->execute([date('Y-m-d H:i:s'), $userID]);
   }
+
+  /**
+   * Busca una ubicacion de usuario
+   *
+   * @param  int $userID: ID del usuario
+   * @param  int $locationID: ID de la ubicación
+   * @return array: datos de la ubicación o false si no existe
+   **/
+  public function getUserLocation($userID, $locationID) {
+    $stmt = $this->db->prepare("SELECT LocationName, AddressName, AddressNumber,
+      Floor, Department, Cp, City, State, CountryCode, IsActive
+      FROM UsersLocations
+      WHERE UserID = ? AND LocationID = ?");
+    $stmt->execute([$userID, $locationID]);
+    return $stmt->fetch();
+  }
+
 
   /**
    * Actualiza la foto de perfil de un usuario

@@ -569,14 +569,16 @@ class UserController{
     $params['UserID'] = $args['UserID'];
     $jwt = $request->getAttribute('jwt');
 
-    $pValidation = ParameterValidator::validate($response, 'users','update_user', $params, STRICT_FIELD_VALIDATION, IGNORE_MISSING_FIELDS);
+    $pValidation = ParameterValidator::validate($response, 'users','update_user',
+      $params, STRICT_FIELD_VALIDATION, IGNORE_MISSING_FIELDS);
     if(!$pValidation->valid){
       return $pValidation->response;
     }
     $params = $pValidation->values;
 
     if(!empty($params['Location'])){
-      $pValidation = ParameterValidator::validate($response, 'users','user_location', $params['Location'], STRICT_FIELD_VALIDATION, IGNORE_MISSING_FIELDS);
+      $pValidation = ParameterValidator::validate($response, 'users','user_location',
+        $params['Location'], STRICT_FIELD_VALIDATION, IGNORE_MISSING_FIELDS);
       if(!$pValidation->valid){
         return $pValidation->response;
       }
@@ -717,7 +719,8 @@ class UserController{
     $params = $pValidation->values;
 
     if(!empty($params['Notifications'])){
-      $pValidation = ParameterValidator::validate($response, 'users','user_notifications', $params['Notifications'], STRICT_FIELD_VALIDATION);
+      $pValidation = ParameterValidator::validate($response, 'users','user_notifications',
+        $params['Notifications'], STRICT_FIELD_VALIDATION);
       if(!$pValidation->valid){
         return $pValidation->response;
       }

@@ -103,6 +103,11 @@ class ParameterValidator {
           if (!$result->valid) return $result;
           $values[$i] = $result->value ?? $values[$i];
           break;
+        case 'float':
+          $result = ParameterValidator::validateFloat($response, $v, $i, $values[$i]);
+          if (!$result->valid) return $result;
+          $values[$i] = $result->value ?? $values[$i];
+          break;
         case 'boolean':
           $result = ParameterValidator::validateBoolean($response, $v, $i, $values[$i]);
           if (!$result->valid) return $result;
@@ -240,6 +245,58 @@ class ParameterValidator {
         ];
       }
     }
+    return (object)["valid" => true, "value" => $value];
+  }
+
+  static function validateFloat(Response $response, $validation, $parameter, $value){
+    if(!is_null($value) && !is_numeric($value)){
+      return (object)[
+        "valid" => false,
+        "response" => $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "INVALID_PARAMETERS",
+            "desc" => "$parameter must be a numeric value"
+          ]
+        ])
+      ];
+    }
+
+    if(!is_null($value)){
+      $value = floatval($value);
+    }
+
+    if(!is_null($value) && property_exists($validation, 'min')){
+      if($value < $validation->min){
+        return (object)[
+          "valid" => false,
+          "response" => $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "INVALID_PARAMETERS",
+              "desc" => "$parameter is below the minimum value ({$validation->min})"
+            ]
+          ])
+        ];
+      }
+    }
+
+    if(!is_null($value) && property_exists($validation, 'max')){
+      if($value > $validation->max){
+        return (object)[
+          "valid" => false,
+          "response" => $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "INVALID_PARAMETERS",
+              "desc" => "$parameter exceeded the maximum value ({$validation->max})"
+            ]
+          ])
+        ];
+      }
+    }
+
+    if(!is_null($value) && property_exists($validation, 'precision')){
+      $value = round($value, $validation->precision);
+    }
+
     return (object)["valid" => true, "value" => $value];
   }
 

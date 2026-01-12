@@ -3,7 +3,9 @@
 use Slim\App;
 use App\Controllers\OfferingController;
 use App\Models\Offering;
+use App\Models\User;
 use App\Models\Subscription;
+use App\Models\Currency;
 use Tuupola\Middleware\JwtAuthentication;
 use App\Middleware\JwtTokenMiddleware;
 use App\Enums\JwtValidationMode;
@@ -19,8 +21,10 @@ return function (App $app) {
   // Obtener PDO del contenedor DI
   $pdo = $app->getContainer()->get('pdo');
 	$offering = new Offering($pdo);
+  $user = new User($pdo);
   $subscription = new Subscription($pdo);
-	$offeringController = new OfferingController($offering, $subscription);
+  $currency = new Currency($pdo);
+	$offeringController = new OfferingController($offering, $user, $subscription, $currency);
 
   $app->get('/offerings', [$offeringController, 'getOfferings']);
   $app->get('/categories/{categoryID}/offerings', [$offeringController, 'getOfferingsByCategory']);

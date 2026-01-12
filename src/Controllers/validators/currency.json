@@ -14,5 +14,12 @@
       "required": false,
       "type": "date"
     }
+  },
+  "get_country_default_currency": {
+    "CountryCode": {
+      "required": false,
+      "type": "string",
+      "regex": "~^[A-Z]{2}$~"
+    }
   }
 }

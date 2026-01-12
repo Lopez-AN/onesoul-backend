@@ -525,6 +525,7 @@ class Offering {
     try {
       $this->db->beginTransaction(); # Iniciar transacción
 
+      # Inserto el offering
       $stmt = $this->db->prepare("INSERT INTO Offerings (Title, ShortDescription,
         Description, CategoryID, UserID, Status, CreationDate, IsActive, Currency,
         Tags, SKU, Stock, ServiceType, Price, SessionType, Conditions, Duration)
@@ -552,6 +553,7 @@ class Offering {
       ]);
       $offeringID = $this->db->lastInsertId();
 
+      # Inserto los FAQs
       if (isset($data['Faqs'])) {
         foreach ($data['Faqs'] as $faq) {
           $stmt = $this->db->prepare("INSERT INTO OfferingsFaqs (OfferingID, Position, Question, Answer)
@@ -560,6 +562,13 @@ class Offering {
         }
       }
 
+      # Inserto el location
+      $stmt = $this->db->prepare("INSERT INTO OfferingsLocations
+        (UserID, LocationID, OfferingID)
+        VALUES (:UserID, :LocationID, :OfferingID)");
+      $stmt->execute([$data['UserID'], $data['LocationID'], $offeringID]);
+
+      # Traigo el offering insertado
       $offering = $this->getOfferingById($offeringID) ?:
         throw new DatabaseException("Failed to retrieve the created offering");
 
@@ -711,14 +720,14 @@ class Offering {
   }
 
   /**
-   * Obtiene la cantidad de publicaciones activas o pendientes del guia
+   * Obtiene la cantidad de publicaciones activas del guia
    *
    * @param  int $userID: ID del guia propietario de las publicaciones
-   * @return int: cantidad de publicaciones activas o pendientes
+   * @return int: cantidad de publicaciones activas
    **/
   public function countActiveOfferings($userID) {
     $stmt = $this->db->prepare("SELECT count(*) as found FROM Offerings
-      WHERE UserID = ? AND Status IN ('Active','Pending')");
+      WHERE UserID = ? AND Status = 'Active'");
     $stmt->execute([$userID]);
     $offerings = $stmt->fetch(PDO::FETCH_ASSOC);
     return ($offerings && isset($offerings['found'])) ? $offerings['found'] : 0;

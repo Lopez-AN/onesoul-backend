@@ -18,3 +18,14 @@ COMMENT='Guarda las cotizaciones de las monedas entre si'
 COLLATE='utf8mb4_unicode_ci'
 ENGINE=InnoDB
 ;
+
+ALTER TABLE `UsersLocations`
+	ADD CONSTRAINT `FK_UsersLocations_Countries` FOREIGN KEY (`CountryCode`) REFERENCES `Countries` (`CountryCode`) ON UPDATE RESTRICT ON DELETE RESTRICT;
+
+ALTER TABLE `OfferingsLocations`
+ 	DROP FOREIGN KEY IF EXISTS `FK_OfferingsLocations_UsersLocations`;
+ALTER TABLE `OfferingsLocations`
+	ADD CONSTRAINT `FK_OfferingsLocations_UsersLocations` FOREIGN KEY (`UserID`, `LocationID`) REFERENCES `UsersLocations` (`UserID`, `LocationID`) ON UPDATE RESTRICT ON DELETE RESTRICT;
+
+ALTER TABLE `OfferingsLocations`
+	ADD CONSTRAINT `FK_OfferingsLocations_soul.Offerings` FOREIGN KEY (`OfferingID`) REFERENCES `soul`.`Offerings` (`OfferingID`) ON UPDATE CASCADE ON DELETE CASCADE;
