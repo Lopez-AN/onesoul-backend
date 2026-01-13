@@ -237,8 +237,6 @@ class OfferingController {
         ]);
       }
 
-      $params['Currency'] = $guide['Currency'];
-
       # Valido si el usuario puede crear publicaciones y no supero el limite
       $pubMax = $this->subscription->getUserSubscriptionFeature($userID, 'PUB_MAX');
       if(!$pubMax){

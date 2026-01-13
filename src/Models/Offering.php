@@ -541,7 +541,7 @@ class Offering {
         ':UserID' => $data['UserID'],
         ':Status' => 'Pending',
         ':CreationDate' => date('YmdHis'),
-        ':Currency' => $data['Currency'],
+        ':Currency' => 'ARS',
         ':Tags' => is_array($data['Tags']) ? implode(",", $data['Tags']) : $data['Tags'],
         ':SKU' => $data['SKU'] ?? null,
         ':Stock' => $data['Stock'] ?? null,
