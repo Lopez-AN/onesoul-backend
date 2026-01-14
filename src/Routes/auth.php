@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Models\Auth;
 use App\Models\Notification;
 use App\Models\Subscription;
+use App\Services\TwilioService;
 use Tuupola\Middleware\JwtAuthentication;
 use App\Middleware\JwtTokenMiddleware;
 use App\Enums\JwtValidationMode;
@@ -27,7 +28,8 @@ return function (App $app) {
   $notification = new Notification($pdo);
   $auth = new Auth($pdo);
   $subscription = new Subscription($pdo);
-  $authController = new AuthController($auth, $user, $notification, $subscription, $redis);
+  $twilio = new TwilioService();
+  $authController = new AuthController($auth, $user, $notification, $subscription, $redis, $twilio);
 
   $app->post('/login', [$authController, 'login']);
   $app->post('/login/facebook', [$authController, 'loginFacebook']);
@@ -50,4 +52,6 @@ return function (App $app) {
   $app->get('/auth/mfa_check/{code}', [$authController, 'mfaCheck'])->add($requiredJwt);
   $app->post('/legal', [$authController, 'uploadLegalDocuments'])->add($requiredJwt);
   $app->get('/legal', [$authController, 'legalDocuments']);
+  $app->post('/auth/whatsapp/otp', [$authController, 'sendWhatsappOTP'])->add($requiredJwt);
+  $app->post('/auth/whatsapp/verify', [$authController, 'verifyWhatsappOTP'])->add($requiredJwt);
 };

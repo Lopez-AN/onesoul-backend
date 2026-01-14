@@ -11,6 +11,7 @@ use App\Models\Auth;
 use App\Models\User;
 use App\Models\Subscription;
 use App\Models\Notification;
+use App\Services\TwilioService;
 use Firebase\JWT\JWT;
 use Firebase\JWT\JWK;
 use Stripe\Stripe;
@@ -29,15 +30,17 @@ class AuthController{
   protected $notification;
   protected $subscription;
   protected $redis;
+  protected $twilio;
 
   public function __construct(Auth $auth, User $user, Notification $notification,
-    Subscription $subscription, RedisClient $redisClient
+    Subscription $subscription, RedisClient $redisClient, TwilioService $twilio
   ){
     $this->auth = $auth;
     $this->user = $user;
     $this->notification = $notification;
     $this->subscription = $subscription;
     $this->redis = $redisClient;
+    $this->twilio = $twilio;
   }
 
   /**
@@ -1447,6 +1450,34 @@ class AuthController{
     $this->auth->validateUserEmail($userID);
 
     return $response->withStatus(200)->withJson("OTP code validated successfully");
+  }
+
+  public function sendWhatsappOTP(Request $request, Response $response, $args) {
+    $params = $request->getParsedBody();
+
+    $this->twilio->sendWhatsappOTP($params['Phone']);
+
+    return $response->withStatus(200)->withJson([
+      'ok' => true,
+      'message' => 'OTP sent'
+    ]);
+  }
+
+  public function verifyWhatsappOTP(Request $request, Response $response, $args) {
+    $params = $request->getParsedBody();
+
+    $valid = $this->twilio->checkWhatsappOTP($params['Phone'], $params['Code']);
+
+    if (!$valid) {
+      return $response->withStatus(401)->withJson([
+        'ok' => false,
+        'error' => 'INVALID_CODE'
+      ]);
+    }
+
+    return $response->withStatus(200)->withJson([
+      'ok' => true
+    ]);
   }
 
   /**

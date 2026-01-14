@@ -7,6 +7,7 @@ use Exception;
 
 class TwilioService{
   private $client;
+  private string $verifyServiceSid;
 
   public function __construct() {
     # Inicializo cliente de twilio
@@ -50,5 +51,24 @@ class TwilioService{
         'error' => $e
       ];
     }
+  }
+
+  public function sendWhatsappOTP(string $phone): void {
+    $this->client->verify->v2
+      ->services("VAfb4ea2603d28b40a8426628f5b99d6c7")
+      ->verifications
+      ->create($phone, 'whatsapp');
+  }
+
+  public function checkWhatsappOTP(string $phone, string $code): bool {
+    $check = $this->client->verify->v2
+      ->services("VAfb4ea2603d28b40a8426628f5b99d6c7")
+      ->verificationChecks
+      ->create([
+        'to' => $phone,
+        'code' => $code
+      ]);
+
+    return $check->status === 'approved';
   }
 }
