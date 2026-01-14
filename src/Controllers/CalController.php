@@ -252,7 +252,7 @@ class CalController{
 
       # Busco si ya tiene un webhook con onesoul en ese caso no creo otro
       $webhooks = array_values(array_filter($result->response->data, function($e){
-        return strstr($e->subscriberUrl, "onesoul.app") !== false;
+        return strstr($e->subscriberUrl, $GLOBALS['config']['base_url']) !== false;
       }));
       if(!empty($webhooks)){
         $webhook = array_pop($webhooks);
