@@ -341,6 +341,35 @@ class ParameterValidator {
         ])
       ];
     }
+
+    if(!is_null($value) && property_exists($validation, 'minlength')){
+      if(strlen($value) < $validation->minlength){
+        return (object)[
+          "valid" => false,
+          "response" => $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "INVALID_PARAMETERS",
+              "desc" => "$parameter is below the minimum length ({$validation->minlength})"
+            ]
+          ])
+        ];
+      }
+    }
+
+    if(!is_null($value) && property_exists($validation, 'maxlength')){
+      if(strlen($value) > $validation->maxlength){
+        return (object)[
+          "valid" => false,
+          "response" => $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "INVALID_PARAMETERS",
+              "desc" => "$parameter exceeded the maximum length ({$validation->maxlength})"
+            ]
+          ])
+        ];
+      }
+    }
+
     return (object)["valid" => true, "value" => $value];
   }
 

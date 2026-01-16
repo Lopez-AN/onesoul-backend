@@ -209,6 +209,15 @@ class Auth{
   }
 
   /**
+   * Marca el telefono de un usuario como validado
+   * @param  int $userID: ID del usuario
+   **/
+  public function validateUserPhone($userID){
+    $stmt = $this->db->prepare("UPDATE Users SET ValidatedPhone = 1 WHERE UserID = ?");
+    $stmt->execute([$userID]);
+  }
+
+  /**
    * Maneja la recompensa de referral cuando se alcanza el límite con transacción
    * @param  int $referrerUserID: ID del usuario que refirió
    * @param  int $newUserID: ID del nuevo usuario referido

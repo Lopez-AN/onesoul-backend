@@ -40,53 +40,70 @@ class ChatbotController {
     }
     $params = $pValidation->values;
 
-    $token = $this->_checkToken();
-    if(!$token){
+    $clientIp = $request->getServerParams()['REMOTE_ADDR'];
+
+    try{
+      # Valido recaptcha
+      $validation = validateReCaptcha($response, $params['RecaptchaToken'], $clientIp);
+      if (!$validation->valid) {
+        return $validation->response;
+      }
+
+      $token = $this->_checkToken();
+      if(!$token){
+        return $response->withStatus(500)->withJson([
+          "error" => [
+            "code" => "CHATBOT_TOKEN_ERROR",
+            "desc" => "Error refreshing access token"
+          ]
+        ]);
+      }
+
+      $params = [
+        'query' => $params['Message'],
+        'context' => $GLOBALS['config']['chatbot']['context'],
+        'provider' => $GLOBALS['config']['chatbot']['provider'],
+        'model' => $GLOBALS['config']['chatbot']['model'],
+        'temperature' => $GLOBALS['config']['chatbot']['temperature'],
+        'max_tokens' => $GLOBALS['config']['chatbot']['max_tokens']
+      ];
+
+      $ch = curl_init($GLOBALS['config']['chatbot']['message_url']);
+      curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => json_encode($params),
+        CURLOPT_HTTPHEADER     => [
+          'Content-Type: application/json',
+          'Authorization: Bearer '.$token
+        ],
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 30,
+      ]);
+      $curlResp = curl_exec($ch);
+
+      # capturar errores y status antes de cerrar
+      $curlErrno = curl_errno($ch);
+      $httpCode  = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+
+      curl_close($ch);
+
+      if ($curlErrno || $httpCode !== 200) {
+        return $response->withStatus(500)->withJson([
+          "error" => [
+            "code" => "CHATBOT_ERROR",
+            "desc" => "Unable to connect to the virtual assistant."
+          ]
+        ]);
+      }
+      return $response->withJson($curlResp);
+    } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
-          "code" => "CHATBOT_TOKEN_ERROR",
-          "desc" => "Error refreshing access token"
+          "code" => "INTERNAL_SERVER_ERROR",
+           "desc" => $e->getMessage()
         ]
       ]);
     }
-
-    $params = [
-      'query' => $params['Message'],
-      'context' => $GLOBALS['config']['chatbot']['context'],
-      'provider' => $GLOBALS['config']['chatbot']['provider'],
-      'model' => $GLOBALS['config']['chatbot']['model'],
-      'temperature' => $GLOBALS['config']['chatbot']['temperature'],
-      'max_tokens' => $GLOBALS['config']['chatbot']['max_tokens']
-    ];
-
-    $ch = curl_init($GLOBALS['config']['chatbot']['message_url']);
-    curl_setopt_array($ch, [
-      CURLOPT_POST           => true,
-      CURLOPT_POSTFIELDS     => json_encode($params),
-      CURLOPT_HTTPHEADER     => [
-        'Content-Type: application/json',
-        'Authorization: Bearer '.$token
-      ],
-      CURLOPT_RETURNTRANSFER => true,
-      CURLOPT_TIMEOUT        => 30,
-    ]);
-    $curlResp = curl_exec($ch);
-
-    # capturar errores y status antes de cerrar
-    $curlErrno = curl_errno($ch);
-    $httpCode  = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-
-    curl_close($ch);
-
-    if ($curlErrno || $httpCode !== 200) {
-      return $response->withStatus(500)->withJson([
-        "error" => [
-          "code" => "CHATBOT_ERROR",
-          "desc" => "Unable to connect to the virtual assistant."
-        ]
-      ]);
-    }
-    return $response->withJson($curlResp);
   }
 
   private function _checkToken(){

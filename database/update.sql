@@ -29,3 +29,6 @@ ALTER TABLE `OfferingsLocations`
 
 ALTER TABLE `OfferingsLocations`
 	ADD CONSTRAINT `FK_OfferingsLocations_soul.Offerings` FOREIGN KEY (`OfferingID`) REFERENCES `soul`.`Offerings` (`OfferingID`) ON UPDATE CASCADE ON DELETE CASCADE;
+
+ALTER TABLE `Users`
+	CHANGE COLUMN `ValidatedPhone` `ValidatedPhone` TINYINT(1) NULL DEFAULT '0' COMMENT 'Celular validado.' AFTER `ValidatedEmail`;

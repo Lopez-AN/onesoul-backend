@@ -5,6 +5,11 @@
       "type": "string",
       "min": 10,
       "maxlength": 1200
+    },
+    "RecaptchaToken": {
+      "required": true,
+      "type": "string",
+      "regex": "~^[A-Za-z0-9_-]+$~"
     }
   }
 }

@@ -40,8 +40,10 @@ return function (App $app) {
   $app->post('/register/facebook', [$authController, 'registerFacebook']);
   $app->post('/register/google', [$authController, 'registerGoogle']);
   $app->post('/register/apple', [$authController, 'registerApple']);
-  $app->post('/register/otp', [$authController, 'validateOTP'])->add($optionalJwt);
   $app->post('/register/send_otp_mail', [$authController, 'sendOtpMail'])->add($optionalJwt);
+  $app->post('/register/otp', [$authController, 'validateOtpMail'])->add($optionalJwt);
+  $app->post('/auth/phone/otp', [$authController, 'sendOtpPhone'])->add($requiredJwt);
+  $app->post('/auth/phone/verify', [$authController, 'validateOtpPhone'])->add($requiredJwt);
   $app->post('/recaptcha', [$authController, 'validateReCaptcha']);
   $app->get('/auth/refresh_token', [$authController, 'refreshToken'])->add($noExpireJwt);
   $app->post('/auth/request_password_reset', [$authController, 'requestPasswordReset']);
@@ -52,6 +54,4 @@ return function (App $app) {
   $app->get('/auth/mfa_check/{code}', [$authController, 'mfaCheck'])->add($requiredJwt);
   $app->post('/legal', [$authController, 'uploadLegalDocuments'])->add($requiredJwt);
   $app->get('/legal', [$authController, 'legalDocuments']);
-  $app->post('/auth/whatsapp/otp', [$authController, 'sendWhatsappOTP'])->add($requiredJwt);
-  $app->post('/auth/whatsapp/verify', [$authController, 'verifyWhatsappOTP'])->add($requiredJwt);
 };
