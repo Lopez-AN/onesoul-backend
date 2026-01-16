@@ -1,0 +1,53 @@
+{
+  "get_contact_info": {
+    "FromDate": {
+      "required": false,
+      "type": "date"
+    },
+    "ToDate": {
+      "required": false,
+      "type": "date"
+    }
+  },
+  "send_contact_info": {
+    "Name": {
+      "required": false,
+      "type": "string",
+      "minlength": 2,
+      "maxlength": 100
+    },
+    "Email": {
+      "required": true,
+      "type": "email",
+      "maxlength": 100
+    },
+    "SocialNetwork": {
+      "required": true,
+      "type": "string",
+      "minlength": 2,
+      "maxlength": 100
+    },
+    "CountryCode": {
+      "required": true,
+      "type": "string",
+      "regex": "~^[A-Z]{2}~"
+    },
+    "City": {
+      "required": true,
+      "type": "string",
+      "minlength": 2,
+      "maxlength": 60
+    },
+    "Specialization": {
+      "required": true,
+      "type": "string",
+      "minlength": 2,
+      "maxlength": 60
+    },
+    "RecaptchaToken": {
+      "required": true,
+      "type": "string",
+      "regex": "~^[A-Za-z0-9_-]+$~"
+    }
+  }
+}

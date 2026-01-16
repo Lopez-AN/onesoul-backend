@@ -25,7 +25,8 @@
   "get_user_by_email": {
     "Email": {
       "required": true,
-      "type": "email"
+      "type": "email",
+      "maxlength": 100
     }
   },
   "get_user_by_username": {
