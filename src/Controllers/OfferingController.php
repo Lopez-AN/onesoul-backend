@@ -97,7 +97,7 @@ class OfferingController {
    * @statusCode 500: error del servidor
    **/
   public function getOfferingById(Request $request, Response $response, $args)  {
-    $id = intval($args['id']);
+    $id = intval($args['OfferingID']);
     try {
       $offering = $this->offering->getOfferingById($id);
       if (!$offering) {
@@ -131,7 +131,7 @@ class OfferingController {
    **/
   public function getOfferingsByCategory(Request $request, Response $response, $args)  {
     $paginator = paginator($request);
-    $categoryId = intval($args['categoryID']);
+    $categoryId = intval($args['CategoryID']);
     try {
       $result = $this->offering->getOfferingsByCategory($paginator, $categoryId);
       return $response->withStatus(200)->withJson($result);
@@ -156,7 +156,7 @@ class OfferingController {
    **/
   public function getOfferingsByUserId(Request $request, Response $response, $args)  {
     $paginator = paginator($request);
-    $userID = intval($args['userID']);
+    $userID = intval($args['UserID']);
     try {
       $result = $this->offering->getOfferingsByUserId($paginator, $userID);
       return $response->withStatus(200)->withJson($result);
@@ -210,8 +210,8 @@ class OfferingController {
       ]);
     }
 
-    # Campos hardcodeados por ahora
     $params['UserID'] = $userID;
+    # Campos hardcodeados por ahora
     $params['SKU'] = null;
     $params['Stock'] = null;
     $params['ServiceType'] = 'Service';
@@ -300,7 +300,7 @@ class OfferingController {
    * @statusCode 500: error del servidor
    **/
   public function approveOffering(Request $request, Response $response, $args)  {
-    $id = intval($args['id']);
+    $id = intval($args['OfferingID']);
     $jwt = $request->getAttribute('jwt');
 
     # Verificar que el usuario sea admin
@@ -325,16 +325,16 @@ class OfferingController {
       }
 
       # Verificar que el offering este pendiente
-      if ($offering['Status'] !== 'Pending') {
+      if ($offering['Status'] !== 'Active') {
         return $response->withStatus(400)->withJson([
           "error" => [
-            "code" => "OFFERING_NOT_PENDING",
-            "desc" => "The specified offering must have pending status"
+            "code" => "OFFERING_NOT_ACTIVE",
+            "desc" => "The specified offering must have active status"
           ]
         ]);
       }
 
-      # Aprobar el offering (cambiar el estado a 'Active')
+      # Aprobar el offering
       $offering = $this->offering->approveOfferingById($id);
       return $response->withStatus(200)->withJson($offering);
     } catch (\Throwable $e) {
@@ -360,10 +360,9 @@ class OfferingController {
    * @statusCode 500: error del servidor
    **/
   public function updateOffering(Request $request, Response $response, $args)  {
-    $id = intval($args['id']);
+    $params['OfferingID'] = intval($args['OfferingID']);
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
-    $userID = $jwt->data->UserID;
 
     # Verificar si el body es un array/object válido
     if (!is_array($data) && !is_object($data)) {
@@ -392,7 +391,6 @@ class OfferingController {
       'CategoryID',
       'Tags',
       'Stock',
-      'Status',
       'Currency',
       'ServiceType',
       'SKU',
@@ -436,35 +434,12 @@ class OfferingController {
     }
 
     try {
-      $offering = $this->offering->getOfferingById($id);
-      if (!$offering) {
-        return $response->withStatus(404)->WithJson([
-          "error" => [
-            "code" => "OFFERING_NOT_FOUND",
-            "desc"=> "No Offering found for this specific ID."
-          ]
-        ]);
+      # Valido que el offering exista, no este eliminado y el usuario tenga acceso
+      $validation = $this -> _validateOffering($response, $params['OfferingID'], $jwt);
+      if(!$validation->valid){
+        return $validation->response;
       }
-
-      # Verificar si el usuario autenticado es el mismo que el que se intenta crear, o si es un administrador
-      if ($offering['UserID'] !== $userID && !$jwt->data->IsAdmin) {
-        return $response->withStatus(403)->withJson([
-          "error" => [
-            "code" => "UNAUTHORIZED",
-            "desc" => "You don't have permission to modify this offering."
-          ]
-        ]);
-      }
-
-      # Verificar que el offering no esté eliminado
-      if ($offering['Status'] === 'Deleted') {
-        return $response->withStatus(400)->withJson([
-          "error" => [
-            "code" => "OFFERING_DELETED",
-            "desc" => "The specified offering is deleted"
-          ]
-        ]);
-      }
+      $offering = $validation->response;
 
       # Validación de contenido inapropiado
       $contentToCheck = implode(" ", [
@@ -486,7 +461,92 @@ class OfferingController {
       }
 
       # Actualizar la oferta
-      $offering = $this->offering->updateOffering($id, $data);
+      $offering = $this->offering->updateOffering($params['OfferingID'], $data);
+      return $response->withStatus(200)->withJson($offering);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+
+  /**
+   * Habilita una publicación
+   * @param  Request $request: objeto de request HTTP (requiere JWT)
+   * @param  Response $response: objeto de response HTTP
+   * @param  array $args: argumentos de ruta (OfferingID)
+   * @return Response: JSON con confirmación o error
+   * @statusCode 200: publicación eliminada exitosamente
+   * @statusCode 400: la publicación esta eliminada o parametros incorrectos
+   * @statusCode 403: usuario sin permisos
+   * @statusCode 404: publicación no encontrada
+   * @statusCode 500: error del servidor
+   **/
+  public function enableOffering(Request $request, Response $response, $args)  {
+    $params['OfferingID'] = $args['OfferingID'];
+    $jwt = $request->getAttribute('jwt');
+
+    $pValidation = ParameterValidator::validate($response, 'offerings','enable_offering', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
+    }
+    $params = $pValidation->values;
+
+    try {
+      # Valido que el offering exista, no este eliminado y el usuario tenga acceso
+      $validation = $this -> _validateOffering($response, $params['OfferingID'], $jwt);
+      if(!$validation->valid){
+        return $validation->response;
+      }
+      $offering = $validation->response;
+
+      $offering = $this->offering->enableOffering($params['OfferingID']);
+      return $response->withStatus(200)->withJson($offering);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  /**
+   * Deshabilita una publicación
+   * @param  Request $request: objeto de request HTTP (requiere JWT)
+   * @param  Response $response: objeto de response HTTP
+   * @param  array $args: argumentos de ruta (OfferingID)
+   * @return Response: JSON con confirmación o error
+   * @statusCode 200: publicación deshabilitada exitosamente
+   * @statusCode 400: la publicación esta eliminada o parametros incorrectos
+   * @statusCode 403: usuario sin permisos
+   * @statusCode 404: publicación no encontrada
+   * @statusCode 500: error del servidor
+   **/
+  public function disableOffering(Request $request, Response $response, $args)  {
+    $params['OfferingID'] = $args['OfferingID'];
+    $jwt = $request->getAttribute('jwt');
+
+    $pValidation = ParameterValidator::validate($response, 'offerings','disable_offering', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
+    }
+    $params = $pValidation->values;
+
+    try {
+      # Valido que el offering exista, no este eliminado y el usuario tenga acceso
+      $validation = $this -> _validateOffering($response, $params['OfferingID'], $jwt);
+      if(!$validation->valid){
+        return $validation->response;
+      }
+      $offering = $validation->response;
+
+      $offering = $this->offering->disableOffering($params['OfferingID']);
       return $response->withStatus(200)->withJson($offering);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
@@ -502,50 +562,33 @@ class OfferingController {
    * Elimina una publicación (soft delete, cambia estado a 'Deleted')
    * @param  Request $request: objeto de request HTTP (requiere JWT)
    * @param  Response $response: objeto de response HTTP
-   * @param  array $args: argumentos de ruta (id)
+   * @param  array $args: argumentos de ruta (OfferingID)
    * @return Response: JSON con confirmación o error
    * @statusCode 200: publicación eliminada exitosamente
-   * @statusCode 400: publicación ya eliminada
+   * @statusCode 400: la publicación esta eliminada, parametros incorrectos
    * @statusCode 403: usuario sin permisos
    * @statusCode 404: publicación no encontrada
    * @statusCode 500: error del servidor
    **/
   public function deleteOffering(Request $request, Response $response, $args)  {
-    $id = intval($args['id']);
+    $params['OfferingID'] = $args['OfferingID'];
     $jwt = $request->getAttribute('jwt');
-    $userID = $jwt->data->UserID;
+
+    $pValidation = ParameterValidator::validate($response, 'offerings','delete_offering', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
+    }
+    $params = $pValidation->values;
 
     try {
-      $offering = $this->offering->getOfferingById($id);
-      if (!$offering) {
-        return $response->withStatus(404)->WithJson([
-          "error" => [
-            "code" => "OFFERING_NOT_FOUND",
-            "desc"=> "No Offering found for this specific ID."
-          ]
-        ]);
+      # Valido que el offering exista, no este eliminado y el usuario tenga acceso
+      $validation = $this -> _validateOffering($response, $params['OfferingID'], $jwt);
+      if(!$validation->valid){
+        return $validation->response;
       }
+      $offering = $validation->response;
 
-      # Verificar si el usuario autenticado es el mismo que creo el offering o un admin
-      if ($offering['UserID'] !== $userID && !$jwt->data->IsAdmin) {
-        return $response->withStatus(403)->withJson([
-          "error" => [
-            "code" => "UNAUTHORIZED",
-            "desc" => "You don't have permission to modify this offering."
-          ]
-        ]);
-      }
-
-      if ($offering['Status'] === 'Deleted') {
-        return $response->withStatus(400)->withJson([
-          "error" => [
-            "code" => "OFFERING_DELETED",
-            "desc" => "The specified offering is deleted"
-          ]
-        ]);
-      }
-
-      $offering = $this->offering->deleteOffering($id);
+      $offering = $this->offering->deleteOffering($params['OfferingID']);
       return $response->withStatus(200)->withJson($offering);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
@@ -570,7 +613,7 @@ class OfferingController {
    * @statusCode 500: error del servidor
    **/
   public function createOfferingMedia(Request $request, Response $response, $args) {
-    $id = intval($args['id']); # ID de offering
+    $id = intval($args['OfferingID']); # ID de offering
     # Obtener los metadatos
     $data = $request->getParsedBody();
     # Obtener el archivo adjunto
@@ -743,8 +786,8 @@ class OfferingController {
    * @statusCode 500: error del servidor
    **/
   public function updateOfferingMedia(Request $request, Response $response, $args){
-    $id = intval($args['id']); # ID de offering
-    $mediaID = intval($args['mediaID']); # ID del archivo de medios
+    $id = intval($args['OfferingID']); # ID de offering
+    $mediaID = intval($args['MediaID']); # ID del archivo de medios
     # Obtener los metadatos
     $data = $request->getParsedBody();
     # Obtener el archivo adjunto
@@ -932,8 +975,8 @@ class OfferingController {
    * @statusCode 500: error del servidor o fallo al eliminar archivo del filesystem
    **/
   public function deleteOfferingMedia(Request $request, Response $response, $args)  {
-    $id = intval($args['id']);
-    $mediaID = intval($args['mediaID']);
+    $id = intval($args['OfferingID']);
+    $mediaID = intval($args['MediaID']);
     # Token JWT
     $jwt = $request->getAttribute('jwt');
     $userID = $jwt->data->UserID;
@@ -1084,5 +1127,57 @@ class OfferingController {
       return MediaType::VIDEO;
     }
     MediaType::INVALID;
+  }
+
+
+  /**
+   * Valida que la publicacion no este eliminada y el usuario tenga acceso
+   * @param Response $response: objeto de response HTTP
+   * @param $offeringID: ID de la publicación
+   * @param $jwt: Datos del token del usuario autenticado
+   * @return Response|array Retorna Response con error si falla, datos del offering si tiene exito
+   */
+  private function _validateOffering(Response $response, $offeringID, $jwt) {
+    $offering = $this->offering->getOfferingById($offeringID);
+    if (empty($offering)) {
+      return (object)[
+        "valid" => false,
+        "response" => $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "OFFERING_NOT_FOUND",
+            "desc"=> "No Offering found for this specific ID."
+          ]
+        ])
+      ];
+    }
+
+    # Verificar si el usuario autenticado es el mismo que el que se intenta crear, o si es un administrador
+    if ($offering['UserID'] !== $jwt->data->UserID && !$jwt->data->IsAdmin) {
+      return (object)[
+        "valid" => false,
+        "response" => $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "UNAUTHORIZED",
+            "desc" => "You don't have permission to modify this offering."
+          ]
+        ])
+      ];
+    }
+
+    # Verificar que el offering no esté eliminado
+    if ($offering['Status'] === 'Deleted') {
+      return (object)[
+        "valid" => false,
+        "response" => $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "OFFERING_DELETED",
+            "desc" => "The specified offering is deleted"
+          ]
+        ])
+      ];
+    }
+
+    # Validación exitosa
+    return (object)["valid" => true, "response" => $offering];
   }
 }

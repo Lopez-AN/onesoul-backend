@@ -2600,7 +2600,7 @@ class AuthController{
    * Valida que el usuario exista tenga un teléfono configurado y válido
    * @param Response $response: objeto de response HTTP
    * @param $userID: ID del usuario a validar
-   * @return Response|null Retorna Response con error si falla, null si es válido
+   * @return Response|string Retorna Response con error si falla, el numero de telefono si es válido
    */
   private function _validateUserPhone(Response $response, $userID) {
     $user = $this->user->getUserById($userID);

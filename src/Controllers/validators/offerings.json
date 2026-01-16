@@ -77,5 +77,29 @@
       "minlength": 10,
       "maxlength": 500
     }
+  },
+  "enable_offering": {
+    "OfferingID": {
+      "required": true,
+      "type": "integer",
+      "min": 0,
+      "max": 999999999
+    }
+  },
+  "disable_offering": {
+    "OfferingID": {
+      "required": true,
+      "type": "integer",
+      "min": 0,
+      "max": 999999999
+    }
+  },
+  "delete_offering": {
+    "OfferingID": {
+      "required": true,
+      "type": "integer",
+      "min": 0,
+      "max": 999999999
+    }
   }
 }

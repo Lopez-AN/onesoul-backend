@@ -69,6 +69,7 @@ class Offering {
       LEFT JOIN Reviews AS r ON o.OfferingID = r.OfferingID
       LEFT JOIN Reviews AS ru ON u.UserID = ru.SeekerID
       LEFT JOIN Bookings AS b ON b.OfferingID = o.OfferingID AND b.LastBookingEvent IN ('completed', 'rated')
+      WHERE o.Status = 'Active' AND o.IsActive = 1
       GROUP BY o.OfferingID
       ORDER BY o.OfferingID
       LIMIT ? OFFSET ?");
@@ -141,7 +142,7 @@ class Offering {
       LEFT JOIN Bookings AS b ON b.OfferingID = o.OfferingID AND b.LastBookingEvent IN ('completed', 'rated')
       WHERE (o.Title LIKE ? OR o.Description LIKE ?
       OR o.ShortDescription LIKE ? OR o.Tags LIKE ?)
-      AND o.Status = 'Active'
+      AND o.Status = 'Active' AND o.IsActive = 1
       GROUP BY o.OfferingID
       ORDER BY o.OfferingID
       LIMIT ? OFFSET ?"
@@ -294,6 +295,7 @@ class Offering {
     LEFT JOIN Reviews as r ON o.OfferingID = r.OfferingID
     LEFT JOIN Reviews as ru ON u.UserID = ru.SeekerID
     LEFT JOIN Bookings AS b ON b.OfferingID = o.OfferingID AND b.LastBookingEvent IN ('completed', 'rated')
+    WHERE o.Status = 'Active' AND o.IsActive = 1
     GROUP BY o.OfferingID
     ORDER BY o.OfferingID
     LIMIT ? OFFSET ?");
@@ -514,7 +516,7 @@ class Offering {
   /**
    * Crea una nueva publicación con FAQs asociadas
    *
-   * Crea una publicación con estado 'Pending' que requiere aprobación del admin.
+   * Crea una publicación con estado 'Active' que requiere aprobación del admin (isActive = 0).
    * Inserta además todas las FAQs asociadas en una transacción atómica.
    *
    * @param  array $data: datos de la publicación (Title, ShortDescription, Description, etc)
@@ -527,10 +529,10 @@ class Offering {
 
       # Inserto el offering
       $stmt = $this->db->prepare("INSERT INTO Offerings (Title, ShortDescription,
-        Description, CategoryID, UserID, Status, CreationDate, IsActive, Currency,
+        Description, CategoryID, UserID, Status, CreationDate, Currency, Approved,
         Tags, SKU, Stock, ServiceType, Price, SessionType, Conditions, Duration)
         VALUES (:Title, :ShortDescription, :Description, :CategoryID, :UserID, :Status,
-        :CreationDate, 0, :Currency, :Tags, :SKU, :Stock, :ServiceType,
+        :CreationDate, :Currency, 0, :Tags, :SKU, :Stock, :ServiceType,
         :Price, :SessionType, :Conditions, :Duration)");
 
       $stmt->execute([
@@ -539,9 +541,9 @@ class Offering {
         ':Description' => $data['Description'],
         ':CategoryID' => $data['CategoryID'],
         ':UserID' => $data['UserID'],
-        ':Status' => 'Pending',
+        ':Status' => 'Active',
         ':CreationDate' => date('YmdHis'),
-        ':Currency' => 'ARS',
+        ':Currency' => 'USD',
         ':Tags' => is_array($data['Tags']) ? implode(",", $data['Tags']) : $data['Tags'],
         ':SKU' => $data['SKU'] ?? null,
         ':Stock' => $data['Stock'] ?? null,
@@ -583,7 +585,7 @@ class Offering {
   /**
    * Aprueba una publicación cambiando su estado a 'Active'
    *
-   * Cambia el estado de la publicación a 'Active', marca IsActive = 1 y Approved = 1.
+   * Cambia el estado de la publicación a Approved = 1.
    * Solo debe ser ejecutado por administradores.
    *
    * @param  int $offeringID: ID de la publicación
@@ -595,8 +597,8 @@ class Offering {
       $this->db->beginTransaction(); # Iniciar transacción
 
       $stmt = $this->db->prepare("UPDATE Offerings
-        SET Status = 'Active', IsActive = 1, Approved = 1
-        WHERE OfferingID = ? AND Status != 'Deleted'");
+        SET Approved = 1, ApprovalDate = now()
+        WHERE OfferingID = ? AND Status = 'Active'");
       $stmt->execute([$offeringID]);
 
       $offering = $this->getOfferingById($offeringID) ?:
@@ -614,7 +616,7 @@ class Offering {
    * Actualiza los datos de una publicación existente
    *
    * Actualiza campos permitidos y si se modifican ciertos campos (Title, Description, Faqs, Tags),
-   * automáticamente cambia el estado a 'Pending' para que sea re-aprobada.
+   * la publicacion debe volver a autorizarse
    * Actualiza también las FAQs si se incluyen.
    *
    * @param  int $offeringID: ID de la publicación
@@ -635,11 +637,11 @@ class Offering {
         }
       }
 
-      # Verificar si se han modificado campos que requieren cambiar el estado
+      # Verificar si se han modificado campos que requieren volver a autorizar el offering
       $updateStatusRequired = isset($data['Title']) || isset($data['ShortDescription'])
         || isset($data['Description']) || isset($data['Faqs'])
         || isset($data['Description']) || isset($data['Tags']);
-      $statusQuery = $updateStatusRequired ? ", Status = 'Pending', IsActive = 0, Approved = 0" : "";
+      $statusQuery = $updateStatusRequired ? ", Approved = 0, ApprovalDate = NULL " : "";
 
       # Siempre agregar ModificationDate
       $modificationDate = date("YmdHis");
@@ -677,7 +679,7 @@ class Offering {
   /**
    * Elimina una publicación realizando soft delete
    *
-   * Cambia el estado de la publicación a 'Deleted' e IsActive = 0.
+   * Cambia el estado de la publicación a 'Deleted'
    * No elimina físicamente el registro de la BD.
    *
    * @param  int $offeringID: ID de la publicación
@@ -688,7 +690,63 @@ class Offering {
     try{
       $this->db->beginTransaction(); # Iniciar transacción
 
-      $stmt = $this->db->prepare("UPDATE Offerings SET Status = 'Deleted', IsActive = 0
+      $stmt = $this->db->prepare("UPDATE Offerings SET Status = 'Deleted'
+        WHERE OfferingID = ?");
+      $stmt->execute([$offeringID]);
+
+      $offering = $this->getOfferingById($offeringID) ?:
+        throw new DatabaseException("Failed to retrieve the updated offering");
+
+      $this->db->commit(); # Confirmo transacción
+      return $offering;
+    } catch (\PDOException $e) {
+      $this->db->rollBack(); # Revierto en caso de error
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  /**
+   * Habilita una publicación
+   *
+   * Cambia el estado de la publicación a 'Active'
+   *
+   * @param  int $offeringID: ID de la publicación
+   * @return array: datos de la publicación actualizada
+   * @throws DatabaseException
+   **/
+  public function enableOffering($offeringID) {
+    try{
+      $this->db->beginTransaction(); # Iniciar transacción
+
+      $stmt = $this->db->prepare("UPDATE Offerings SET Status = 'Active'
+        WHERE OfferingID = ?");
+      $stmt->execute([$offeringID]);
+
+      $offering = $this->getOfferingById($offeringID) ?:
+        throw new DatabaseException("Failed to retrieve the updated offering");
+
+      $this->db->commit(); # Confirmo transacción
+      return $offering;
+    } catch (\PDOException $e) {
+      $this->db->rollBack(); # Revierto en caso de error
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  /**
+   * Deshabilita una publicación
+   *
+   * Cambia el estado de la publicación a 'Inactive'
+   *
+   * @param  int $offeringID: ID de la publicación
+   * @return array: datos de la publicación actualizada
+   * @throws DatabaseException
+   **/
+  public function disableOffering($offeringID) {
+    try{
+      $this->db->beginTransaction(); # Iniciar transacción
+
+      $stmt = $this->db->prepare("UPDATE Offerings SET Status = 'Inactive'
         WHERE OfferingID = ?");
       $stmt->execute([$offeringID]);
 
@@ -795,7 +853,7 @@ class Offering {
    * Actualiza un archivo multimedia de una publicación
    *
    * Actualiza metadatos (title, description, position) y opcionalmente la URL y ruta del archivo.
-   * Si se actualiza cualquier campo, cambia el estado de la publicación a 'Pending'.
+   * Si se actualiza cualquier campo, la publicacion debe volver a autorizarse
    *
    * @param  int $offeringID: ID de la publicación
    * @param  string $title: nuevo título del archivo
@@ -848,7 +906,7 @@ class Offering {
 
       # Verificar si se han modificado campos que requieren cambiar el estado
       $updateStatusRequired = isset($title) || isset($description) || isset($fileURL) || isset($filePath);
-      $statusQuery = $updateStatusRequired ? ", Status = 'Pending', IsActive = 0, Approved = 0" : "";
+      $statusQuery = $updateStatusRequired ? ", Approved = 0, ApprovalDate = NULL " : "";
 
       $stmt = $this->db->prepare("UPDATE Offerings SET ModificationDate = ? $statusQuery WHERE OfferingID = ?");
       $stmt->execute([date("YmdHis"), $offeringID]);

@@ -27,15 +27,17 @@ return function (App $app) {
 	$offeringController = new OfferingController($offering, $user, $subscription, $currency);
 
   $app->get('/offerings', [$offeringController, 'getOfferings']);
-  $app->get('/categories/{categoryID}/offerings', [$offeringController, 'getOfferingsByCategory']);
-  $app->get('/users/{userID}/offerings', [$offeringController, 'getOfferingsByUserId']);
+  $app->get('/categories/{CategoryID}/offerings', [$offeringController, 'getOfferingsByCategory']);
+  $app->get('/users/{UserID}/offerings', [$offeringController, 'getOfferingsByUserId']);
   $app->get('/search/offerings', [$offeringController, 'searchOfferings']);
-  $app->get('/offerings/{id}', [$offeringController, 'getOfferingById']);
+  $app->get('/offerings/{OfferingID}', [$offeringController, 'getOfferingById']);
   $app->post('/offerings', [$offeringController, 'createOffering'])->add($requiredJwt);
-  $app->patch('/offerings/{id}', [$offeringController, 'updateOffering'])->add($requiredJwt);
-  $app->delete('/offerings/{id}', [$offeringController, 'deleteOffering'])->add($requiredJwt);
-  $app->post('/offerings/{id}/media', [$offeringController, 'createOfferingMedia'])->add($requiredJwt);
-  $app->post('/offerings/{id}/media/{mediaID}', [$offeringController, 'updateOfferingMedia'])->add($requiredJwt);
-  $app->delete('/offerings/{id}/media/{mediaID}', [$offeringController, 'deleteOfferingMedia'])->add($requiredJwt);
-  $app->patch('/offerings/approve/{id}', [$offeringController, 'approveOffering'])->add($requiredJwt);
+  $app->patch('/offerings/{OfferingID}', [$offeringController, 'updateOffering'])->add($requiredJwt);
+  $app->patch('/offerings/{OfferingID}/enable', [$offeringController, 'enableOffering'])->add($requiredJwt);
+  $app->patch('/offerings/{OfferingID}/disable', [$offeringController, 'disableOffering'])->add($requiredJwt);
+  $app->delete('/offerings/{OfferingID}', [$offeringController, 'deleteOffering'])->add($requiredJwt);
+  $app->post('/offerings/{OfferingID}/media', [$offeringController, 'createOfferingMedia'])->add($requiredJwt);
+  $app->post('/offerings/{OfferingID}/media/{MediaID}', [$offeringController, 'updateOfferingMedia'])->add($requiredJwt);
+  $app->delete('/offerings/{OfferingID}/media/{MediaID}', [$offeringController, 'deleteOfferingMedia'])->add($requiredJwt);
+  $app->patch('/offerings/approve/{OfferingID}', [$offeringController, 'approveOffering'])->add($requiredJwt);
 };

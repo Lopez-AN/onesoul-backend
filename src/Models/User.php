@@ -1218,7 +1218,8 @@ class User {
    * @return array: mapa de tipos sociales activos { nombre => [SocialAccountTypeID, Name] }
    **/
   public function getActiveSocialAccountsTypes() {
-    $stmt = $this->db->prepare("SELECT SocialAccountTypeID, Name FROM SocialAccountsTypes WHERE IsActive = 1");
+    $stmt = $this->db->prepare("SELECT SocialAccountTypeID, Name
+     FROM SocialAccountsTypes WHERE IsActive = 1");
 
     $stmt->execute();
     $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -1258,7 +1259,8 @@ class User {
    * @param  string $accountName: URL o nombre de cuenta de la red social
    **/
   public function addUserSocialAccount($userID, $typeID, $accountName) {
-    $stmt = $this->db->prepare("INSERT INTO SocialAccounts (UserID, SocialAccountTypeID, AccountName, IsActive)
+    $stmt = $this->db->prepare("INSERT INTO SocialAccounts
+      (UserID, SocialAccountTypeID, AccountName, IsActive)
       VALUES (?, ?, ?, 1)");
     $stmt->execute([$userID, $typeID, $accountName]);
   }
