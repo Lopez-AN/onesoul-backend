@@ -247,7 +247,7 @@ class OfferingController {
           ]
         ]);
       }
-      if($pubMax['Value'] !== null && $this->offering->countActiveOfferings($userID) >= $pubMax['Value']){
+      if($pubMax->Value !== null && $this->offering->countActiveOfferings($userID) >= $pubMax->Value){
         return $response->withStatus(403)->withJson([
           "error" => [
             "code" => "HIGHER_PLAN_NEEDED",

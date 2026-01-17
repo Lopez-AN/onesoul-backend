@@ -7,6 +7,8 @@ use Psr\Http\Message\ServerRequestInterface as Request;
 use App\Models\StripeService;
 use App\Models\User;
 use App\Models\Subscription;
+use App\Models\Notification;
+use App\Services\SubscriptionEnforcementService;
 use Firebase\JWT\JWT;
 
 class StripeController{
@@ -14,11 +16,17 @@ class StripeController{
   protected $stripe;
   protected $user;
   protected $subscription;
+  protected $notification;
+  protected $subscriptionEnforcementService;
 
-  public function __construct(StripeService $stripe, User $user, Subscription $subscription) {
+  public function __construct(StripeService $stripe, User $user, Subscription $subscription,
+    Notification $notification, SubscriptionEnforcementService $subscriptionEnforcementService
+  ) {
     $this->stripe = $stripe;
     $this->user = $user;
     $this->subscription = $subscription;
+    $this->notification = $notification;
+    $this->subscriptionEnforcementService = $subscriptionEnforcementService;
   }
 
   public function createCheckoutSession(Request $request, Response $response, $args) {
@@ -1032,8 +1040,30 @@ class StripeController{
           }
 
           try {
-            $this->subscription->createConfirmedSubscription($userID, $planID, $platformSubscriptionID, $platformCustomerID, $subDomain, $userData);
+            $subscription = $this->subscription->createConfirmedSubscription($userID, $planID, $platformSubscriptionID, $platformCustomerID, $subDomain, $userData);
+            $planInfo = $this->subscription->getSubscriptionPlanByID($planID);
+
             error_log("Subscription creada para UserID: $userID | PlanID: $planID | StripeID: $platformSubscriptionID | SubDomain: $subDomain");
+
+            if($userResult['Email']){
+              # Notificación para el buscador
+              $payload = [
+                '{USERNAME}' => $userResult['UserName'],
+                '{PLAN_NAME}' => $planInfo['Name'],
+                '{PLAN_PRICE}' => number_format($planInfo['Price'], 2) . ' ' . $planInfo['CurrencyCode'],
+                '{PLAN_DURATION}' => $planInfo['Duration'],
+                '{DASHBOARD_URL}' => $dashboardURL
+              ];
+              $this->notification->createNotification(
+                $userID,
+                "SUBSCRIPTION.CREATED",
+                $payload,
+                "SUBSCRIPTION.CREATED_." . time()
+              );
+            }
+
+            # Aplica los cambios de la subscripcion
+            $this->subscriptionEnforcementService->enforceOfferings($userID, 1);
           } catch (\Throwable $e) {
             error_log("Error al crear la suscripción: " . $e->getMessage());
             return $response->withStatus(500);
@@ -1210,6 +1240,10 @@ class StripeController{
           $nextBillingDate = isset($sub->items->data[0]->current_period_end) ? date("Y-m-d H:i:s", $sub->items->data[0]->current_period_end) : null;
           $skipHistory = false;
 
+          # Busco la sub en la DB
+          $subscriptionInDb = $this->subscription->getUserSubscriptionByPlatformSubID($platformSubscriptionID);
+          $userID = $subscriptionInDb['UserID'] ?? null;
+
           error_log("Subscription actualizada en Stripe: $platformSubscriptionID con nuevo PriceID: $newPriceId");
 
           if ($sub->canceled_at) {
@@ -1249,7 +1283,6 @@ class StripeController{
             }
 
             // Si Stripe no nos dio previous_attributes (prevPriceId === null), comparamos con la BD
-            $subscriptionInDb = $this->subscription->getUserSubscriptionByPlatformSubID($platformSubscriptionID);
             $currentPlanIDInDb = $subscriptionInDb['PlanID'] ?? null;
             $currentPlanInfoInDb = null;
             if ($currentPlanIDInDb) {
@@ -1294,7 +1327,7 @@ class StripeController{
                 }
               } else {
                 // upgrade → aplicar directamente
-                $res = $this->subscription->updateSubscriptionByUser(
+                $res = $this->subscription->updateSubscriptionByPlatformId(
                   $platformSubscriptionID,
                   $planInfo['PlanID'],
                   $nextBillingDate,
@@ -1305,6 +1338,10 @@ class StripeController{
               }
             } else {
               error_log("No hay cambio de plan detectado o no se encontró planInfo para priceId: $newPriceId");
+            }
+            # Aplica los cambios de la subscripcion
+            if($userID){
+              $this->subscriptionEnforcementService->enforceOfferings($userID, 2);
             }
           } catch (\Throwable $e) {
             error_log("Error al actualizar suscripción: " . $e->getMessage());
@@ -1318,14 +1355,21 @@ class StripeController{
           $platformSubscriptionID = $sub->id;
           $endDate = isset($sub->items->data[0]->current_period_end) ? date("Y-m-d H:i:s", $sub->items->data[0]->current_period_end) : null;
 
+          # Busco la sub en la DB
+          $subscriptionInDb = $this->subscription->getUserSubscriptionByPlatformSubID($platformSubscriptionID);
+          $userID = $subscriptionInDb['UserID'] ?? null;
+
           error_log("Subscription eliminada en Stripe: " . $platformSubscriptionID);
 
           try {
             $this->subscription->cancelSubscription($platformSubscriptionID, $endDate);
             error_log("Subscription cancelada en base de datos.");
-
             $this->subscription->cancelSubscriptionChange($platformSubscriptionID);
             error_log("Downgrade pendiente cancelado.");
+            # Aplica los cambios de la subscripcion
+            if($userID){
+              $this->subscriptionEnforcementService->enforceOfferings($userID, 3);
+            }
           } catch (\Throwable $e) {
             error_log("Error al cancelar suscripción: " . $e->getMessage());
             // Responder 200 para no re-intentar infinitamente; Stripe retryará si retornamos 500.
@@ -1362,14 +1406,23 @@ class StripeController{
 
         case 'customer.subscription.pending_update_applied':
           $sub = $event->data->object;
+
+          # Busco la sub en la DB
+          $subscriptionInDb = $this->subscription->getUserSubscriptionByPlatformSubID($sub->id);
+          $userID = $subscriptionInDb['UserID'] ?? null;
+
           // Actualizar plan si cambió el Price
           $newPriceId = $sub->items->data[0]->price->id ?? null;
           if ($newPriceId) {
             $planInfo = $this->subscription->getSubscriptionPlanByStripeID($newPriceId);
             if ($planInfo) {
-              $this->subscription->updateSubscriptionByUser($sub->id, $planInfo['PlanID'],
+              $this->subscription->updateSubscriptionByPlatformId($sub->id, $planInfo['PlanID'],
                 $sub->current_period_end ? date("Y-m-d", $sub->current_period_end) : null);
             }
+          }
+          # Aplica los cambios de la subscripcion
+          if($userID){
+            $this->subscriptionEnforcementService->enforceOfferings($userID, 4);
           }
         break;
 

@@ -69,7 +69,7 @@ class Offering {
       LEFT JOIN Reviews AS r ON o.OfferingID = r.OfferingID
       LEFT JOIN Reviews AS ru ON u.UserID = ru.SeekerID
       LEFT JOIN Bookings AS b ON b.OfferingID = o.OfferingID AND b.LastBookingEvent IN ('completed', 'rated')
-      WHERE o.Status = 'Active' AND o.IsActive = 1
+      WHERE o.Status = 'Active' AND o.Approved = 1
       GROUP BY o.OfferingID
       ORDER BY o.OfferingID
       LIMIT ? OFFSET ?");
@@ -142,7 +142,7 @@ class Offering {
       LEFT JOIN Bookings AS b ON b.OfferingID = o.OfferingID AND b.LastBookingEvent IN ('completed', 'rated')
       WHERE (o.Title LIKE ? OR o.Description LIKE ?
       OR o.ShortDescription LIKE ? OR o.Tags LIKE ?)
-      AND o.Status = 'Active' AND o.IsActive = 1
+      AND o.Status = 'Active' AND o.Approved = 1
       GROUP BY o.OfferingID
       ORDER BY o.OfferingID
       LIMIT ? OFFSET ?"
@@ -295,7 +295,7 @@ class Offering {
     LEFT JOIN Reviews as r ON o.OfferingID = r.OfferingID
     LEFT JOIN Reviews as ru ON u.UserID = ru.SeekerID
     LEFT JOIN Bookings AS b ON b.OfferingID = o.OfferingID AND b.LastBookingEvent IN ('completed', 'rated')
-    WHERE o.Status = 'Active' AND o.IsActive = 1
+    WHERE o.Status = 'Active' AND o.Approved = 1
     GROUP BY o.OfferingID
     ORDER BY o.OfferingID
     LIMIT ? OFFSET ?");
@@ -511,6 +511,45 @@ class Offering {
         "fetched" => count($offerings)
       ]
     ];
+  }
+
+  /**
+   * Obtiene las cantidad de publicaciones activas de un usuario
+   *
+   * @return integer: cantidad de publicaciones activas
+   **/
+  public function countUserActiveOfferings($userID) {
+    $stmt = $this->db->prepare("SELECT count(*) as q
+      FROM Offerings WHERE UserID = ? AND Status = 'Active'");
+    $stmt->execute([$userID]);
+    $result = $stmt->fetch(PDO::FETCH_ASSOC);
+    return (int)($result['q'] ?? 0);
+  }
+
+  /**
+   * Desactiva todas publicaciones del guia
+   *
+   **/
+  public function disableUserOfferings($userID) {
+    $stmt = $this->db->prepare("UPDATE Offerings
+      SET Status = 'Inactive' WHERE UserID = ? AND Status = 'Active'");
+    $stmt->execute([$userID]);
+  }
+
+  /**
+   * Desactiva las publicaciones con videos
+   *
+   **/
+  public function disableUserOfferingsWithVideos($userID) {
+    $stmt = $this->db->prepare("UPDATE Offerings
+      SET Status = 'Inactive'
+      WHERE UserID = ? AND Status = 'Active' AND OfferingID IN (
+        SELECT o.OfferingID FROM Offerings as o
+        INNER JOIN Media as m ON o.OfferingID = m.OfferingID
+        WHERE MediaType = 'video'
+        GROUP BY o.OfferingID
+      )");
+    $stmt->execute([$userID]);
   }
 
   /**

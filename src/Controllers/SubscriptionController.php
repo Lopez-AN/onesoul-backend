@@ -8,20 +8,25 @@ use App\Models\Subscription;
 use App\Models\User;
 use App\Models\Auth;
 use App\Models\StripeService;
-use Firebase\JWT\JWT;
 use App\Utils\ParameterValidator;
+use App\Services\SubscriptionEnforcementService;
+use Firebase\JWT\JWT;
 
 class SubscriptionController {
   protected $subscription;
   protected $user;
   protected $auth;
   protected $stripe;
+  protected $subscriptionEnforcementService;
 
-  public function __construct(Subscription $subscription, User $user, Auth $auth, StripeService $stripe)  {
+  public function __construct(Subscription $subscription, User $user, Auth $auth,
+    StripeService $stripe, SubscriptionEnforcementService $subscriptionEnforcementService
+  ) {
     $this->subscription = $subscription;
     $this->user = $user;
     $this->auth = $auth;
     $this->stripe = $stripe;
+    $this->subscriptionEnforcementService = $subscriptionEnforcementService;
   }
 
   /**
@@ -423,6 +428,8 @@ class SubscriptionController {
 
     try {
       $subscription = $this->subscription->applyScheduledChange($params['ChangeID']);
+      # Aplica los cambios de la subscripcion
+      $this->subscriptionEnforcementService->enforceOfferings($subscription['UserID']);
 
       return $response->withStatus(200)->withJson($subscription);
     } catch (\Throwable $e) {

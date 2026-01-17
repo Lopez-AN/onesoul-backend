@@ -4,7 +4,10 @@ use Slim\App;
 use App\Controllers\StripeController;
 use App\Models\StripeService;
 use App\Models\User;
+use App\Models\Offering;
 use App\Models\Subscription;
+use App\Models\Notification;
+use App\Services\SubscriptionEnforcementService;
 use Tuupola\Middleware\JwtAuthentication;
 use App\Middleware\JwtTokenMiddleware;
 use App\Enums\JwtValidationMode;
@@ -19,10 +22,17 @@ return function (App $app) {
 
   // Obtener PDO del contenedor DI
   $pdo = $app->getContainer()->get('pdo');
+
   $stripeService = new StripeService($pdo);
   $user = new User($pdo);
   $subscription = new Subscription($pdo);
-  $stripeController = new StripeController($stripeService, $user, $subscription);
+  $notification = new Notification($pdo);
+  $offering = new Offering($pdo);
+  $subscriptionEnforcementService = new SubscriptionEnforcementService($subscription, $offering);
+
+  $stripeController = new StripeController(
+    $stripeService, $user, $subscription, $notification, $subscriptionEnforcementService
+  );
 
   $app->post('/stripe/subscribe', [$stripeController, 'createCheckoutSession'])->add($requiredJwt);
   $app->post('/stripe/webhook', [$stripeController, 'handleWebhook']);
