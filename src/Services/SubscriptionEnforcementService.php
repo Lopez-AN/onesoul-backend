@@ -16,7 +16,7 @@ class SubscriptionEnforcementService {
     $this->offering = $offering;
   }
 
-  public function enforceOfferings($userID, $d = 0){
+  public function enforceOfferings($userID){
     # Controlo si no se excedio de los offerings maximos
 
     # Maximas publicaciones que puede tener

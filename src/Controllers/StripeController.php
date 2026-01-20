@@ -1063,7 +1063,7 @@ class StripeController{
             }
 
             # Aplica los cambios de la subscripcion
-            $this->subscriptionEnforcementService->enforceOfferings($userID, 1);
+            $this->subscriptionEnforcementService->enforceOfferings($userID);
           } catch (\Throwable $e) {
             error_log("Error al crear la suscripción: " . $e->getMessage());
             return $response->withStatus(500);
@@ -1341,7 +1341,7 @@ class StripeController{
             }
             # Aplica los cambios de la subscripcion
             if($userID){
-              $this->subscriptionEnforcementService->enforceOfferings($userID, 2);
+              $this->subscriptionEnforcementService->enforceOfferings($userID);
             }
           } catch (\Throwable $e) {
             error_log("Error al actualizar suscripción: " . $e->getMessage());
@@ -1368,7 +1368,7 @@ class StripeController{
             error_log("Downgrade pendiente cancelado.");
             # Aplica los cambios de la subscripcion
             if($userID){
-              $this->subscriptionEnforcementService->enforceOfferings($userID, 3);
+              $this->subscriptionEnforcementService->enforceOfferings($userID);
             }
           } catch (\Throwable $e) {
             error_log("Error al cancelar suscripción: " . $e->getMessage());
@@ -1422,7 +1422,7 @@ class StripeController{
           }
           # Aplica los cambios de la subscripcion
           if($userID){
-            $this->subscriptionEnforcementService->enforceOfferings($userID, 4);
+            $this->subscriptionEnforcementService->enforceOfferings($userID);
           }
         break;
 

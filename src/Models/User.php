@@ -247,7 +247,6 @@ class User {
     return $this -> _getUserGenericMulti($users, $total['total']);
   }
 
-
  /**
    * Busca guías por término de búsqueda con paginación
    *
@@ -331,6 +330,20 @@ class User {
     $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
     return $this -> _getUserGenericMulti($users, $total['total']);
+  }
+
+  /**
+   * Trae los guias con offerings activos.
+   **/
+  public function getGuidesWithActiveOfferings() {
+    $stmt = $this->db->prepare("SELECT u.UserID, u.UserName, count(*)
+      FROM Users AS u
+      INNER JOIN Offerings as o ON u.UserID = o.UserID
+      WHERE u.DeactivationDate IS NULL AND o.Status = 'Active'
+      GROUP BY u.UserID");
+
+    $stmt->execute();
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
   }
 
   /**

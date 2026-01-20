@@ -11,19 +11,17 @@ define('ROOT', dirname(__FILE__)."/../..");
 require ROOT . '/src/Workers/initWorker.php';
 
 # Instanciar y ejectuar el worker
-$worker = new NotificationWorker($pdo, new Notification($pdo), new TwilioService());
+$worker = new NotificationWorker(new Notification($pdo), new TwilioService());
 $worker->run($argv[1] ?? null);
 
 
 class NotificationWorker {
   protected $notification;
   protected $twilio;
-  protected $db;
 
-  public function __construct(PDO $db, Notification $notification, TwilioService $twilio) {
+  public function __construct(Notification $notification, TwilioService $twilio) {
     $this->notification = $notification;
     $this->twilio = $twilio;
-    $this->db = $db;
   }
 
   public function run($notificationID = null) {
