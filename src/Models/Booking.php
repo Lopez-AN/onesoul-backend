@@ -27,10 +27,10 @@ class Booking {
           'DisplayName', u.DisplayName,
           'ImgURL', m.URL
         ))
-        FROM Media AS m
-        INNER JOIN Users as u
+        FROM Users as u
+        LEFT JOIN Media AS m
           ON m.userID = u.userID
-        WHERE m.UserID = b.UserID
+        WHERE u.UserID = b.UserID
       ) AS seeker_info,
       -- Subconsulta para eventos
       (
@@ -47,7 +47,6 @@ class Booking {
       FROM Bookings AS b
       INNER JOIN Offerings AS o ON b.OfferingID = o.OfferingID
       INNER JOIN Users AS u ON o.UserID = u.UserID
-      INNER JOIN Media AS m ON m.UserID = b.UserID
       WHERE b.BookingID = ?"
     );
     $stmt->execute([$bookingID]);
@@ -326,7 +325,7 @@ class Booking {
       }
 
       $booking = $this->getBookingByID($bookingID) ?:
-        throw new DatabaseException("Failed to retrieve the updated offering");
+        throw new DatabaseException("Failed to retrieve the created booking");
 
       $this->db->commit(); # Confirmo transacción
       return $booking;

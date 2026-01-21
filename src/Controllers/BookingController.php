@@ -367,7 +367,7 @@ class BookingController {
 
       $emailValidated = filter_var($seeker['ValidatedEmail'], FILTER_VALIDATE_BOOLEAN);
       $phoneValidated = filter_var($seeker['ValidatedPhone'], FILTER_VALIDATE_BOOLEAN);
-      if (!$emailValidated || !$phoneValidated) {
+      if (!$emailValidated){  // || !$phoneValidated) {  // DEBUG DESCOMENTAR LUEGO
         return $response->withStatus(400)->withJson([
           "error" => [
             "code" => "USER_NOT_VALIDATE_EMAIL_PHONE",

@@ -499,8 +499,7 @@ class Notification  {
   public function getRecipientAddress($recipientID, $channel) {
     switch (strtoupper($channel)) {
       case 'EMAIL':
-        $sql = "SELECT Email FROM Users WHERE UserID = ?";
-        $stmt = $this->db->prepare($sql);
+        $stmt = $this->db->prepare("SELECT Email FROM Users WHERE UserID = ?");
         $stmt->execute([$recipientID]);
         $email = $stmt->fetchColumn();
         if (!$email) {
@@ -509,12 +508,11 @@ class Notification  {
         return $email;
 
       case 'WHATSAPP':
-        $sql = "SELECT Phone FROM Users WHERE UserID = ?";
-        $stmt = $this->db->prepare($sql);
+        $stmt = $this->db->prepare("SELECT Phone FROM Users WHERE UserID = ? AND ValidatedPhone = 1");
         $stmt->execute([$recipientID]);
         $phone = $stmt->fetchColumn();
         if (!$phone) {
-          throw new NotFoundException("No phone found for user {$recipientID}");
+          throw new NotFoundException("No validated phone found for user {$recipientID}");
         }
         return $phone;
 
