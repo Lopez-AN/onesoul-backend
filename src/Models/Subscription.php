@@ -768,7 +768,7 @@ class Subscription {
     return (object) [
       "data" => $payments,
       "rows" => [
-        "total" => $total,
+        "total" => $total['total'],
         "fetched" => count($payments)
       ]
     ];

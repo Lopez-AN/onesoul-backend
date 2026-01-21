@@ -10,10 +10,15 @@
     }
   },
   "send_contact_info": {
-    "Name": {
-      "required": false,
+    "Role": {
+      "required": true,
       "type": "string",
-      "minlength": 2,
+      "regex": "~(Guide|Seeker)~"
+    },
+    "Name": {
+      "required": true,
+      "type": "string",
+      "minlength": 5,
       "maxlength": 100
     },
     "Email": {
@@ -24,7 +29,7 @@
     "SocialNetwork": {
       "required": true,
       "type": "string",
-      "minlength": 2,
+      "minlength": 10,
       "maxlength": 100
     },
     "CountryCode": {
@@ -38,11 +43,33 @@
       "minlength": 2,
       "maxlength": 60
     },
+    "RecaptchaToken": {
+      "required": true,
+      "type": "string",
+      "regex": "~^[A-Za-z0-9_-]+$~"
+    }
+  },
+  "send_contact_info_guide": {
     "Specialization": {
       "required": true,
       "type": "string",
-      "minlength": 2,
+      "minlength": 5,
       "maxlength": 60
+    }
+  },
+  "send_contact_info_seeker": {
+    "LookingFor": {
+      "required": true,
+      "type": "string",
+      "minlength": 5,
+      "maxlength": 255
+    }
+  },
+  "send_contact_email": {
+    "Email": {
+      "required": true,
+      "type": "email",
+      "maxlength": 100
     },
     "RecaptchaToken": {
       "required": true,

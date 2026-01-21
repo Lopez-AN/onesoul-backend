@@ -51,7 +51,7 @@ class Landing {
     return [
       "data" => $contacts,
       "rows" => [
-        "total" => $total,
+        "total" => $total['total'],
         "fetched" => count($contacts)
       ]
     ];
@@ -60,16 +60,15 @@ class Landing {
   /**
    * Inserta un nuevo contacto desde el landing page
    * Graba tambien los datos del browser, dispositivo e ip de la solicitud
-   * @param int $userID: ID del guía propietario
-   * @param int $data: Datos del contacto a guardar
-   * @param int $browser: Informacion del browser, dispositivo...
+   * @param array $data: Datos del contacto a guardar
+   * @param array $browser: Informacion del browser, dispositivo...
    **/
   public function saveContactInfo($data, $browser){
     $stmt = $this->db->prepare("INSERT INTO LandingContacts
       (Name, Email, SocialNetwork, CountryCode, City, Specialization,
-      Browser, BrowserVersion, Os, Device, IP)
+      LookingFor, Browser, BrowserVersion, Os, Device, IP)
       VALUES (:name, :email, :socialNetwork, :countryCode, :city, :specialization,
-      :browser, :browserVersion, :os, :device, :ip)");
+      :lookingFor, :browser, :browserVersion, :os, :device, :ip)");
 
     $stmt->execute([
       ':name' => $data['Name'],
@@ -77,7 +76,29 @@ class Landing {
       ':socialNetwork' => $data['SocialNetwork'],
       ':countryCode' => $data['CountryCode'],
       ':city' => $data['City'],
-      ':specialization' => $data['Specialization'],
+      ':specialization' => $data['Specialization'] ?? null,
+      ':lookingFor' => $data['LookingFor'] ?? null,
+      ':browser' => $browser['browser'],
+      ':browserVersion' => $browser['version'],
+      ':os' => $browser['os'],
+      ':device' => $browser['device'],
+      ':ip' => $browser['ip']
+    ]);
+  }
+
+  /**
+   * Inserta un nuevo email desde el landing page
+   * Graba tambien los datos del browser, dispositivo e ip de la solicitud
+   * @param string $email: Email a guardar
+   * @param array $browser: Informacion del browser, dispositivo...
+   **/
+  public function saveEmail($email, $browser){
+    $stmt = $this->db->prepare("INSERT INTO LandingEmails
+      (Email, Browser, BrowserVersion, Os, Device, IP)
+      VALUES (:email, :browser, :browserVersion, :os, :device, :ip)");
+
+    $stmt->execute([
+      ':email' => $email,
       ':browser' => $browser['browser'],
       ':browserVersion' => $browser['version'],
       ':os' => $browser['os'],

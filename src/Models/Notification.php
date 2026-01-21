@@ -270,7 +270,7 @@ class Notification  {
     return [
       "data" => $deliveries,
       "rows" => [
-        "total" => $total,
+        "total" => $total['total'],
         "fetched" => count($deliveries)
       ]
     ];
@@ -307,7 +307,7 @@ class Notification  {
     return [
       "data" => $deliveries,
       "rows" => [
-        "total" => $total,
+        "total" => $total['total'],
         "fetched" => count($deliveries)
       ]
     ];
@@ -369,7 +369,7 @@ class Notification  {
     return [
       "data" => $notifications,
       "rows" => [
-        "total" => $total,
+        "total" => $total['total'],
         "fetched" => count($notifications)
       ]
     ];

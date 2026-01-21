@@ -49,7 +49,7 @@
     "Conditions": {
       "required": false,
       "type": "string",
-      "maxlength": 300
+      "maxlength": 3000
     },
     "LocationID": {
       "required": true,

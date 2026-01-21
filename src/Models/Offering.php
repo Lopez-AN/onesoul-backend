@@ -393,6 +393,7 @@ class Offering {
       return false;
     }
 
+    $offering['Approved'] = (bool)$offering['Approved'];
     $offering['Media'] = [
       'Images' => [],
       'Videos' => []
@@ -455,6 +456,7 @@ class Offering {
   private function _getOfferingsGenericMulti($offerings, $total){
     # Desagrupo los json traidos por MYSQL para armar el JSON anidado de respuesta
     $offerings = array_map(function ($e) {
+      $e['Approved'] = (bool)$e['Approved'];
       $e['Media'] = [
         'Images' => [],
         'Videos' => []

@@ -22,4 +22,5 @@ return function (App $app) {
 
   $app->get('/landing/contact', [$landingController, 'getContactInfo'])->add($requiredJwt);
   $app->post('/landing/contact', [$landingController, 'saveContactInfo']);
+  $app->post('/landing/email', [$landingController, 'saveEmail']);
 };

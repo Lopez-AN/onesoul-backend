@@ -93,9 +93,31 @@ class LandingController {
     }
     $params = $pValidation->values;
 
+    if($params['Role'] === 'Guide'){
+      $pValidation = ParameterValidator::validate($response, 'landing','send_contact_info_guide', $params);
+      if(!$pValidation->valid){
+        return $pValidation->response;
+      }
+      $params['Specialization'] = $pValidation->values['Specialization'];
+    }
+
+    if($params['Role'] === 'Seeker'){
+      $pValidation = ParameterValidator::validate($response, 'landing','send_contact_info_seeker', $params);
+      if(!$pValidation->valid){
+        return $pValidation->response;
+      }
+      $params['LookingFor'] = $pValidation->values['LookingFor'];
+    }
+
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
     try{
+      # Valido recaptcha
+      $validation = validateReCaptcha($response, $params['RecaptchaToken'], $clientIp);
+      if (!$validation->valid) {
+        return $validation->response;
+      }
+
       # Obtener información del navegador desde el encabezado User-Agent
       $userAgent = $request->getHeader('User-Agent')[0];
       $parser = new \WhichBrowser\Parser($userAgent);
@@ -109,12 +131,6 @@ class LandingController {
         "ip" => $clientIp
       ];
 
-      # Valido recaptcha
-      $validation = validateReCaptcha($response, $params['RecaptchaToken'], $clientIp);
-      if (!$validation->valid) {
-        return $validation->response;
-      }
-
       $this->landing->saveContactInfo($params, $browser);
       return $response->withJson("Contact info saved successfully");
     } catch (Throwable $e) {
@@ -127,4 +143,60 @@ class LandingController {
     }
   }
 
+
+  /**
+   * Envía un email de contacto de la landing page
+   *
+   * @param Request $request Objeto de request HTTP con el mensaje en el body
+   * @param Response $response Objeto de response HTTP
+   * @param array $args Argumentos de ruta
+   * @return Response string indicando operación exitosa, u objeto de error
+   *
+   * @statusCode 200 Datos recibidos correctamente y almacenados en DB
+   * @statusCode 400 Parámetros inválidos
+   * @statusCode 401 Error de recaptcha
+   * @statusCode 500 Error del servidor
+   */
+  public function saveEmail(Request $request, Response $response, $args) {
+    $params = $request->getParsedBody();
+
+    $pValidation = ParameterValidator::validate($response, 'landing','send_contact_email', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
+    }
+    $params = $pValidation->values;
+
+    $clientIp = $request->getServerParams()['REMOTE_ADDR'];
+
+    try{
+      # Valido recaptcha
+      $validation = validateReCaptcha($response, $params['RecaptchaToken'], $clientIp);
+      if (!$validation->valid) {
+        return $validation->response;
+      }
+
+      # Obtener información del navegador desde el encabezado User-Agent
+      $userAgent = $request->getHeader('User-Agent')[0];
+      $parser = new \WhichBrowser\Parser($userAgent);
+
+      # Detalles del navegador y del dispositivo
+      $browser = [
+        "browser" => $parser->browser->getName(),
+        "version" => $parser->browser->getVersion(),
+        "os" => $parser->browser->getName(),
+        "device" => $parser->device->type,
+        "ip" => $clientIp
+      ];
+
+      $this->landing->saveEmail($params['Email'], $browser);
+      return $response->withJson("Contact email saved successfully");
+    } catch (Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+           "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
 }

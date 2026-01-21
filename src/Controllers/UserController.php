@@ -884,7 +884,8 @@ class UserController{
       }
 
       $imgID = uniqid();
-      $uploadDirectory = $GLOBALS['config']['media_folder']['path'];
+      $uploadDirectory = rtrim($GLOBALS['config']['media_folder']['path'], '/');
+      $baseURL = rtrim($GLOBALS['config']['media_folder']['url'], '/');
 
       # Crear directorio si no existe
       if (!is_dir($uploadDirectory . "/user")) {
@@ -935,7 +936,7 @@ class UserController{
       }
 
       # Generar URL - IMPORTANTE: debe coincidir con la ruta guardada
-      $fileURL = $GLOBALS['config']['media_folder']['url'] . "/user/" . $imgID . ".webp";
+      $fileURL = "$baseURL/user/$imgID.webp";
 
       # Pasar los datos al modelo
       $updatedUser = $this->user->updateProfilePhoto($userID, $fileURL, $optimizedPath);

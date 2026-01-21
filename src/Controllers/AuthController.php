@@ -56,46 +56,36 @@ class AuthController{
    * @statusCode 500: error del servidor
    **/
   public function login(Request $request, Response $response, $args) {
-    $data = $request->getParsedBody();
+    $params = $request->getParsedBody();
 
-    # Verificar si el body es un array/object válido
-    if (!is_array($data) && !is_object($data)) {
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "INVALID_JSON",
-          "desc" => "Request body must be valid JSON"
-        ]
-      ]);
+    $pValidation = ParameterValidator::validate($response, 'auth','login', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
     }
+    $params = $pValidation->values;
 
-    $email = $data['Email'] ?? null;
-    $userName = $data['UserName'] ?? null;
-    $password = $data['Password'] ?? null;
-    $mfaID = $data['MfaID'] ?? null;
-    $mfaCode = $data['MfaCode'] ?? null;
-    $recaptchaToken = $data['RecaptchaToken'] ?? null;
     $clientIp = $request->getServerParams()['REMOTE_ADDR'];
 
     # Validar credenciales básicas
-    if(($email === null && $userName === null) || $password === null || $recaptchaToken === null){
+    if(empty($params['UserName']) && empty($params['Email'])){
       return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "INVALID_PARAMETERS",
-          "desc" => "Parameters are missing or invalid"
+          "desc" => "Either username or email must be provided."
         ]
       ]);
     }
 
     try {
       # Valido recaptcha
-      $validation = validateReCaptcha($response,  $recaptchaToken, $clientIp);
+      $validation = validateReCaptcha($response, $params['RecaptchaToken'], $clientIp);
       if (!$validation->valid) {
         return $validation->response;
       }
 
       # Busco por mail o username
-      $user = !empty($email) ?
-        $this->user->getUserByEmail($email, false) : $this->user->getUserByUserName($username, false);
+      $user = !empty($params['Email']) ?
+        $this->user->getUserByEmail($params['Email'], false) : $this->user->getUserByUserName($params['UserName'], false);
       if(empty($user)){
         return $response->withStatus(401)->withJson([
           "error" => [
@@ -126,7 +116,7 @@ class AuthController{
       }
 
       # valido credenciales
-      $userAuth = $this->auth->login($userName, $email);
+      $userAuth = $this->auth->login($params['UserName'], $params['Email']);
       if(empty($userAuth)){
         return $response->withStatus(401)->withJson([
           "error" => [
@@ -135,7 +125,7 @@ class AuthController{
           ]
         ]);
       }
-      if (!password_verify($password, $userAuth['PasswordHash'])) {
+      if (!password_verify($params['Password'], $userAuth['PasswordHash'])) {
         # Logueo fallido actualizar contador de erroneos y tiempo bloqueo si corresponde
         $failedAttempts = $userAuth['FailedLoginAttempts'] + 1;
         $lockTime = $this->auth->calculateLockTime($failedAttempts);
@@ -150,7 +140,7 @@ class AuthController{
         ]);
       }
       # El resto del login es generico para todos los tipos de login
-      return $this->_loginGeneric($response, $request, $user, $mfaID, $mfaCode, $clientIp);
+      return $this->_loginGeneric($response, $request, $user, $params['MfaID'], $params['MfaCode'], $clientIp);
     } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -1180,9 +1170,7 @@ class AuthController{
       $jwt = $this -> _JWTgen($user); # Genero el token
 
       # Limpiar OTP de Redis si existe
-      if($altEmail && $this->redis->get("otp:{$altEmail}")){
-        $this->redis->del("otp:{$altEmail}");
-      }
+      $this->redis->del("otp:{$altEmail}");
 
       # Manejar recompensa de referral
       if($referrerUserID){
@@ -1387,6 +1375,7 @@ class AuthController{
     # Verificar si expiro
     if (time() > $expiresAt) {
       $this->redis->del("otp:{$email}");
+
       return $response->withStatus(401)->withJson([
         "error" => [
           "code" => "EXPIRED_OTP",
@@ -1421,7 +1410,7 @@ class AuthController{
 
     # OTP válido
     $otpData -> validated = true;
-    $this->redis->del("otp:{$email}");
+    $this->redis->setex("otp:{$email}", 86400, json_encode($otpData));
     return $response->withStatus(200)->withJson("OTP code validated successfully");
   }
 

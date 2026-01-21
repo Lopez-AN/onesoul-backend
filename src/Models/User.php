@@ -334,6 +334,7 @@ class User {
 
   /**
    * Trae los guias con offerings activos.
+   * @return array: lista de guias con offertings activos o [] si no hay ninguno
    **/
   public function getGuidesWithActiveOfferings() {
     $stmt = $this->db->prepare("SELECT u.UserID, u.UserName, count(*)

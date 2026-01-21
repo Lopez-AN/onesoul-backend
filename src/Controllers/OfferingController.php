@@ -741,9 +741,10 @@ class OfferingController {
 
       # Ruta de archivo y URL
       $uid = uniqid();
-      $uploadDirectory = $GLOBALS['config']['media_folder']['path'];
+      $uploadDirectory = rtrim($GLOBALS['config']['media_folder']['path'], '/');
+      $baseURL = rtrim($GLOBALS['config']['media_folder']['url'], '/');
       $filePath = "$uploadDirectory/offering/$uid.{$media->Extension}";
-      $fileURL = $GLOBALS['config']['media_folder']['url'] . "/offering/$uid.{$media->Extension}";
+      $fileURL = "$baseURL/offering/$uid.{$media->Extension}";
 
       # Mover el archivo al destino
       $media->File->moveTo($filePath);
@@ -930,9 +931,10 @@ class OfferingController {
 
         # Ruta de archivo y URL
         $uid = uniqid();
-        $uploadDirectory = $GLOBALS['config']['media_folder']['path'];
+        $uploadDirectory = rtrim($GLOBALS['config']['media_folder']['path'], '/');
+        $baseURL = rtrim($GLOBALS['config']['media_folder']['url'], '/');
         $filePath = "$uploadDirectory/offering/$uid.{$media->Extension}";
-        $fileURL = $GLOBALS['config']['media_folder']['url'] . "/offering/$uid.{$media->Extension}";
+        $fileURL = "$baseURL/offering/$uid.{$media->Extension}";
 
         # Mover el archivo al destino
         $media->File->moveTo($filePath);

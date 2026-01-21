@@ -20,7 +20,9 @@ CREATE TABLE `LandingContacts` (
 	`SocialNetwork` VARCHAR(100) NOT NULL COMMENT 'Red social del guía' COLLATE 'utf8mb4_unicode_ci',
 	`CountryCode` CHAR(2) NOT NULL COMMENT 'Código del país del guia' COLLATE 'utf8mb4_unicode_ci',
 	`City` VARCHAR(60) NOT NULL COMMENT 'Ciudad o localidad' COLLATE 'utf8mb4_unicode_ci',
-	`Specialization` VARCHAR(50) NOT NULL COMMENT 'Especialización del guía' COLLATE 'utf8mb4_unicode_ci',
+	`Role` ENUM('Guide','Seeker') NOT NULL COMMENT 'Rol de la persona que contacta' COLLATE 'utf8mb4_unicode_ci',
+	`Specialization` VARCHAR(50) NULL DEFAULT NULL COMMENT 'Especialización del guía' COLLATE 'utf8mb4_unicode_ci',
+	`LookingFor` VARCHAR(255) NULL DEFAULT NULL COMMENT 'que necesita el buscador' COLLATE 'utf8mb4_unicode_ci',
 	`Browser` VARCHAR(255) NULL DEFAULT NULL COMMENT 'Nombre del navegador' COLLATE 'utf8mb4_unicode_ci',
 	`BrowserVersion` VARCHAR(50) NULL DEFAULT NULL COMMENT 'Versión del navegador' COLLATE 'utf8mb4_unicode_ci',
 	`Os` VARCHAR(255) NULL DEFAULT NULL COMMENT 'Sistema operativo utilizado' COLLATE 'utf8mb4_unicode_ci',
@@ -28,7 +30,24 @@ CREATE TABLE `LandingContacts` (
 	`IP` VARCHAR(45) NULL DEFAULT NULL COMMENT 'Dirección IP del dispositivo desde el cual se realizó el contacto' COLLATE 'utf8mb4_unicode_ci',
 	PRIMARY KEY (`ID`) USING BTREE
 )
-COMMENT='Tabla para guardar los datos de quienes contactan con el formulario de la landing page'
+COMMENT='Guardo los datos de quienes contactan con el formulario de la landing page'
+COLLATE='utf8mb4_unicode_ci'
+ENGINE=InnoDB
+AUTO_INCREMENT=3
+;
+
+CREATE TABLE `LandingEmails` (
+	`ID` INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+	`Date` DATETIME NULL DEFAULT current_timestamp() COMMENT 'Fecha y hora del contacto',
+	`Email` VARCHAR(100) NOT NULL COLLATE 'utf8mb4_unicode_ci',
+	`Browser` VARCHAR(255) NULL DEFAULT NULL COMMENT 'Nombre del navegador' COLLATE 'utf8mb4_unicode_ci',
+	`BrowserVersion` VARCHAR(50) NULL DEFAULT NULL COMMENT 'Versión del navegador' COLLATE 'utf8mb4_unicode_ci',
+	`Os` VARCHAR(255) NULL DEFAULT NULL COMMENT 'Sistema operativo utilizado' COLLATE 'utf8mb4_unicode_ci',
+	`Device` VARCHAR(50) NULL DEFAULT NULL COMMENT 'Tipo de dispositivo' COLLATE 'utf8mb4_unicode_ci',
+	`IP` VARCHAR(45) NULL DEFAULT NULL COMMENT 'Dirección IP del dispositivo desde el cual se realizó el contacto' COLLATE 'utf8mb4_unicode_ci',
+	PRIMARY KEY (`ID`) USING BTREE
+)
+COMMENT='Guardo los datos de quienes contactan con el formulario de la landing page'
 COLLATE='utf8mb4_unicode_ci'
 ENGINE=InnoDB
 ;
@@ -43,3 +62,6 @@ ALTER TABLE `Offerings`
 
 ALTER TABLE `Offerings`
 	DROP COLUMN `IsActive`;
+
+ALTER TABLE `Offerings`
+	CHANGE COLUMN `ShortDescription` `ShortDescription` VARCHAR(300) NULL DEFAULT NULL COMMENT 'Descripción corta de la publicación' COLLATE 'utf8mb4_unicode_ci' AFTER `ServiceType`;
