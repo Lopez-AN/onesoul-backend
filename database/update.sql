@@ -1,67 +1,178 @@
 ALTER TABLE `UsersLocations`
-	ADD CONSTRAINT `FK_UsersLocations_Countries` FOREIGN KEY (`CountryCode`) REFERENCES `Countries` (`CountryCode`) ON UPDATE RESTRICT ON DELETE RESTRICT;
+	DROP FOREIGN KEY `FK_UsersLocations_Countries`;
 
-ALTER TABLE `OfferingsLocations`
- 	DROP FOREIGN KEY IF EXISTS `FK_OfferingsLocations_UsersLocations`;
-ALTER TABLE `OfferingsLocations`
-	ADD CONSTRAINT `FK_OfferingsLocations_UsersLocations` FOREIGN KEY (`UserID`, `LocationID`) REFERENCES `UsersLocations` (`UserID`, `LocationID`) ON UPDATE RESTRICT ON DELETE RESTRICT;
+ALTER TABLE `Countries`
+	CHANGE COLUMN `CountryCode` `CountryCode` CHAR(2) NOT NULL COMMENT 'Código ISO 3166-1 alpha-2' COLLATE 'utf8mb4_unicode_ci' FIRST;
 
-ALTER TABLE `OfferingsLocations`
-	ADD CONSTRAINT `FK_OfferingsLocations_soul.Offerings` FOREIGN KEY (`OfferingID`) REFERENCES `soul`.`Offerings` (`OfferingID`) ON UPDATE CASCADE ON DELETE CASCADE;
+ALTER TABLE `UsersLocations`
+	CHANGE COLUMN `CountryCode` `CountryCode` CHAR(2) NULL DEFAULT NULL COLLATE 'utf8mb4_unicode_ci' AFTER `State`,
+	ADD CONSTRAINT `FK_UsersLocations_Countries` FOREIGN KEY (`CountryCode`) REFERENCES `Countries` (`CountryCode`) ON UPDATE CASCADE ON DELETE CASCADE;
 
-ALTER TABLE `Users`
-	CHANGE COLUMN `ValidatedPhone` `ValidatedPhone` TINYINT(1) NULL DEFAULT '0' COMMENT 'Celular validado.' AFTER `ValidatedEmail`;
+ALTER TABLE `CountriesStates`
+	ADD CONSTRAINT `FK_CountriesStates_Countries` FOREIGN KEY (`CountryCode`) REFERENCES `Countries` (`CountryCode`) ON UPDATE CASCADE ON DELETE CASCADE;
 
-CREATE TABLE `LandingContacts` (
-	`ID` INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
-	`Date` DATETIME NULL DEFAULT current_timestamp() COMMENT 'Fecha y hora del contacto',
-	`Name` VARCHAR(100) NOT NULL COLLATE 'utf8mb4_unicode_ci',
-	`Email` VARCHAR(100) NOT NULL COLLATE 'utf8mb4_unicode_ci',
-	`SocialNetwork` VARCHAR(100) NOT NULL COMMENT 'Red social del guía' COLLATE 'utf8mb4_unicode_ci',
-	`CountryCode` CHAR(2) NOT NULL COMMENT 'Código del país del guia' COLLATE 'utf8mb4_unicode_ci',
-	`City` VARCHAR(60) NOT NULL COMMENT 'Ciudad o localidad' COLLATE 'utf8mb4_unicode_ci',
-	`Role` ENUM('Guide','Seeker') NOT NULL COMMENT 'Rol de la persona que contacta' COLLATE 'utf8mb4_unicode_ci',
-	`Specialization` VARCHAR(50) NULL DEFAULT NULL COMMENT 'Especialización del guía' COLLATE 'utf8mb4_unicode_ci',
-	`LookingFor` VARCHAR(255) NULL DEFAULT NULL COMMENT 'que necesita el buscador' COLLATE 'utf8mb4_unicode_ci',
-	`Browser` VARCHAR(255) NULL DEFAULT NULL COMMENT 'Nombre del navegador' COLLATE 'utf8mb4_unicode_ci',
-	`BrowserVersion` VARCHAR(50) NULL DEFAULT NULL COMMENT 'Versión del navegador' COLLATE 'utf8mb4_unicode_ci',
-	`Os` VARCHAR(255) NULL DEFAULT NULL COMMENT 'Sistema operativo utilizado' COLLATE 'utf8mb4_unicode_ci',
-	`Device` VARCHAR(50) NULL DEFAULT NULL COMMENT 'Tipo de dispositivo' COLLATE 'utf8mb4_unicode_ci',
-	`IP` VARCHAR(45) NULL DEFAULT NULL COMMENT 'Dirección IP del dispositivo desde el cual se realizó el contacto' COLLATE 'utf8mb4_unicode_ci',
-	PRIMARY KEY (`ID`) USING BTREE
-)
-COMMENT='Guardo los datos de quienes contactan con el formulario de la landing page'
-COLLATE='utf8mb4_unicode_ci'
-ENGINE=InnoDB
-AUTO_INCREMENT=3
-;
+-- Estados Unidos (en inglés)
+INSERT INTO CountriesStates (CountryCode, StateName) VALUES
+('US', 'Alabama'),
+('US', 'Alaska'),
+('US', 'Arizona'),
+('US', 'Arkansas'),
+('US', 'California'),
+('US', 'Colorado'),
+('US', 'Connecticut'),
+('US', 'Delaware'),
+('US', 'Florida'),
+('US', 'Georgia'),
+('US', 'Hawaii'),
+('US', 'Idaho'),
+('US', 'Illinois'),
+('US', 'Indiana'),
+('US', 'Iowa'),
+('US', 'Kansas'),
+('US', 'Kentucky'),
+('US', 'Louisiana'),
+('US', 'Maine'),
+('US', 'Maryland'),
+('US', 'Massachusetts'),
+('US', 'Michigan'),
+('US', 'Minnesota'),
+('US', 'Mississippi'),
+('US', 'Missouri'),
+('US', 'Montana'),
+('US', 'Nebraska'),
+('US', 'Nevada'),
+('US', 'New Hampshire'),
+('US', 'New Jersey'),
+('US', 'New Mexico'),
+('US', 'New York'),
+('US', 'North Carolina'),
+('US', 'North Dakota'),
+('US', 'Ohio'),
+('US', 'Oklahoma'),
+('US', 'Oregon'),
+('US', 'Pennsylvania'),
+('US', 'Rhode Island'),
+('US', 'South Carolina'),
+('US', 'South Dakota'),
+('US', 'Tennessee'),
+('US', 'Texas'),
+('US', 'Utah'),
+('US', 'Vermont'),
+('US', 'Virginia'),
+('US', 'Washington'),
+('US', 'West Virginia'),
+('US', 'Wisconsin'),
+('US', 'Wyoming');
 
-CREATE TABLE `LandingEmails` (
-	`ID` INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
-	`Date` DATETIME NULL DEFAULT current_timestamp() COMMENT 'Fecha y hora del contacto',
-	`Email` VARCHAR(100) NOT NULL COLLATE 'utf8mb4_unicode_ci',
-	`Browser` VARCHAR(255) NULL DEFAULT NULL COMMENT 'Nombre del navegador' COLLATE 'utf8mb4_unicode_ci',
-	`BrowserVersion` VARCHAR(50) NULL DEFAULT NULL COMMENT 'Versión del navegador' COLLATE 'utf8mb4_unicode_ci',
-	`Os` VARCHAR(255) NULL DEFAULT NULL COMMENT 'Sistema operativo utilizado' COLLATE 'utf8mb4_unicode_ci',
-	`Device` VARCHAR(50) NULL DEFAULT NULL COMMENT 'Tipo de dispositivo' COLLATE 'utf8mb4_unicode_ci',
-	`IP` VARCHAR(45) NULL DEFAULT NULL COMMENT 'Dirección IP del dispositivo desde el cual se realizó el contacto' COLLATE 'utf8mb4_unicode_ci',
-	PRIMARY KEY (`ID`) USING BTREE
-)
-COMMENT='Guardo los datos de quienes contactan con el formulario de la landing page'
-COLLATE='utf8mb4_unicode_ci'
-ENGINE=InnoDB
-;
+-- Argentina (en español)
+INSERT INTO CountriesStates (CountryCode, StateName) VALUES
+('AR', 'CABA'),
+('AR', 'Buenos Aires'),
+('AR', 'Catamarca'),
+('AR', 'Chaco'),
+('AR', 'Chubut'),
+('AR', 'Córdoba'),
+('AR', 'Corrientes'),
+('AR', 'Entre Ríos'),
+('AR', 'Formosa'),
+('AR', 'Jujuy'),
+('AR', 'La Pampa'),
+('AR', 'La Rioja'),
+('AR', 'Mendoza'),
+('AR', 'Misiones'),
+('AR', 'Neuquén'),
+('AR', 'Río Negro'),
+('AR', 'Salta'),
+('AR', 'San Juan'),
+('AR', 'San Luis'),
+('AR', 'Santa Cruz'),
+('AR', 'Santa Fe'),
+('AR', 'Santiago del Estero'),
+('AR', 'Tierra del Fuego'),
+('AR', 'Tucumán');
 
-DROP TABLE `InAppNotification`;
+-- Brasil (en español)
+INSERT INTO CountriesStates (CountryCode, StateName) VALUES
+('BR', 'Acre'),
+('BR', 'Alagoas'),
+('BR', 'Amapá'),
+('BR', 'Amazonas'),
+('BR', 'Bahía'),
+('BR', 'Ceará'),
+('BR', 'Distrito Federal'),
+('BR', 'Espírito Santo'),
+('BR', 'Goiás'),
+('BR', 'Maranhão'),
+('BR', 'Mato Grosso'),
+('BR', 'Mato Grosso do Sul'),
+('BR', 'Minas Gerais'),
+('BR', 'Pará'),
+('BR', 'Paraíba'),
+('BR', 'Paraná'),
+('BR', 'Pernambuco'),
+('BR', 'Piauí'),
+('BR', 'Río de Janeiro'),
+('BR', 'Río Grande do Norte'),
+('BR', 'Río Grande do Sul'),
+('BR', 'Rondônia'),
+('BR', 'Roraima'),
+('BR', 'Santa Catarina'),
+('BR', 'São Paulo'),
+('BR', 'Sergipe'),
+('BR', 'Tocantins');
 
-UPDATE Offerings SET Approved = 1, ApprovalDate = NOW() WHERE STATUS = 'Active';
-UPDATE Offerings SET Status = 'Active', Approved = 0, ApprovalDate = null WHERE STATUS = 'Pending';
+-- Chile (en español)
+INSERT INTO CountriesStates (CountryCode, StateName) VALUES
+('CL', 'Antofagasta'),
+('CL', 'Araucanía'),
+('CL', 'Atacama'),
+('CL', 'Aysén'),
+('CL', 'Biobío'),
+('CL', 'Coquimbo'),
+('CL', 'Libertador General Bernardo O''Higgins'),
+('CL', 'Los Lagos'),
+('CL', 'Los Ríos'),
+('CL', 'Magallanes'),
+('CL', 'Maule'),
+('CL', 'Metropolitana'),
+('CL', 'Ñuble'),
+('CL', 'Tarapacá');
 
-ALTER TABLE `Offerings`
-	CHANGE COLUMN `Status` `Status` ENUM('Active','Inactive','Deleted') NULL DEFAULT NULL COMMENT 'Estado del servicio' COLLATE 'utf8mb4_unicode_ci' AFTER `UserID`;
+-- Paraguay (en español)
+INSERT INTO CountriesStates (CountryCode, StateName) VALUES
+('PY', 'Amambay'),
+('PY', 'Boquerón'),
+('PY', 'Caaguazú'),
+('PY', 'Caazapá'),
+('PY', 'Central'),
+('PY', 'Concepción'),
+('PY', 'Cordillera'),
+('PY', 'Guairá'),
+('PY', 'Itapúa'),
+('PY', 'Misiones'),
+('PY', 'Ñeembucú'),
+('PY', 'Paraguarí'),
+('PY', 'Presidente Hayes'),
+('PY', 'San Pedro');
 
-ALTER TABLE `Offerings`
-	DROP COLUMN `IsActive`;
-
-ALTER TABLE `Offerings`
-	CHANGE COLUMN `ShortDescription` `ShortDescription` VARCHAR(300) NULL DEFAULT NULL COMMENT 'Descripción corta de la publicación' COLLATE 'utf8mb4_unicode_ci' AFTER `ServiceType`;
+-- Uruguay (en español)
+INSERT INTO CountriesStates (CountryCode, StateName) VALUES
+('UY', 'Artigas'),
+('UY', 'Canelones'),
+('UY', 'Cerro Largo'),
+('UY', 'Colonia'),
+('UY', 'Durazno'),
+('UY', 'Flores'),
+('UY', 'Florida'),
+('UY', 'Lavalleja'),
+('UY', 'Maldonado'),
+('UY', 'Montevideo'),
+('UY', 'Paysandú'),
+('UY', 'Río Negro'),
+('UY', 'Rivera'),
+('UY', 'Rocha'),
+('UY', 'San José'),
+('UY', 'San Pedro'),
+('UY', 'Soriano'),
+('UY', 'Tacuarembó'),
+('UY', 'Treinta y Tres');

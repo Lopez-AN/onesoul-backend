@@ -1,0 +1,16 @@
+{
+  "get_countries": {
+    "CountryCode": {
+      "required": false,
+      "type": "string",
+      "regex": "~[A-Z]{2}~"
+    }
+  },
+  "get_states": {
+    "CountryCode": {
+      "required": true,
+      "type": "string",
+      "regex": "~[A-Z]{2}~"
+    }
+  }
+}

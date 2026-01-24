@@ -76,18 +76,6 @@
       "minlength": 2,
       "maxlength": 50
     },
-    "Email": {
-      "required": false,
-      "type": "email",
-      "maxlength": 100
-    },
-    "Phone": {
-      "required": false,
-      "type": "string",
-      "minlength": 8,
-      "maxlength": 20,
-      "regex": "~^\\+[0-9]+$~"
-    },
     "DateOfBirth": {
       "required": false,
       "type": "date"
