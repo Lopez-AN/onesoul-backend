@@ -806,6 +806,7 @@ class User {
     $user['ValidatedPhone'] = (bool)$user['ValidatedPhone'];
     $user['TwoFactorAuth'] = (bool)$user['TwoFactorAuth'];
     $user['IsAdmin'] = (bool)$user['IsAdmin'];
+    $user['Phone'] = str_replace("+549", "+54", $user['Phone']); # Fix telefonos argentinos
     $user['Categories'] = is_null($user['Categories']) ? [] : array_map(
       function ($a) {
         $a = explode(":", $a);
@@ -852,6 +853,7 @@ class User {
       $e['ValidatedPhone'] = (bool)$e['ValidatedPhone'];
       $e['TwoFactorAuth'] = (bool)$e['TwoFactorAuth'];
       $e['IsAdmin'] = (bool)$e['IsAdmin'];
+      $e['Phone'] = str_replace("+549", "+54", $e['Phone']); # Fix telefonos argentinos
       $e['Categories'] = is_null($e['Categories']) ? [] : array_map(
         function ($a) {
           $a = explode(":", $a);
