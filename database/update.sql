@@ -8,8 +8,16 @@ ALTER TABLE `UsersLocations`
 	CHANGE COLUMN `CountryCode` `CountryCode` CHAR(2) NULL DEFAULT NULL COLLATE 'utf8mb4_unicode_ci' AFTER `State`,
 	ADD CONSTRAINT `FK_UsersLocations_Countries` FOREIGN KEY (`CountryCode`) REFERENCES `Countries` (`CountryCode`) ON UPDATE CASCADE ON DELETE CASCADE;
 
-ALTER TABLE `CountriesStates`
-	ADD CONSTRAINT `FK_CountriesStates_Countries` FOREIGN KEY (`CountryCode`) REFERENCES `Countries` (`CountryCode`) ON UPDATE CASCADE ON DELETE CASCADE;
+CREATE TABLE `CountriesStates` (
+	`CountryCode` CHAR(2) NOT NULL COMMENT 'Código pais ISO 3166-1 alpha-2' COLLATE 'utf8mb4_unicode_ci',
+	`StateName` VARCHAR(75) NOT NULL COMMENT 'Nombre del estado o provincia' COLLATE 'utf8mb4_unicode_ci',
+	PRIMARY KEY (`CountryCode`, `StateName`) USING BTREE,
+	CONSTRAINT `FK_CountriesStates_Countries` FOREIGN KEY (`CountryCode`) REFERENCES `Countries` (`CountryCode`) ON UPDATE CASCADE ON DELETE CASCADE
+)
+COMMENT='Guarda los estados/provincias (o como se denomine en dicho pais sus unidades administrativas) '
+COLLATE='utf8mb4_unicode_ci'
+ENGINE=InnoDB
+;
 
 -- Estados Unidos (en inglés)
 INSERT INTO CountriesStates (CountryCode, StateName) VALUES
@@ -176,3 +184,17 @@ INSERT INTO CountriesStates (CountryCode, StateName) VALUES
 ('UY', 'Soriano'),
 ('UY', 'Tacuarembó'),
 ('UY', 'Treinta y Tres');
+
+ALTER TABLE `Countries`
+	ADD COLUMN `PhoneCode` VARCHAR(5) NOT NULL DEFAULT '' COMMENT 'Prefijo telefónico' AFTER `CountryName`;
+
+UPDATE `Countries` SET `PhoneCode`='+54', `IsActive`=1 WHERE `CountryCode`='AR';
+UPDATE `Countries` SET `PhoneCode`='+55', `IsActive`=0 WHERE `CountryCode`='BR';
+UPDATE `Countries` SET `PhoneCode`='+6', `IsActive`=0 WHERE `CountryCode`='CL';
+UPDATE `Countries` SET `PhoneCode`='+595', `IsActive`=0 WHERE `CountryCode`='PY';
+UPDATE `Countries` SET `PhoneCode`='+1', `IsActive`=0 WHERE `CountryCode`='US';
+UPDATE `Countries` SET `PhoneCode`='+598', `IsActive`=0 WHERE `CountryCode`='UY';
+
+ALTER TABLE `Countries`
+	CHANGE COLUMN `CurrencyCode` `CurrencyCode` CHAR(3) NOT NULL COMMENT 'Moneda asociada al país' COLLATE 'utf8mb4_unicode_ci' AFTER `CountryCode`,
+	CHANGE COLUMN `PhoneCode` `PhoneCode` VARCHAR(5) NOT NULL COMMENT 'Prefijo telefónico' COLLATE 'utf8mb4_unicode_ci' AFTER `CountryName`;
