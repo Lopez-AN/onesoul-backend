@@ -1198,15 +1198,14 @@ class AuthController{
   }
 
   /**
-   * Envía un código OTP por email para validación
-   * @param  Request $request: objeto de request HTTP (requiere JWT opcional)
+   * Envía un código OTP por email para validación en el proceso de registración
+   * @param  Request $request: objeto de request HTTP
    * @param  Response $response: objeto de response HTTP
    * @param  array $args: argumentos de ruta
    * @return Response: JSON con confirmación o error
    * @statusCode 200: OTP enviado exitosamente
    * @statusCode 400: parámetros inválidos
    * @statusCode 401: reCaptcha inválido
-   * @statusCode 404: usuario no encontrado
    * @statusCode 500: error del servidor o fallo al enviar email
    **/
   public function sendOtpMail(Request $request, Response $response, $args) {
@@ -1228,57 +1227,19 @@ class AuthController{
         return $validation->response;
       }
 
-      # MODO SIN TOKEN (usa redis, para usuarios no existentes)
-      if(!$jwt){
-        if(!$params['Email']){ # Si no hay token tiene que haber email
-          return $response->withStatus(401)->withJson([
-            "error" => [
-              "code" => "INVALID_PARAMETERS",
-              "desc" => "Parameters are missing or invalid"
-            ]
-          ]);
-        }
-        $otpCode = $this->_setOtpCodeRedis($params['Email']);
-
-        $event = $this->notification->getEventType("SEND_OTP", "es");
-        if(!empty($event)){
-          $payload = [
-            "ACTION"       => "Valida tu cuenta de correo",
-            "YEAR"         => date('Y'),
-            "OTP_CODE"     => $otpCode,
-            "USERNAME"     => $params['Email']
-          ];
-          $subject = $this->notification->renderTemplate($event[0]['TemplateSubject'], $payload);
-          $template = $this->notification->renderTemplate($event[0]['TemplateBody'], $payload);
-          EmailHelper::send($params['Email'], $subject, $template);
-        }
-      }else{ # MODO CON TOKEN (usa la base, para usuarios existentes)
-        $user = $this->user->getUserById($jwt->data -> UserID);
-        if(empty($user)){
-          return $response->withStatus(404)->withJson([
-            "error" => [
-              "code" => "USER_NOT_FOUND",
-              "desc" => "No user associated with the specified id was found"
-            ]
-          ]);
-        }
-        $otpCode = $this->auth->setOtpCodeDB($user['UserID']);
-
-        # Notificación para el buscador
+      $otpCode = $this->_setOtpCodeRedis($params['Email']);
+      $event = $this->notification->getEventType("SEND_OTP", "es");
+      if(!empty($event)){
         $payload = [
           "ACTION"       => "Valida tu cuenta de correo",
           "YEAR"         => date('Y'),
           "OTP_CODE"     => $otpCode,
-          "USERNAME"     => $user['UserName']
+          "USERNAME"     => $params['Email']
         ];
-        $this->notification->createNotification(
-          $user['UserID'],
-          "SEND_OTP",
-          $payload,
-          "SEND_OTP." . time() . ".VALIDATE"
-        );
+        $subject = $this->notification->renderTemplate($event[0]['TemplateSubject'], $payload);
+        $template = $this->notification->renderTemplate($event[0]['TemplateBody'], $payload);
+        EmailHelper::send($params['Email'], $subject, $template);
       }
-
       return $response->withStatus(200)->withJson("OTP code sent");
     } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
@@ -1291,7 +1252,7 @@ class AuthController{
   }
 
   /**
-   * Valida un código OTP recibido por email
+   * Valida un código OTP recibido por email durante el proceso de registro
    * @param  Request $request: objeto de request HTTP (requiere JWT opcional)
    * @param  Response $response: objeto de response HTTP
    * @param  array $args: argumentos de ruta
@@ -1299,7 +1260,6 @@ class AuthController{
    * @statusCode 200: OTP validado exitosamente
    * @statusCode 400: parámetros inválidos o OTP expirado
    * @statusCode 401: reCaptcha o código OTP inválido
-   * @statusCode 404: usuario no encontrado
    * @statusCode 500: error del servidor
    **/
   public function validateOtpMail(Request $request, Response $response, $args) {
@@ -1321,20 +1281,11 @@ class AuthController{
         return $validation->response;
       }
 
-      # MODO SIN TOKEN (usa redis, para usuarios no existentes)
-      if(!$jwt){
-        if(!$params['Email']){ # Si no hay token tiene que haber email
-          return $response->withStatus(401)->withJson([
-            "error" => [
-              "code" => "INVALID_PARAMETERS",
-              "desc" => "Parameters are missing or invalid"
-            ]
-          ]);
-        }
-        return $this->_validateOtpMailRedis($response, $params['Email'], $params['OTPCode']);
+      $result = $this->_validateOtpMail($response, $params['Email'], $params['OTPCode']);
+      if(!$result->valid){
+        return $result->response;
       }
-      # MODO CON TOKEN (usa la base, para usuarios existentes)
-      return $this->_validateOtpMail($response, $jwt->data->UserID, $params['OTPCode']);
+      return $response->withStatus(200)->withJson("OTP code validated successfully");
     } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -1346,97 +1297,7 @@ class AuthController{
   }
 
   /**
-   * Valida código OTP contra Redis para usuarios en proceso de registro
-   * @param  Response $response: objeto de response HTTP
-   * @param  string $email: email del usuario
-   * @param  string $otpCode: código OTP a validar
-   * @return Response: JSON con confirmación o error
-   * @statusCode 200: OTP validado exitosamente
-   * @statusCode 401: código OTP inválido, expirado o máximo de intentos
-   **/
-  private function _validateOtpMailRedis($response, $email, $otpCode){
-    $MAX_ATTEMPTS = 5;
-
-    $otpJson = $this->redis->get("otp:{$email}");
-    # Decodificar JSON
-    $otpData = @json_decode($otpJson);
-    if (!$otpData) {
-      return $response->withStatus(404)->withJson([
-        "error" => [
-          "code" => "OTP_CODE_NOT_FOUND",
-          "desc" => "OTP code is not set. Please request a new OTP."
-        ]
-      ]);
-    }
-    $attempts = $otpData -> attempts;
-    $hashedOtp = $otpData -> otp_hash;
-    $expiresAt = $otpData -> expires_at;
-
-    # Verificar si expiro
-    if (time() > $expiresAt) {
-      $this->redis->del("otp:{$email}");
-
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "EXPIRED_OTP",
-          "desc" => "OTP has expired. Please request a new OTP."
-        ]
-      ]);
-    }
-
-    # Verificar intentos fallidos
-    if ($attempts >= $MAX_ATTEMPTS) {
-      $this->redis->del("otp:{$email}");
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "OTP_MAX_ATTEMPTS",
-          "desc" => "Maximum OTP attempts reached. Please request a new OTP."
-        ]
-      ]);
-    }
-
-    # Verificar OTP
-    if (!password_verify($otpCode, $hashedOtp)) { # No es valido
-      # Incrementar intentos en el JSON
-      $otpData -> attempts++;
-      $this->redis->setex("otp:{$email}", 86400, json_encode($otpData));
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "OTP_CODE_INVALID",
-          "desc" => "Invalid OTP code"
-        ]
-      ]);
-    }
-
-    # OTP válido
-    $otpData -> validated = true;
-    $this->redis->setex("otp:{$email}", 86400, json_encode($otpData));
-    return $response->withStatus(200)->withJson("OTP code validated successfully");
-  }
-
-  /**
-   * Valida código OTP contra la base de datos para usuarios registrados
-   * @param  Response $response: objeto de response HTTP
-   * @param  int $userId: ID del usuario
-   * @param  string $otpCode: código OTP a validar
-   * @return Response: JSON con confirmación o error
-   * @statusCode 200: OTP validado exitosamente
-   * @statusCode 401: código OTP inválido
-   **/
-  private function _validateOtpMail($response, $userID, $otpCode) {
-    $validation = $this->_validateOtpCode($response, $userID, $otpCode);
-    if (!$validation->valid) {
-      return $validation->response;
-    }
-
-    $this->auth->clearUserOtp($userID);
-    $this->auth->validateUserEmail($userID);
-
-    return $response->withStatus(200)->withJson("OTP code validated successfully");
-  }
-
-  /**
-   * Envía un código OTP por SMS para validar un teléfono
+   * Envía un código OTP por SMS para solicitar un cambio de email
    * @param  Request $request: objeto de request HTTP
    * @param  Response $response: objeto de response HTTP
    * @param  array $args: argumentos de ruta
@@ -1447,7 +1308,221 @@ class AuthController{
    * @statusCode 404: usuario no encontrado
    * @statusCode 500: error del servidor o fallo al enviar email
    **/
-  public function sendOtpPhone(Request $request, Response $response, $args) {
+  public function requestEmailChange(Request $request, Response $response, $args) {
+    $params = $request->getParsedBody();
+    $jwt = $request->getAttribute('jwt');
+
+    $pValidation = ParameterValidator::validate($response, 'auth','send_otp_mail', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
+    }
+    $params = $pValidation->values;
+
+    $clientIp = $request->getServerParams()['REMOTE_ADDR'];
+
+    try {
+      # Valido recaptcha
+      $validation = validateReCaptcha($response, $params['RecaptchaToken'], $clientIp);
+      if (!$validation->valid) {
+        return $validation->response;
+      }
+
+      $user = $this->user->getUserById($jwt->data->UserID);
+      if(empty($user)){
+        return (object)[
+          "valid" => false,
+          "response" => $response->withStatus(404)->withJson([
+            "error" => [
+              "code" => "USER_NOT_FOUND",
+              "desc" => "No user associated with the specified id was found"
+            ]
+          ])
+        ];
+      }
+
+      if($params['Email'] === $user['Email']){
+        return $response->withStatus(422 )->withJson([
+          "error" => [
+            "code" => "UNCHANGED_EMAIL",
+            "desc" => "The new email is the same as the current one"
+          ]
+        ]);
+      }
+
+      # Valido que no se repita el email en otro usuario
+      $check = $this->user->getUserByEmail($params['Email']);
+      if($check && $check['UserID'] !== $jwt->data->UserID){
+        return $response->withStatus(409)->withJson([
+          "error" => [
+            "code" => "DUPLICATED_EMAIL",
+            "desc" => "Another user with the specified email already exists"
+          ]
+        ]);
+      }
+
+      $otpCode = $this->_setOtpCodeRedis($params['Email']);
+      $event = $this->notification->getEventType("SEND_OTP", "es");
+      if(!empty($event)){
+        $payload = [
+          "ACTION"       => "Valida tu cuenta de correo",
+          "YEAR"         => date('Y'),
+          "OTP_CODE"     => $otpCode,
+          "USERNAME"     => $params['Email']
+        ];
+        $subject = $this->notification->renderTemplate($event[0]['TemplateSubject'], $payload);
+        $template = $this->notification->renderTemplate($event[0]['TemplateBody'], $payload);
+        EmailHelper::send($params['Email'], $subject, $template);
+      }
+      return $response->withStatus(200)->withJson('Email change requested, OTP sent');
+    } catch (Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+           "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  /**
+   * Verifica un código OTP enviado por email para confirmar un cambio de email
+   * @param  Request $request: objeto de request HTTP (requiere JWT opcional)
+   * @param  Response $response: objeto de response HTTP
+   * @param  array $args: argumentos de ruta
+   * @return Response: JSON con confirmación o error
+   * @statusCode 200: OTP validado exitosamente
+   * @statusCode 400: parámetros inválidos o OTP expirado
+   * @statusCode 401: reCaptcha o código OTP inválido
+   * @statusCode 500: error del servidor
+   **/
+  public function validateEmailChange(Request $request, Response $response, $args) {
+    $params = $request->getParsedBody();
+    $jwt = $request->getAttribute('jwt');
+
+    $pValidation = ParameterValidator::validate($response, 'auth','validate_otp_mail', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
+    }
+    $params = $pValidation->values;
+
+    $clientIp = $request->getServerParams()['REMOTE_ADDR'];
+
+    try {
+      # Valido recaptcha
+      $validation = validateReCaptcha($response, $params['RecaptchaToken'], $clientIp);
+      if (!$validation->valid) {
+        return $validation->response;
+      }
+
+      $result = $this->_validateOtpMail($response, $params['Email'], $params['OTPCode']);
+      if(!$result->valid){
+        return $result->response;
+      }
+      $this->auth->changeUserMail($jwt->data->UserID, $params['Email']);
+      return $response->withStatus(200)->withJson('Email change confirmed');
+    } catch (Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+           "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  /**
+   * Valida código OTP contra Redis
+   * @param  Response $response: objeto de response HTTP
+   * @param  string $email: email del usuario
+   * @param  string $otpCode: código OTP a validar
+   * @return Response: JSON con confirmación o error
+   * @statusCode 200: OTP validado exitosamente
+   * @statusCode 401: código OTP inválido, expirado o máximo de intentos
+   **/
+  private function _validateOtpMail($response, $email, $otpCode){
+    $MAX_ATTEMPTS = 5;
+
+    $otpJson = $this->redis->get("otp:{$email}");
+    # Decodificar JSON
+    $otpData = @json_decode($otpJson);
+    if (!$otpData) {
+      return (object)[
+        "valid" => false,
+        "response" => $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "OTP_CODE_NOT_FOUND",
+            "desc" => "OTP code is not set. Please request a new OTP."
+          ]
+        ])
+      ];
+    }
+    $attempts = $otpData -> attempts;
+    $hashedOtp = $otpData -> otp_hash;
+    $expiresAt = $otpData -> expires_at;
+
+    # Verificar si expiro
+    if (time() > $expiresAt) {
+      $this->redis->del("otp:{$email}");
+      return (object)[
+        "valid" => false,
+        "response" => $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "EXPIRED_OTP",
+            "desc" => "OTP has expired. Please request a new OTP."
+          ]
+        ])
+      ];
+    }
+
+    # Verificar intentos fallidos
+    if ($attempts >= $MAX_ATTEMPTS) {
+      $this->redis->del("otp:{$email}");
+      return (object)[
+        "valid" => false,
+        "response" => $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "OTP_MAX_ATTEMPTS",
+            "desc" => "Maximum OTP attempts reached. Please request a new OTP."
+          ]
+        ])
+      ];
+    }
+
+    # Verificar OTP
+    if (!password_verify($otpCode, $hashedOtp)) { # No es valido
+      # Incrementar intentos en el JSON
+      $otpData -> attempts++;
+      $this->redis->setex("otp:{$email}", 86400, json_encode($otpData));
+      return (object)[
+        "valid" => false,
+        "response" => $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "OTP_CODE_INVALID",
+            "desc" => "Invalid OTP code"
+          ]
+        ])
+      ];
+    }
+
+    # OTP válido
+    $otpData -> validated = true;
+    $this->redis->setex("otp:{$email}", 86400, json_encode($otpData));
+    return (object)["valid" => true, "response" => null];
+  }
+
+  /**
+   * Envía un código OTP por SMS para solicitar un cambio de teléfono
+   * @param  Request $request: objeto de request HTTP
+   * @param  Response $response: objeto de response HTTP
+   * @param  array $args: argumentos de ruta
+   * @return Response: JSON con confirmación o error
+   * @statusCode 200: OTP enviado exitosamente
+   * @statusCode 400: parámetros inválidos
+   * @statusCode 401: reCaptcha inválido
+   * @statusCode 404: usuario no encontrado
+   * @statusCode 500: error del servidor o fallo al enviar email
+   **/
+  public function requestPhoneChange(Request $request, Response $response, $args) {
     $params = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
 
@@ -1466,15 +1541,44 @@ class AuthController{
         return $validation->response;
       }
 
-      # Valido usuario y telefono
-      $validation = $this -> _validateUserPhone($response, $jwt->data->UserID);
-      if(!$validation->valid){
-        return $validation->response;
+      $user = $this->user->getUserById($jwt->data->UserID);
+      if(empty($user)){
+        return (object)[
+          "valid" => false,
+          "response" => $response->withStatus(404)->withJson([
+            "error" => [
+              "code" => "USER_NOT_FOUND",
+              "desc" => "No user associated with the specified id was found"
+            ]
+          ])
+        ];
       }
-      $phone = $validation->response;
 
-      $this->twilio->sendOtpSms($phone);
-      return $response->withStatus(200)->withJson('OTP sent');
+      $newPhone = $this->twilio->fixArgPhone($params['Phone']);
+      $currentPhone = $user['Phone'] ? $this->twilio->fixArgPhone($user['Phone']) : null;
+
+      if($currentPhone && $newPhone === $currentPhone){
+        return $response->withStatus(422 )->withJson([
+          "error" => [
+            "code" => "UNCHANGED_PHONE",
+            "desc" => "The new phone is the same as the current one"
+          ]
+        ]);
+      }
+
+      # Valido que no se repita el email en otro usuario
+      $check = $this->user->getUserByPhone($newPhone);
+      if($check && $check['UserID'] !== $jwt->data->UserID){
+        return $response->withStatus(409)->withJson([
+          "error" => [
+            "code" => "DUPLICATED_PHONE",
+            "desc" => "Another user with the specified phone already exists"
+          ]
+        ]);
+      }
+
+      $this->twilio->sendOtpSms($newPhone);
+      return $response->withStatus(200)->withJson('Phone change requested, SMS OTP sent');
     } catch (\Twilio\Exceptions\RestException $e) {
       $error = $this->twilio->handleTwilioException($e->getCode() ?: 0);
       return $response->withStatus($error->status)->withJson([
@@ -1494,7 +1598,7 @@ class AuthController{
   }
 
   /**
-   * Verifica un código OTP recibido por SMS
+   * Verifica un código OTP enviado por SMS para confirmar un cambio de teléfono
    * @param  Request $request: objeto de request HTTP
    * @param  Response $response: objeto de response HTTP
    * @param  array $args: argumentos de ruta
@@ -1504,7 +1608,7 @@ class AuthController{
    * @statusCode 401: código OTP inválido o expirado
    * @statusCode 500: error del servidor
    **/
-  public function validateOtpPhone(Request $request, Response $response, $args) {
+  public function validatePhoneChange(Request $request, Response $response, $args) {
     $params = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
 
@@ -1523,14 +1627,21 @@ class AuthController{
         return $validation->response;
       }
 
-      # Valido usuario y telefono
-      $validation = $this -> _validateUserPhone($response, $jwt->data->UserID);
-      if(!$validation->valid){
-        return $validation->response;
+      $user = $this->user->getUserById($jwt->data->UserID);
+      if(empty($user)){
+        return (object)[
+          "valid" => false,
+          "response" => $response->withStatus(404)->withJson([
+            "error" => [
+              "code" => "USER_NOT_FOUND",
+              "desc" => "No user associated with the specified id was found"
+            ]
+          ])
+        ];
       }
-      $phone = $validation->response;
 
-      $valid = $this->twilio->validateOtpSms($phone, $params['OTPCode']);
+      $newPhone = $this->twilio->fixArgPhone($params['Phone']);
+      $valid = $this->twilio->validateOtpSms($newPhone, $params['OTPCode']);
       if (!$valid) {
         return $response->withStatus(401)->withJson([
           "error" => [
@@ -1540,8 +1651,8 @@ class AuthController{
         ]);
       }
 
-      $this->auth->validateUserPhone($jwt->data->UserID);
-      return $response->withStatus(200)->withJson('OTP code verified');
+      $this->auth->changeUserPhone($jwt->data->UserID, $newPhone);
+      return $response->withStatus(200)->withJson('Phone change confirmed');
     } catch (\Twilio\Exceptions\RestException $e) {
       $error = $this->twilio->handleTwilioException($e->getCode() ?: 0);
       return $response->withStatus($error->status)->withJson([
@@ -1757,7 +1868,7 @@ class AuthController{
     $jwt = $request->getAttribute('jwt');
 
     try {
-      $userID = $jwt->data -> UserID;
+      $userID = $jwt->data->UserID;
       $user = $this->user->getUserById($userID);
       if(!$user){
         return $response->withStatus(404)->withJson([
@@ -1929,10 +2040,8 @@ class AuthController{
   public function mfaReq(Request $request, Response $response, $args){
     $jwt = $request->getAttribute('jwt');
 
-    $userID = $jwt->data -> UserID;
-
     try{
-      $user = $this->user->getUserById($userID);
+      $user = $this->user->getUserById($jwt->data->UserID);
       if(!$user){
         return $response->withStatus(404)->withJson([
           "error" => [
@@ -1981,23 +2090,17 @@ class AuthController{
    * @statusCode 500: error del servidor
    **/
   public function mfaSet(Request $request, Response $response, $args){
-    $data = $request->getParsedBody();
+    $params = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
 
-    # Verificar si el body es un array/object válido
-    if (!is_array($data) && !is_object($data)) {
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "INVALID_JSON",
-          "desc" => "Request body must be valid JSON"
-        ]
-      ]);
+    $pValidation = ParameterValidator::validate($response, 'auth','mfa_set', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
     }
-
-    $userID = $jwt->data -> UserID;
+    $params = $pValidation->values;
 
     try{
-      $user = $this->user->getUserById($userID);
+      $user = $this->user->getUserById($jwt->data->UserID);
       if(!$user){
         return $response->withStatus(404)->withJson([
           "error" => [
@@ -2016,21 +2119,9 @@ class AuthController{
         ]);
       }
 
-      $secret = $data['Secret'] ?? '';
-      $code = $data['Code'] ?? '';
-
-      if(empty($secret) && empty($code)){
-        return $response->withStatus(400)->withJson([
-          "error" => [
-            "code" => "INVALID_PARAMETERS",
-            "desc" => "Parameters are missing or invalid"
-          ]
-        ]);
-      }
-
       # Chequeo el codigo contra el secret
       $g2fa = new \PragmaRX\Google2FA\Google2FA();
-      if(!$g2fa -> verifyKey($secret, $code)){
+      if(!$g2fa -> verifyKey($params['Secret'], $params['Code'])){
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "INVALID_MFA_CODE",
@@ -2039,19 +2130,13 @@ class AuthController{
         ]);
       }
 
-      $this->auth->mfaSet($userID,$secret);
-      return $response->withStatus(200)->withJson([
-        "Message" => "MFA is set"
-      ]);
+      $this->auth->mfaSet($jwt->data->UserID, $params['Secret']);
+      return $response->withStatus(200)->withJson("MFA set");
     } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
-          "debug" => [
-            "code" => $code,
-            "secret" => $secret
-          ],
-           "desc" => $e->getMessage()
+          "desc" => $e->getMessage()
         ]
       ]);
     }
@@ -2072,10 +2157,8 @@ class AuthController{
   public function mfaDel(Request $request, Response $response, $args){
     $jwt = $request->getAttribute('jwt');
 
-    $userID = $jwt->data -> UserID;
-
     try{
-      $user = $this->user->getUserById($userID);
+      $user = $this->user->getUserById($jwt->data->UserID);
       if(!$user){
         return $response->withStatus(404)->withJson([
           "error" => [
@@ -2094,10 +2177,8 @@ class AuthController{
         ]);
       }
 
-      $this->auth->mfaDel($userID);
-      return $response->withStatus(200)->withJson([
-        "Message" => "MFA unset"
-      ]);
+      $this->auth->mfaDel($jwt->data->UserID);
+      return $response->withStatus(200)->withJson("MFA unset");
     } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -2121,22 +2202,17 @@ class AuthController{
    * @statusCode 500: error del servidor
    **/
   public function mfaCheck(Request $request, Response $response, $args){
-    $code = $args['code'];
+    $params['Code'] = $args['Code'];
     $jwt = $request->getAttribute('jwt');
 
-    $userID = $jwt->data -> UserID;
-
-    if(empty($code) || !is_numeric($code)){
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "INVALID_PARAMETERS",
-          "desc" => "Parameters are missing or invalid"
-        ]
-      ]);
+    $pValidation = ParameterValidator::validate($response, 'auth','mfa_check', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
     }
+    $params = $pValidation->values;
 
     try{
-      $mfa = $this->auth->getMfa($userID);
+      $mfa = $this->auth->getMfa($jwt->data->UserID);
       if(!$mfa){
         return $response->withStatus(401)->withJson([
           "error" => [
@@ -2147,7 +2223,7 @@ class AuthController{
       }
 
       # Verifico el OTP
-      $validation = $this -> _mfaCheck($response, $userID, $code, $mfa['MfaSecret'], $mfa['FailedLoginAttempts'], $mfa['LockedUntil']);
+      $validation = $this -> _mfaCheck($response, $jwt->data->UserID, $params['Code'], $mfa['MfaSecret'], $mfa['FailedLoginAttempts'], $mfa['LockedUntil']);
       if(!$validation->valid){
         return $validation->response;
       }
@@ -2583,55 +2659,5 @@ class AuthController{
     $this->redis->setex("otp:{$email}", 86400, json_encode($otpData));
 
     return $otpCode;
-  }
-
-  /**
-   * Valida que el usuario exista tenga un teléfono configurado y válido
-   * @param Response $response: objeto de response HTTP
-   * @param $userID: ID del usuario a validar
-   * @return Response|string Retorna Response con error si falla, el numero de telefono si es válido
-   */
-  private function _validateUserPhone(Response $response, $userID) {
-    $user = $this->user->getUserById($userID);
-    if(empty($user)){
-      return (object)[
-        "valid" => false,
-        "response" => $response->withStatus(404)->withJson([
-          "error" => [
-            "code" => "USER_NOT_FOUND",
-            "desc" => "No user associated with the specified id was found"
-          ]
-        ])
-      ];
-    }
-
-    # Verificar que el usuario tenga teléfono configurado
-    if (empty($user['Phone'])) {
-      return (object)[
-        "valid" => false,
-        "response" => $response->withStatus(400)->withJson([
-          "error" => [
-          "code" => "USER_PHONE_NOT_CONFIGURED",
-          "desc" => "The user does not have a phone configured"
-          ]
-        ])
-      ];
-    }
-
-    # Validar formato internacional: + seguido de 10-15 dígitos
-    if (preg_match('/^\+\d{10,15}$/', $user['Phone']) !== 1) {
-      return (object)[
-        "valid" => false,
-        "response" => $response->withStatus(400)->withJson([
-          "error" => [
-            "code" => "USER_PHONE_INVALID",
-            "desc" => "The configured user phone is invalid"
-          ]
-        ])
-      ];
-    }
-
-    # Validación exitosa
-    return (object)["valid" => true, "response" => $user['Phone']];
   }
 }

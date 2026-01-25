@@ -40,10 +40,9 @@ return function (App $app) {
   $app->post('/register/facebook', [$authController, 'registerFacebook']);
   $app->post('/register/google', [$authController, 'registerGoogle']);
   $app->post('/register/apple', [$authController, 'registerApple']);
-  $app->post('/register/send_otp_mail', [$authController, 'sendOtpMail'])->add($optionalJwt);
-  $app->post('/register/otp', [$authController, 'validateOtpMail'])->add($optionalJwt);
-  $app->post('/auth/phone/otp', [$authController, 'sendOtpPhone'])->add($requiredJwt);
-  $app->post('/auth/phone/verify', [$authController, 'validateOtpPhone'])->add($requiredJwt);
+  $app->post('/register/send_otp_mail', [$authController, 'sendOtpMail']);
+  $app->post('/register/validate_otp_mail', [$authController, 'validateOtpMail']);
+
   $app->post('/recaptcha', [$authController, 'validateReCaptcha']);
   $app->get('/auth/refresh_token', [$authController, 'refreshToken'])->add($noExpireJwt);
   $app->post('/auth/request_password_reset', [$authController, 'requestPasswordReset']);
@@ -51,7 +50,12 @@ return function (App $app) {
   $app->get('/auth/mfa_req', [$authController, 'mfaReq'])->add($requiredJwt);
   $app->post('/auth/mfa_set', [$authController, 'mfaSet'])->add($requiredJwt);
   $app->delete('/auth/mfa_del', [$authController, 'mfaDel'])->add($requiredJwt);
-  $app->get('/auth/mfa_check/{code}', [$authController, 'mfaCheck'])->add($requiredJwt);
+  $app->get('/auth/mfa_check/{Code}', [$authController, 'mfaCheck'])->add($requiredJwt);
   $app->post('/legal', [$authController, 'uploadLegalDocuments'])->add($requiredJwt);
   $app->get('/legal', [$authController, 'legalDocuments']);
+
+  $app->patch('/profile/email/change/request', [$authController, 'requestEmailChange'])->add($requiredJwt);
+  $app->patch('/profile/email/change/validate', [$authController, 'validateEmailChange'])->add($requiredJwt);
+  $app->patch('/profile/phone/change/request', [$authController, 'requestPhoneChange'])->add($requiredJwt);
+  $app->patch('/profile/phone/change/validate', [$authController, 'validatePhoneChange'])->add($requiredJwt);
 };

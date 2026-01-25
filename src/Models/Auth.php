@@ -209,12 +209,21 @@ class Auth{
   }
 
   /**
-   * Marca el telefono de un usuario como validado
+   * Cambia el telefono de un usuario y lo marca como validado
    * @param  int $userID: ID del usuario
    **/
-  public function validateUserPhone($userID){
-    $stmt = $this->db->prepare("UPDATE Users SET ValidatedPhone = 1 WHERE UserID = ?");
-    $stmt->execute([$userID]);
+  public function changeUserPhone($userID, $phone){
+    $stmt = $this->db->prepare("UPDATE Users SET ValidatedPhone = 1, Phone = ? WHERE UserID = ?");
+    $stmt->execute([$phone, $userID]);
+  }
+
+  /**
+   * Cambia el email de un usuario y lo marca como validado
+   * @param  int $userID: ID del usuario
+   **/
+  public function changeUserMail($userID, $email){
+    $stmt = $this->db->prepare("UPDATE Users SET ValidatedEmail = 1, Email = ? WHERE UserID = ?");
+    $stmt->execute([$email, $userID]);
   }
 
   /**

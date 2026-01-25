@@ -54,7 +54,7 @@ class TwilioService{
   }
 
   public function sendOtpSms(string $phoneNumber) {
-    $phoneNumber = $this -> _fixArgPhone($phoneNumber);
+    $phoneNumber = $this -> fixArgPhone($phoneNumber);
     $this->client->verify->v2
       ->services($GLOBALS['config']['twilio']['sender_id'])
       ->verifications
@@ -62,7 +62,7 @@ class TwilioService{
   }
 
   public function validateOtpSms(string $phoneNumber, string $code) {
-    $phoneNumber = $this -> _fixArgPhone($phoneNumber);
+    $phoneNumber = $this -> fixArgPhone($phoneNumber);
     $check = $this->client->verify->v2
       ->services($GLOBALS['config']['twilio']['sender_id'])
       ->verificationChecks
@@ -70,7 +70,6 @@ class TwilioService{
         'to' => $phoneNumber,
         'code' => $code
       ]);
-
     return $check->status === 'approved';
   }
 
@@ -126,7 +125,7 @@ class TwilioService{
   }
 
   # Fix para los numeros argentinos, agregando el 9
-  private function _fixArgPhone(string $phoneNumber){
+  public function fixArgPhone(string $phoneNumber){
     # Si el número empieza con +54 pero NO tiene +549, agregar el 9
     if (preg_match('/^\+54(?!9)/', $phoneNumber)) {
       $phoneNumber = preg_replace('/^\+54/', '+549', $phoneNumber);

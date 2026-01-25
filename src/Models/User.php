@@ -567,6 +567,79 @@ class User {
   }
 
   /**
+   * Obtiene un usuario por su telefono
+   *
+   * Retorna datos sin filtrar de campos sensibles. El controller es responsable
+   * de aplicar el scope de acceso antes de enviar la respuesta al cliente.
+   *
+   * @param  string $phone: Telefono del usuario
+   * @param  bool $activeOnly: si esta en true solo trae usuarios activos
+   * @return array|false: datos del usuario o false si no existe
+   *
+   * @note El filtrado de datos según scope (PUBLIC, USER, ADMIN) debe realizarse en el controller
+   **/
+  public function getUserByPhone($phone, $activeOnly = true) {
+    $wactive = $activeOnly ? " AND u.DeactivationDate IS NULL " : "";
+
+    $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
+    u.UserName, u.DisplayName, u.Email, u.Phone, u.DateOfBirth,
+    u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth,
+    u.MfaSecret, u.UserType, u.RegistrationDate, u.LastLogin, u.DeactivationDate,
+    u.UserLevel, u.SignedContract, u.LegalDocuments, u.ShortDescription,
+    u.OTPDate, u.OTPCode, u.OTPAttemps,
+    u.Oauth2ID, u.Oauth2Service, u.FailedLoginAttempts,
+    u.LockedUntil,u.ReferralCode,u.IsAdmin,
+    sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL, u.IsAdmin,
+    GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
+      ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
+    -- Subconsulta para reviews y ratings
+    (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
+      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
+    (SELECT COUNT(DISTINCT r.ReviewID)
+      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews,
+    -- Subconsulta para locations
+    (SELECT JSON_ARRAYAGG(
+      JSON_OBJECT(
+        'LocationID', l.LocationID,
+        'CountryCode', l.CountryCode,
+        'State', l.State,
+        'City', l.City,
+        'Cp', l.Cp,
+        'LocationName', l.LocationName,
+        'AddressName', l.AddressName,
+        'AddressNumber', l.AddressNumber,
+        'Floor', l.Floor,
+        'Department', l.Department,
+        'IsActive', l.IsActive
+      )
+    ) FROM UsersLocations as l WHERE l.UserID = u.UserID) as user_locations,
+    IF(ct.CurrencyCode IS NULL,'ARS',ct.CurrencyCode) as Currency
+    FROM Users AS u
+    LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
+    LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
+    LEFT JOIN Media AS m ON u.UserID = m.UserID
+    LEFT JOIN (
+      SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
+      MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
+      MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
+      FROM Offerings AS o
+      INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
+      WHERE o.Status = 'Active'
+      GROUP BY o.UserID
+    ) AS sub ON sub.UserID = u.UserID
+    LEFT JOIN UsersLocations as l ON u.UserID = l.UserID AND l.LocationID = 0
+    LEFT JOIN Countries as ct ON l.CountryCode = ct.CountryCode
+    WHERE u.Phone = ? $wactive
+    GROUP BY u.UserID
+    ORDER BY u.UserID");
+
+    $stmt->execute([$phone]);
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    return $this -> _getUserGeneric($user);
+  }
+
+  /**
    * Obtiene un usuario por OAuth ID
    *
    * Retorna datos sin filtrar de campos sensibles. El controller es responsable
