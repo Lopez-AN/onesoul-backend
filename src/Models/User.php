@@ -178,12 +178,10 @@ class User {
       SELECT CategoryID
       FROM Categories
       WHERE CategoryID = ?
-
       UNION ALL
-
       SELECT c.CategoryID
       FROM Categories c
-      INNER JOIN category_tree ct ON c.ParentCategoryID = ct.CategoryID
+      INNER JOIN category_tree AS cat ON c.ParentCategoryID = cat.CategoryID
     )
     SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName,
     u.UserName, u.DisplayName, u.Email, u.Phone, u.DateOfBirth,
@@ -221,7 +219,7 @@ class User {
     FROM Users AS u
     INNER JOIN UsersCategories AS uc ON uc.userID = u.userID
     INNER JOIN Categories AS c ON uc.CategoryID = c.CategoryID
-    INNER JOIN category_tree ct ON ct.CategoryID = c.CategoryID
+    INNER JOIN category_tree AS cat ON cat.CategoryID = c.CategoryID
     LEFT JOIN Media AS m ON u.UserID = m.UserID
     LEFT JOIN (
       SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
