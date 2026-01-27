@@ -42,7 +42,7 @@
       "regex": "~^[A-Z]{2}~"
     },
     "Location": {
-      "required": true,
+      "required": false,
       "type": "string",
       "maxlength": 100
     },
