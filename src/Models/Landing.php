@@ -65,17 +65,18 @@ class Landing {
    **/
   public function saveContactInfo($data, $browser){
     $stmt = $this->db->prepare("INSERT INTO LandingContacts
-      (Name, Email, SocialNetwork, CountryCode, City, Specialization,
+      (Name, Email, SocialNetwork, CountryCode, City, Specialization, Role,
       LookingFor, Browser, BrowserVersion, Os, Device, IP)
       VALUES (:name, :email, :socialNetwork, :countryCode, :city, :specialization,
-      :lookingFor, :browser, :browserVersion, :os, :device, :ip)");
+      :role, :lookingFor, :browser, :browserVersion, :os, :device, :ip)");
 
     $stmt->execute([
       ':name' => $data['Name'],
       ':email' => $data['Email'],
-      ':socialNetwork' => $data['SocialNetwork'],
-      ':countryCode' => $data['CountryCode'],
-      ':city' => $data['City'],
+      ':role' => $data['Role'],
+      ':socialNetwork' => $data['SocialNetwork'] ?? null,
+      ':countryCode' => $data['CountryCode'] ?? null,
+      ':city' => $data['City'] ?? null,
       ':specialization' => $data['Specialization'] ?? null,
       ':lookingFor' => $data['LookingFor'] ?? null,
       ':browser' => $browser['browser'],

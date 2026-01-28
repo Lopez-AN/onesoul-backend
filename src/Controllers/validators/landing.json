@@ -31,17 +31,17 @@
       "regex": "~^(\\+[0-9]{6,14})|[0-9]{6,14}$~"
     },
     "SocialNetwork": {
-      "required": true,
+      "required": false,
       "type": "string",
       "minlength": 10,
       "maxlength": 100
     },
     "CountryCode": {
-      "required": true,
+      "required": false,
       "type": "string",
       "regex": "~^[A-Z]{2}~"
     },
-    "Location": {
+    "City": {
       "required": false,
       "type": "string",
       "maxlength": 100
@@ -54,15 +54,15 @@
   },
   "send_contact_info_guide": {
     "Specialization": {
-      "required": true,
+      "required": false,
       "type": "string",
       "minlength": 5,
-      "maxlength": 60
+      "maxlength": 50
     }
   },
   "send_contact_info_seeker": {
     "LookingFor": {
-      "required": true,
+      "required": false,
       "type": "string",
       "minlength": 10,
       "maxlength": 255

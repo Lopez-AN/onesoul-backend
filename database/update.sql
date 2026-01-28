@@ -198,3 +198,8 @@ UPDATE `Countries` SET `PhoneCode`='+598', `IsActive`=0 WHERE `CountryCode`='UY'
 ALTER TABLE `Countries`
 	CHANGE COLUMN `CurrencyCode` `CurrencyCode` CHAR(3) NOT NULL COMMENT 'Moneda asociada al país' COLLATE 'utf8mb4_unicode_ci' AFTER `CountryCode`,
 	CHANGE COLUMN `PhoneCode` `PhoneCode` VARCHAR(5) NOT NULL COMMENT 'Prefijo telefónico' COLLATE 'utf8mb4_unicode_ci' AFTER `CountryName`;
+
+ALTER TABLE `LandingContacts`
+	CHANGE COLUMN `SocialNetwork` `SocialNetwork` VARCHAR(100) NULL COMMENT 'Red social del guía' COLLATE 'utf8mb4_unicode_ci' AFTER `Email`,
+	CHANGE COLUMN `CountryCode` `CountryCode` CHAR(2) NULL COMMENT 'Código del país del guia' COLLATE 'utf8mb4_unicode_ci' AFTER `SocialNetwork`,
+	CHANGE COLUMN `City` `City` VARCHAR(60) NULL COMMENT 'Ciudad o localidad' COLLATE 'utf8mb4_unicode_ci' AFTER `CountryCode`;
