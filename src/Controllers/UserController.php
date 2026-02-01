@@ -1361,7 +1361,6 @@ class UserController{
         $e['ValidatedEmail'],
         $e['ValidatedPhone'],
         $e['TwoFactorAuth'],
-        $e['RegistrationDate'],
         $e['LastLogin'],
         $e['DeactivationDate'],
         $e['SignedContract'],
