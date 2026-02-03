@@ -59,10 +59,10 @@ class CalController{
     $state = rtrim(strtr(base64_encode($data.'.'.$mac), '+/','-_'), '=');
 
     # Envio al frontend un redirect para que se autentifique con Cal.com y autorize nuestra APP
-    $url = sprintf(
-      'https://app.cal.com/auth/oauth2/authorize?client_id=%s&state=%s',
+    $url = sprintf('https://app.cal.com/auth/oauth2/authorize?client_id=%s&state=%s&redirect_uri=%s',
       urlencode($GLOBALS['config']['cal']['client_id']),
-      urlencode($state)
+      urlencode($state),
+      urlencode($GLOBALS['config']['base_url']."/cal/callback")
     );
     return $response->withStatus(200)->withJson($url);
   }
