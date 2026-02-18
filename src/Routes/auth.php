@@ -8,14 +8,17 @@ use App\Models\Notification;
 use App\Models\Subscription;
 use App\Services\TwilioService;
 use JimTools\JwtAuth\Middleware\JwtAuthentication;
+use JimTools\JwtAuth\Decoder\FirebaseDecoder;
+use JimTools\JwtAuth\Options;
+use JimTools\JwtAuth\Secret;
 use App\Middleware\JwtTokenMiddleware;
 use App\Enums\JwtValidationMode;
 
 return function (App $app) {
-  $jwtMiddleware = new JwtAuthentication([
-    "secret" => $GLOBALS['config']['jwt']['secret'],
-    "attribute" => "jwt"
-  ]);
+  $jwtMiddleware = new JwtAuthentication(
+    new Options(),
+    new FirebaseDecoder(new Secret($GLOBALS['config']['jwt']['secret'], 'HS256'))
+  );
 
   $optionalJwt = new JwtTokenMiddleware($jwtMiddleware, JwtValidationMode::OPTIONAL);
   $requiredJwt = new JwtTokenMiddleware($jwtMiddleware, JwtValidationMode::REQUIRED);

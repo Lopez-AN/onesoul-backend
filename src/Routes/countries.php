@@ -4,6 +4,9 @@ use Slim\App;
 use App\Controllers\CountriesController;
 use App\Models\Countries;
 use JimTools\JwtAuth\Middleware\JwtAuthentication;
+use JimTools\JwtAuth\Decoder\FirebaseDecoder;
+use JimTools\JwtAuth\Options;
+use JimTools\JwtAuth\Secret;
 use App\Middleware\JwtTokenMiddleware;
 use App\Enums\JwtValidationMode;
 
