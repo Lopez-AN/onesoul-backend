@@ -6,7 +6,7 @@ use App\Models\User;
 use App\Models\Auth;
 use App\Models\Category;
 use App\Models\Subscription;
-use Tuupola\Middleware\JwtAuthentication;
+use JimTools\JwtAuth\Middleware\JwtAuthentication;
 use App\Middleware\JwtTokenMiddleware;
 use App\Enums\JwtValidationMode;
 

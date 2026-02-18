@@ -6,7 +6,7 @@ use App\Models\Offering;
 use App\Models\User;
 use App\Models\Subscription;
 use App\Models\Currency;
-use Tuupola\Middleware\JwtAuthentication;
+use JimTools\JwtAuth\Middleware\JwtAuthentication;
 use App\Middleware\JwtTokenMiddleware;
 use App\Enums\JwtValidationMode;
 

@@ -8,7 +8,7 @@ use App\Models\Offering;
 use App\Models\Subscription;
 use App\Models\Notification;
 use App\Services\SubscriptionEnforcementService;
-use Tuupola\Middleware\JwtAuthentication;
+use JimTools\JwtAuth\Middleware\JwtAuthentication;
 use App\Middleware\JwtTokenMiddleware;
 use App\Enums\JwtValidationMode;
 

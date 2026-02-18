@@ -4,7 +4,7 @@ use Slim\App;
 use App\Controllers\DonationController;
 use App\Models\Donation;
 use App\Models\Offering;
-use Tuupola\Middleware\JwtAuthentication;
+use JimTools\JwtAuth\Middleware\JwtAuthentication;
 use App\Middleware\JwtTokenMiddleware;
 use App\Enums\JwtValidationMode;
 

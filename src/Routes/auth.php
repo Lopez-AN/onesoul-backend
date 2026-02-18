@@ -7,7 +7,7 @@ use App\Models\Auth;
 use App\Models\Notification;
 use App\Models\Subscription;
 use App\Services\TwilioService;
-use Tuupola\Middleware\JwtAuthentication;
+use JimTools\JwtAuth\Middleware\JwtAuthentication;
 use App\Middleware\JwtTokenMiddleware;
 use App\Enums\JwtValidationMode;
 

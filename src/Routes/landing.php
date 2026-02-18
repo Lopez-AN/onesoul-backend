@@ -3,7 +3,7 @@
 use Slim\App;
 use App\Controllers\LandingController;
 use App\Models\Landing;
-use Tuupola\Middleware\JwtAuthentication;
+use JimTools\JwtAuth\Middleware\JwtAuthentication;
 use App\Middleware\JwtTokenMiddleware;
 use App\Enums\JwtValidationMode;
 

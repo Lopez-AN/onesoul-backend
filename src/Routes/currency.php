@@ -3,7 +3,7 @@
 use Slim\App;
 use App\Controllers\CurrencyController;
 use App\Models\Currency;
-use Tuupola\Middleware\JwtAuthentication;
+use JimTools\JwtAuth\Middleware\JwtAuthentication;
 use App\Middleware\JwtTokenMiddleware;
 use App\Enums\JwtValidationMode;
 

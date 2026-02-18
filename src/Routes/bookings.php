@@ -7,7 +7,7 @@ use App\Models\Offering;
 use App\Models\User;
 use App\Models\Donation;
 use App\Models\Notification;
-use Tuupola\Middleware\JwtAuthentication;
+use JimTools\JwtAuth\Middleware\JwtAuthentication;
 use App\Middleware\JwtTokenMiddleware;
 use App\Enums\JwtValidationMode;
 

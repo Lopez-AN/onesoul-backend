@@ -4,7 +4,7 @@ use Slim\App;
 use App\Controllers\NotificationController;
 use App\Models\Notification;
 use App\Models\User;
-use Tuupola\Middleware\JwtAuthentication;
+use JimTools\JwtAuth\Middleware\JwtAuthentication;
 use App\Middleware\JwtTokenMiddleware;
 use App\Enums\JwtValidationMode;
 
