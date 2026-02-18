@@ -22,8 +22,6 @@ function validateToken($url) {
   $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
   $error = curl_errno($ch);
 
-  curl_close($ch);
-
   # Verifica si hubo un error en la solicitud
   if ($error || $httpCode !== 200) {
     return false;

@@ -44,7 +44,6 @@ class ExchangeRatesWorker {
       $curlError = curl_error($ch);
       $curlErrno = curl_errno($ch);
       $httpCode  = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-      curl_close($ch);
 
       $json = @json_decode($result);
       if($httpCode !== 200 || empty($json -> conversion_rates)){
@@ -72,7 +71,6 @@ class ExchangeRatesWorker {
       $curlError = curl_error($ch);
       $curlErrno = curl_errno($ch);
       $httpCode  = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-      curl_close($ch);
 
       $json = @json_decode($result);
       if($httpCode !== 200 || empty($json->results[0]->detalle[0]->tipoCotizacion)){

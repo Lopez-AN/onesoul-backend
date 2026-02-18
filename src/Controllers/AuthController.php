@@ -2507,7 +2507,6 @@ class AuthController{
       CURLOPT_TIMEOUT        => 15,
     ]);
     $result = curl_exec($ch);
-    curl_close($ch);
 
     $json = json_decode($result, true);
     return $json['id_token'] ?? null;

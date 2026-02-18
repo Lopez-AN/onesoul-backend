@@ -85,8 +85,6 @@ class ChatbotController {
       $curlErrno = curl_errno($ch);
       $httpCode  = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 
-      curl_close($ch);
-
       if ($curlErrno || $httpCode !== 200) {
         return $response->withStatus(500)->withJson([
           "error" => [
@@ -166,8 +164,6 @@ class ChatbotController {
     # capturar errores y status antes de cerrar
     $curlErrno = curl_errno($ch);
     $httpCode  = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-
-    curl_close($ch);
 
     if ($curlErrno || $httpCode !== 200) {
       return $httpCode;
