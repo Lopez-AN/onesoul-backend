@@ -2432,8 +2432,7 @@ class AuthController{
 
       # Decodifico token
       $keys = JWK::parseKeySet($jwks);
-      $decoded = JWT::decode($idToken, $keys, ['RS256']);
-
+      $decoded = JWT::decode($idToken, $keys);
       # Validaciones de claims
       $iss = $decoded->iss ?? null;
       if ($iss !== 'https://appleid.apple.com') {
