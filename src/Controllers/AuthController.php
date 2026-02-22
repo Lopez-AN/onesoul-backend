@@ -1364,7 +1364,6 @@ class AuthController{
       $event = $this->notification->getEventType("SEND_OTP", "es");
       if(!empty($event)){
         $payload = [
-          "ACTION"       => "Valida tu cuenta de correo",
           "YEAR"         => date('Y'),
           "OTP_CODE"     => $otpCode,
           "USERNAME"     => $params['Email']
@@ -2000,18 +1999,20 @@ class AuthController{
 
       $otpCode = $this->auth->setOtpCodeDB($user['UserID']);
 
-      # Notificación para el buscador
+      $origin = !empty($params['SubDomain']) ? "https://{$params['SubDomain']}.onesoul.app" : "https://onesoul.app";
+      $resetData = base64_encode(json_encode(["otp_code" => $otpCode, "email" => $user['Email']]));
+
+      # Mail de recuperacion
       $payload = [
-        "ACTION"      => "Recuperación de contraseña",
+        "LINK"         => "$origin/auth/recovery/reset/$resetData",
         "YEAR"         => date('Y'),
-        "OTP_CODE"     => $otpCode,
         "USERNAME"     => $user['UserName']
       ];
       $this->notification->createNotification(
         $user['UserID'],
-        "SEND_OTP",
+        "PASSWORD_RECOVERY",
         $payload,
-        "SEND_OTP." . time() . ".VALIDATE"
+        "PASSWORD_RECOVERY." . time()
       );
 
       return $response->withStatus(200)->withJson("OTP code sent");

@@ -1366,7 +1366,6 @@ class UserController{
         $e['SignedContract'],
         $e['LegalDocuments'],
         $e['LockedUntil'],
-        $e['ReferralCode'],
         $e['Oauth2ID'],
         $e['Oauth2Service'],
         $e['IsAdmin']);
