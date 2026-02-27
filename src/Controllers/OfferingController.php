@@ -72,9 +72,10 @@ class OfferingController {
     $paginator = paginator($request);
     $queryParams = $request->getQueryParams();
     $query = $queryParams['query'] ?? '';
+    $category = $queryParams['category'] ?? false;
 
     try {
-      $offerings = $this->offering->searchOfferings($paginator, $query);
+      $offerings = $this->offering->searchOfferings($paginator, $query, $category);
       return $response->withStatus(200)->withJson($offerings);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([

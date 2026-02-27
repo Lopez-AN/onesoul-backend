@@ -24,55 +24,14 @@ class Offering {
    * @throws DatabaseException
    **/
   public function getOfferings($paginator) {
-    $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*,
-      u.UserID AS author_UserID,
-      u.DisplayName AS author_DisplayName,
-      u.FirstName AS author_FirstName,
-      u.LastName AS author_LastName,
-      u.UserName AS author_UserName,
-      round(avg(ru.Rating),2) AS author_Rating,
-      COUNT(DISTINCT ru.ReviewID) AS author_TotalReviews,
-      (SELECT URL FROM Media WHERE UserID = u.UserID LIMIT 1) AS author_ImgURL,
-      -- Subconsulta para media_images
-      (SELECT JSON_ARRAYAGG(
-        JSON_OBJECT(
-          'Id', m.MediaID,
-          'Url', m.URL,
-          'Title', m.Title,
-          'Description', m.Description,
-          'Position', m.Position
-        )
-      ) FROM Media AS m WHERE m.OfferingID = o.OfferingID AND m.MediaType = 'image') AS media_images,
-      -- Subconsulta para media_videos
-      (SELECT JSON_ARRAYAGG(
-        JSON_OBJECT(
-          'Id', m.MediaID,
-          'Url', m.URL,
-          'Title', m.Title,
-          'Description', m.Description,
-          'Position', m.Position
-        )
-      ) FROM Media AS m WHERE m.OfferingID = o.OfferingID AND m.MediaType = 'video') AS media_videos,
-      -- Subconsulta para faqs
-      (SELECT JSON_ARRAYAGG(
-        JSON_OBJECT(
-          'Position', f.Position,
-          'Question', f.Question,
-          'Answer', f.Answer
-        )
-      ) FROM OfferingsFaqs AS f WHERE f.OfferingID = o.OfferingID) AS Faqs,
-      ROUND(AVG(r.Rating),2) AS Rating,
-      COUNT(DISTINCT r.ReviewID) AS TotalReviews,
-      COUNT(DISTINCT b.BookingID) as Bookings
-      FROM Offerings AS o
-      INNER JOIN Users AS u ON u.UserID = o.UserID
-      LEFT JOIN Reviews AS r ON o.OfferingID = r.OfferingID
-      LEFT JOIN Reviews AS ru ON u.UserID = ru.SeekerID
-      LEFT JOIN Bookings AS b ON b.OfferingID = o.OfferingID AND b.LastBookingEvent IN ('completed', 'rated')
-      WHERE o.Status = 'Active' AND o.Approved = 1
+    $stmt = $this->db->prepare(
+      $this->_sqlCategoryRootCTE().
+      $this->_sqlMain().
+      "WHERE o.Status = 'Active' AND o.Approved = 1
       GROUP BY o.OfferingID
       ORDER BY o.OfferingID
-      LIMIT ? OFFSET ?");
+      LIMIT ? OFFSET ?"
+    );
 
     $stmt->execute([$paginator->limit, $paginator->offset]);
     $offerings = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -90,57 +49,20 @@ class Offering {
    *
    * @param  object $paginator: objeto con limit y offset
    * @param  string $query: término(s) de búsqueda
+   * @param  int $categoryID: categoria a filtrar (default null)
    * @return object: { data: [], rows: { total: int, fetched: int } }
    * @throws DatabaseException
    **/
-  public function searchOfferings($paginator, $query) {
+  public function searchOfferings($paginator, $query, $category = null) {
     $searchQuery = "%$query%";
-    $stmt = $this->db->prepare("SELECT o.*,
-      u.UserID AS author_UserID,
-      u.DisplayName AS author_DisplayName,
-      u.FirstName AS author_FirstName,
-      u.LastName AS author_LastName,
-      u.UserName AS author_UserName,
-      round(avg(ru.Rating),2) AS author_Rating,
-      COUNT(DISTINCT ru.ReviewID) AS author_TotalReviews,
-      (SELECT URL FROM Media WHERE UserID = u.UserID LIMIT 1) AS author_ImgURL,
-      -- Subconsulta para media_images
-      (SELECT JSON_ARRAYAGG(
-        JSON_OBJECT(
-          'Id', m.MediaID,
-          'Url', m.URL,
-          'Title', m.Title,
-          'Description', m.Description,
-          'Position', m.Position
-        )
-      ) FROM Media m WHERE m.OfferingID = o.OfferingID AND m.MediaType = 'image') AS media_images,
-      -- Subconsulta para media_videos
-      (SELECT JSON_ARRAYAGG(
-        JSON_OBJECT(
-          'Id', m.MediaID,
-          'Url', m.URL,
-          'Title', m.Title,
-          'Description', m.Description,
-          'Position', m.Position
-        )
-      ) FROM Media m WHERE m.OfferingID = o.OfferingID AND m.MediaType = 'video') AS media_videos,
-      -- Subconsulta para faqs
-      (SELECT JSON_ARRAYAGG(
-        JSON_OBJECT(
-          'Position', f.Position,
-          'Question', f.Question,
-          'Answer', f.Answer
-        )
-      ) FROM OfferingsFaqs f WHERE f.OfferingID = o.OfferingID) AS Faqs,
-      ROUND(AVG(r.Rating),2) as Rating,
-      COUNT(DISTINCT r.ReviewID) AS TotalReviews,
-      COUNT(DISTINCT b.BookingID) as Bookings
-      FROM Offerings AS o
-      INNER JOIN Users AS u ON u.UserID = o.UserID
-      LEFT JOIN Reviews as r ON o.OfferingID = r.OfferingID
-      LEFT JOIN Reviews as ru ON u.UserID = ru.SeekerID
-      LEFT JOIN Bookings AS b ON b.OfferingID = o.OfferingID AND b.LastBookingEvent IN ('completed', 'rated')
-      WHERE (o.Title LIKE ? OR o.Description LIKE ?
+
+    $stmt = $this->db->prepare(
+      $this->_sqlCategoryRootCTE().
+      ($category !== null ? $this->_sqlCategoryFilterCTE() : '').
+      $this->_sqlMain().
+      ($category !== null ? ' INNER JOIN category_filter_tree as ct
+        ON ct.CategoryID = o.CategoryID ' : '').
+      "WHERE (o.Title LIKE ? OR o.Description LIKE ?
       OR o.ShortDescription LIKE ? OR o.Tags LIKE ?)
       AND o.Status = 'Active' AND o.Approved = 1
       GROUP BY o.OfferingID
@@ -148,7 +70,13 @@ class Offering {
       LIMIT ? OFFSET ?"
     );
 
-    $stmt->execute([$searchQuery, $searchQuery, $searchQuery, $searchQuery, $paginator->limit, $paginator->offset]);
+    $params = [$searchQuery, $searchQuery, $searchQuery, $searchQuery,
+      $paginator->limit, $paginator->offset];
+    if($category !== null){
+      array_unshift($params, $category);
+    }
+
+    $stmt->execute($params);
     $offerings = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
     $total = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -167,53 +95,12 @@ class Offering {
    * @throws DatabaseException
    **/
   public function getOfferingById($offeringID) {
-    $stmt = $this->db->prepare("SELECT o.*,
-    u.UserID AS author_UserID,
-    u.DisplayName AS author_DisplayName,
-    u.FirstName AS author_FirstName,
-    u.LastName AS author_LastName,
-    u.UserName AS author_UserName,
-    round(avg(ru.Rating),2) AS author_Rating,
-    COUNT(DISTINCT ru.ReviewID) AS author_TotalReviews,
-    (SELECT URL FROM Media WHERE UserID = u.UserID LIMIT 1) AS author_ImgURL,
-    -- Subconsulta para media_images
-    (SELECT JSON_ARRAYAGG(
-      JSON_OBJECT(
-        'Id', m.MediaID,
-        'Url', m.URL,
-        'Title', m.Title,
-        'Description', m.Description,
-        'Position', m.Position
-      )
-    ) FROM Media AS m WHERE m.OfferingID = o.OfferingID AND m.MediaType = 'image') AS media_images,
-    -- Subconsulta para media_videos
-    (SELECT JSON_ARRAYAGG(
-      JSON_OBJECT(
-        'Id', m.MediaID,
-        'Url', m.URL,
-        'Title', m.Title,
-        'Description', m.Description,
-        'Position', m.Position
-      )
-    ) FROM Media AS m WHERE m.OfferingID = o.OfferingID AND m.MediaType = 'video') AS media_videos,
-    -- Subconsulta para faqs
-    (SELECT JSON_ARRAYAGG(
-      JSON_OBJECT(
-        'Position', f.Position,
-        'Question', f.Question,
-        'Answer', f.Answer
-      )
-    ) FROM OfferingsFaqs AS f WHERE f.OfferingID = o.OfferingID) AS Faqs,
-    ROUND(AVG(r.Rating),2) AS Rating,
-    COUNT(DISTINCT r.ReviewID) AS TotalReviews,
-    COUNT(DISTINCT b.BookingID) as Bookings
-    FROM Offerings AS o
-    INNER JOIN Users AS u ON u.UserID = o.UserID
-    LEFT JOIN Reviews AS r ON o.OfferingID = r.OfferingID
-    LEFT JOIN Reviews AS ru ON u.UserID = ru.SeekerID
-    LEFT JOIN Bookings AS b ON b.OfferingID = o.OfferingID AND b.LastBookingEvent IN ('completed', 'rated')
-    WHERE o.OfferingID = ?
-    GROUP BY o.OfferingID");
+    $stmt = $this->db->prepare(
+      $this->_sqlCategoryRootCTE().
+      $this->_sqlMain().
+      "WHERE o.OfferingID = ?
+      GROUP BY o.OfferingID"
+    );
 
     $stmt->execute([$offeringID]);
     $offering = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -234,71 +121,17 @@ class Offering {
    * @throws DatabaseException
    **/
   public function getOfferingsByCategory($paginator, $category) {
-    $stmt = $this->db->prepare("WITH RECURSIVE category_tree AS (
-      SELECT CategoryID
-      FROM Categories
-      WHERE CategoryID = ?
-
-      UNION ALL
-
-      SELECT c.CategoryID
-      FROM Categories c
-      INNER JOIN category_tree ct ON c.ParentCategoryID = ct.CategoryID
-    )
-    SELECT SQL_CALC_FOUND_ROWS
-    o.*,
-    u.UserID AS author_UserID,
-    u.DisplayName AS author_DisplayName,
-    u.FirstName AS author_FirstName,
-    u.LastName AS author_LastName,
-    u.UserName AS author_UserName,
-    ROUND(AVG(ru.Rating),2) AS author_Rating,
-    COUNT(DISTINCT ru.ReviewID) AS author_TotalReviews,
-    (SELECT URL FROM Media WHERE UserID = u.UserID LIMIT 1) AS author_ImgURL,
-    -- media_images
-    (SELECT JSON_ARRAYAGG(
-      JSON_OBJECT(
-        'Id', m.MediaID,
-        'Url', m.URL,
-        'Title', m.Title,
-        'Description', m.Description,
-        'Position', m.Position
-      )
-    ) FROM Media m
-    WHERE m.OfferingID = o.OfferingID AND m.MediaType = 'image') AS media_images,
-    -- media_videos
-    (SELECT JSON_ARRAYAGG(
-      JSON_OBJECT(
-        'Id', m.MediaID,
-        'Url', m.URL,
-        'Title', m.Title,
-        'Description', m.Description,
-        'Position', m.Position
-      )
-    ) FROM Media m
-    WHERE m.OfferingID = o.OfferingID AND m.MediaType = 'video') AS media_videos,
-    -- faqs
-    (SELECT JSON_ARRAYAGG(
-      JSON_OBJECT(
-        'Position', f.Position,
-        'Question', f.Question,
-        'Answer', f.Answer
-      )
-    ) FROM OfferingsFaqs f
-    WHERE f.OfferingID = o.OfferingID) AS Faqs,
-    ROUND(AVG(r.Rating),2) as Rating,
-    COUNT(DISTINCT r.ReviewID) AS TotalReviews,
-    COUNT(DISTINCT b.BookingID) as Bookings
-    FROM Offerings AS o
-    INNER JOIN category_tree ct ON ct.CategoryID = o.CategoryID
-    INNER JOIN Users AS u ON u.UserID = o.UserID
-    LEFT JOIN Reviews as r ON o.OfferingID = r.OfferingID
-    LEFT JOIN Reviews as ru ON u.UserID = ru.SeekerID
-    LEFT JOIN Bookings AS b ON b.OfferingID = o.OfferingID AND b.LastBookingEvent IN ('completed', 'rated')
-    WHERE o.Status = 'Active' AND o.Approved = 1
-    GROUP BY o.OfferingID
-    ORDER BY o.OfferingID
-    LIMIT ? OFFSET ?");
+    $stmt = $this->db->prepare(
+      $this->_sqlCategoryRootCTE().
+      $this->_sqlCategoryFilterCTE().
+      $this->_sqlMain().
+      "INNER JOIN category_filter_tree as ct
+        ON ct.CategoryID = o.CategoryID
+      WHERE o.Status = 'Active' AND o.Approved = 1
+      GROUP BY o.OfferingID
+      ORDER BY o.OfferingID
+      LIMIT ? OFFSET ?"
+    );
 
     $stmt->execute([$category, $paginator->limit, $paginator->offset]);
 
@@ -321,55 +154,14 @@ class Offering {
    * @throws DatabaseException
    **/
   public function getOfferingsByUserId($paginator, $userID) {
-    $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS o.*,
-      u.UserID AS author_UserID,
-      u.DisplayName AS author_DisplayName,
-      u.FirstName AS author_FirstName,
-      u.LastName AS author_LastName,
-      u.UserName AS author_UserName,
-      round(avg(ru.Rating),2) AS author_Rating,
-      COUNT(DISTINCT ru.ReviewID) AS author_TotalReviews,
-      (SELECT URL FROM Media WHERE UserID = u.UserID LIMIT 1) AS author_ImgURL,
-      -- Subconsulta para media_images
-      (SELECT JSON_ARRAYAGG(
-        JSON_OBJECT(
-          'Id', m.MediaID,
-          'Url', m.URL,
-          'Title', m.Title,
-          'Description', m.Description,
-          'Position', m.Position
-        )
-      ) FROM Media AS m WHERE m.OfferingID = o.OfferingID AND m.MediaType = 'image') AS media_images,
-      -- Subconsulta para media_videos
-      (SELECT JSON_ARRAYAGG(
-        JSON_OBJECT(
-          'Id', m.MediaID,
-          'Url', m.URL,
-          'Title', m.Title,
-          'Description', m.Description,
-          'Position', m.Position
-        )
-      ) FROM Media AS m WHERE m.OfferingID = o.OfferingID AND m.MediaType = 'video') AS media_videos,
-      -- Subconsulta para faqs
-      (SELECT JSON_ARRAYAGG(
-        JSON_OBJECT(
-          'Position', f.Position,
-          'Question', f.Question,
-          'Answer', f.Answer
-        )
-      ) FROM OfferingsFaqs AS f WHERE f.OfferingID = o.OfferingID) AS Faqs,
-      ROUND(AVG(r.Rating),2) AS Rating,
-      COUNT(DISTINCT r.ReviewID) AS TotalReviews,
-      COUNT(DISTINCT b.BookingID) as Bookings
-      FROM Offerings AS o
-      INNER JOIN Users AS u ON u.UserID = o.UserID
-      LEFT JOIN Reviews AS r ON o.OfferingID = r.OfferingID
-      LEFT JOIN Reviews AS ru ON u.UserID = ru.SeekerID
-      LEFT JOIN Bookings AS b ON b.OfferingID = o.OfferingID AND b.LastBookingEvent IN ('completed', 'rated')
-      WHERE o.UserID = ?
+    $stmt = $this->db->prepare(
+      $this->_sqlCategoryRootCTE().
+      $this->_sqlMain().
+      "WHERE o.UserID = ?
       GROUP BY o.OfferingID
       ORDER BY o.OfferingID
-      LIMIT ? OFFSET ?");
+      LIMIT ? OFFSET ?"
+    );
 
     $stmt->execute([$userID, $paginator->limit, $paginator->offset]);
     $offerings = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -377,6 +169,119 @@ class Offering {
     $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
     return $this -> _getOfferingsGenericMulti($offerings, $total['total']);
+  }
+
+  /**
+  * SQL CTE para obtener la categoría raiz
+  *
+  * @return string: CTE generado
+  **/
+  private function _sqlCategoryRootCTE(){
+    return "WITH RECURSIVE category_up AS (
+      SELECT CategoryID,
+        ParentCategoryID,
+        CategoryID AS OriginCategoryID
+      FROM Categories
+      UNION ALL
+      SELECT
+        p.CategoryID,
+        p.ParentCategoryID,
+        cu.OriginCategoryID
+      FROM Categories as p
+      INNER JOIN category_up as cu
+        ON cu.ParentCategoryID = p.CategoryID
+    ),
+    category_root AS (
+      SELECT
+        OriginCategoryID AS CategoryID,
+        CategoryID       AS RootCategoryID
+      FROM category_up
+      WHERE ParentCategoryID IS NULL -- RAIZ
+    )";
+  }
+
+  /**
+  * SQL CTE para filtrar categorias
+  *
+  * @return string: CTE generado
+  **/
+  private function _sqlCategoryFilterCTE(){
+    return ",category_filter_tree AS (
+  		SELECT
+		    c.CategoryID
+		  FROM Categories c
+		  WHERE c.CategoryID = ?
+		  UNION ALL
+		  SELECT
+		    ch.CategoryID
+		  FROM Categories ch
+		  INNER JOIN category_filter_tree ft
+		    ON ch.ParentCategoryID = ft.CategoryID
+		) ";
+  }
+
+  /**
+   * Generaliza la consulta principal de obtener offerings
+   *
+   * @return string: consulta principal sin filtros
+   **/
+  private function _sqlMain(){
+    return "SELECT SQL_CALC_FOUND_ROWS o.*,
+      cr.RootCategoryID,
+      u.UserID      AS author_UserID,
+      u.DisplayName AS author_DisplayName,
+      u.FirstName   AS author_FirstName,
+      u.LastName    AS author_LastName,
+      u.UserName    AS author_UserName,
+      ROUND(AVG(ru.Rating), 2)       AS author_Rating,
+      COUNT(DISTINCT ru.ReviewID)    AS author_TotalReviews,
+      au.author_ImgURL               AS author_ImgURL,
+      mi.media_images                AS media_images,
+      mv.media_videos                AS media_videos,
+      fq.Faqs                        AS Faqs,
+      ROUND(AVG(r.Rating), 2)        AS Rating,
+      COUNT(DISTINCT r.ReviewID)     AS TotalReviews,
+      COUNT(DISTINCT b.BookingID)    AS Bookings
+    FROM Offerings o
+    INNER JOIN Users u ON u.UserID = o.UserID
+    LEFT JOIN category_root as cr
+      ON cr.CategoryID = o.CategoryID
+    LEFT JOIN (
+      SELECT UserID, MIN(URL) AS author_ImgURL
+      FROM Media
+      GROUP BY UserID
+    ) au ON au.UserID = u.UserID
+    LEFT JOIN (
+      SELECT OfferingID,
+        JSON_ARRAYAGG(JSON_OBJECT(
+          'Id', MediaID,'Url',URL,'Title',Title,'Description',Description,'Position',Position
+        )) AS media_images
+      FROM Media
+      WHERE MediaType='image'
+      GROUP BY OfferingID
+    ) mi ON mi.OfferingID = o.OfferingID
+    LEFT JOIN (
+      SELECT OfferingID,
+        JSON_ARRAYAGG(JSON_OBJECT(
+          'Id', MediaID,'Url',URL,'Title',Title,'Description',Description,'Position',Position
+        )) AS media_videos
+      FROM Media
+      WHERE MediaType='video'
+      GROUP BY OfferingID
+    ) mv ON mv.OfferingID = o.OfferingID
+    LEFT JOIN (
+      SELECT OfferingID,
+        JSON_ARRAYAGG(JSON_OBJECT(
+          'Position',Position,'Question',Question,'Answer',Answer
+        )) AS Faqs
+      FROM OfferingsFaqs
+      GROUP BY OfferingID
+    ) fq ON fq.OfferingID = o.OfferingID
+    LEFT JOIN Reviews r  ON o.OfferingID = r.OfferingID
+    LEFT JOIN Reviews ru ON u.UserID = ru.SeekerID
+    LEFT JOIN Bookings b
+      ON b.OfferingID = o.OfferingID
+    AND b.LastBookingEvent IN ('completed','rated')";
   }
 
   /**
