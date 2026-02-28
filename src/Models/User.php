@@ -85,8 +85,8 @@ class User {
    * @note El filtrado de datos según scope (PUBLIC, USER, ADMIN) debe realizarse en el controller
    **/
   public function getUsersByCategory($paginator, $categoryID) {
-    $stmt = $this->db->prepare("WITH RECURSIVE ".
-      CategoryTreeHelper::getFilterCategoryCTE().
+    $stmt = $this->db->prepare(
+      CategoryTreeHelper::getFilterCategoryCTE(true).
       $this->_sqlMain().
       "INNER JOIN category_filter_tree AS cat ON cat.CategoryID = c.CategoryID
       WHERE u.DeactivationDate is null
@@ -118,8 +118,8 @@ class User {
   public function searchGuides($paginator, $query, $category = null) {
     $searchQuery = "%$query%";
 
-    $stmt = $this->db->prepare("WITH RECURSIVE ".
-      ($category !== null ? CategoryTreeHelper::getFilterCategoryCTE() : '').
+    $stmt = $this->db->prepare(
+      ($category !== null ? CategoryTreeHelper::getFilterCategoryCTE(true) : '').
       $this->_sqlMain().
       ($category !== null ? ' INNER JOIN category_filter_tree AS cat
         ON cat.CategoryID = c.CategoryID ' : '').

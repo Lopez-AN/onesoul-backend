@@ -25,8 +25,8 @@ class Offering {
    * @throws DatabaseException
    **/
   public function getOfferings($paginator) {
-    $stmt = $this->db->prepare("WITH RECURSIVE ".
-      CategoryTreeHelper::getRootCategoryCTE().
+    $stmt = $this->db->prepare(
+      CategoryTreeHelper::getRootCategoryCTE(true).
       $this->_sqlMain().
       "WHERE o.Status = 'Active' AND o.Approved = 1
       GROUP BY o.OfferingID
@@ -57,9 +57,9 @@ class Offering {
   public function searchOfferings($paginator, $query, $category = null) {
     $searchQuery = "%$query%";
 
-    $stmt = $this->db->prepare("WITH RECURSIVE ".
-      CategoryTreeHelper::getRootCategoryCTE().','.
-      ($category !== null ? CategoryTreeHelper::getFilterCategoryCTE() : '').
+    $stmt = $this->db->prepare(
+      CategoryTreeHelper::getRootCategoryCTE(true).
+      ($category !== null ? ','. CategoryTreeHelper::getFilterCategoryCTE() : '').
       $this->_sqlMain().
       ($category !== null ? ' INNER JOIN category_filter_tree as ct
         ON ct.CategoryID = o.CategoryID ' : '').
@@ -96,8 +96,8 @@ class Offering {
    * @throws DatabaseException
    **/
   public function getOfferingById($offeringID) {
-    $stmt = $this->db->prepare("WITH RECURSIVE ".
-      CategoryTreeHelper::getRootCategoryCTE().
+    $stmt = $this->db->prepare(
+      CategoryTreeHelper::getRootCategoryCTE(true).
       $this->_sqlMainSingle().
       "WHERE o.OfferingID = ?
       GROUP BY o.OfferingID"
@@ -122,8 +122,8 @@ class Offering {
    * @throws DatabaseException
    **/
   public function getOfferingsByCategory($paginator, $category) {
-    $stmt = $this->db->prepare("WITH RECURSIVE ".
-      CategoryTreeHelper::getRootCategoryCTE().','.
+    $stmt = $this->db->prepare(
+      CategoryTreeHelper::getRootCategoryCTE(true).','.
       CategoryTreeHelper::getFilterCategoryCTE().
       $this->_sqlMain().
       "INNER JOIN category_filter_tree as ct
@@ -155,8 +155,8 @@ class Offering {
    * @throws DatabaseException
    **/
   public function getOfferingsByUserId($paginator, $userID) {
-    $stmt = $this->db->prepare("WITH RECURSIVE ".
-      CategoryTreeHelper::getRootCategoryCTE().
+    $stmt = $this->db->prepare(
+      CategoryTreeHelper::getRootCategoryCTE(true).
       $this->_sqlMain().
       "WHERE o.UserID = ?
       GROUP BY o.OfferingID

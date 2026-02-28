@@ -6,10 +6,12 @@ class CategoryTreeHelper {
   /**
    * SQL CTE para obtener la categoría raíz de cada categoría
    *
+   * @param bool: addRecursive: agrega WITH RECURSVE al CTE
    * @return string: Fragmento SQL con el CTE
    */
-  public static function getRootCategoryCTE(): string {
-    return "category_up AS (
+  public static function getRootCategoryCTE(bool $addRecursive = false): string {
+    return ($addRecursive ? "WITH RECURSIVE " : "").
+      "category_up AS (
       SELECT CategoryID,
         ParentCategoryID,
         CategoryID AS OriginCategoryID
@@ -29,16 +31,18 @@ class CategoryTreeHelper {
         CategoryID       AS RootCategoryID
       FROM category_up
       WHERE ParentCategoryID IS NULL
-    )";
+    ) ";
   }
 
   /**
    * SQL CTE para filtrar categorías (incluye subcategorías recursivamente)
    *
+   * @param bool: addRecursive: agrega WITH RECURSVE al CTE
    * @return string: Fragmento SQL con el CTE
    */
-  public static function getFilterCategoryCTE(): string {
-    return "category_filter_tree AS (
+  public static function getFilterCategoryCTE(bool $addRecursive = false): string {
+    return ($addRecursive ? "WITH RECURSIVE " : "").
+      "category_filter_tree AS (
       SELECT c.CategoryID
       FROM Categories c
       WHERE c.CategoryID = ?
