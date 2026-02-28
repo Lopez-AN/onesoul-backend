@@ -292,12 +292,12 @@ class Offering {
     $offering['AverageRating'] = floatVal($offering['Rating']);
 
     $offering['Category'] = [
-      "ID" => $offering['CategoryID'],
+      "CategoryID" => $offering['CategoryID'],
       "Name" => $offering['CategoryName'],
     ];
     unset($offering['CategoryID'], $offering['CategoryName']);
     $offering['RootCategory'] = [
-      "ID" => $offering['RootCategoryID'],
+      "CategoryID" => $offering['RootCategoryID'],
       "Name" => $offering['RootCategoryName'],
     ];
     unset($offering['RootCategoryID'], $offering['RootCategoryName']);
@@ -367,12 +367,12 @@ class Offering {
       $e['AverageRating'] = floatVal($e['Rating']);
 
       $e['Category'] = [
-        "ID" => $e['CategoryID'],
+        "CategoryID" => $e['CategoryID'],
         "Name" => $e['CategoryName'],
       ];
       unset($e['CategoryID'], $e['CategoryName']);
       $e['RootCategory'] = [
-        "ID" => $e['RootCategoryID'],
+        "CategoryID" => $e['RootCategoryID'],
         "Name" => $e['RootCategoryName'],
       ];
       unset($e['RootCategoryID'], $e['RootCategoryName']);
