@@ -29,6 +29,7 @@ class User {
    **/
   public function getUsers($paginator) {
     $stmt = $this->db->prepare(
+      CategoryTreeHelper::getRootCategoryCTE(true).
       $this->_sqlMain().
       "GROUP BY u.UserID
       ORDER BY u.UserID
@@ -57,6 +58,7 @@ class User {
    **/
   public function getUsersByType($paginator, $userType) {
     $stmt = $this->db->prepare(
+      CategoryTreeHelper::getRootCategoryCTE(true).
       $this->_sqlMain().
       "WHERE u.UserType = ?
       GROUP BY u.UserID
@@ -86,7 +88,8 @@ class User {
    **/
   public function getUsersByCategory($paginator, $categoryID) {
     $stmt = $this->db->prepare(
-      CategoryTreeHelper::getFilterCategoryCTE(true).
+      CategoryTreeHelper::getRootCategoryCTE(true).','.
+      CategoryTreeHelper::getFilterCategoryCTE().
       $this->_sqlMain().
       "INNER JOIN category_filter_tree AS cat ON cat.CategoryID = c.CategoryID
       WHERE u.DeactivationDate is null
@@ -119,7 +122,8 @@ class User {
     $searchQuery = "%$query%";
 
     $stmt = $this->db->prepare(
-      ($category !== null ? CategoryTreeHelper::getFilterCategoryCTE(true) : '').
+      CategoryTreeHelper::getRootCategoryCTE(true).
+      ($category !== null ? ','. CategoryTreeHelper::getFilterCategoryCTE() : '').
       $this->_sqlMain().
       ($category !== null ? ' INNER JOIN category_filter_tree AS cat
         ON cat.CategoryID = c.CategoryID ' : '').
@@ -181,6 +185,7 @@ class User {
     $wactive = $activeOnly ? " AND u.DeactivationDate IS NULL " : "";
 
     $stmt = $this->db->prepare(
+      CategoryTreeHelper::getRootCategoryCTE(true).
       $this->_sqlMainSingle().
       "WHERE u.UserID = ? $wactive
       GROUP BY u.UserID
@@ -209,6 +214,7 @@ class User {
     $wactive = $activeOnly ? " AND u.DeactivationDate IS NULL " : "";
 
     $stmt = $this->db->prepare(
+      CategoryTreeHelper::getRootCategoryCTE(true).
       $this->_sqlMainSingle().
       "WHERE u.UserName = ? $wactive
       GROUP BY u.UserID
@@ -237,6 +243,7 @@ class User {
     $wactive = $activeOnly ? " AND u.DeactivationDate IS NULL " : "";
 
     $stmt = $this->db->prepare(
+      CategoryTreeHelper::getRootCategoryCTE(true).
       $this->_sqlMainSingle().
       "WHERE u.Email = ? $wactive
       GROUP BY u.UserID
@@ -265,6 +272,7 @@ class User {
     $wactive = $activeOnly ? " AND u.DeactivationDate IS NULL " : "";
 
     $stmt = $this->db->prepare(
+      CategoryTreeHelper::getRootCategoryCTE(true).
       $this->_sqlMainSingle().
       "WHERE u.Phone = ? $wactive
       GROUP BY u.UserID
@@ -294,6 +302,7 @@ class User {
     $wactive = $activeOnly ? " AND u.DeactivationDate IS NULL " : "";
 
     $stmt = $this->db->prepare(
+      CategoryTreeHelper::getRootCategoryCTE(true).
       $this->_sqlMainSingle().
       "WHERE u.Oauth2ID = ? AND u.Oauth2Service = ? $wactive
       GROUP BY u.UserID
@@ -322,6 +331,7 @@ class User {
     $wactive = $activeOnly ? " AND u.DeactivationDate IS NULL " : "";
 
     $stmt = $this->db->prepare(
+      CategoryTreeHelper::getRootCategoryCTE(true).
       $this->_sqlMainSingle().
       "WHERE u.ReferralCode = ? $wactive
       GROUP BY u.UserID
@@ -343,17 +353,24 @@ class User {
     return str_replace('SQL_CALC_FOUND_ROWS ', '', $this->_sqlMain());
   }
   private function _sqlMain(){
-    return "SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName,
+    return "SELECT SQL_CALC_FOUND_ROWS
+      u.UserID, u.FirstName, u.LastName,
       u.UserName, u.DisplayName, u.Email, u.Phone, u.DateOfBirth,
       u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth,
       u.MfaSecret, u.UserType, u.RegistrationDate, u.LastLogin, u.DeactivationDate,
       u.UserLevel, u.SignedContract, u.LegalDocuments, u.ShortDescription,
       u.OTPDate, u.OTPCode, u.OTPAttemps,
       u.Oauth2ID, u.Oauth2Service, u.FailedLoginAttempts,
-      u.LockedUntil,u.ReferralCode,u.IsAdmin,
-      sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL, u.IsAdmin,
-      GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
-        ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
+      u.LockedUntil, u.ReferralCode, u.IsAdmin,
+      sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
+      JSON_ARRAYAGG(
+        JSON_OBJECT(
+          'CategoryID', c.CategoryID,
+          'CategoryName', TRIM(c.Name),
+          'RootCategoryID', cr.RootCategoryID,
+          'RootCategoryName', TRIM(cr.RootCategoryName)
+        )
+      ) AS user_categories,
       -- Subconsulta para reviews y ratings
       (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
         FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
@@ -379,6 +396,7 @@ class User {
       FROM Users AS u
       LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
       LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
+      LEFT JOIN category_root as cr ON cr.CategoryID = c.CategoryID
       LEFT JOIN Media AS m ON u.UserID = m.UserID
       LEFT JOIN (
         SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
@@ -389,8 +407,8 @@ class User {
         WHERE o.Status = 'Active'
         GROUP BY o.UserID
       ) AS sub ON sub.UserID = u.UserID
-      LEFT JOIN UsersLocations as l ON u.UserID = l.UserID AND l.LocationID = 0
-      LEFT JOIN Countries as ct ON l.CountryCode = ct.CountryCode ";
+      LEFT JOIN UsersLocations as ul ON u.UserID = ul.UserID AND ul.LocationID = 0
+      LEFT JOIN Countries as ct ON ul.CountryCode = ct.CountryCode ";
   }
 
   /**
@@ -414,13 +432,6 @@ class User {
     $user['TwoFactorAuth'] = (bool)$user['TwoFactorAuth'];
     $user['IsAdmin'] = (bool)$user['IsAdmin'];
     $e['Phone'] = $user['Phone'] ? str_replace("+549", "+54", $user['Phone']) : null; # Fix telefonos argentinos
-    $user['Categories'] = is_null($user['Categories']) ? [] : array_map(
-      function ($a) {
-        $a = explode(":", $a);
-        return ["Id" => intval($a[0]), "Name" => $a[1]];
-      },
-      explode(",", $user['Categories'])
-    );
     $user['IsActive'] = $user['DeactivationDate'] === null;
 
     # Agregar sessionType con valores booleanos
@@ -431,12 +442,14 @@ class User {
     unset($user['hasVirtual'], $user['hasInPerson']);
 
     $locations = @json_decode($user['user_locations'], true);
-    $user['Locations'] = $locations ? $locations : [];
     $user['Locations'] = array_map(function($a){
       $a['IsActive'] = (bool)$a['IsActive'];
       return $a;
-    }, $user['Locations']);
+    }, is_array($locations) ? $locations : []);
     unset($user['user_locations']);
+
+    $user['Categories'] = @json_decode($user['user_categories'], true);
+    unset($user['user_categories']);
 
     return $user;
   }
@@ -461,13 +474,6 @@ class User {
       $e['TwoFactorAuth'] = (bool)$e['TwoFactorAuth'];
       $e['IsAdmin'] = (bool)$e['IsAdmin'];
       $e['Phone'] = $e['Phone'] ? str_replace("+549", "+54", $e['Phone']) : null; # Fix telefonos argentinos
-      $e['Categories'] = is_null($e['Categories']) ? [] : array_map(
-        function ($a) {
-          $a = explode(":", $a);
-          return ["Id" => intval($a[0]), "Name" => $a[1]];
-        },
-        explode(",", $e['Categories'])
-      );
       $e['IsActive'] = $e['DeactivationDate'] === null;
 
       # Agregar sessionType con valores booleanos
@@ -479,12 +485,14 @@ class User {
       unset($e['hasVirtual'], $e['hasInPerson']);
 
       $locations = @json_decode($e['user_locations'], true);
-      $e['Locations'] = $locations ? $locations : [];
       $e['Locations'] = array_map(function($a){
         $a['IsActive'] = (bool)$a['IsActive'];
         return $a;
-      }, $e['Locations']);
+      }, is_array($locations) ? $locations : []);
       unset($e['user_locations']);
+
+      $e['Categories'] = @json_decode($e['user_categories'], true);
+      unset($e['user_categories']);
 
       return $e;
     }, $users);

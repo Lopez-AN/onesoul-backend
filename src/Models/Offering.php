@@ -182,7 +182,9 @@ class Offering {
   }
   private function _sqlMain(){
     return "SELECT SQL_CALC_FOUND_ROWS o.*,
+      c.Name as CategoryName,
       cr.RootCategoryID,
+      cr.RootCategoryName,
       u.UserID      AS author_UserID,
       u.DisplayName AS author_DisplayName,
       u.FirstName   AS author_FirstName,
@@ -199,6 +201,7 @@ class Offering {
       COUNT(DISTINCT b.BookingID)    AS Bookings
     FROM Offerings o
     INNER JOIN Users u ON u.UserID = o.UserID
+    INNER JOIN Categories as c ON c.CategoryID = o.CategoryID
     LEFT JOIN category_root as cr
       ON cr.CategoryID = o.CategoryID
     LEFT JOIN (
@@ -288,6 +291,18 @@ class Offering {
 
     $offering['AverageRating'] = floatVal($offering['Rating']);
 
+    $offering['Category'] = [
+      "ID" => $offering['CategoryID'],
+      "Name" => $offering['CategoryName'],
+    ];
+    unset($offering['CategoryID'], $offering['CategoryName']);
+    $offering['RootCategory'] = [
+      "ID" => $offering['RootCategoryID'],
+      "Name" => $offering['RootCategoryName'],
+    ];
+    unset($offering['RootCategoryID'], $offering['RootCategoryName']);
+
+
     unset($offering['Rating'],
       $offering['author_UserID'],
       $offering['author_DisplayName'],
@@ -350,6 +365,17 @@ class Offering {
       ];
 
       $e['AverageRating'] = floatVal($e['Rating']);
+
+      $e['Category'] = [
+        "ID" => $e['CategoryID'],
+        "Name" => $e['CategoryName'],
+      ];
+      unset($e['CategoryID'], $e['CategoryName']);
+      $e['RootCategory'] = [
+        "ID" => $e['RootCategoryID'],
+        "Name" => $e['RootCategoryName'],
+      ];
+      unset($e['RootCategoryID'], $e['RootCategoryName']);
 
       unset($e['Rating'],
         $e['author_UserID'],

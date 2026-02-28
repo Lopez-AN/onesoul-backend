@@ -14,12 +14,16 @@ class CategoryTreeHelper {
       "category_up AS (
       SELECT CategoryID,
         ParentCategoryID,
+        Name,
+        Name as OriginName,
         CategoryID AS OriginCategoryID
       FROM Categories
       UNION ALL
       SELECT
         p.CategoryID,
         p.ParentCategoryID,
+        p.Name,
+        cu.OriginName,
         cu.OriginCategoryID
       FROM Categories as p
       INNER JOIN category_up as cu
@@ -28,7 +32,9 @@ class CategoryTreeHelper {
     category_root AS (
       SELECT
         OriginCategoryID AS CategoryID,
-        CategoryID       AS RootCategoryID
+        OriginName       AS CategoryName,
+        CategoryID       AS RootCategoryID,
+        Name             AS RootCategoryName
       FROM category_up
       WHERE ParentCategoryID IS NULL
     ) ";
