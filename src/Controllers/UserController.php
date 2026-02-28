@@ -58,6 +58,34 @@ class UserController{
   }
 
   /**
+   * Busca guias usando un string
+   * @param  Request $request: objeto de request HTTP
+   * @param  Response $response: objeto de response HTTP
+   * @param  string ?query: texto a buscar
+   * @return Response: JSON con usuarios o error
+   * @statusCode 200: éxito
+   * @statusCode 500: error del servidor
+   **/
+  public function searchGuides(Request $request, Response $response, $args) {
+    $paginator = paginator($request);
+    $queryParams = $request->getQueryParams();
+    $query = $queryParams['query'] ?? '';
+    $category = $queryParams['category'] ?? null;
+
+    try {
+      $users = $this->user->searchGuides($paginator, $query, $category);
+      return $response->withStatus(200)->withJson($users);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  /**
    * Obtiene usuarios por tipo con paginación
    * @param  Request $request: objeto de request HTTP
    * @param  Response $response: objeto de response HTTP
@@ -116,33 +144,6 @@ class UserController{
       $users->data = $this->_filterByScope($users->data, $jwt);
       return $response->withStatus(200)->withJson($users);
     } catch (Throwable $e) {
-      return $response->withStatus(500)->withJson([
-        "error" => [
-          "code" => "INTERNAL_SERVER_ERROR",
-          "desc" => $e->getMessage()
-        ]
-      ]);
-    }
-  }
-
-  /**
-   * Busca guias usando un string
-   * @param  Request $request: objeto de request HTTP
-   * @param  Response $response: objeto de response HTTP
-   * @param  string ?query: texto a buscar
-   * @return Response: JSON con usuarios o error
-   * @statusCode 200: éxito
-   * @statusCode 500: error del servidor
-   **/
-  public function searchGuides(Request $request, Response $response, $args) {
-    $paginator = paginator($request);
-    $queryParams = $request->getQueryParams();
-    $query = $queryParams['query'] ?? '';
-
-    try {
-      $users = $this->user->searchGuides($paginator, $query);
-      return $response->withStatus(200)->withJson($users);
-    } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",

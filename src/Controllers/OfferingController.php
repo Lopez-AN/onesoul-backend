@@ -72,7 +72,7 @@ class OfferingController {
     $paginator = paginator($request);
     $queryParams = $request->getQueryParams();
     $query = $queryParams['query'] ?? '';
-    $category = $queryParams['category'] ?? false;
+    $category = $queryParams['category'] ?? null;
 
     try {
       $offerings = $this->offering->searchOfferings($paginator, $query, $category);
@@ -98,14 +98,21 @@ class OfferingController {
    * @statusCode 500: error del servidor
    **/
   public function getOfferingById(Request $request, Response $response, $args)  {
-    $id = intval($args['OfferingID']);
+    $params['OfferingID'] = $args['OfferingID'];
+
+    $pValidation = ParameterValidator::validate($response, 'offerings', 'get_offering_by_id', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
+    }
+    $params = $pValidation->values;
+
     try {
-      $offering = $this->offering->getOfferingById($id);
+      $offering = $this->offering->getOfferingById($params['OfferingID']);
       if (!$offering) {
-        return $response->withStatus(400)->WithJson([
+        return $response->withStatus(404)->WithJson([
           "error" => [
-            "code" => "INVALID_OFFERING",
-            "desc"=> "Provided OfferingID is not valid."
+            "code" => "OFFERING_NOT_FOUND",
+            "desc"=> "No Offering found for this specific ID."
           ]
         ]);
       }
@@ -131,10 +138,17 @@ class OfferingController {
    * @statusCode 500: error del servidor
    **/
   public function getOfferingsByCategory(Request $request, Response $response, $args)  {
+    $params['CategoryID'] = $args['CategoryID'];
     $paginator = paginator($request);
-    $categoryId = intval($args['CategoryID']);
+
+    $pValidation = ParameterValidator::validate($response, 'offerings', 'get_offerings_by_category', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
+    }
+    $params = $pValidation->values;
+
     try {
-      $result = $this->offering->getOfferingsByCategory($paginator, $categoryId);
+      $result = $this->offering->getOfferingsByCategory($paginator, $params['CategoryID']);
       return $response->withStatus(200)->withJson($result);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
@@ -156,10 +170,17 @@ class OfferingController {
    * @statusCode 500: error del servidor
    **/
   public function getOfferingsByUserId(Request $request, Response $response, $args)  {
+    $params['UserID'] = $args['UserID'];
     $paginator = paginator($request);
-    $userID = intval($args['UserID']);
+
+    $pValidation = ParameterValidator::validate($response, 'offerings', 'get_offerings_by_user', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
+    }
+    $params = $pValidation->values;
+
     try {
-      $result = $this->offering->getOfferingsByUserId($paginator, $userID);
+      $result = $this->offering->getOfferingsByUserId($paginator, $params['UserID']);
       return $response->withStatus(200)->withJson($result);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([

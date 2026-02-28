@@ -1,4 +1,28 @@
 {
+  "get_offering_by_id": {
+    "OfferingID": {
+      "required": true,
+      "type": "integer",
+      "min": 0,
+      "max": 999999999
+    }
+  },
+  "get_offerings_by_category": {
+    "CategoryID": {
+      "required": true,
+      "type": "integer",
+      "min": 0,
+      "max": 999999999
+    }
+  },
+  "get_offerings_by_user": {
+    "UserID": {
+      "required": true,
+      "type": "integer",
+      "min": 0,
+      "max": 999999999
+    }
+  },
   "create_offering": {
     "Title": {
       "required": true,

@@ -6,6 +6,7 @@ use PDO;
 use PDOException;
 use App\Exceptions\DatabaseException;
 use Exception;
+use App\Helpers\CategoryTreeHelper;
 use PHPMailer\PHPMailer\PHPMailer;
 
 class User {
@@ -27,57 +28,12 @@ class User {
    * @note El filtrado de datos según scope (PUBLIC, USER, ADMIN) debe realizarse en el controller
    **/
   public function getUsers($paginator) {
-    $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName,
-    u.UserName, u.DisplayName, u.Email, u.Phone, u.DateOfBirth,
-    u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth,
-    u.MfaSecret, u.UserType, u.RegistrationDate, u.LastLogin, u.DeactivationDate,
-    u.UserLevel, u.SignedContract, u.LegalDocuments, u.ShortDescription,
-    u.OTPDate, u.OTPCode, u.OTPAttemps,
-    u.Oauth2ID, u.Oauth2Service, u.FailedLoginAttempts,
-    u.LockedUntil,u.ReferralCode,u.IsAdmin,
-    sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL, u.IsAdmin,
-    GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
-      ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
-    -- Subconsulta para reviews y ratings
-    (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
-    (SELECT COUNT(DISTINCT r.ReviewID)
-      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews,
-    -- Subconsulta para locations
-    (SELECT JSON_ARRAYAGG(
-      JSON_OBJECT(
-        'LocationID', l.LocationID,
-        'CountryCode', l.CountryCode,
-        'State', l.State,
-        'City', l.City,
-        'Cp', l.Cp,
-        'LocationName', l.LocationName,
-        'AddressName', l.AddressName,
-        'AddressNumber', l.AddressNumber,
-        'Floor', l.Floor,
-        'Department', l.Department,
-        'IsActive', l.IsActive
-      )
-    ) FROM UsersLocations as l WHERE l.UserID = u.UserID) as user_locations,
-    IF(ct.CurrencyCode IS NULL,'ARS',ct.CurrencyCode) as Currency
-    FROM Users AS u
-    LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
-    LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
-    LEFT JOIN Media AS m ON u.UserID = m.UserID
-    LEFT JOIN (
-      SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
-      MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
-      MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
-      FROM Offerings AS o
-      INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
-      WHERE o.Status = 'Active'
-      GROUP BY o.UserID
-    ) AS sub ON sub.UserID = u.UserID
-    LEFT JOIN UsersLocations as l ON u.UserID = l.UserID AND l.LocationID = 0
-    LEFT JOIN Countries as ct ON l.CountryCode = ct.CountryCode
-    GROUP BY u.UserID
-    ORDER BY u.UserID
-    LIMIT ? OFFSET ?");
+    $stmt = $this->db->prepare(
+      $this->_sqlMain().
+      "GROUP BY u.UserID
+      ORDER BY u.UserID
+      LIMIT ? OFFSET ?
+    ");
 
     $stmt->execute([$paginator->limit, $paginator->offset]);
     $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -100,58 +56,13 @@ class User {
    * @note El filtrado de datos según scope (PUBLIC, USER, ADMIN) debe realizarse en el controller
    **/
   public function getUsersByType($paginator, $userType) {
-    $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName,
-    u.UserName, u.DisplayName, u.Email, u.Phone, u.DateOfBirth,
-    u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth,
-    u.MfaSecret, u.UserType, u.RegistrationDate, u.LastLogin, u.DeactivationDate,
-    u.UserLevel, u.SignedContract, u.LegalDocuments, u.ShortDescription,
-    u.OTPDate, u.OTPCode, u.OTPAttemps,
-    u.Oauth2ID, u.Oauth2Service, u.FailedLoginAttempts,
-    u.LockedUntil,u.ReferralCode,u.IsAdmin,
-    sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL, u.IsAdmin,
-    GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
-      ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
-    -- Subconsulta para reviews y ratings
-    (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
-    (SELECT COUNT(DISTINCT r.ReviewID)
-      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews,
-    -- Subconsulta para locations
-    (SELECT JSON_ARRAYAGG(
-      JSON_OBJECT(
-        'LocationID', l.LocationID,
-        'CountryCode', l.CountryCode,
-        'State', l.State,
-        'City', l.City,
-        'Cp', l.Cp,
-        'LocationName', l.LocationName,
-        'AddressName', l.AddressName,
-        'AddressNumber', l.AddressNumber,
-        'Floor', l.Floor,
-        'Department', l.Department,
-        'IsActive', l.IsActive
-      )
-    ) FROM UsersLocations as l WHERE l.UserID = u.UserID) as user_locations,
-    IF(ct.CurrencyCode IS NULL,'ARS',ct.CurrencyCode) as Currency
-    FROM Users AS u
-    LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
-    LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
-    LEFT JOIN Media AS m ON u.UserID = m.UserID
-    LEFT JOIN (
-      SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
-      MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
-      MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
-      FROM Offerings AS o
-      INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
-      WHERE o.Status = 'Active'
-      GROUP BY o.UserID
-    ) AS sub ON sub.UserID = u.UserID
-    LEFT JOIN UsersLocations as l ON u.UserID = l.UserID AND l.LocationID = 0
-    LEFT JOIN Countries as ct ON l.CountryCode = ct.CountryCode
-    WHERE u.UserType = ?
-    GROUP BY u.UserID
-    ORDER BY u.UserID
-    LIMIT ? OFFSET ?");
+    $stmt = $this->db->prepare(
+      $this->_sqlMain().
+      "WHERE u.UserType = ?
+      GROUP BY u.UserID
+      ORDER BY u.UserID
+      LIMIT ? OFFSET ?
+    ");
 
     $stmt->execute([$userType, $paginator->limit, $paginator->offset]);
     $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -174,68 +85,15 @@ class User {
    * @note El filtrado de datos según scope (PUBLIC, USER, ADMIN) debe realizarse en el controller
    **/
   public function getUsersByCategory($paginator, $categoryID) {
-    $stmt = $this->db->prepare("WITH RECURSIVE category_tree AS (
-      SELECT CategoryID
-      FROM Categories
-      WHERE CategoryID = ?
-      UNION ALL
-      SELECT c.CategoryID
-      FROM Categories c
-      INNER JOIN category_tree AS cat ON c.ParentCategoryID = cat.CategoryID
-    )
-    SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName,
-    u.UserName, u.DisplayName, u.Email, u.Phone, u.DateOfBirth,
-    u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth,
-    u.MfaSecret, u.UserType, u.RegistrationDate, u.LastLogin, u.DeactivationDate,
-    u.UserLevel, u.SignedContract, u.LegalDocuments, u.ShortDescription,
-    u.OTPDate, u.OTPCode, u.OTPAttemps,
-    u.Oauth2ID, u.Oauth2Service, u.FailedLoginAttempts,
-    u.LockedUntil,u.ReferralCode,u.IsAdmin,
-    sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL, u.IsAdmin,
-    GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
-      ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
-    -- Subconsulta para reviews y ratings
-    (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
-    (SELECT COUNT(DISTINCT r.ReviewID)
-      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews,
-    -- Subconsulta para locations
-    (SELECT JSON_ARRAYAGG(
-      JSON_OBJECT(
-        'LocationID', l.LocationID,
-        'CountryCode', l.CountryCode,
-        'State', l.State,
-        'City', l.City,
-        'Cp', l.Cp,
-        'LocationName', l.LocationName,
-        'AddressName', l.AddressName,
-        'AddressNumber', l.AddressNumber,
-        'Floor', l.Floor,
-        'Department', l.Department,
-        'IsActive', l.IsActive
-      )
-    ) FROM UsersLocations as l WHERE l.UserID = u.UserID) as user_locations,
-    IF(ct.CurrencyCode IS NULL,'ARS',ct.CurrencyCode) as Currency
-    FROM Users AS u
-    INNER JOIN UsersCategories AS uc ON uc.userID = u.userID
-    INNER JOIN Categories AS c ON uc.CategoryID = c.CategoryID
-    INNER JOIN category_tree AS cat ON cat.CategoryID = c.CategoryID
-    LEFT JOIN Media AS m ON u.UserID = m.UserID
-    LEFT JOIN (
-      SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
-      MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
-      MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
-      FROM Offerings AS o
-      INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
-      WHERE o.Status = 'Active'
-      GROUP BY o.UserID
-    ) AS sub ON sub.UserID = u.UserID
-    LEFT JOIN UsersLocations as l ON u.UserID = l.UserID AND l.LocationID = 0
-    LEFT JOIN Countries as ct ON l.CountryCode = ct.CountryCode
-    WHERE u.DeactivationDate is null
-    GROUP BY u.UserID
-    ORDER BY u.UserID
-    LIMIT ? OFFSET ?");
+    $stmt = $this->db->prepare("WITH RECURSIVE ".
+      CategoryTreeHelper::getFilterCategoryCTE().
+      $this->_sqlMain().
+      "INNER JOIN category_filter_tree AS cat ON cat.CategoryID = c.CategoryID
+      WHERE u.DeactivationDate is null
+      GROUP BY u.UserID
+      ORDER BY u.UserID
+      LIMIT ? OFFSET ?
+    ");
     $stmt->execute([$categoryID, $paginator->limit, $paginator->offset]);
 
     $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -257,72 +115,34 @@ class User {
    *
    * @note El filtrado de datos según scope (PUBLIC, USER, ADMIN) debe realizarse en el controller
    **/
-  public function searchGuides($paginator, $query) {
+  public function searchGuides($paginator, $query, $category = null) {
     $searchQuery = "%$query%";
 
-    $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName,
-    u.UserName, u.DisplayName, u.Email, u.Phone, u.DateOfBirth,
-    u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth,
-    u.MfaSecret, u.UserType, u.RegistrationDate, u.LastLogin, u.DeactivationDate,
-    u.UserLevel, u.SignedContract, u.LegalDocuments, u.ShortDescription,
-    u.OTPDate, u.OTPCode, u.OTPAttemps,
-    u.Oauth2ID, u.Oauth2Service, u.FailedLoginAttempts,
-    u.LockedUntil,u.ReferralCode,u.IsAdmin,
-    sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL, u.IsAdmin,
-    GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
-      ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
-    -- Subconsulta para reviews y ratings
-    (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
-    (SELECT COUNT(DISTINCT r.ReviewID)
-      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews,
-    -- Subconsulta para locations
-    (SELECT JSON_ARRAYAGG(
-      JSON_OBJECT(
-        'LocationID', l.LocationID,
-        'CountryCode', l.CountryCode,
-        'State', l.State,
-        'City', l.City,
-        'Cp', l.Cp,
-        'LocationName', l.LocationName,
-        'AddressName', l.AddressName,
-        'AddressNumber', l.AddressNumber,
-        'Floor', l.Floor,
-        'Department', l.Department,
-        'IsActive', l.IsActive
+    $stmt = $this->db->prepare("WITH RECURSIVE ".
+      ($category !== null ? CategoryTreeHelper::getFilterCategoryCTE() : '').
+      $this->_sqlMain().
+      ($category !== null ? ' INNER JOIN category_filter_tree AS cat
+        ON cat.CategoryID = c.CategoryID ' : '').
+      "WHERE u.UserType = 'Guide' AND (
+        u.UserName LIKE ? OR
+        u.DisplayName LIKE ? OR
+        u.Biography LIKE ? OR
+        u.ShortDescription LIKE ? OR
+        c.Name LIKE ?
       )
-    ) FROM UsersLocations as l WHERE l.UserID = u.UserID) as user_locations,
-    IF(ct.CurrencyCode IS NULL,'ARS',ct.CurrencyCode) as Currency
-    FROM Users AS u
-    LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
-    LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
-    LEFT JOIN Media AS m ON u.UserID = m.UserID
-    LEFT JOIN (
-      SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
-      MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
-      MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
-      FROM Offerings AS o
-      INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
-      WHERE o.Status = 'Active'
-      GROUP BY o.UserID
-    ) AS sub ON sub.UserID = u.UserID
-    LEFT JOIN UsersLocations as l ON u.UserID = l.UserID AND l.LocationID = 0
-    LEFT JOIN Countries as ct ON l.CountryCode = ct.CountryCode
-    WHERE u.UserType = 'Guide' AND (
-      u.UserName LIKE ? OR
-      u.DisplayName LIKE ? OR
-      u.Biography LIKE ? OR
-      u.ShortDescription LIKE ? OR
-      c.Name LIKE ?
-    )
-    AND u.DeactivationDate IS NULL
-    GROUP BY u.UserID
-    ORDER BY u.UserID
-    LIMIT ? OFFSET ?");
+      AND u.DeactivationDate IS NULL
+      GROUP BY u.UserID
+      ORDER BY u.UserID
+      LIMIT ? OFFSET ?"
+    );
 
-    $stmt->execute([$searchQuery, $searchQuery, $searchQuery, $searchQuery, $searchQuery,
-      $paginator->limit, $paginator->offset]);
+    $params = [$searchQuery, $searchQuery, $searchQuery, $searchQuery, $searchQuery,
+      $paginator->limit, $paginator->offset];
+    if($category !== null){
+      array_unshift($params, $category);
+    }
 
+    $stmt->execute($params);
     $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $stmt = $this->db->query("SELECT FOUND_ROWS() AS total");
     $total = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -331,7 +151,7 @@ class User {
   }
 
   /**
-   * Trae los guias con offerings activos.
+   * Trae los guias con offerings activos y cuantos tienen.
    * @return array: lista de guias con offertings activos o [] si no hay ninguno
    **/
   public function getGuidesWithActiveOfferings() {
@@ -360,57 +180,12 @@ class User {
   public function getUserById($userID, $activeOnly = true) {
     $wactive = $activeOnly ? " AND u.DeactivationDate IS NULL " : "";
 
-    $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
-    u.UserName, u.DisplayName, u.Email, u.Phone, u.DateOfBirth,
-    u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth,
-    u.MfaSecret, u.UserType, u.RegistrationDate, u.LastLogin, u.DeactivationDate,
-    u.UserLevel, u.SignedContract, u.LegalDocuments, u.ShortDescription,
-    u.OTPDate, u.OTPCode, u.OTPAttemps,
-    u.Oauth2ID, u.Oauth2Service, u.FailedLoginAttempts,
-    u.LockedUntil,u.ReferralCode,u.IsAdmin,
-    sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL, u.IsAdmin,
-    GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
-      ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
-    -- Subconsulta para reviews y ratings
-    (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
-    (SELECT COUNT(DISTINCT r.ReviewID)
-      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews,
-    -- Subconsulta para locations
-    (SELECT JSON_ARRAYAGG(
-      JSON_OBJECT(
-        'LocationID', l.LocationID,
-        'CountryCode', l.CountryCode,
-        'State', l.State,
-        'City', l.City,
-        'Cp', l.Cp,
-        'LocationName', l.LocationName,
-        'AddressName', l.AddressName,
-        'AddressNumber', l.AddressNumber,
-        'Floor', l.Floor,
-        'Department', l.Department,
-        'IsActive', l.IsActive
-      )
-    ) FROM UsersLocations as l WHERE l.UserID = u.UserID) as user_locations,
-    IF(ct.CurrencyCode IS NULL,'ARS',ct.CurrencyCode) as Currency
-    FROM Users AS u
-    LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
-    LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
-    LEFT JOIN Media AS m ON u.UserID = m.UserID
-    LEFT JOIN (
-      SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
-      MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
-      MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
-      FROM Offerings AS o
-      INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
-      WHERE o.Status = 'Active'
-      GROUP BY o.UserID
-    ) AS sub ON sub.UserID = u.UserID
-    LEFT JOIN UsersLocations as l ON u.UserID = l.UserID AND l.LocationID = 0
-    LEFT JOIN Countries as ct ON l.CountryCode = ct.CountryCode
-    WHERE u.UserID = ? $wactive
-    GROUP BY u.UserID
-    ORDER BY u.UserID");
+    $stmt = $this->db->prepare(
+      $this->_sqlMainSingle().
+      "WHERE u.UserID = ? $wactive
+      GROUP BY u.UserID
+      ORDER BY u.UserID"
+    );
 
     $stmt->execute([$userID]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -433,57 +208,12 @@ class User {
   public function getUserByUserName($userName, $activeOnly = true) {
     $wactive = $activeOnly ? " AND u.DeactivationDate IS NULL " : "";
 
-    $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
-    u.UserName, u.DisplayName, u.Email, u.Phone, u.DateOfBirth,
-    u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth,
-    u.MfaSecret, u.UserType, u.RegistrationDate, u.LastLogin, u.DeactivationDate,
-    u.UserLevel, u.SignedContract, u.LegalDocuments, u.ShortDescription,
-    u.OTPDate, u.OTPCode, u.OTPAttemps,
-    u.Oauth2ID, u.Oauth2Service, u.FailedLoginAttempts,
-    u.LockedUntil,u.ReferralCode,u.IsAdmin,
-    sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL, u.IsAdmin,
-    GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
-      ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
-    -- Subconsulta para reviews y ratings
-    (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
-    (SELECT COUNT(DISTINCT r.ReviewID)
-      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews,
-    -- Subconsulta para locations
-    (SELECT JSON_ARRAYAGG(
-      JSON_OBJECT(
-        'LocationID', l.LocationID,
-        'CountryCode', l.CountryCode,
-        'State', l.State,
-        'City', l.City,
-        'Cp', l.Cp,
-        'LocationName', l.LocationName,
-        'AddressName', l.AddressName,
-        'AddressNumber', l.AddressNumber,
-        'Floor', l.Floor,
-        'Department', l.Department,
-        'IsActive', l.IsActive
-      )
-    ) FROM UsersLocations as l WHERE l.UserID = u.UserID) as user_locations,
-    IF(ct.CurrencyCode IS NULL,'ARS',ct.CurrencyCode) as Currency
-    FROM Users AS u
-    LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
-    LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
-    LEFT JOIN Media AS m ON u.UserID = m.UserID
-    LEFT JOIN (
-      SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
-      MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
-      MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
-      FROM Offerings AS o
-      INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
-      WHERE o.Status = 'Active'
-      GROUP BY o.UserID
-    ) AS sub ON sub.UserID = u.UserID
-    LEFT JOIN UsersLocations as l ON u.UserID = l.UserID AND l.LocationID = 0
-    LEFT JOIN Countries as ct ON l.CountryCode = ct.CountryCode
-    WHERE u.UserName = ? $wactive
-    GROUP BY u.UserID
-    ORDER BY u.UserID");
+    $stmt = $this->db->prepare(
+      $this->_sqlMainSingle().
+      "WHERE u.UserName = ? $wactive
+      GROUP BY u.UserID
+      ORDER BY u.UserID"
+    );
 
     $stmt->execute([$userName]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -506,57 +236,12 @@ class User {
   public function getUserByEmail($email, $activeOnly = true) {
     $wactive = $activeOnly ? " AND u.DeactivationDate IS NULL " : "";
 
-    $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
-    u.UserName, u.DisplayName, u.Email, u.Phone, u.DateOfBirth,
-    u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth,
-    u.MfaSecret, u.UserType, u.RegistrationDate, u.LastLogin, u.DeactivationDate,
-    u.UserLevel, u.SignedContract, u.LegalDocuments, u.ShortDescription,
-    u.OTPDate, u.OTPCode, u.OTPAttemps,
-    u.Oauth2ID, u.Oauth2Service, u.FailedLoginAttempts,
-    u.LockedUntil,u.ReferralCode,u.IsAdmin,
-    sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL, u.IsAdmin,
-    GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
-      ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
-    -- Subconsulta para reviews y ratings
-    (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
-    (SELECT COUNT(DISTINCT r.ReviewID)
-      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews,
-    -- Subconsulta para locations
-    (SELECT JSON_ARRAYAGG(
-      JSON_OBJECT(
-        'LocationID', l.LocationID,
-        'CountryCode', l.CountryCode,
-        'State', l.State,
-        'City', l.City,
-        'Cp', l.Cp,
-        'LocationName', l.LocationName,
-        'AddressName', l.AddressName,
-        'AddressNumber', l.AddressNumber,
-        'Floor', l.Floor,
-        'Department', l.Department,
-        'IsActive', l.IsActive
-      )
-    ) FROM UsersLocations as l WHERE l.UserID = u.UserID) as user_locations,
-    IF(ct.CurrencyCode IS NULL,'ARS',ct.CurrencyCode) as Currency
-    FROM Users AS u
-    LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
-    LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
-    LEFT JOIN Media AS m ON u.UserID = m.UserID
-    LEFT JOIN (
-      SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
-      MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
-      MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
-      FROM Offerings AS o
-      INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
-      WHERE o.Status = 'Active'
-      GROUP BY o.UserID
-    ) AS sub ON sub.UserID = u.UserID
-    LEFT JOIN UsersLocations as l ON u.UserID = l.UserID AND l.LocationID = 0
-    LEFT JOIN Countries as ct ON l.CountryCode = ct.CountryCode
-    WHERE u.Email = ? $wactive
-    GROUP BY u.UserID
-    ORDER BY u.UserID");
+    $stmt = $this->db->prepare(
+      $this->_sqlMainSingle().
+      "WHERE u.Email = ? $wactive
+      GROUP BY u.UserID
+      ORDER BY u.UserID"
+    );
 
     $stmt->execute([$email]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -579,57 +264,12 @@ class User {
   public function getUserByPhone($phone, $activeOnly = true) {
     $wactive = $activeOnly ? " AND u.DeactivationDate IS NULL " : "";
 
-    $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
-    u.UserName, u.DisplayName, u.Email, u.Phone, u.DateOfBirth,
-    u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth,
-    u.MfaSecret, u.UserType, u.RegistrationDate, u.LastLogin, u.DeactivationDate,
-    u.UserLevel, u.SignedContract, u.LegalDocuments, u.ShortDescription,
-    u.OTPDate, u.OTPCode, u.OTPAttemps,
-    u.Oauth2ID, u.Oauth2Service, u.FailedLoginAttempts,
-    u.LockedUntil,u.ReferralCode,u.IsAdmin,
-    sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL, u.IsAdmin,
-    GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
-      ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
-    -- Subconsulta para reviews y ratings
-    (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
-    (SELECT COUNT(DISTINCT r.ReviewID)
-      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews,
-    -- Subconsulta para locations
-    (SELECT JSON_ARRAYAGG(
-      JSON_OBJECT(
-        'LocationID', l.LocationID,
-        'CountryCode', l.CountryCode,
-        'State', l.State,
-        'City', l.City,
-        'Cp', l.Cp,
-        'LocationName', l.LocationName,
-        'AddressName', l.AddressName,
-        'AddressNumber', l.AddressNumber,
-        'Floor', l.Floor,
-        'Department', l.Department,
-        'IsActive', l.IsActive
-      )
-    ) FROM UsersLocations as l WHERE l.UserID = u.UserID) as user_locations,
-    IF(ct.CurrencyCode IS NULL,'ARS',ct.CurrencyCode) as Currency
-    FROM Users AS u
-    LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
-    LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
-    LEFT JOIN Media AS m ON u.UserID = m.UserID
-    LEFT JOIN (
-      SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
-      MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
-      MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
-      FROM Offerings AS o
-      INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
-      WHERE o.Status = 'Active'
-      GROUP BY o.UserID
-    ) AS sub ON sub.UserID = u.UserID
-    LEFT JOIN UsersLocations as l ON u.UserID = l.UserID AND l.LocationID = 0
-    LEFT JOIN Countries as ct ON l.CountryCode = ct.CountryCode
-    WHERE u.Phone = ? $wactive
-    GROUP BY u.UserID
-    ORDER BY u.UserID");
+    $stmt = $this->db->prepare(
+      $this->_sqlMainSingle().
+      "WHERE u.Phone = ? $wactive
+      GROUP BY u.UserID
+      ORDER BY u.UserID"
+    );
 
     $stmt->execute([$phone]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -653,57 +293,12 @@ class User {
   public function getUserByOAuthID($oAuthID, $oAuthService, $activeOnly = true) {
     $wactive = $activeOnly ? " AND u.DeactivationDate IS NULL " : "";
 
-    $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
-    u.UserName, u.DisplayName, u.Email, u.Phone, u.DateOfBirth,
-    u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth,
-    u.MfaSecret, u.UserType, u.RegistrationDate, u.LastLogin, u.DeactivationDate,
-    u.UserLevel, u.SignedContract, u.LegalDocuments, u.ShortDescription,
-    u.OTPDate, u.OTPCode, u.OTPAttemps,
-    u.Oauth2ID, u.Oauth2Service, u.FailedLoginAttempts,
-    u.LockedUntil,u.ReferralCode,u.IsAdmin,
-    sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL, u.IsAdmin,
-    GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
-      ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
-    -- Subconsulta para reviews y ratings
-    (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
-    (SELECT COUNT(DISTINCT r.ReviewID)
-      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews,
-    -- Subconsulta para locations
-    (SELECT JSON_ARRAYAGG(
-      JSON_OBJECT(
-        'LocationID', l.LocationID,
-        'CountryCode', l.CountryCode,
-        'State', l.State,
-        'City', l.City,
-        'Cp', l.Cp,
-        'LocationName', l.LocationName,
-        'AddressName', l.AddressName,
-        'AddressNumber', l.AddressNumber,
-        'Floor', l.Floor,
-        'Department', l.Department,
-        'IsActive', l.IsActive
-      )
-    ) FROM UsersLocations as l WHERE l.UserID = u.UserID) as user_locations,
-    IF(ct.CurrencyCode IS NULL,'ARS',ct.CurrencyCode) as Currency
-    FROM Users AS u
-    LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
-    LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
-    LEFT JOIN Media AS m ON u.UserID = m.UserID
-    LEFT JOIN (
-      SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
-      MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
-      MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
-      FROM Offerings AS o
-      INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
-      WHERE o.Status = 'Active'
-      GROUP BY o.UserID
-    ) AS sub ON sub.UserID = u.UserID
-    LEFT JOIN UsersLocations as l ON u.UserID = l.UserID AND l.LocationID = 0
-    LEFT JOIN Countries as ct ON l.CountryCode = ct.CountryCode
-    WHERE u.Oauth2ID = ? AND u.Oauth2Service = ? $wactive
-    GROUP BY u.UserID
-    ORDER BY u.UserID");
+    $stmt = $this->db->prepare(
+      $this->_sqlMainSingle().
+      "WHERE u.Oauth2ID = ? AND u.Oauth2Service = ? $wactive
+      GROUP BY u.UserID
+      ORDER BY u.UserID"
+    );
 
     $stmt->execute([$oAuthID, $oAuthService]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -726,62 +321,76 @@ class User {
   public function getUserByRefCode($referralCode, $activeOnly = true) {
     $wactive = $activeOnly ? " AND u.DeactivationDate IS NULL " : "";
 
-    $stmt = $this->db->prepare("SELECT u.UserID, u.FirstName, u.LastName,
-    u.UserName, u.DisplayName, u.Email, u.Phone, u.DateOfBirth,
-    u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth,
-    u.MfaSecret, u.UserType, u.RegistrationDate, u.LastLogin, u.DeactivationDate,
-    u.UserLevel, u.SignedContract, u.LegalDocuments, u.ShortDescription,
-    u.OTPDate, u.OTPCode, u.OTPAttemps,
-    u.Oauth2ID, u.Oauth2Service, u.FailedLoginAttempts,
-    u.LockedUntil,u.ReferralCode,u.IsAdmin,
-    sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL, u.IsAdmin,
-    GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
-      ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
-    -- Subconsulta para reviews y ratings
-    (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
-      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
-    (SELECT COUNT(DISTINCT r.ReviewID)
-      FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews,
-    -- Subconsulta para locations
-    (SELECT JSON_ARRAYAGG(
-      JSON_OBJECT(
-        'LocationID', l.LocationID,
-        'CountryCode', l.CountryCode,
-        'State', l.State,
-        'City', l.City,
-        'Cp', l.Cp,
-        'LocationName', l.LocationName,
-        'AddressName', l.AddressName,
-        'AddressNumber', l.AddressNumber,
-        'Floor', l.Floor,
-        'Department', l.Department,
-        'IsActive', l.IsActive
-      )
-    ) FROM UsersLocations as l WHERE l.UserID = u.UserID) as user_locations,
-    IF(ct.CurrencyCode IS NULL,'ARS',ct.CurrencyCode) as Currency
-    FROM Users AS u
-    LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
-    LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
-    LEFT JOIN Media AS m ON u.UserID = m.UserID
-    LEFT JOIN (
-      SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
-      MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
-      MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
-      FROM Offerings AS o
-      INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
-      WHERE o.Status = 'Active'
-      GROUP BY o.UserID
-    ) AS sub ON sub.UserID = u.UserID
-    LEFT JOIN UsersLocations as l ON u.UserID = l.UserID AND l.LocationID = 0
-    LEFT JOIN Countries as ct ON l.CountryCode = ct.CountryCode
-    WHERE u.ReferralCode = ? $wactive
-    GROUP BY u.UserID
-    ORDER BY u.UserID");
+    $stmt = $this->db->prepare(
+      $this->_sqlMainSingle().
+      "WHERE u.ReferralCode = ? $wactive
+      GROUP BY u.UserID
+      ORDER BY u.UserID"
+    );
 
     $stmt->execute([$referralCode]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
     return $this -> _getUserGeneric($user);
+  }
+
+  /**
+   * Generaliza la consulta principal de obtener users
+   *
+   * @return string: consulta principal sin filtros
+   **/
+  private function _sqlMainSingle() {
+    return str_replace('SQL_CALC_FOUND_ROWS ', '', $this->_sqlMain());
+  }
+  private function _sqlMain(){
+    return "SELECT SQL_CALC_FOUND_ROWS u.UserID, u.FirstName, u.LastName,
+      u.UserName, u.DisplayName, u.Email, u.Phone, u.DateOfBirth,
+      u.Gender, u.Biography, u.ValidatedEmail, u.ValidatedPhone, u.TwoFactorAuth,
+      u.MfaSecret, u.UserType, u.RegistrationDate, u.LastLogin, u.DeactivationDate,
+      u.UserLevel, u.SignedContract, u.LegalDocuments, u.ShortDescription,
+      u.OTPDate, u.OTPCode, u.OTPAttemps,
+      u.Oauth2ID, u.Oauth2Service, u.FailedLoginAttempts,
+      u.LockedUntil,u.ReferralCode,u.IsAdmin,
+      sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL, u.IsAdmin,
+      GROUP_CONCAT(DISTINCT CONCAT(c.CategoryID,':',trim(c.Name))
+        ORDER BY c.CategoryID ASC SEPARATOR ', ') AS Categories,
+      -- Subconsulta para reviews y ratings
+      (SELECT ROUND(CAST(AVG(r.Rating) AS FLOAT),2)
+        FROM Reviews AS r WHERE r.GuideID = u.UserID) AS Rating,
+      (SELECT COUNT(DISTINCT r.ReviewID)
+        FROM Reviews AS r WHERE r.GuideID = u.UserID) AS TotalReviews,
+      -- Subconsulta para locations
+      (SELECT JSON_ARRAYAGG(
+        JSON_OBJECT(
+          'LocationID', l.LocationID,
+          'CountryCode', l.CountryCode,
+          'State', l.State,
+          'City', l.City,
+          'Cp', l.Cp,
+          'LocationName', l.LocationName,
+          'AddressName', l.AddressName,
+          'AddressNumber', l.AddressNumber,
+          'Floor', l.Floor,
+          'Department', l.Department,
+          'IsActive', l.IsActive
+        )
+      ) FROM UsersLocations as l WHERE l.UserID = u.UserID) as user_locations,
+      IF(ct.CurrencyCode IS NULL,'ARS',ct.CurrencyCode) as Currency
+      FROM Users AS u
+      LEFT JOIN UsersCategories AS uc ON uc.userID = u.userID
+      LEFT JOIN Categories AS c ON uc.CategoryID = c.CategoryID
+      LEFT JOIN Media AS m ON u.UserID = m.UserID
+      LEFT JOIN (
+        SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
+        MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
+        MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
+        FROM Offerings AS o
+        INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
+        WHERE o.Status = 'Active'
+        GROUP BY o.UserID
+      ) AS sub ON sub.UserID = u.UserID
+      LEFT JOIN UsersLocations as l ON u.UserID = l.UserID AND l.LocationID = 0
+      LEFT JOIN Countries as ct ON l.CountryCode = ct.CountryCode ";
   }
 
   /**

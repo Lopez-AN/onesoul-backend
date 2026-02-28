@@ -16,7 +16,7 @@ use Firebase\JWT\JWT;
 use Firebase\JWT\JWK;
 use Stripe\Stripe;
 use DateTime;
-use App\Utils\EmailHelper;
+use App\Helpers\EmailHelper;
 use Predis\Client as RedisClient;
 use App\Utils\ParameterValidator;
 

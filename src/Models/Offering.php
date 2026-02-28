@@ -5,6 +5,7 @@ namespace App\Models;
 use PDO;
 use App\Exceptions\DatabaseException;
 use App\Enums\MediaType;
+use App\Helpers\CategoryTreeHelper;
 
 class Offering {
   protected $db;
@@ -24,8 +25,8 @@ class Offering {
    * @throws DatabaseException
    **/
   public function getOfferings($paginator) {
-    $stmt = $this->db->prepare(
-      $this->_sqlCategoryRootCTE().
+    $stmt = $this->db->prepare("WITH RECURSIVE ".
+      CategoryTreeHelper::getRootCategoryCTE().
       $this->_sqlMain().
       "WHERE o.Status = 'Active' AND o.Approved = 1
       GROUP BY o.OfferingID
@@ -56,9 +57,9 @@ class Offering {
   public function searchOfferings($paginator, $query, $category = null) {
     $searchQuery = "%$query%";
 
-    $stmt = $this->db->prepare(
-      $this->_sqlCategoryRootCTE().
-      ($category !== null ? $this->_sqlCategoryFilterCTE() : '').
+    $stmt = $this->db->prepare("WITH RECURSIVE ".
+      CategoryTreeHelper::getRootCategoryCTE().','.
+      ($category !== null ? CategoryTreeHelper::getFilterCategoryCTE() : '').
       $this->_sqlMain().
       ($category !== null ? ' INNER JOIN category_filter_tree as ct
         ON ct.CategoryID = o.CategoryID ' : '').
@@ -95,9 +96,9 @@ class Offering {
    * @throws DatabaseException
    **/
   public function getOfferingById($offeringID) {
-    $stmt = $this->db->prepare(
-      $this->_sqlCategoryRootCTE().
-      $this->_sqlMain().
+    $stmt = $this->db->prepare("WITH RECURSIVE ".
+      CategoryTreeHelper::getRootCategoryCTE().
+      $this->_sqlMainSingle().
       "WHERE o.OfferingID = ?
       GROUP BY o.OfferingID"
     );
@@ -121,9 +122,9 @@ class Offering {
    * @throws DatabaseException
    **/
   public function getOfferingsByCategory($paginator, $category) {
-    $stmt = $this->db->prepare(
-      $this->_sqlCategoryRootCTE().
-      $this->_sqlCategoryFilterCTE().
+    $stmt = $this->db->prepare("WITH RECURSIVE ".
+      CategoryTreeHelper::getRootCategoryCTE().','.
+      CategoryTreeHelper::getFilterCategoryCTE().
       $this->_sqlMain().
       "INNER JOIN category_filter_tree as ct
         ON ct.CategoryID = o.CategoryID
@@ -154,8 +155,8 @@ class Offering {
    * @throws DatabaseException
    **/
   public function getOfferingsByUserId($paginator, $userID) {
-    $stmt = $this->db->prepare(
-      $this->_sqlCategoryRootCTE().
+    $stmt = $this->db->prepare("WITH RECURSIVE ".
+      CategoryTreeHelper::getRootCategoryCTE().
       $this->_sqlMain().
       "WHERE o.UserID = ?
       GROUP BY o.OfferingID
@@ -172,59 +173,13 @@ class Offering {
   }
 
   /**
-  * SQL CTE para obtener la categoría raiz
-  *
-  * @return string: CTE generado
-  **/
-  private function _sqlCategoryRootCTE(){
-    return "WITH RECURSIVE category_up AS (
-      SELECT CategoryID,
-        ParentCategoryID,
-        CategoryID AS OriginCategoryID
-      FROM Categories
-      UNION ALL
-      SELECT
-        p.CategoryID,
-        p.ParentCategoryID,
-        cu.OriginCategoryID
-      FROM Categories as p
-      INNER JOIN category_up as cu
-        ON cu.ParentCategoryID = p.CategoryID
-    ),
-    category_root AS (
-      SELECT
-        OriginCategoryID AS CategoryID,
-        CategoryID       AS RootCategoryID
-      FROM category_up
-      WHERE ParentCategoryID IS NULL -- RAIZ
-    )";
-  }
-
-  /**
-  * SQL CTE para filtrar categorias
-  *
-  * @return string: CTE generado
-  **/
-  private function _sqlCategoryFilterCTE(){
-    return ",category_filter_tree AS (
-  		SELECT
-		    c.CategoryID
-		  FROM Categories c
-		  WHERE c.CategoryID = ?
-		  UNION ALL
-		  SELECT
-		    ch.CategoryID
-		  FROM Categories ch
-		  INNER JOIN category_filter_tree ft
-		    ON ch.ParentCategoryID = ft.CategoryID
-		) ";
-  }
-
-  /**
    * Generaliza la consulta principal de obtener offerings
    *
    * @return string: consulta principal sin filtros
    **/
+  private function _sqlMainSingle() {
+    return str_replace('SQL_CALC_FOUND_ROWS ', '', $this->_sqlMain());
+  }
   private function _sqlMain(){
     return "SELECT SQL_CALC_FOUND_ROWS o.*,
       cr.RootCategoryID,
@@ -281,7 +236,7 @@ class Offering {
     LEFT JOIN Reviews ru ON u.UserID = ru.SeekerID
     LEFT JOIN Bookings b
       ON b.OfferingID = o.OfferingID
-    AND b.LastBookingEvent IN ('completed','rated')";
+    AND b.LastBookingEvent IN ('completed','rated') ";
   }
 
   /**
