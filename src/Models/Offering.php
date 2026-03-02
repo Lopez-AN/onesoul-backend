@@ -196,6 +196,7 @@ class Offering {
       mi.media_images                AS media_images,
       mv.media_videos                AS media_videos,
       fq.Faqs                        AS Faqs,
+      ol.Locations                   AS Locations,
       ROUND(AVG(r.Rating), 2)        AS Rating,
       COUNT(DISTINCT r.ReviewID)     AS TotalReviews,
       COUNT(DISTINCT b.BookingID)    AS Bookings
@@ -235,6 +236,22 @@ class Offering {
       FROM OfferingsFaqs
       GROUP BY OfferingID
     ) fq ON fq.OfferingID = o.OfferingID
+    LEFT JOIN (
+      SELECT ol.OfferingID,
+        JSON_ARRAYAGG(JSON_OBJECT(
+          'LocationID', ul.LocationID,
+          'LocationName', ul.LocationName,
+          'CountryCode', ul.CountryCode,
+          'State', ul.State,
+          'City', ul.City
+        )) AS Locations
+      FROM OfferingsLocations ol
+      INNER JOIN UsersLocations ul
+        ON ul.UserID = ol.UserID
+        AND ul.LocationID = ol.LocationID
+      WHERE ul.IsActive = 1
+      GROUP BY ol.OfferingID
+    ) ol ON ol.OfferingID = o.OfferingID
     LEFT JOIN Reviews r  ON o.OfferingID = r.OfferingID
     LEFT JOIN Reviews ru ON u.UserID = ru.SeekerID
     LEFT JOIN Bookings b
@@ -274,10 +291,8 @@ class Offering {
     }
     unset($offering['media_videos']);
 
-    $faqs = @json_decode($offering['Faqs'], true);
-    if($faqs){
-      $offering['Faqs'] = $faqs;
-    }
+    $offering['Faqs'] = $offering['Faqs'] ? json_decode($offering['Faqs'], true) : [];
+    $offering['Locations'] = $offering['Locations'] ? json_decode($offering['Locations'], true) : [];
 
     $offering['Author'] = [
       "UserID" => $offering['author_UserID'],
@@ -301,7 +316,6 @@ class Offering {
       "Name" => $offering['RootCategoryName'],
     ];
     unset($offering['RootCategoryID'], $offering['RootCategoryName']);
-
 
     unset($offering['Rating'],
       $offering['author_UserID'],
@@ -349,10 +363,8 @@ class Offering {
       }
       unset($e['media_videos']);
 
-      $faqs = @json_decode($e['Faqs'], true);
-      if($faqs){
-        $e['Faqs'] = $faqs;
-      }
+      $e['Faqs'] = $e['Faqs'] ? json_decode($e['Faqs'], true) : [];
+      $e['Locations'] = $e['Locations'] ? json_decode($e['Locations'], true) : [];
 
       $e['Author'] = [
         "UserID" => $e['author_UserID'],

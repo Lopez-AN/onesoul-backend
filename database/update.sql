@@ -9,3 +9,5 @@ ON Bookings (OfferingID, LastBookingEvent);
 
 CREATE INDEX idx_media_offering_type
 ON Media (OfferingID, MediaType);
+
+DROP TABLE `OfferingsPackages`;

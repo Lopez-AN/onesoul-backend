@@ -363,12 +363,14 @@ class User {
       u.Oauth2ID, u.Oauth2Service, u.FailedLoginAttempts,
       u.LockedUntil, u.ReferralCode, u.IsAdmin,
       sub.AvgRate, sub.hasVirtual, sub.hasInPerson, m.URL AS ImgURL,
-      JSON_ARRAYAGG(
-        JSON_OBJECT(
-          'CategoryID', c.CategoryID,
-          'CategoryName', TRIM(c.Name),
-          'RootCategoryID', cr.RootCategoryID,
-          'RootCategoryName', TRIM(cr.RootCategoryName)
+      IF(c.CategoryID IS NULL, NULL,
+        JSON_ARRAYAGG(
+          JSON_OBJECT(
+            'CategoryID', c.CategoryID,
+            'CategoryName', TRIM(c.Name),
+            'RootCategoryID', cr.RootCategoryID,
+            'RootCategoryName', TRIM(cr.RootCategoryName)
+          )
         )
       ) AS user_categories,
       -- Subconsulta para reviews y ratings
@@ -399,11 +401,10 @@ class User {
       LEFT JOIN category_root as cr ON cr.CategoryID = c.CategoryID
       LEFT JOIN Media AS m ON u.UserID = m.UserID
       LEFT JOIN (
-        SELECT ROUND(AVG(p.Price),0) AS AvgRate, o.UserID,
-        MAX(CASE WHEN p.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
-        MAX(CASE WHEN p.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
+        SELECT ROUND(AVG(o.Price),0) AS AvgRate, o.UserID,
+        MAX(CASE WHEN o.SessionType IN ('virtual', 'both') THEN 1 ELSE 0 END) AS hasVirtual,
+        MAX(CASE WHEN o.SessionType IN ('in-person', 'both') THEN 1 ELSE 0 END) AS hasInPerson
         FROM Offerings AS o
-        INNER JOIN OfferingsPackages AS p ON o.OfferingID = p.OfferingID
         WHERE o.Status = 'Active'
         GROUP BY o.UserID
       ) AS sub ON sub.UserID = u.UserID
