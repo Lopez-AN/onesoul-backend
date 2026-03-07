@@ -187,8 +187,6 @@ class Offering {
       cr.RootCategoryName,
       u.UserID      AS author_UserID,
       u.DisplayName AS author_DisplayName,
-      u.FirstName   AS author_FirstName,
-      u.LastName    AS author_LastName,
       u.UserName    AS author_UserName,
       ROUND(AVG(ru.Rating), 2)       AS author_Rating,
       COUNT(DISTINCT ru.ReviewID)    AS author_TotalReviews,
@@ -297,8 +295,7 @@ class Offering {
     $offering['Author'] = [
       "UserID" => $offering['author_UserID'],
       "DisplayName" => $offering['author_DisplayName'],
-      "FirstName" => $offering['author_FirstName'],
-      "LastName" => $offering['author_LastName'],
+      "UserName" => $offering['author_UserName'],
       "Rating" => floatVal($offering['author_Rating']),
       "TotalReviews" => intval($offering['author_TotalReviews']),
       "ImgURL" => $offering['author_ImgURL']
@@ -320,8 +317,6 @@ class Offering {
     unset($offering['Rating'],
       $offering['author_UserID'],
       $offering['author_DisplayName'],
-      $offering['author_FirstName'],
-      $offering['author_LastName'],
       $offering['author_UserName'],
       $offering['author_Rating'],
       $offering['author_TotalReviews'],
@@ -369,8 +364,7 @@ class Offering {
       $e['Author'] = [
         "UserID" => $e['author_UserID'],
         "DisplayName" => $e['author_DisplayName'],
-        "FirstName" => $e['author_FirstName'],
-        "LastName" => $e['author_LastName'],
+        "UserName" => $e['author_UserName'],
         "Rating" => floatVal($e['author_Rating']),
         "TotalReviews" => intval($e['author_TotalReviews']),
         "ImgURL" => $e['author_ImgURL']
@@ -392,8 +386,6 @@ class Offering {
       unset($e['Rating'],
         $e['author_UserID'],
         $e['author_DisplayName'],
-        $e['author_FirstName'],
-        $e['author_LastName'],
         $e['author_UserName'],
         $e['author_Rating'],
         $e['author_TotalReviews'],

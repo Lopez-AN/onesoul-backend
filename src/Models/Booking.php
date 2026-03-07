@@ -533,11 +533,11 @@ class Booking {
   public function getReviews($limit, $from = null, $to = null, $rating = null) {
     try {
       $query = "SELECT SQL_CALC_FOUND_ROWS r.ReviewID, r.CreationDate, r.SeekerID AS SeekerID,
-        IF(u.DisplayName IS NULL, CONCAT(u.FirstName, ' ', u.LastName), u.DisplayName) AS Reviewer,
+        IF(u.DisplayName IS NULL, u.Username, u.DisplayName) AS Reviewer,
         l.CountryCode, r.ReviewText, r.Rating,
         r.OfferingID, o.Title AS TitleOffering,
         r.GuideID AS GuideID,
-        IF(u2.DisplayName IS NULL, CONCAT(u2.FirstName, ' ', u2.LastName), u2.DisplayName) AS Guide,
+        IF(u2.DisplayName IS NULL, u2.Username, u2.DisplayName) AS Guide,
         m.URL as ReviewerProfilePhoto, r.Reply
         FROM Reviews AS r
         INNER JOIN Offerings AS o ON r.OfferingID = o.OfferingID
@@ -599,11 +599,11 @@ class Booking {
   {
     try {
       $query = "SELECT SQL_CALC_FOUND_ROWS r.ReviewID, r.CreationDate, r.SeekerID AS SeekerID,
-        IF(u.DisplayName IS NULL, CONCAT(u.FirstName, ' ', u.LastName), u.DisplayName) AS Reviewer,
+        IF(u.DisplayName IS NULL, u.Username, u.DisplayName) AS Reviewer,
         l.CountryCode, r.ReviewText, r.Rating,
         r.OfferingID, o.Title AS TitleOffering,
         r.GuideID AS GuideID,
-        IF(u2.DisplayName IS NULL, CONCAT(u2.FirstName, ' ', u2.LastName), u2.DisplayName) AS Guide,
+        IF(u2.DisplayName IS NULL, u2.Username, u2.DisplayName) AS Guide,
         m.URL as ReviewerProfilePhoto, r.Reply
         FROM Reviews AS r
         INNER JOIN Offerings AS o ON r.OfferingID = o.OfferingID
@@ -667,11 +667,11 @@ class Booking {
   {
     try {
       $query = "SELECT SQL_CALC_FOUND_ROWS r.ReviewID, r.CreationDate, r.SeekerID AS SeekerID,
-        IF(u.DisplayName IS NULL, CONCAT(u.FirstName, ' ', u.LastName), u.DisplayName) AS Reviewer,
+        IF(u.DisplayName IS NULL, u.Username, u.DisplayName) AS Reviewer,
         l.CountryCode, r.ReviewText, r.Rating,
         r.OfferingID, o.Title AS TitleOffering,
         r.GuideID AS GuideID,
-        IF(u2.DisplayName IS NULL, CONCAT(u2.FirstName, ' ', u2.LastName), u2.DisplayName) AS Guide,
+        IF(u2.DisplayName IS NULL, u2.Username, u2.DisplayName) AS Guide,
         m.URL as ReviewerProfilePhoto, r.Reply
         FROM Reviews AS r
         INNER JOIN Offerings AS o ON r.OfferingID = o.OfferingID
@@ -749,11 +749,11 @@ class Booking {
       $type = $isGuide ? 'r.GuideID' : 'r.SeekerID';
 
       $query = "SELECT SQL_CALC_FOUND_ROWS r.ReviewID, r.CreationDate, r.SeekerID AS SeekerID,
-        IF(u.DisplayName IS NULL, CONCAT(u.FirstName, ' ', u.LastName), u.DisplayName) AS Reviewer,
+        IF(u.DisplayName IS NULL, u.Username, u.DisplayName) AS Reviewer,
         l.CountryCode, r.ReviewText, r.Rating,
         r.OfferingID, o.Title AS TitleOffering,
         r.GuideID AS GuideID,
-        IF(u2.DisplayName IS NULL, CONCAT(u2.FirstName, ' ', u2.LastName), u2.DisplayName) AS Guide,
+        IF(u2.DisplayName IS NULL, u2.Username, u2.DisplayName) AS Guide,
         m.URL as ReviewerProfilePhoto, r.Reply
         FROM Reviews AS r
         INNER JOIN Offerings AS o ON r.OfferingID = o.OfferingID
@@ -809,11 +809,11 @@ class Booking {
   {
     try {
       $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS r.ReviewID, r.CreationDate, r.SeekerID AS SeekerID,
-        IF(u.DisplayName IS NULL, CONCAT(u.FirstName, ' ', u.LastName), u.DisplayName) AS Reviewer,
+        IF(u.DisplayName IS NULL, u.Username, u.DisplayName) AS Reviewer,
         l.CountryCode, r.ReviewText, r.Rating,
         r.OfferingID, o.Title AS TitleOffering,
         r.GuideID AS GuideID,
-        IF(u2.DisplayName IS NULL, CONCAT(u2.FirstName, ' ', u2.LastName), u2.DisplayName) AS Guide,
+        IF(u2.DisplayName IS NULL, u2.Username, u2.DisplayName) AS Guide,
         m.URL as ReviewerProfilePhoto, r.Reply
         FROM Reviews AS r
         INNER JOIN Offerings AS o ON r.OfferingID = o.OfferingID
@@ -843,11 +843,11 @@ class Booking {
   {
     try {
       $query = "SELECT SQL_CALC_FOUND_ROWS r.ReviewID, r.CreationDate, r.SeekerID AS SeekerID,
-        IF(u.DisplayName IS NULL, CONCAT(u.FirstName, ' ', u.LastName), u.DisplayName) AS Reviewer,
+        IF(u.DisplayName IS NULL, u.Username, u.DisplayName) AS Reviewer,
         l.CountryCode, r.ReviewText, r.Rating,
         r.OfferingID, o.Title AS TitleOffering,
         r.GuideID AS GuideID,
-        IF(u2.DisplayName IS NULL, CONCAT(u2.FirstName, ' ', u2.LastName), u2.DisplayName) AS Guide,
+        IF(u2.DisplayName IS NULL, u2.Username, u2.DisplayName) AS Guide,
         m.URL as ReviewerProfilePhoto, r.Reply
         FROM Reviews AS r
         INNER JOIN Offerings AS o ON r.OfferingID = o.OfferingID

@@ -11,3 +11,6 @@ CREATE INDEX idx_media_offering_type
 ON Media (OfferingID, MediaType);
 
 DROP TABLE `OfferingsPackages`;
+
+ALTER TABLE `Bookings`
+	DROP FOREIGN KEY `Bookings_ibfk_3`;
