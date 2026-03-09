@@ -30,6 +30,14 @@
       "max": 999999999
     }
   },
+  "get_completed_bookings": {
+    "GuideID": {
+      "required": true,
+      "type": "integer",
+      "min": 0,
+      "max": 999999999
+    }
+  },
   "get_seeker_info": {
     "BookingID": {
       "required": true,

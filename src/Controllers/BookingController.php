@@ -252,6 +252,39 @@ class BookingController {
   }
 
   /**
+   * Obtiene la cantidad de servicios completados de un guía específico (cliente)
+   * Solo el buscador o un administrador puede acceder a esta información
+   * Soporta paginación y filtrado por estado (abierto/cerrado)
+   * @param Request $request: objeto de la petición HTTP entrante con JWT y query params opcionales (status)
+   * @param Response $response: objeto de la respuesta HTTP
+   * @param array $args: argumentos de ruta, debe incluir 'userID' del guia
+   * @return Response: JSON con lista de reservas paginadas o error
+   * @statusCode 200: éxito - cantidad de bookings completados por el guía
+   * @statusCode 500: error interno del servidor
+   **/
+  public function getGuideCompletedBookings(Request $request, Response $response, $args) {
+    $params['GuideID'] = $args['GuideID'];
+
+    $pValidation = ParameterValidator::validate($response, 'bookings','get_completed_bookings', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
+    }
+    $params = $pValidation->values;
+
+    try {
+      $completed = $this->booking->getGuideCompletedBookings($params['GuideID']);
+      return $response->withJson($completed);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  /**
    * Obtiene información detallada del cliente (seeker) asociado a una reserva
    * Retorna datos personales, de contacto, ubicación y rating del buscador
    * @param Request $request: objeto de la petición HTTP entrante con JWT

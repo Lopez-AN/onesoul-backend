@@ -13,6 +13,12 @@ class Booking {
     $this->db = $db;
   }
 
+  /**
+   * Obtiene los datos completos de una reserva por su ID numérico
+   * Incluye información del seeker, guía, offering y eventos
+   * @param int $bookingID: ID numérico de la reserva
+   * @return array|false: datos de la reserva o false si no existe
+   */
   public function getBookingByID($bookingID) {
     $stmt = $this->db->prepare("SELECT b.BookingID, b.PublicID,
       b.ReviewID, b.PaymentID, b.Mode as SessionType, b.LocationID, b.CreationDate,
@@ -55,6 +61,12 @@ class Booking {
     return $this->_getBookingsGeneric($booking);
   }
 
+  /**
+   * Obtiene los datos completos de una reserva por su ID público
+   * Incluye información del seeker, guía, offering y eventos
+   * @param string $publicID: ID público de la reserva (formato: XX-YYMM-T-HASH)
+   * @return array|false: datos de la reserva o false si no existe
+   */
   public function getBookingByPublicID($publicID) {
     $stmt = $this->db->prepare("SELECT b.BookingID, b.PublicID,
       b.ReviewID, b.PaymentID, b.Mode as SessionType, b.LocationID, b.CreationDate,
@@ -97,6 +109,14 @@ class Booking {
     return $this->_getBookingsGeneric($booking);
   }
 
+  /**
+   * Obtiene todas las reservas de un guía específico con paginación
+   * Permite filtrar solo reservas abiertas (no canceladas/completadas/calificadas)
+   * @param int $guideID: ID del usuario guía
+   * @param object $paginator: objeto con propiedades limit y offset para paginación
+   * @param bool $onlyOpen: true para filtrar solo reservas abiertas, false para todas
+   * @return array: { data: [], rows: { total: int, fetched: int } }
+   */
   public function getBookingsByGuide($guideID, $paginator, $onlyOpen) {
     $filterOpen = $onlyOpen ?
       " AND LastBookingEvent NOT IN ('Canceled', 'Completed', 'Rated') " : "";
@@ -150,6 +170,14 @@ class Booking {
     return $this -> _getBookingsGenericMulti($bookings, $total['total']);
   }
 
+  /**
+   * Obtiene todas las reservas de un buscador específico con paginación
+   * Permite filtrar solo reservas abiertas (no canceladas/completadas/calificadas)
+   * @param int $seekerID: ID del usuario buscador
+   * @param object $paginator: objeto con propiedades limit y offset para paginación
+   * @param bool $onlyOpen: true para filtrar solo reservas abiertas, false para todas
+   * @return array: { data: [], rows: { total: int, fetched: int } }
+   */
   public function getBookingsBySeeker($seekerID, $paginator, $onlyOpen) {
     $filterOpen = $onlyOpen ?
       " AND LastBookingEvent NOT IN ('Canceled', 'Completed', 'Rated') " : "";
@@ -200,7 +228,24 @@ class Booking {
     $stmt = $this->db->query("SELECT FOUND_ROWS() as total");
     $total = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    return $this -> _getBookingsGenericMulti($bookings, $total['total'], $onlyOpen);
+    return $this -> _getBookingsGenericMulti($bookings, $total['total']);
+  }
+
+  /**
+   * Obtiene la cantidad total de servicios completados por un guía
+   * Cuenta reservas con estado 'Rated' o 'Completed'
+   * @param int $guideID: ID del usuario guía
+   * @return array: { CompletedBookings: int }
+   */
+  public function getGuideCompletedBookings($guideID) {
+    $stmt = $this->db->prepare("SELECT COUNT(*) as CompletedBookings
+      FROM Bookings as b
+      INNER JOIN Offerings as o
+        ON b.OfferingID = o.OfferingID
+      WHERE b.LastBookingEvent IN ('Rated','Completed')
+      AND o.UserID = ?");
+    $stmt->execute([$guideID]);
+    return $stmt->fetch(PDO::FETCH_ASSOC);
   }
 
   /**
@@ -223,9 +268,11 @@ class Booking {
     $booking['Events'] = @json_decode($booking['booking_events'], true);
     unset($booking['booking_events']);
 
-    usort($booking['Events'], function($a, $b){
-      return $a['EventDate'] < $b['EventDate'] ? 1 : -1;
-    });
+    if(!empty($booking['Events'])){
+      usort($booking['Events'] ?? [], function($a, $b){
+        return $a['EventDate'] < $b['EventDate'] ? 1 : -1;
+      });
+    }
 
     return $booking;
   }
@@ -236,7 +283,7 @@ class Booking {
    * Trae los eventos e información para un conjunto de bookings.
    * Retorna en formato paginado.
    *
-   * @param  array $offerings: array de bookings obtenidas de la BD
+   * @param  array $bookings: array de bookings obtenidas de la BD
    * @param  int $total: cantidad total de registros disponibles
    * @return object: { data: [], rows: { total: int, fetched: int } }
    **/
@@ -248,9 +295,11 @@ class Booking {
       $e['Events'] = @json_decode($e['booking_events'], true);
       unset($e['booking_events']);
 
-      usort($e['Events'], function($a, $b){
-        return $a['EventDate'] < $b['EventDate'] ? 1 : -1;
-      });
+      if(!empty($e['Events'])){
+        usort($e['Events'], function($a, $b){
+          return $a['EventDate'] < $b['EventDate'] ? 1 : -1;
+        });
+      }
     }
 
     return [
@@ -262,7 +311,17 @@ class Booking {
     ];
   }
 
+  /**
+   * Cuenta el total de reservas de un guía
+   * Permite filtrar solo reservas abiertas
+   * @param int $guideID: ID del usuario guía
+   * @param bool $onlyOpen: true para contar solo reservas abiertas
+   * @return int: cantidad de reservas encontradas
+   */
   public function countBookingsByGuide($guideID, $onlyOpen) {
+    $filterOpen = $onlyOpen ?
+      " AND LastBookingEvent NOT IN ('Canceled', 'Completed', 'Rated') " : "";
+
     $stmt = $this->db->prepare("SELECT COUNT(*) AS found
       FROM Bookings AS b
       INNER JOIN Offerings AS o ON b.OfferingID = o.OfferingID
@@ -273,7 +332,17 @@ class Booking {
     return ($bookings && isset($bookings['found'])) ? $bookings['found'] : 0;
   }
 
+  /**
+   * Cuenta el total de reservas de un buscador
+   * Permite filtrar solo reservas abiertas
+   * @param int $seekerID: ID del usuario buscador
+   * @param bool $onlyOpen: true para contar solo reservas abiertas
+   * @return int: cantidad de reservas encontradas
+   */
   public function countBookingsBySeeker($seekerID, $onlyOpen) {
+    $filterOpen = $onlyOpen ?
+      " AND LastBookingEvent NOT IN ('Canceled', 'Completed', 'Rated') " : "";
+
     $stmt = $this->db->prepare("SELECT COUNT(*) AS found
       FROM Bookings AS b
       INNER JOIN Offerings AS o ON b.OfferingID = o.OfferingID
@@ -284,6 +353,17 @@ class Booking {
     return ($bookings && isset($bookings['found'])) ? $bookings['found'] : 0;
   }
 
+  /**
+   * Crea una nueva reserva en el sistema
+   * Inserta booking, evento inicial 'Pending', actualiza voucher si existe y vincula Cal.com
+   * Usa transacciones para garantizar consistencia de datos
+   * @param array $data: datos de la reserva (OfferingID, PublicID, SeekerID, SessionType, LocationID, ScheduledDate, Currency, Amount)
+   * @param string $subDomain: subdominio de la agencia (opcional)
+   * @param string|null $assocUUID: UUID de Cal.com para vincular con webhook
+   * @param int|null $voucherID: ID del voucher/cupón a redimir
+   * @return array: datos completos de la reserva creada
+   * @throws DatabaseException: si falla la creación o recuperación del booking
+   */
   public function createBooking($data, $subDomain, $assocUUID, $voucherID) {
     try {
       $this->db->beginTransaction(); # Iniciar transacción
@@ -335,6 +415,11 @@ class Booking {
     }
   }
 
+  /**
+   * Verifica si un usuario tiene conexión activa con Cal.com
+   * @param int $userID: ID del usuario a verificar
+   * @return bool: true si tiene conexión, false en caso contrario
+   */
   public function userHasCal($userID){
     $stmt = $this->db->prepare("SELECT 1 FROM CalConnections
       WHERE UserID = ? LIMIT 1");
@@ -342,6 +427,13 @@ class Booking {
     return (bool) $stmt->fetchColumn();
   }
 
+  /**
+   * Busca un invitee de Cal.com sin booking asociado
+   * Verifica que el evento sea 'BOOKING_CREATED' y pertenezca al guía
+   * @param string $assocUUID: UUID asociado al webhook de Cal.com
+   * @param int $userID: ID del guía propietario del evento
+   * @return array|false: datos del webhook o false si no existe
+   */
   public function findCalInvitee($assocUUID, $userID) {
     $stmt = $this->db->prepare("SELECT *
       FROM CalWebhooks
@@ -351,15 +443,32 @@ class Booking {
     return $stmt->fetch(PDO::FETCH_ASSOC);
   }
 
+  /**
+   * Vincula una reserva con un webhook de Cal.com
+   * @param string $assocUUID: UUID asociado al webhook
+   * @param int $bookingID: ID de la reserva a vincular
+   */
   public function linkBookingWithCal($assocUUID, $bookingID) {
-    $stmt = $this->db->prepare("UPDATE CalendlyWebhooks
+    $stmt = $this->db->prepare("UPDATE CalWebhooks
       SET BookingID = ?
       WHERE BookingID IS NULL AND AssocUUID = ?
-      AND Event = 'BOOKING_CREATED'
-      AND ");
+      AND Event = 'BOOKING_CREATED'");
     $stmt->execute([$bookingID, $assocUUID]);
   }
 
+  /**
+   * Actualiza los datos de una reserva existente
+   * Modifica tipo de sesión, fecha programada y crea evento 'Modified'
+   * Usa transacciones para garantizar consistencia
+   * @param int $bookingID: ID de la reserva a actualizar
+   * @param string $sessionType: tipo de sesión ('in-person' o 'virtual')
+   * @param string|null $scheduledDate: fecha programada en formato ISO o Y-m-d H:i:s
+   * @param string|null $message: mensaje del cliente/guía
+   * @param int|null $locationID: ID de la ubicación (para sesiones presenciales)
+   * @param string $subDomain: subdominio de la agencia
+   * @return array: datos completos de la reserva actualizada
+   * @throws DatabaseException: si falla la actualización o recuperación
+   */
   public function updateBooking($bookingID, $sessionType, $scheduledDate, $message, $locationID, $subDomain) {
     try {
       $this->db->beginTransaction(); # Iniciar transacción
@@ -393,6 +502,16 @@ class Booking {
     }
   }
 
+  /**
+   * Cancela una reserva existente
+   * Actualiza estado a 'Canceled' y crea evento correspondiente
+   * Usa transacciones para garantizar consistencia
+   * @param int $bookingID: ID de la reserva a cancelar
+   * @param string|null $message: motivo de cancelación
+   * @param string $subDomain: subdominio de la agencia
+   * @return array: datos completos de la reserva cancelada
+   * @throws DatabaseException: si falla la cancelación o recuperación
+   */
   public function cancelBooking($bookingID, $message, $subDomain) {
     try {
       $this->db->beginTransaction(); # Iniciar transacción
@@ -418,6 +537,16 @@ class Booking {
     }
   }
 
+  /**
+   * Confirma una reserva existente
+   * Actualiza estado a 'Confirmed' y crea evento correspondiente
+   * Usa transacciones para garantizar consistencia
+   * @param int $bookingID: ID de la reserva a confirmar
+   * @param string|null $message: mensaje de confirmación del guía
+   * @param string $subDomain: subdominio de la agencia
+   * @return array: datos completos de la reserva confirmada
+   * @throws DatabaseException: si falla la confirmación o recuperación
+   */
   public function confirmBooking($bookingID, $message, $subDomain) {
     try {
       $this->db->beginTransaction(); # Iniciar transacción
@@ -443,6 +572,20 @@ class Booking {
     }
   }
 
+  /**
+   * Marca una reserva como completada
+   * Crea una reseña del guía sobre el seeker, actualiza estado a 'Completed'
+   * y establece FeedbackStatus a 'Pending' (esperando calificación del seeker)
+   * Usa transacciones para garantizar consistencia
+   * @param int $bookingID: ID de la reserva a completar
+   * @param string|null $message: comentario del guía sobre la sesión
+   * @param int $seekerID: ID del usuario buscador
+   * @param int $guideID: ID del usuario guía
+   * @param int $rating: calificación del seeker por el guía (1-5)
+   * @param bool $fulfilled: true si la sesión se cumplió, false si no asistió
+   * @return array: datos completos de la reserva completada
+   * @throws DatabaseException: si falla la operación o recuperación
+   */
   public function completeBooking($bookingID, $message, $seekerID, $guideID, $rating, $fulfilled) {
     try {
       $this->db->beginTransaction(); # Iniciar transacción
@@ -482,6 +625,21 @@ class Booking {
     }
   }
 
+  /**
+   * Permite al seeker calificar una reserva completada
+   * Crea una reseña del servicio/offering, actualiza estado a 'Rated'
+   * y establece FeedbackStatus a 'Submitted'
+   * Usa transacciones para garantizar consistencia
+   * @param int $offeringID: ID del servicio calificado
+   * @param int $bookingID: ID de la reserva a calificar
+   * @param string|null $message: comentario del seeker sobre el servicio
+   * @param int $seekerID: ID del usuario buscador
+   * @param int $guideID: ID del usuario guía
+   * @param int $rating: calificación del servicio (1-5)
+   * @param bool $fulfilled: true si el servicio cumplió expectativas
+   * @return array: datos completos de la reserva calificada
+   * @throws DatabaseException: si falla la operación o recuperación
+   */
   public function rateBooking($offeringID, $bookingID, $message, $seekerID, $guideID, $rating, $fulfilled) {
     try {
       $this->db->beginTransaction(); # Iniciar transacción
@@ -527,9 +685,16 @@ class Booking {
     }
   }
 
-  /*
-  REVIEWS
-  */
+  /**
+   * Obtiene todas las reseñas del sistema con filtros opcionales
+   * Soporta paginación y filtrado por rango de fechas y calificación
+   * @param int $limit: cantidad máxima de resultados a retornar
+   * @param string|null $from: fecha inicio en formato YYYYMMDD
+   * @param string|null $to: fecha fin en formato YYYYMMDD
+   * @param int|null $rating: filtrar por calificación específica (1-5)
+   * @return array|null: { data: [], rows: { total: int, fetched: int } } o null si no hay resultados
+   * @throws DatabaseException: si falla la consulta
+   */
   public function getReviews($limit, $from = null, $to = null, $rating = null) {
     try {
       $query = "SELECT SQL_CALC_FOUND_ROWS r.ReviewID, r.CreationDate, r.SeekerID AS SeekerID,
@@ -595,6 +760,17 @@ class Booking {
     }
   }
 
+  /**
+   * Obtiene todas las reseñas recibidas por un guía específico
+   * Soporta paginación y filtrado por rango de fechas y calificación
+   * @param int $userID: ID del usuario guía
+   * @param int $limit: cantidad máxima de resultados a retornar
+   * @param string|null $from: fecha inicio en formato YYYYMMDD
+   * @param string|null $to: fecha fin en formato YYYYMMDD
+   * @param int|null $rating: filtrar por calificación específica (1-5)
+   * @return array|null: { data: [], rows: { total: int, fetched: int } } o null si no hay resultados
+   * @throws DatabaseException: si falla la consulta
+   */
   public function getReviewsByGuide($userID, $limit, $from = null, $to = null, $rating = null)
   {
     try {
@@ -663,6 +839,17 @@ class Booking {
     }
   }
 
+  /**
+   * Obtiene todas las reseñas realizadas por un buscador específico
+   * Soporta paginación y filtrado por rango de fechas y calificación
+   * @param int $userID: ID del usuario buscador
+   * @param int $limit: cantidad máxima de resultados a retornar
+   * @param string|null $from: fecha inicio en formato YYYYMMDD
+   * @param string|null $to: fecha fin en formato YYYYMMDD
+   * @param int|null $rating: filtrar por calificación específica (1-5)
+   * @return array|null: { data: [], rows: { total: int, fetched: int } } o null si no hay resultados
+   * @throws DatabaseException: si falla la consulta
+   */
   public function getReviewsBySeeker($userID, $limit, $from = null, $to = null, $rating = null)
   {
     try {
@@ -731,7 +918,19 @@ class Booking {
     }
   }
 
-  # TRAE TODAS LAS REVIEWS DEL USUARIO, TANTO COMO GUIA Y COMO BUSCADOR
+  /**
+   * Obtiene todas las reseñas de un usuario (como guía O como buscador)
+   * Determina automáticamente el rol del usuario según su UserType
+   * Soporta paginación y filtrado por rango de fechas y calificación
+   * @param int $userID: ID del usuario
+   * @param int $limit: cantidad máxima de resultados a retornar
+   * @param string|null $from: fecha inicio en formato YYYYMMDD
+   * @param string|null $to: fecha fin en formato YYYYMMDD
+   * @param int|null $rating: filtrar por calificación específica (1-5)
+   * @return array|null: { data: [], rows: { total: int, fetched: int } } o null si no hay resultados
+   * @throws DatabaseException: si falla la consulta
+   * @throws \Exception: si el usuario no existe
+   */
   public function getReviewsByUser($userID, $limit, $from = null, $to = null, $rating = null)
   {
     try {
@@ -805,6 +1004,12 @@ class Booking {
     }
   }
 
+  /**
+   * Obtiene los datos de una reseña específica por su ID
+   * @param int $reviewID: ID de la reseña
+   * @return array|null: datos completos de la reseña o null si no existe
+   * @throws DatabaseException: si falla la consulta
+   */
   public function getReviewsByID($reviewID)
   {
     try {
@@ -839,6 +1044,17 @@ class Booking {
     }
   }
 
+  /**
+   * Obtiene todas las reseñas de un servicio/offering específico
+   * Soporta paginación y filtrado por rango de fechas y calificación
+   * @param int $offeringID: ID del servicio
+   * @param int $limit: cantidad máxima de resultados a retornar
+   * @param string|null $from: fecha inicio en formato YYYYMMDD
+   * @param string|null $to: fecha fin en formato YYYYMMDD
+   * @param int|null $rating: filtrar por calificación específica (1-5)
+   * @return array|null: { data: [], rows: { total: int, fetched: int } } o null si no hay resultados
+   * @throws DatabaseException: si falla la consulta
+   */
   public function getReviewsByOffering($offeringID, $limit, $from = null, $to = null, $rating = null)
   {
     try {
@@ -906,6 +1122,12 @@ class Booking {
     }
   }
 
+  /**
+   * Verifica si una ubicación específica existe para un offering
+   * @param int $offeringID: ID del servicio
+   * @param int $locationID: ID de la ubicación
+   * @return array|false: { LocationID: int } o false si no existe
+   */
   public function getLocation($offeringID, $locationID){
     $stmt = $this->db->prepare("SELECT LocationID
       FROM OfferingLocations

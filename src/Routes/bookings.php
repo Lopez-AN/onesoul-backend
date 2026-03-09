@@ -35,6 +35,7 @@ return function (App $app) {
   $app->get('/bookings/{BookingID}', [$bookingController, 'getBookingByID'])->add($requiredJwt);
   $app->get('/bookings/public/{PublicID}', [$bookingController, 'getBookingByPublicID'])->add($requiredJwt);
   $app->get('/bookings/guide/{GuideID}', [$bookingController, 'getBookingsByGuide'])->add($requiredJwt);
+  $app->get('/bookings/completed/{GuideID}', [$bookingController, 'getGuideCompletedBookings']);
   $app->get('/bookings/seeker/{SeekerID}', [$bookingController, 'getBookingsBySeeker'])->add($requiredJwt);
   $app->get('/bookings/seeker/info/{BookingID}', [$bookingController, 'getSeekerInfo'])->add($requiredJwt);
   $app->post('/bookings', [$bookingController, 'createBooking'])->add($requiredJwt);
