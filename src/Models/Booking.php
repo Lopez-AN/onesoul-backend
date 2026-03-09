@@ -24,6 +24,7 @@ class Booking {
       b.ReviewID, b.PaymentID, b.Mode as SessionType, b.LocationID, b.CreationDate,
       b.ScheduledDate, b.ModificationDate, o.UserID AS Guide, u.DisplayName, b.OfferingID,
       o.Title AS TitleOffering, b.ScheduledDate, b.Currency, b.Amount, b.VoucherID,
+      b.LastBookingEvent,
       -- Subconsulta para seeker
       (
         SELECT JSON_ARRAYAGG(
@@ -72,6 +73,7 @@ class Booking {
       b.ReviewID, b.PaymentID, b.Mode as SessionType, b.LocationID, b.CreationDate,
       b.ScheduledDate, b.ModificationDate, o.UserID AS Guide, u.DisplayName, b.OfferingID,
       o.Title AS TitleOffering, b.ScheduledDate, b.Currency, b.Amount, b.VoucherID,
+      b.LastBookingEvent,
       -- Subconsulta para seeker
       (
         SELECT JSON_ARRAYAGG(
@@ -126,6 +128,7 @@ class Booking {
       b.ReviewID, b.PaymentID, b.Mode as SessionType, b.LocationID, b.CreationDate,
       b.ScheduledDate, b.ModificationDate, o.UserID AS Guide, u.DisplayName, b.OfferingID,
       o.Title AS TitleOffering, b.ScheduledDate, b.Currency, b.Amount, b.VoucherID,
+      b.LastBookingEvent,
       -- Subconsulta para seeker
       (
         SELECT JSON_ARRAYAGG(
@@ -187,6 +190,7 @@ class Booking {
       b.ReviewID, b.PaymentID, b.Mode as SessionType, b.LocationID, b.CreationDate,
       b.ScheduledDate, b.ModificationDate, o.UserID AS Guide, u.DisplayName, b.OfferingID,
       o.Title AS TitleOffering, b.ScheduledDate, b.Currency, b.Amount, b.VoucherID,
+      b.LastBookingEvent,
       -- Subconsulta para seeker
       (
         SELECT JSON_ARRAYAGG(
