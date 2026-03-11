@@ -272,8 +272,8 @@ class Booking {
     $booking['Events'] = @json_decode($booking['booking_events'], true);
     unset($booking['booking_events']);
 
-    if(!empty($booking['Events'])){
-      usort($booking['Events'] ?? [], function($a, $b){
+    if(!empty($booking['Events']) && is_array($booking['Events'])){
+      usort($booking['Events'], function($a, $b){
         return $a['EventDate'] < $b['EventDate'] ? 1 : -1;
       });
     }
@@ -299,7 +299,7 @@ class Booking {
       $e['Events'] = @json_decode($e['booking_events'], true);
       unset($e['booking_events']);
 
-      if(!empty($e['Events'])){
+      if(!empty($e['Events']) && is_array($e['Events'])){
         usort($e['Events'], function($a, $b){
           return $a['EventDate'] < $b['EventDate'] ? 1 : -1;
         });
@@ -374,8 +374,8 @@ class Booking {
 
       $stmt = $this->db->prepare("INSERT INTO Bookings
         (OfferingID, PublicID, UserID, Mode, LocationID,
-        CreationDate, ScheduledDate, VoucherID, Currency, Amount)
-        VALUES (?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?)");
+        CreationDate, ScheduledDate, VoucherID, Currency, Amount, LastBookingEvent)
+        VALUES (?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?, 'pending')");
       $stmt->execute([
         $data['OfferingID'],
         $data['PublicID'],
