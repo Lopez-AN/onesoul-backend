@@ -1,6 +1,6 @@
 <?php
 
-use App\Utils\EmailHelper;
+use App\Helpers\EmailHelper;
 use App\Models\Notification;
 use App\Enums\DeliveriesMode;
 use App\Services\TwilioService;

@@ -6,7 +6,7 @@ use PDO;
 use App\Exceptions\DatabaseException;
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
-use App\Utils\EmailHelper;
+use App\Helpers\EmailHelper;
 use App\Services\SubscriptionEnforcementService;
 
 class Subscription {
