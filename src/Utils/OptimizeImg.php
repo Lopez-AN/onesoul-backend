@@ -45,9 +45,6 @@ function optimizeImage($file, $maxWidth = 1024, $maxHeight = 1024, $webp = true)
   } else {
     imagejpeg($newImage, $optimizedPath, 80); // Guardar como JPEG calidad 80
   }
-  // Liberar la memoria
-  imagedestroy($source);
-  imagedestroy($newImage);
 
   return $optimizedPath;
 }

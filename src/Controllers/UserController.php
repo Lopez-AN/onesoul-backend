@@ -1263,7 +1263,7 @@ class UserController{
       $accounts = [];
       foreach ($result as $acc) {
         $accounts[] = [
-          "Nombre" => strtolower($acc['Name']),
+          "Name" => strtolower($acc['Name']),
           "URL"    => $acc['AccountName']
         ];
       }
