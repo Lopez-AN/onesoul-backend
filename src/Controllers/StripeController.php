@@ -279,6 +279,9 @@ class StripeController{
   public function upgradeApply(Request $request, Response $response, array $args) {
     $data = $request->getParsedBody();
     $jwt = $request->getAttribute('jwt');
+    $userID = null;
+    $platformSubscriptionID = null;
+    $newPlanID = null;
 
     if (!isset($jwt->data) || !property_exists($jwt->data, 'UserID') || !property_exists($jwt->data, 'UserType')) {
       return $response->withStatus(401)->withJson([
@@ -303,8 +306,34 @@ class StripeController{
       }
 
       $platformSubscriptionID = $subscription['PlatformSubscriptionID'];
+      $newPlanID = isset($data['PlanID']) ? (int) $data['PlanID'] : null;
 
-      $newPlanID = $data['PlanID'] ?? null;
+      // Flujo estricto: bloquear nuevos upgrades si existe uno colgado en espera de pago.
+      $waitingChange = $this->subscription->getWaitingChange($platformSubscriptionID);
+      if (!empty($waitingChange)) {
+        $this->logUpgradeRejection(
+          $userID,
+          $platformSubscriptionID,
+          $newPlanID,
+          'UPGRADE_PENDING_BLOCKED',
+          'There is a pending upgrade waiting for payment confirmation. Resolve it before retrying.',
+          null,
+          null,
+          null,
+          [
+            'waitingChangeId' => $waitingChange['id'] ?? null,
+            'waitingStatus' => $waitingChange['Status'] ?? null
+          ]
+        );
+
+        return $response->withStatus(409)->withJson([
+          'error' => [
+            'code' => 'UPGRADE_PENDING_BLOCKED',
+            'desc' => 'There is a pending upgrade waiting for payment confirmation. Resolve it before retrying.'
+          ]
+        ]);
+      }
+
       // Obtener el ID de Stripe desde el plan
       $plan = $this->subscription->getSubscriptionPlanByID($newPlanID);
       if (!$plan || empty($plan['StripeID'])) {
@@ -333,13 +362,12 @@ class StripeController{
 
       $sub = \Stripe\Subscription::retrieve($platformSubscriptionID);
       $itemId = $sub->items->data[0]->id;
-      $currentPeriodEnd = $sub->items->data[0]->current_period_end;
 
       $updated = \Stripe\Subscription::update($platformSubscriptionID, [
         'items' => [[ 'id' => $itemId, 'price' => $newPriceId ]],
         'proration_behavior' => 'always_invoice',   // factura la diferencia ahora
         'proration_date'     => $prorationDate,     // MISMO que el preview
-        'payment_behavior'   => 'pending_if_incomplete', // si requiere SCA, queda pendiente
+        'payment_behavior'   => 'error_if_incomplete', // si no puede cobrarse ahora, falla y no aplica cambio
         'expand' => ['latest_invoice.payment_intent', 'latest_invoice.charge'],
       ]);
 
@@ -356,6 +384,17 @@ class StripeController{
         ]);
       }
       if ($pi && $pi->status === 'requires_action') {
+        $this->logUpgradeRejection(
+          $userID,
+          $platformSubscriptionID,
+          $newPlanID,
+          'UPGRADE_REQUIRES_ACTION',
+          'Payment requires additional user action and was rejected by strict flow.',
+          $invoice ? $invoice->id : null,
+          $pi->id ?? null,
+          $pi->status ?? null
+        );
+
         return $response->withJson([
           'Status'          => 'requires_action',
           'ClientSecret'    => $pi->client_secret,
@@ -365,6 +404,17 @@ class StripeController{
         ]);
       }
       if ($pi && $pi->status === 'requires_payment_method') {
+        $this->logUpgradeRejection(
+          $userID,
+          $platformSubscriptionID,
+          $newPlanID,
+          'UPGRADE_REQUIRES_PAYMENT_METHOD',
+          'Payment method was rejected by Stripe.',
+          $invoice ? $invoice->id : null,
+          $pi->id ?? null,
+          $pi->status ?? null
+        );
+
         return $response->withJson([
           'Status'          => 'requires_payment_method',
           // 'OperationId'     => $operationId,
@@ -372,23 +422,49 @@ class StripeController{
           'InvoiceId'       => $invoice->id
         ]);
       }
-      
-      // Agregar un cambio WAITING en BD
-      $changeId = $this->subscription->waitingSubscriptionChange(
+
+      // Flujo estricto: cualquier estado no pagado se rechaza.
+      $this->logUpgradeRejection(
+        $userID,
         $platformSubscriptionID,
         $newPlanID,
-        $currentPeriodEnd
+        'UPGRADE_NOT_CONFIRMED',
+        'The upgrade payment was not confirmed. No pending upgrade was created.',
+        $invoice ? $invoice->id : null,
+        $pi ? ($pi->id ?? null) : null,
+        $pi ? ($pi->status ?? null) : null,
+        [
+          'invoiceStatus' => $invoice ? ($invoice->status ?? null) : null
+        ]
       );
 
-      // Fallback: pendiente (stripe tratara de cobrar)
-      return $response->withJson([
-        'Status'          => 'pending',
-        // 'OperationId'     => $operationId,
-        'SubscriptionId'  => $updated->id,
-        'InvoiceId'       => $invoice ? $invoice->id : null
+      return $response->withStatus(409)->withJson([
+        'error' => [
+          'code' => 'UPGRADE_NOT_CONFIRMED',
+          'desc' => 'The upgrade payment was not confirmed. No pending upgrade was created.'
+        ]
       ]);
 
     } catch (\Stripe\Exception\ApiErrorException $e) {
+      if ($userID !== null) {
+        $stripeError = method_exists($e, 'getError') ? $e->getError() : null;
+        $this->logUpgradeRejection(
+          $userID,
+          $platformSubscriptionID,
+          $newPlanID,
+          'UPGRADE_STRIPE_ERROR',
+          $e->getMessage(),
+          null,
+          null,
+          null,
+          [
+            'stripeCode' => method_exists($e, 'getStripeCode') ? $e->getStripeCode() : null,
+            'httpStatus' => method_exists($e, 'getHttpStatus') ? $e->getHttpStatus() : null,
+            'errorType' => $stripeError ? ($stripeError->type ?? null) : null
+          ]
+        );
+      }
+
       return $response->withStatus(400)->withJson([
         "error" => [
           "code" => "STRIPE_ERROR",
@@ -396,12 +472,56 @@ class StripeController{
         ]
       ]);
     } catch (\Throwable $e) {
+      if ($userID !== null) {
+        $this->logUpgradeRejection(
+          $userID,
+          $platformSubscriptionID,
+          $newPlanID,
+          'UPGRADE_INTERNAL_ERROR',
+          $e->getMessage()
+        );
+      }
+
       return $response->withStatus(500)->withJson([
         "error" => [
           "code" => "INTERNAL_SERVER_ERROR",
           "desc" => $e->getMessage()
         ]
       ]);
+    }
+  }
+
+  private function logUpgradeRejection(
+    int $userID,
+    ?string $platformSubscriptionID,
+    ?int $newPlanID,
+    string $rejectionCode,
+    string $rejectionReason,
+    ?string $invoiceID = null,
+    ?string $paymentIntentID = null,
+    ?string $paymentIntentStatus = null,
+    ?array $context = null
+  ): void {
+    try {
+      $subscription = $platformSubscriptionID
+        ? $this->subscription->getUserSubscriptionByPlatformSubID($platformSubscriptionID)
+        : $this->subscription->getSubscriptionByUser($userID);
+
+      $this->subscription->createSubscriptionPaymentRejection([
+        'UserID' => $userID,
+        'PlatformSubscriptionID' => $platformSubscriptionID,
+        'PlatformCustomerID' => $subscription['PlatformCustomerID'] ?? null,
+        'NewPlanID' => $newPlanID,
+        'PaymentPlatform' => 'STRIPE',
+        'InvoiceID' => $invoiceID,
+        'PaymentIntentID' => $paymentIntentID,
+        'PaymentIntentStatus' => $paymentIntentStatus,
+        'RejectionCode' => $rejectionCode,
+        'RejectionReason' => $rejectionReason,
+        'Context' => $context
+      ]);
+    } catch (\Throwable $logError) {
+      error_log('Error logging subscription payment rejection: ' . $logError->getMessage());
     }
   }
 

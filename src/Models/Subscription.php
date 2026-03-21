@@ -775,6 +775,46 @@ class Subscription {
   }
 
   /**
+   * Registra un rechazo de pago de suscripción
+   * @param  array $data: datos del rechazo
+   * @return int|string: ID del registro creado
+   * @throws DatabaseException
+   */
+  public function createSubscriptionPaymentRejection($data) {
+    try {
+      $contextJson = null;
+      if (isset($data['Context']) && $data['Context'] !== null) {
+        $encoded = json_encode($data['Context'], JSON_UNESCAPED_UNICODE);
+        $contextJson = $encoded !== false ? $encoded : null;
+      }
+
+      $stmt = $this->db->prepare("INSERT INTO SubscriptionPaymentRejections
+        (UserID, PlatformSubscriptionID, PlatformCustomerID, NewPlanID, PaymentPlatform,
+        InvoiceID, PaymentIntentID, PaymentIntentStatus, RejectionCode, RejectionReason, ContextJSON)
+        VALUES (:UserID, :PlatformSubscriptionID, :PlatformCustomerID, :NewPlanID, :PaymentPlatform,
+        :InvoiceID, :PaymentIntentID, :PaymentIntentStatus, :RejectionCode, :RejectionReason, :ContextJSON)");
+
+      $stmt->execute([
+        ':UserID' => $data['UserID'] ?? null,
+        ':PlatformSubscriptionID' => $data['PlatformSubscriptionID'] ?? null,
+        ':PlatformCustomerID' => $data['PlatformCustomerID'] ?? null,
+        ':NewPlanID' => $data['NewPlanID'] ?? null,
+        ':PaymentPlatform' => $data['PaymentPlatform'] ?? 'STRIPE',
+        ':InvoiceID' => $data['InvoiceID'] ?? null,
+        ':PaymentIntentID' => $data['PaymentIntentID'] ?? null,
+        ':PaymentIntentStatus' => $data['PaymentIntentStatus'] ?? null,
+        ':RejectionCode' => $data['RejectionCode'] ?? 'UNKNOWN_REJECTION',
+        ':RejectionReason' => $data['RejectionReason'] ?? null,
+        ':ContextJSON' => $contextJson,
+      ]);
+
+      return $this->db->lastInsertId();
+    } catch (\PDOException $e) {
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  /**
    * Marca cancelación al final del período con fecha de efectividad
    * @param  string $platformSubscriptionID: ID de suscripción en plataforma de pagos
    * @param  string $canceledAt: fecha de cancelación

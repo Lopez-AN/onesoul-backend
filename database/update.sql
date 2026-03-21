@@ -1,16 +1,20 @@
-CREATE INDEX idx_offerings_status_approved
-ON Offerings (Status, Approved, OfferingID);
-
-CREATE INDEX idx_reviews_offering ON Reviews (OfferingID);
-CREATE INDEX idx_reviews_seeker   ON Reviews (SeekerID);
-
-CREATE INDEX idx_bookings_offering_event
-ON Bookings (OfferingID, LastBookingEvent);
-
-CREATE INDEX idx_media_offering_type
-ON Media (OfferingID, MediaType);
-
-DROP TABLE `OfferingsPackages`;
-
-ALTER TABLE `Bookings`
-	DROP FOREIGN KEY `Bookings_ibfk_3`;
+CREATE TABLE IF NOT EXISTS `SubscriptionPaymentRejections` (
+  `ID` bigint(20) unsigned NOT NULL AUTO_INCREMENT COMMENT 'Internal identifier',
+  `UserID` int(10) unsigned NOT NULL COMMENT 'User related to the rejected payment',
+  `PlatformSubscriptionID` varchar(128) DEFAULT NULL COMMENT 'Subscription identifier in payment platform',
+  `PlatformCustomerID` varchar(128) DEFAULT NULL COMMENT 'Customer identifier in payment platform',
+  `NewPlanID` smallint(5) unsigned DEFAULT NULL COMMENT 'Target plan that was requested',
+  `PaymentPlatform` varchar(50) NOT NULL DEFAULT 'STRIPE' COMMENT 'Payment platform name',
+  `InvoiceID` varchar(128) DEFAULT NULL COMMENT 'Invoice identifier in payment platform',
+  `PaymentIntentID` varchar(128) DEFAULT NULL COMMENT 'Payment intent identifier in payment platform',
+  `PaymentIntentStatus` varchar(50) DEFAULT NULL COMMENT 'Payment intent status at rejection time',
+  `RejectionCode` varchar(100) NOT NULL COMMENT 'Internal rejection code',
+  `RejectionReason` text DEFAULT NULL COMMENT 'Human-readable rejection reason',
+  `ContextJSON` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL COMMENT 'Additional structured context' CHECK (json_valid(`ContextJSON`)),
+  `CreatedAt` timestamp NULL DEFAULT current_timestamp() COMMENT 'Creation timestamp',
+  PRIMARY KEY (`ID`),
+  KEY `IDX_SubscriptionPaymentRejections_UserID` (`UserID`),
+  KEY `IDX_SubscriptionPaymentRejections_Subscription` (`PlatformSubscriptionID`),
+  KEY `IDX_SubscriptionPaymentRejections_Code` (`RejectionCode`),
+  CONSTRAINT `FK_SubscriptionPaymentRejections_User` FOREIGN KEY (`UserID`) REFERENCES `Users` (`UserID`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Stores subscription payment rejections for audit and troubleshooting.';
