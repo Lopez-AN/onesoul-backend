@@ -670,7 +670,7 @@ class AuthController{
             ]
           ]);
         }
-        $referrerUserID = $result->data['UserID'];
+        $referrerUserID = $result['UserID'];
       }
 
       # Verifico que usuario e email no existan
@@ -1129,7 +1129,7 @@ class AuthController{
             ]
           ]);
         }
-        $referrerUserID = $result->data['UserID'];
+        $referrerUserID = $result['UserID'];
       }
 
       # Verificar que email y username no existan
@@ -2619,8 +2619,8 @@ class AuthController{
    **/
   private function _handleReferralReward($referrerUserID, $userID) {
     # Genero los rewards si corresponde
-    $referralResult = $this->auth->handleReferralReward($referrerUserID, $userID);
-    if ($referralResult['RewardTriggered']) {
+    $rewardTriggered = $this->auth->handleReferralReward($referrerUserID, $userID);
+    if ($rewardTriggered) {
       $subscription = $this->subscription->getSubscriptionByUser($referrerUserID);
       $platformSubscriptionID = $subscription['PlatformSubscriptionID'] ?? null;
       $currentPlanID = $subscription['PlanDetails']['StripeID'] ?? null;

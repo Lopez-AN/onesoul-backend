@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Models\Auth;
 use App\Models\Category;
 use App\Models\Subscription;
+use App\Models\Notification;
 use JimTools\JwtAuth\Middleware\JwtAuthentication;
 use JimTools\JwtAuth\Decoder\FirebaseDecoder;
 use JimTools\JwtAuth\Options;
@@ -28,7 +29,8 @@ return function (App $app) {
   $category = new Category($pdo);
   $auth = new Auth($pdo, $redis);
   $subscription = new Subscription($pdo);
-  $userController = new UserController($user, $auth, $category, $subscription);
+  $notification = new Notification($pdo);
+  $userController = new UserController($user, $auth, $category, $subscription, $notification);
 
   $app->get('/users', [$userController, 'getUsers'])->add($optionalJwt);
   $app->get('/users/type/{UserType}', [$userController, 'getUsersByType'])->add($optionalJwt);

@@ -549,56 +549,6 @@ class User {
   }
 
   /**
-   * Envía un email de invitación con código de referencia
-   * @param  string $userName: nombre de usuario que invita
-   * @param  string $referralCode: código de referencia
-   * @param  string $email: email a invitar
-   * @param  string $subDomain: subdominio opcional de onesoul.app
-   * @return bool: true si se envió exitosamente, false en caso de excepcion
-   **/
-  public function inviteByEmail($userName, $referralCode, $email, $subDomain) {
-    # Construir enlace de referido
-    $origin = $subDomain ? "https://{$subDomain}.onesoul.app" : "https://onesoul.app";
-    $referralUrl = $origin ."/onboard/register?refid=" . urlencode($referralCode);
-
-    # Cargar plantilla HTML
-    $template = file_get_contents(ROOT."/src/Templates/email_refCode.html");
-    $template = str_replace("{LINK}", $referralUrl, $template);
-    $template = str_replace("{USERNAME}", $userName, $template);
-
-    $smtpAccount = $GLOBALS['config']['mailer']['account'];
-    $smtpPassword = $GLOBALS['config']['mailer']['password'];
-
-    # Configuración de PHPMailer
-    $mail = new PHPMailer(true);
-    try {
-      # Configuración del servidor SMTP
-      $mail->isSMTP();
-      $mail->Host = 'smtp.gmail.com';
-      $mail->SMTPAuth = true;
-      $mail->Username = $smtpAccount;
-      $mail->Password = $smtpPassword;
-      $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-      $mail->Port = 587;
-
-      # Configuración del remitente y destinatario
-      $mail->setFrom($smtpAccount,'Contacto OneSoul');
-      $mail->addAddress($email, $userName);
-
-      # Contenido del correo
-      $mail->isHTML(true);
-      $mail->Subject = "Te invitan a OneSoul.app";
-      $mail->Body    = $template;
-      $mail->addEmbeddedImage(ROOT."/src/Templates/logo2.png", 'logo');
-
-      # Enviar el correo
-      return $mail->send();
-    } catch (Exception $e) {
-      return false;
-    }
-  }
-
-  /**
    * Actualiza los datos de un usuario
    * @param  array $user: datos actuales del usuario
    * @param  array $values: valores correspondientes a los campos

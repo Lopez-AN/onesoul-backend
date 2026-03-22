@@ -9,6 +9,8 @@ use App\Models\User;
 use App\Models\Auth;
 use App\Models\Category;
 use App\Models\Subscription;
+use App\Models\Notification;
+use App\Helpers\EmailHelper;
 use App\Utils\ParameterValidator;
 
 require_once ROOT . '/src/Utils/validateReCaptcha.php';
@@ -22,12 +24,16 @@ class UserController{
   protected $auth;
   protected $category;
   protected $subscription;
+  protected $notification;
 
-  public function __construct(User $user, Auth $auth, Category $category, Subscription $subscription){
+  public function __construct(User $user, Auth $auth, Category $category,
+    Subscription $subscription, Notification $notification
+  ){
     $this->user = $user;
     $this->auth = $auth;
     $this->category = $category;
     $this->subscription = $subscription;
+    $this->notification = $notification;
   }
 
   /**
@@ -532,15 +538,36 @@ class UserController{
         ]);
       }
 
-      $result = $this->user->inviteByEmail($user['UserName'], $user['ReferralCode'], $email, $subDomain);
-      if (!$result) {
+      # Construir enlace de referido
+      $origin = $subDomain ? "https://{$subDomain}.onesoul.app" : "https://onesoul.app";
+      $referralUrl = $origin ."/onboard/register?refid=" . urlencode($user['ReferralCode']);
+
+      $event = $this->notification->getEventType("REFERRAL_CODE", "es");
+      if(empty($event)){
         return $response->withStatus(500)->withJson([
           "error" => [
-            "code" => "OTP_NOT_SENT",
-            "desc" => "Cannot send the invite email, try again later"
+            "code" => "INVITE_NOT_SENT",
+            "desc" => "Cannot send the invite email, event REFERRAL_CODE not found"
           ]
         ]);
       }
+
+      $payload = [
+        "LINK"     => $referralUrl,
+        "USERNAME"     => $user['UserName']
+      ];
+      $subject = $this->notification->renderTemplate($event[0]['TemplateSubject'], $payload);
+      $template = $this->notification->renderTemplate($event[0]['TemplateBody'], $payload);
+      $result = EmailHelper::send($email, $subject, $template);
+      if(!$result->sent){
+        return $response->withStatus(500)->withJson([
+          "error" => [
+            "code" => "OTP_NOT_SENT",
+            "desc" => "Cannot send the invite email, mailer error"
+          ]
+        ]);
+      }
+
       return $response->withStatus(200)->withJson("Invite email sent successfully");
     } catch (Throwable $e) {
       return $response->withStatus(500)->withJson([
