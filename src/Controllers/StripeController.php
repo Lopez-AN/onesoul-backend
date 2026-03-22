@@ -810,7 +810,16 @@ class StripeController{
 
       // Refrescar la suscripción para obtener los datos actualizados
       $sub = \Stripe\Subscription::retrieve($platformSubscriptionID);
-      $currentPeriodEnd = $sub->items->data[0]->current_period_end;
+      $currentPeriodEnd = $sub->current_period_end ?? ($sub->items->data[0]->current_period_end ?? null);
+
+      $cancelAtDate = $currentPeriodEnd ? date('Y-m-d H:i:s', $currentPeriodEnd) : null;
+
+      // Reflejar cancelación en base local inmediatamente (sin esperar webhook).
+      $this->subscription->markCancelAtPeriodEnd(
+        $platformSubscriptionID,
+        $cancelAtDate,
+        $cancelAtDate
+      );
 
       // Agregar un cambio PENDING en BD
       $changeId = $this->subscription->scheduleSubscriptionChange(
@@ -823,7 +832,7 @@ class StripeController{
         'Status' => $sub->status,
         'SubscriptionId' => $sub->id,
         'CancelAtPeriodEnd' => $sub->cancel_at_period_end,
-        'CancelAt' => $currentPeriodEnd ? date("Y-m-d H:i:s", $currentPeriodEnd) : null
+        'CancelAt' => $cancelAtDate
       ]);
 
     } catch (\Stripe\Exception\ApiErrorException $e) {

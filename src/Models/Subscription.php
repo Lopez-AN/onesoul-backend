@@ -824,7 +824,7 @@ class Subscription {
     $stmt = $this->db->prepare("UPDATE Subscriptions
       SET CancelAtPeriodEnd = 1, CancelAt = ?, NextBillingDate = ?
       WHERE PlatformSubscriptionID = ? AND
-      Status IN ('ACTIVE','TRIALING')");
+      Status IN ('ACTIVE','TRIALING','PAST_DUE','INCOMPLETE','PAUSED')");
     $stmt->execute([$canceledAt, $nextBillingDate, $platformSubscriptionID]);
   }
 
