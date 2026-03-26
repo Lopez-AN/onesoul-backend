@@ -18,3 +18,7 @@ CREATE TABLE IF NOT EXISTS `SubscriptionPaymentRejections` (
   KEY `IDX_SubscriptionPaymentRejections_Code` (`RejectionCode`),
   CONSTRAINT `FK_SubscriptionPaymentRejections_User` FOREIGN KEY (`UserID`) REFERENCES `Users` (`UserID`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Stores subscription payment rejections for audit and troubleshooting.';
+
+ALTER TABLE `Referrals`
+	CHANGE COLUMN `ReferredUserID` `ReferredUserID` INT(10) UNSIGNED NOT NULL COMMENT 'Identificador del usuario referido; se llena cuando el registro se completa.' AFTER `UserID`,
+	ADD CONSTRAINT `FK_Referrals_Users` FOREIGN KEY (`ReferredUserID`) REFERENCES `Users` (`UserID`) ON UPDATE CASCADE ON DELETE CASCADE;
