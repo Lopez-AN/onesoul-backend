@@ -291,6 +291,11 @@ class Offering {
 
     $offering['Faqs'] = $offering['Faqs'] ? json_decode($offering['Faqs'], true) : [];
     $offering['Locations'] = $offering['Locations'] ? json_decode($offering['Locations'], true) : [];
+    $offering['Tags'] = !empty($offering['Tags'])
+      ? array_values(array_filter(array_map('trim', explode(',', $offering['Tags'])), function($tag){
+        return $tag !== '';
+      }))
+      : [];
 
     $offering['Author'] = [
       "UserID" => $offering['author_UserID'],
@@ -360,6 +365,11 @@ class Offering {
 
       $e['Faqs'] = $e['Faqs'] ? json_decode($e['Faqs'], true) : [];
       $e['Locations'] = $e['Locations'] ? json_decode($e['Locations'], true) : [];
+      $e['Tags'] = !empty($e['Tags'])
+        ? array_values(array_filter(array_map('trim', explode(',', $e['Tags'])), function($tag){
+          return $tag !== '';
+        }))
+        : [];
 
       $e['Author'] = [
         "UserID" => $e['author_UserID'],
@@ -461,10 +471,9 @@ class Offering {
       # Inserto el offering
       $stmt = $this->db->prepare("INSERT INTO Offerings (Title, ShortDescription,
         Description, CategoryID, UserID, Status, CreationDate, Currency, Approved,
-        Tags, SKU, Stock, ServiceType, Price, SessionType, Conditions, Duration)
+        Tags, SKU, Stock, ServiceType)
         VALUES (:Title, :ShortDescription, :Description, :CategoryID, :UserID, :Status,
-        :CreationDate, :Currency, 0, :Tags, :SKU, :Stock, :ServiceType,
-        :Price, :SessionType, :Conditions, :Duration)");
+        :CreationDate, :Currency, 0, :Tags, :SKU, :Stock, :ServiceType)");
 
       $stmt->execute([
         ':Title' => $data['Title'],
@@ -472,34 +481,15 @@ class Offering {
         ':Description' => $data['Description'],
         ':CategoryID' => $data['CategoryID'],
         ':UserID' => $data['UserID'],
-        ':Status' => 'Active',
+        ':Status' => 'Draft',
         ':CreationDate' => date('YmdHis'),
         ':Currency' => 'USD',
         ':Tags' => is_array($data['Tags']) ? implode(",", $data['Tags']) : $data['Tags'],
         ':SKU' => $data['SKU'] ?? null,
         ':Stock' => $data['Stock'] ?? null,
-        ':ServiceType' => $data['ServiceType'],
-        ':Price' => $data['Price'],
-        ':SessionType' => $data['SessionType'],
-        ':Conditions' => $data['Conditions'],
-        ':Duration' => $data['Duration']
+        ':ServiceType' => $data['ServiceType']
       ]);
       $offeringID = $this->db->lastInsertId();
-
-      # Inserto los FAQs
-      if (isset($data['Faqs'])) {
-        foreach ($data['Faqs'] as $faq) {
-          $stmt = $this->db->prepare("INSERT INTO OfferingsFaqs (OfferingID, Position, Question, Answer)
-            VALUES (?, ?, ?, ?)");
-          $stmt->execute([$offeringID, $faq['Position'], $faq['Question'], $faq['Answer']]);
-        }
-      }
-
-      # Inserto el location
-      $stmt = $this->db->prepare("INSERT INTO OfferingsLocations
-        (UserID, LocationID, OfferingID)
-        VALUES (:UserID, :LocationID, :OfferingID)");
-      $stmt->execute([$data['UserID'], $data['LocationID'], $offeringID]);
 
       # Traigo el offering insertado
       $offering = $this->getOfferingById($offeringID) ?:

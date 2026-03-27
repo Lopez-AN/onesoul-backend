@@ -51,35 +51,6 @@
     "Tags": {
       "required": true,
       "type": "object"
-    },
-    "Price": {
-      "required": true,
-      "type": "float",
-      "min": 0,
-      "max": 9999999,
-      "presicion": 2
-    },
-    "SessionType": {
-      "required": true,
-      "type": "string",
-      "regex": "~^(in-person|virtual|both)$~"
-    },
-    "Duration": {
-      "required": true,
-      "type": "integer",
-      "min": 30,
-      "max": 300
-    },
-    "Conditions": {
-      "required": false,
-      "type": "string",
-      "maxlength": 3000
-    },
-    "LocationID": {
-      "required": true,
-      "type": "integer",
-      "min": 0,
-      "max": 999
     }
   },
   "offering_faqs": {

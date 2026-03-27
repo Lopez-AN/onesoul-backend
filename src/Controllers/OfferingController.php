@@ -208,19 +208,19 @@ class OfferingController {
     $jwt = $request->getAttribute('jwt');
     $userID = $jwt->data->UserID;
 
-    $pValidation = ParameterValidator::validate($response, 'offerings','create_offering', $params);
+    $pValidation = ParameterValidator::validate(
+      $response,
+      'offerings',
+      'create_offering',
+      $params,
+      STRICT_FIELD_VALIDATION,
+      IGNORE_MISSING_FIELDS
+    );
+
     if(!$pValidation->valid){
       return $pValidation->response;
     }
     $params = $pValidation->values;
-
-    foreach($params['Faqs'] as $i => $faq){
-      $pValidation = ParameterValidator::validate($response, 'offerings','offering_faqs', $faq);
-      if(!$pValidation->valid){
-        return $pValidation->response;
-      }
-      $params['Faqs'][$i] = $pValidation->values;
-    }
 
     # Verificar si el usuario autenticado es un Guia o un administrador
     if ($jwt->data->UserType !== 'Guide') {
@@ -233,6 +233,7 @@ class OfferingController {
     }
 
     $params['UserID'] = $userID;
+    $params['Status'] = 'Draft';
     # Campos hardcodeados por ahora
     $params['SKU'] = null;
     $params['Stock'] = null;
@@ -245,16 +246,6 @@ class OfferingController {
           "error" => [
             "code" => "USER_NOT_FOUND",
             "desc" => "No user was found with the specified Id."
-          ]
-        ]);
-      }
-
-      $location = $this->user->getUserLocation($userID, $params['LocationID']);
-      if(!$location){
-        return $response->withStatus(404)->withJson([
-          "error" => [
-            "code" => "USER_LOCATION_NOT_FOUND",
-            "desc" => "Cannot retrieve a guide location with provided ID."
           ]
         ]);
       }
@@ -283,11 +274,7 @@ class OfferingController {
         $params['Title'] ?? '',
         $params['Description'] ?? '',
         $params['ShortDescription'] ?? '',
-        $params['Conditions'] ?? '',
-        implode(" ", $params['Tags']),
-        implode(" ", array_map(function($e){
-          return $e['Question']." ".$e['Answer'];
-        }, $params['Faqs'] ?? []))
+        implode(" ", $params['Tags'])
       ]);
 
       if($this->_containsInappropriateContent($contentToCheck)){
