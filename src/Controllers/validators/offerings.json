@@ -96,5 +96,13 @@
       "min": 0,
       "max": 999999999
     }
+  },
+  "duplicate_offering": {
+    "OfferingID": {
+      "required": true,
+      "type": "integer",
+      "min": 0,
+      "max": 999999999
+    }
   }
 }

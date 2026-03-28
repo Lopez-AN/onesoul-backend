@@ -610,6 +610,47 @@ class OfferingController {
   }
 
   /**
+   * Duplica una publicación existente
+   * @param  Request $request: objeto de request HTTP (requiere JWT)
+   * @param  Response $response: objeto de response HTTP
+   * @param  array $args: argumentos de ruta (OfferingID)
+   * @return Response: JSON con publicación duplicada o error
+   * @statusCode 200: publicación duplicada exitosamente
+   * @statusCode 400: parámetros inválidos
+   * @statusCode 403: usuario sin permisos
+   * @statusCode 404: publicación no encontrada
+   * @statusCode 500: error del servidor
+   **/
+  public function duplicateOffering(Request $request, Response $response, $args)  {
+    $params['OfferingID'] = $args['OfferingID'];
+    $jwt = $request->getAttribute('jwt');
+
+    $pValidation = ParameterValidator::validate($response, 'offerings','duplicate_offering', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
+    }
+    $params = $pValidation->values;
+
+    try {
+      # Valido que el offering exista y el usuario tenga acceso (admin o propietario)
+      $validation = $this -> _validateOfferingForDuplicate($response, $params['OfferingID'], $jwt);
+      if(!$validation->valid){
+        return $validation->response;
+      }
+
+      $offering = $this->offering->duplicateOffering($params['OfferingID']);
+      return $response->withStatus(200)->withJson($offering);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  /**
    * Agrega un archivo multimedia (imagen o video) a una publicación
    * @param  Request $request: objeto de request HTTP (requiere JWT, archivo 'Media', body con Title y Description opcional)
    * @param  Response $response: objeto de response HTTP
@@ -1079,7 +1120,6 @@ class OfferingController {
     $finfo = finfo_open(FILEINFO_MIME_TYPE);
     $filePathTemp = $uploadedFile->getStream()->getMetadata('uri');
     $mimeType = finfo_file($finfo, $filePathTemp);
-    finfo_close($finfo);
 
     # Tipo de archivo multimedia
     $mediaType = $this->_getMediaType($mimeType);
@@ -1189,6 +1229,42 @@ class OfferingController {
     }
 
     # Validación exitosa
+    return (object)["valid" => true, "response" => $offering];
+  }
+
+  /**
+   * Valida que la publicacion exista y el usuario tenga acceso para duplicarla
+   * @param Response $response: objeto de response HTTP
+   * @param $offeringID: ID de la publicación
+   * @param $jwt: Datos del token del usuario autenticado
+   * @return Response|array Retorna Response con error si falla, datos del offering si tiene exito
+   */
+  private function _validateOfferingForDuplicate(Response $response, $offeringID, $jwt) {
+    $offering = $this->offering->getOfferingById($offeringID);
+    if (empty($offering)) {
+      return (object)[
+        "valid" => false,
+        "response" => $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "OFFERING_NOT_FOUND",
+            "desc"=> "No Offering found for this specific ID."
+          ]
+        ])
+      ];
+    }
+
+    if ($offering['UserID'] !== $jwt->data->UserID && !$jwt->data->IsAdmin) {
+      return (object)[
+        "valid" => false,
+        "response" => $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "UNAUTHORIZED",
+            "desc" => "You don't have permission to modify this offering."
+          ]
+        ])
+      ];
+    }
+
     return (object)["valid" => true, "response" => $offering];
   }
 }

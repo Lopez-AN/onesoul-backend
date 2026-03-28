@@ -627,6 +627,96 @@ class Offering {
   }
 
   /**
+   * Duplica una publicación existente
+   *
+   * Clona el registro principal en Offerings y también sus relaciones en
+   * OfferingsLocations y OfferingsFaqs.
+   *
+   * @param  int $offeringID: ID de la publicación origen
+   * @return array: datos de la publicación duplicada
+   * @throws DatabaseException
+   **/
+  public function duplicateOffering($offeringID) {
+    try{
+      $this->db->beginTransaction(); # Iniciar transacción
+
+      $stmt = $this->db->prepare("SELECT * FROM Offerings WHERE OfferingID = ?");
+      $stmt->execute([$offeringID]);
+      $sourceOffering = $stmt->fetch(PDO::FETCH_ASSOC);
+
+      if(!$sourceOffering){
+        $this->db->rollBack();
+        throw new DatabaseException("Failed to retrieve source offering");
+      }
+
+      $newTitle = "[duplicado] " . ($sourceOffering['Title'] ?? '');
+      if(strlen($newTitle) > 100){
+        $newTitle = substr($newTitle, 0, 100);
+      }
+
+      $stmt = $this->db->prepare("INSERT INTO Offerings (Title, ShortDescription,
+        Description, CategoryID, UserID, Status, CreationDate, Currency, Approved,
+        Tags, SKU, Stock, ServiceType, Price, SessionType, Conditions, Duration)
+        VALUES (:Title, :ShortDescription, :Description, :CategoryID, :UserID, :Status,
+        :CreationDate, :Currency, 0, :Tags, :SKU, :Stock, :ServiceType,
+        :Price, :SessionType, :Conditions, :Duration)");
+
+      $stmt->execute([
+        ':Title' => $newTitle,
+        ':ShortDescription' => $sourceOffering['ShortDescription'] ?? '',
+        ':Description' => $sourceOffering['Description'] ?? '',
+        ':CategoryID' => $sourceOffering['CategoryID'],
+        ':UserID' => $sourceOffering['UserID'],
+        ':Status' => 'Draft',
+        ':CreationDate' => date('YmdHis'),
+        ':Currency' => $sourceOffering['Currency'] ?? 'USD',
+        ':Tags' => $sourceOffering['Tags'] ?? null,
+        ':SKU' => $sourceOffering['SKU'] ?? null,
+        ':Stock' => $sourceOffering['Stock'] ?? null,
+        ':ServiceType' => $sourceOffering['ServiceType'] ?? 'Service',
+        ':Price' => $sourceOffering['Price'] ?? null,
+        ':SessionType' => $sourceOffering['SessionType'] ?? null,
+        ':Conditions' => $sourceOffering['Conditions'] ?? null,
+        ':Duration' => $sourceOffering['Duration'] ?? null
+      ]);
+
+      $newOfferingID = $this->db->lastInsertId();
+
+      $stmt = $this->db->prepare("INSERT INTO OfferingsLocations (UserID, LocationID, OfferingID)
+        SELECT UserID, LocationID, :newOfferingID
+        FROM OfferingsLocations
+        WHERE OfferingID = :sourceOfferingID");
+      $stmt->execute([
+        ':newOfferingID' => $newOfferingID,
+        ':sourceOfferingID' => $offeringID
+      ]);
+
+      $stmt = $this->db->prepare("INSERT INTO OfferingsFaqs (OfferingID, Position, Question, Answer)
+        SELECT :newOfferingID, Position, Question, Answer
+        FROM OfferingsFaqs
+        WHERE OfferingID = :sourceOfferingID");
+      $stmt->execute([
+        ':newOfferingID' => $newOfferingID,
+        ':sourceOfferingID' => $offeringID
+      ]);
+
+      $offering = $this->getOfferingById($newOfferingID);
+      if(!$offering){
+        $this->db->rollBack();
+        throw new DatabaseException("Failed to retrieve the created offering");
+      }
+
+      $this->db->commit(); # Confirmo transacción
+      return $offering;
+    } catch (\PDOException $e) {
+      if($this->db->inTransaction()){
+        $this->db->rollBack(); # Revierto en caso de error
+      }
+      throw new DatabaseException($e->getMessage());
+    }
+  }
+
+  /**
    * Habilita una publicación
    *
    * Cambia el estado de la publicación a 'Active'

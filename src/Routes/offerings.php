@@ -39,6 +39,7 @@ return function (App $app) {
   $app->patch('/offerings/{OfferingID}/enable', [$offeringController, 'enableOffering'])->add($requiredJwt);
   $app->patch('/offerings/{OfferingID}/disable', [$offeringController, 'disableOffering'])->add($requiredJwt);
   $app->delete('/offerings/{OfferingID}', [$offeringController, 'deleteOffering'])->add($requiredJwt);
+  $app->get('/offerings/{OfferingID}/duplicate', [$offeringController, 'duplicateOffering'])->add($requiredJwt);
   $app->post('/offerings/{OfferingID}/media', [$offeringController, 'createOfferingMedia'])->add($requiredJwt);
   $app->post('/offerings/{OfferingID}/media/{MediaID}', [$offeringController, 'updateOfferingMedia'])->add($requiredJwt);
   $app->delete('/offerings/{OfferingID}/media/{MediaID}', [$offeringController, 'deleteOfferingMedia'])->add($requiredJwt);
