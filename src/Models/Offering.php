@@ -637,6 +637,8 @@ class Offering {
    * @throws DatabaseException
    **/
   public function duplicateOffering($offeringID) {
+    $copiedMediaPaths = [];
+
     try{
       $this->db->beginTransaction(); # Iniciar transacción
 
@@ -700,6 +702,51 @@ class Offering {
         ':sourceOfferingID' => $offeringID
       ]);
 
+      # Clonar media (tabla + archivo físico)
+      $stmt = $this->db->prepare("SELECT MediaID, Title, Description, URL, Path, MediaType, Position
+        FROM Media
+        WHERE OfferingID = ?
+        ORDER BY Position ASC, MediaID ASC");
+      $stmt->execute([$offeringID]);
+      $sourceMedia = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+      if(!empty($sourceMedia)){
+        $insertMediaStmt = $this->db->prepare("INSERT INTO Media
+          (OfferingID, Title, Description, URL, Path, MediaType, Position)
+          VALUES (:OfferingID, :Title, :Description, :URL, :Path, :MediaType, :Position)");
+
+        foreach($sourceMedia as $media){
+          $sourcePath = $media['Path'] ?? null;
+          $sourceUrl = $media['URL'] ?? null;
+
+          if(empty($sourcePath) || !is_file($sourcePath)){
+            throw new DatabaseException("Failed to duplicate media file");
+          }
+
+          $extension = pathinfo($sourcePath, PATHINFO_EXTENSION);
+          $uid = uniqid();
+          $newFileName = $uid . ($extension ? ".{$extension}" : '');
+          $newPath = rtrim(dirname($sourcePath), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $newFileName;
+          $newUrl = rtrim(dirname((string)$sourceUrl), '/') . '/' . $newFileName;
+
+          if(!copy($sourcePath, $newPath)){
+            throw new DatabaseException("Failed to duplicate media file");
+          }
+
+          $copiedMediaPaths[] = $newPath;
+
+          $insertMediaStmt->execute([
+            ':OfferingID' => $newOfferingID,
+            ':Title' => $media['Title'] ?? '',
+            ':Description' => $media['Description'] ?? '',
+            ':URL' => $newUrl,
+            ':Path' => $newPath,
+            ':MediaType' => $media['MediaType'],
+            ':Position' => $media['Position']
+          ]);
+        }
+      }
+
       $offering = $this->getOfferingById($newOfferingID);
       if(!$offering){
         $this->db->rollBack();
@@ -708,10 +755,19 @@ class Offering {
 
       $this->db->commit(); # Confirmo transacción
       return $offering;
-    } catch (\PDOException $e) {
+    } catch (\Throwable $e) {
       if($this->db->inTransaction()){
         $this->db->rollBack(); # Revierto en caso de error
       }
+
+      if(!empty($copiedMediaPaths)){
+        foreach($copiedMediaPaths as $copiedMediaPath){
+          if(!empty($copiedMediaPath) && is_file($copiedMediaPath)){
+            @unlink($copiedMediaPath);
+          }
+        }
+      }
+
       throw new DatabaseException($e->getMessage());
     }
   }
