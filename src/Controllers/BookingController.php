@@ -68,7 +68,7 @@ class BookingController {
       }
 
       # Validar si el user es el buscador o el guía
-      if ($booking['Seeker']['UserID'] !== $userID && $booking['Guide'] !== $userID) {
+      if ($booking['Seeker']['UserID'] !== $userID && $this->_getBookingGuideID($booking) !== $userID) {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "FORBIDDEN",
@@ -123,7 +123,7 @@ class BookingController {
       }
 
       # Validar si el user es el buscador o el guía
-      if ($booking['Seeker']['UserID'] !== $userID && $booking['Guide'] !== $userID) {
+      if ($booking['Seeker']['UserID'] !== $userID && $this->_getBookingGuideID($booking) !== $userID) {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "FORBIDDEN",
@@ -725,7 +725,7 @@ class BookingController {
       }
 
       # Validar si el user es el cliente o el guía o un administrador
-      if ($booking['Seeker']['UserID'] !== $userID && $booking['Guide'] !== $userID && !$jwt->data->IsAdmin){
+      if ($booking['Seeker']['UserID'] !== $userID && $this->_getBookingGuideID($booking) !== $userID && !$jwt->data->IsAdmin){
         return $response->withStatus(403)->withJson([
           "error" => [
             "code" => "FORBIDDEN",
@@ -936,7 +936,7 @@ class BookingController {
         ]);
       }
       $seekerID = $booking['Seeker']['UserID'];
-      $guideID = $booking['Guide'];
+      $guideID = $this->_getBookingGuideID($booking);
 
       # Validar si el user es el cliente o el guía o un administrador
       if ($seekerID !== $userID && $guideID !== $userID && !$jwt->data->IsAdmin){
@@ -1073,7 +1073,7 @@ class BookingController {
         ]);
       }
       $seekerID = $booking['Seeker']['UserID'];
-      $guideID = $booking['Guide'];
+      $guideID = $this->_getBookingGuideID($booking);
 
       # Validar si es el guía o un administrador
       if ($guideID !== $userID && !$jwt->data->IsAdmin){
@@ -1216,7 +1216,7 @@ class BookingController {
         ]);
       }
       $seekerID = $booking['Seeker']['UserID'];
-      $guideID = $booking['Guide'];
+      $guideID = $this->_getBookingGuideID($booking);
 
       # Validar si es el guía o un administrador
       if ($guideID !== $userID && !$jwt->data->IsAdmin){
@@ -1419,7 +1419,7 @@ class BookingController {
       }
 
       $seekerID = $booking['Seeker']['UserID'];
-      $guideID = $booking['Guide'];
+      $guideID = $this->_getBookingGuideID($booking);
       $offeringID = $booking['OfferingID'];
 
       $offering = $this->offering->getOfferingById($offeringID);
@@ -1813,6 +1813,18 @@ class BookingController {
         ]
       ]);
     }
+  }
+
+  private function _getBookingGuideID($booking) {
+    if (!isset($booking['Guide'])) {
+      return null;
+    }
+
+    if (is_array($booking['Guide'])) {
+      return $booking['Guide']['UserID'] ?? null;
+    }
+
+    return $booking['Guide'];
   }
 
   /**

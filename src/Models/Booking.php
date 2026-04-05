@@ -20,41 +20,9 @@ class Booking {
    * @return array|false: datos de la reserva o false si no existe
    */
   public function getBookingByID($bookingID) {
-    $stmt = $this->db->prepare("SELECT b.BookingID, b.PublicID,
-      b.ReviewID, b.PaymentID, b.Mode as SessionType, b.LocationID, b.CreationDate,
-      b.ScheduledDate, b.ModificationDate, o.UserID AS Guide, u.DisplayName, b.OfferingID,
-      o.Title AS TitleOffering, b.ScheduledDate, b.Currency, b.Amount, b.VoucherID,
-      b.LastBookingEvent,
-      -- Subconsulta para seeker
-      (
-        SELECT JSON_ARRAYAGG(
-        JSON_OBJECT(
-          'UserID', u.UserID,
-          'UserName', u.UserName,
-          'DisplayName', u.DisplayName,
-          'ImgURL', m.URL
-        ))
-        FROM Users as u
-        LEFT JOIN Media AS m
-          ON m.userID = u.userID
-        WHERE u.UserID = b.UserID
-      ) AS seeker_info,
-      -- Subconsulta para eventos
-      (
-        SELECT JSON_ARRAYAGG(
-        JSON_OBJECT(
-          'EventDate', s.BookingEventDate,
-          'Event', s.BookingEvent,
-          'ScheduledDate', s.ScheduledDate,
-          'Message', s.Message
-        ))
-        FROM BookingStatus as s
-        WHERE s.BookingID = b.BookingID
-      ) AS booking_events
-      FROM Bookings AS b
-      INNER JOIN Offerings AS o ON b.OfferingID = o.OfferingID
-      INNER JOIN Users AS u ON o.UserID = u.UserID
-      WHERE b.BookingID = ?"
+    $stmt = $this->db->prepare(
+      $this->_sqlMainSingle().
+      "WHERE b.BookingID = ?"
     );
     $stmt->execute([$bookingID]);
     $booking = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -69,42 +37,10 @@ class Booking {
    * @return array|false: datos de la reserva o false si no existe
    */
   public function getBookingByPublicID($publicID) {
-    $stmt = $this->db->prepare("SELECT b.BookingID, b.PublicID,
-      b.ReviewID, b.PaymentID, b.Mode as SessionType, b.LocationID, b.CreationDate,
-      b.ScheduledDate, b.ModificationDate, o.UserID AS Guide, u.DisplayName, b.OfferingID,
-      o.Title AS TitleOffering, b.ScheduledDate, b.Currency, b.Amount, b.VoucherID,
-      b.LastBookingEvent,
-      -- Subconsulta para seeker
-      (
-        SELECT JSON_ARRAYAGG(
-        JSON_OBJECT(
-          'UserID', u.UserID,
-          'UserName', u.UserName,
-          'DisplayName', u.DisplayName,
-          'ImgURL', m.URL
-        ))
-        FROM Media AS m
-        INNER JOIN Users as u
-          ON m.userID = u.userID
-        WHERE m.UserID = b.UserID
-      ) AS seeker_info,
-      -- Subconsulta para eventos
-      (
-        SELECT JSON_ARRAYAGG(
-        JSON_OBJECT(
-          'EventDate', s.BookingEventDate,
-          'Event', s.BookingEvent,
-          'ScheduledDate', s.ScheduledDate,
-          'Message', s.Message
-        ))
-        FROM BookingStatus as s
-        WHERE s.BookingID = b.BookingID
-      ) AS booking_events
-      FROM Bookings AS b
-      INNER JOIN Offerings AS o ON b.OfferingID = o.OfferingID
-      INNER JOIN Users AS u ON o.UserID = u.UserID
-      INNER JOIN Media AS m ON m.UserID = b.UserID
-      WHERE b.PublicID = ?");
+    $stmt = $this->db->prepare(
+      $this->_sqlMainSingle().
+      "WHERE b.PublicID = ?"
+    );
     $stmt->execute([$publicID]);
     $booking = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -123,46 +59,12 @@ class Booking {
     $filterOpen = $onlyOpen ?
       " AND LastBookingEvent NOT IN ('Canceled', 'Completed', 'Rated') " : "";
 
-    # Consulta completa paginada
-    $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS b.BookingID, b.PublicID,
-      b.ReviewID, b.PaymentID, b.Mode as SessionType, b.LocationID, b.CreationDate,
-      b.ScheduledDate, b.ModificationDate, o.UserID AS Guide, u.DisplayName, b.OfferingID,
-      o.Title AS TitleOffering, b.ScheduledDate, b.Currency, b.Amount, b.VoucherID,
-      b.LastBookingEvent,
-      -- Subconsulta para seeker
-      (
-        SELECT JSON_ARRAYAGG(
-        JSON_OBJECT(
-          'UserID', u.UserID,
-          'UserName', u.UserName,
-          'DisplayName', u.DisplayName,
-          'ImgURL', m.URL
-        ))
-        FROM Media AS m
-        INNER JOIN Users as u
-          ON m.userID = u.userID
-        WHERE m.UserID = b.UserID
-      ) AS seeker_info,
-      -- Subconsulta para eventos
-      (
-        SELECT JSON_ARRAYAGG(
-        JSON_OBJECT(
-          'EventDate', s.BookingEventDate,
-          'Event', s.BookingEvent,
-          'ScheduledDate', s.ScheduledDate,
-          'Message', s.Message
-        ))
-        FROM BookingStatus as s
-        WHERE s.BookingID = b.BookingID
-      ) AS booking_events
-      FROM Bookings AS b
-      INNER JOIN Offerings AS o ON b.OfferingID = o.OfferingID
-      INNER JOIN Users AS u ON o.UserID = u.UserID
-      INNER JOIN Media AS m ON m.UserID = b.UserID
-      WHERE o.UserID = ? {$filterOpen}
-      GROUP BY b.BookingID
+    $stmt = $this->db->prepare(
+      $this->_sqlMain().
+      "WHERE o.UserID = ? {$filterOpen}
       ORDER BY b.CreationDate DESC
-      LIMIT ? OFFSET ?");
+      LIMIT ? OFFSET ?"
+    );
 
     $stmt->execute([$guideID, $paginator->limit, $paginator->offset]);
 
@@ -185,46 +87,12 @@ class Booking {
     $filterOpen = $onlyOpen ?
       " AND LastBookingEvent NOT IN ('Canceled', 'Completed', 'Rated') " : "";
 
-    # Consulta completa paginada
-    $stmt = $this->db->prepare("SELECT SQL_CALC_FOUND_ROWS b.BookingID, b.PublicID,
-      b.ReviewID, b.PaymentID, b.Mode as SessionType, b.LocationID, b.CreationDate,
-      b.ScheduledDate, b.ModificationDate, o.UserID AS Guide, u.DisplayName, b.OfferingID,
-      o.Title AS TitleOffering, b.ScheduledDate, b.Currency, b.Amount, b.VoucherID,
-      b.LastBookingEvent,
-      -- Subconsulta para seeker
-      (
-        SELECT JSON_ARRAYAGG(
-        JSON_OBJECT(
-          'UserID', u.UserID,
-          'UserName', u.UserName,
-          'DisplayName', u.DisplayName,
-          'ImgURL', m.URL
-        ))
-        FROM Media AS m
-        INNER JOIN Users as u
-          ON m.userID = u.userID
-        WHERE m.UserID = b.UserID
-      ) AS seeker_info,
-      -- Subconsulta para eventos
-      (
-        SELECT JSON_ARRAYAGG(
-        JSON_OBJECT(
-          'EventDate', s.BookingEventDate,
-          'Event', s.BookingEvent,
-          'ScheduledDate', s.ScheduledDate,
-          'Message', s.Message
-        ))
-        FROM BookingStatus as s
-        WHERE s.BookingID = b.BookingID
-      ) AS booking_events
-      FROM Bookings AS b
-      INNER JOIN Offerings AS o ON b.OfferingID = o.OfferingID
-      INNER JOIN Users AS u ON o.UserID = u.UserID
-      INNER JOIN Media AS m ON m.UserID = b.UserID
-      WHERE b.UserID = ? {$filterOpen}
-      GROUP BY b.BookingID
+    $stmt = $this->db->prepare(
+      $this->_sqlMain().
+      "WHERE b.UserID = ? {$filterOpen}
       ORDER BY b.CreationDate DESC
-      LIMIT ? OFFSET ?");
+      LIMIT ? OFFSET ?"
+    );
 
     $stmt->execute([$seekerID, $paginator->limit, $paginator->offset]);
 
@@ -265,8 +133,11 @@ class Booking {
       return false;
     }
 
+    $booking['Guide'] = @json_decode($booking['guide_info'], true);
+    unset($booking['guide_info']);
+
     $seeker = @json_decode($booking['seeker_info'], true);
-    $booking['Seeker'] = $seeker ? array_shift($seeker) : null;
+    $booking['Seeker'] = $seeker;
     unset($booking['seeker_info']);
 
     $booking['Events'] = @json_decode($booking['booking_events'], true);
@@ -293,8 +164,12 @@ class Booking {
    **/
   private function _getBookingsGenericMulti($bookings, $total){
     foreach ($bookings as &$e) {
+      $e['Guide'] = @json_decode($e['guide_info'], true);
+      unset($e['guide_info']);
+
       $seeker = @json_decode($e['seeker_info'], true);
-      $e['Seeker'] = $seeker ? array_shift($seeker) : null;
+      $e['Seeker'] = $seeker;
+      unset($e['seeker_info']);
 
       $e['Events'] = @json_decode($e['booking_events'], true);
       unset($e['booking_events']);
@@ -313,6 +188,58 @@ class Booking {
         "fetched" => count($bookings)
       ]
     ];
+  }
+
+  /**
+   * Generaliza la consulta principal de obtener bookings
+   * @return string: consulta principal sin filtros
+   */
+  private function _sqlMainSingle() {
+    return str_replace('SQL_CALC_FOUND_ROWS ', '', $this->_sqlMain());
+  }
+  private function _sqlMain() {
+    return "SELECT SQL_CALC_FOUND_ROWS b.BookingID, b.PublicID,
+      b.ReviewID, b.PaymentID, b.Mode as SessionType, b.LocationID, b.CreationDate,
+      b.ScheduledDate, b.ModificationDate, b.OfferingID, o.Title AS TitleOffering,
+      b.Currency, b.Amount, b.VoucherID, b.LastBookingEvent,
+      JSON_OBJECT(
+        'UserID', ug.UserID,
+        'UserName', ug.UserName,
+        'DisplayName', ug.DisplayName,
+        'ImgURL', gm.guide_ImgURL
+      ) AS guide_info,
+      JSON_OBJECT(
+        'UserID', us.UserID,
+        'UserName', us.UserName,
+        'DisplayName', us.DisplayName,
+        'ImgURL', sm.seeker_ImgURL
+      ) AS seeker_info,
+      (
+        SELECT JSON_ARRAYAGG(
+          JSON_OBJECT(
+            'EventDate', s.BookingEventDate,
+            'Event', s.BookingEvent,
+            'ScheduledDate', s.ScheduledDate,
+            'Message', s.Message
+          )
+        )
+        FROM BookingStatus as s
+        WHERE s.BookingID = b.BookingID
+      ) AS booking_events
+      FROM Bookings AS b
+      INNER JOIN Offerings AS o ON b.OfferingID = o.OfferingID
+      INNER JOIN Users AS ug ON o.UserID = ug.UserID
+      INNER JOIN Users AS us ON b.UserID = us.UserID
+      LEFT JOIN (
+        SELECT UserID, MIN(URL) AS guide_ImgURL
+        FROM Media
+        GROUP BY UserID
+      ) gm ON gm.UserID = ug.UserID
+      LEFT JOIN (
+        SELECT UserID, MIN(URL) AS seeker_ImgURL
+        FROM Media
+        GROUP BY UserID
+      ) sm ON sm.UserID = us.UserID ";
   }
 
   /**
