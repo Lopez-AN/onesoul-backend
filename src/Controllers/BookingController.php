@@ -520,7 +520,7 @@ class BookingController {
             ]
           ]);
         }
-        if ($donation['Status'] === 'expired' || ($donation['ExpiredAt'] && $donation['ExpiredAt'] < time())){
+        if ($donation['Status'] === 'Expired' || ($donation['ExpiredAt'] && $donation['ExpiredAt'] < time())){
           return $response->withStatus(410)->withJson([
             "error" => [
               "code" => "COUPON_EXPIRED",
@@ -528,7 +528,7 @@ class BookingController {
             ]
           ]);
         }
-        if ($donation['Status'] === 'canceled'){
+        if ($donation['Status'] === 'Canceled'){
           return $response->withStatus(410)->withJson([
             "error" => [
               "code" => "COUPON_CANCELED",
@@ -536,7 +536,7 @@ class BookingController {
             ]
           ]);
         }
-        if ($donation['Status'] !== 'assigned'){
+        if ($donation['Status'] !== 'Assigned'){
           return $response->withStatus(409)->withJson([
             "error" => [
               "code" => "COUPON_NOT_ASSIGNED",

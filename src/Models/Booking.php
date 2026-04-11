@@ -377,7 +377,7 @@ class Booking {
 
       if($voucherID){
         $stmt = $this->db->prepare("UPDATE DonationVouchers
-          SET WinnerUserID = ?, RedeemedAt = NOW(), Status = 'redeemed'
+          SET WinnerUserID = ?, RedeemedAt = NOW(), Status = 'Redeemed'
           WHERE VoucherID = ?");
         $stmt->execute([$data['SeekerID'], $voucherID]);
       }

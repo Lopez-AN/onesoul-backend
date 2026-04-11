@@ -170,7 +170,7 @@ class DonationController {
           ]
         ]);
       }
-      if ($donation['Status'] === 'redeemed'){
+      if ($donation['Status'] === 'Redeemed'){
         return $response->withStatus(410)->withJson([
           "error" => [
             "code" => "COUPON_ALREADY_REDEEMED",
@@ -179,7 +179,7 @@ class DonationController {
         ]);
       }
 
-      if ($donation['Status'] === 'expired' ||
+      if ($donation['Status'] === 'Expired' ||
           ($donation['ExpiredAt'] && strtotime($donation['ExpiredAt']) < time())) {
         return $response->withStatus(410)->withJson([
           "error" => [
@@ -188,7 +188,7 @@ class DonationController {
           ]
         ]);
       }
-      if ($donation['Status'] === 'canceled'){
+      if ($donation['Status'] === 'Canceled'){
         return $response->withStatus(410)->withJson([
           "error" => [
             "code" => "COUPON_CANCELED",
@@ -196,7 +196,7 @@ class DonationController {
           ]
         ]);
       }
-      if ($donation['Status'] !== 'assigned'){
+      if ($donation['Status'] !== 'Assigned'){
         return $response->withStatus(409)->withJson([
           "error" => [
             "code" => "COUPON_NOT_ASSIGNED",
@@ -401,7 +401,7 @@ class DonationController {
   }
 
   /**
-   * Cancela una donación en estado 'draft'
+   * Cancela una donación en estado 'Pending'
    * Solo el propietario de la donación o administrador pueden cancelarla
    * @param Request $request: objeto de la petición HTTP entrante
    * @param Response $response: objeto de la respuesta HTTP
@@ -410,7 +410,7 @@ class DonationController {
    * @statusCode 200: donación cancelada exitosamente
    * @statusCode 403: usuario no autorizado o no es guía
    * @statusCode 404: voucher no encontrado
-   * @statusCode 409: donación no está en estado 'draft'
+   * @statusCode 409: donación no está en estado 'Pending'
    * @statusCode 500: error del servidor
    **/
   public function cancelDonation(Request $request, Response $response, $args) {
@@ -448,11 +448,11 @@ class DonationController {
           ]
         ]);
       }
-      if ($donation['Status'] !== 'draft') {
+      if ($donation['Status'] !== 'Pending') {
         return $response->withStatus(409)->withJson([
           "error" => [
             "code" => "DONATION_NOT_CANCELABLE",
-            "desc" => "Only draft donations can be canceled"
+            "desc" => "Only pending donations can be canceled"
           ]
         ]);
       }
@@ -470,7 +470,7 @@ class DonationController {
   }
 
   /**
-   * Sortea (raffle) un número aleatorio de cupones en estado 'assigned'
+   * Sortea (raffle) un número aleatorio de cupones en estado 'Assigned'
    * Solo administradores pueden hacer sorteos
    * @param Request $request: objeto de la petición HTTP entrante
    * @param Response $response: objeto de la respuesta HTTP

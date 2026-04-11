@@ -199,7 +199,7 @@ class StripeController{
         'expand' => ['items.data.price.product', 'default_payment_method']
       ]);
 
-      if (!$sub || $sub->status === 'canceled') {
+      if (!$sub || $sub->status === 'Canceled') {
         return $response->withStatus(404)->withJson([
           "error" => [
             "code" => "PLAN_NOT_FOUND",

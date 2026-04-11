@@ -298,7 +298,7 @@ CREATE TABLE IF NOT EXISTS `DonationVouchers` (
   `RaffleCode` varchar(20) NOT NULL COMMENT 'Código público para sorteo (único, visible a agencia)',
   `RedeemCode` varchar(15) NOT NULL COMMENT 'Código secreto para canje',
   `RedeemCodeMasked` varchar(15) NOT NULL COMMENT 'Código secreto enmascarado ****-****-XXXX',
-  `Status` enum('draft','in_raffle','assigned','redeemed','canceled','expired') NOT NULL DEFAULT 'draft' COMMENT 'Estado de la donación',
+  `Status` enum('Draft','Assigned','Redeemed','Canceled','Expired') NOT NULL DEFAULT 'Draft' COMMENT 'Estado de la donación',
   `CreatedAt` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp() COMMENT 'Fecha de creación del vale',
   `AssignedAt` timestamp NULL DEFAULT NULL COMMENT 'Fecha en que se asignó al ganador',
   `RedeemedAt` timestamp NULL DEFAULT NULL COMMENT 'Fecha de canje de la sesión',
@@ -1165,7 +1165,7 @@ CREATE TABLE IF NOT EXISTS `UsersCategories` (
 CREATE TABLE IF NOT EXISTS `UsersLanguages` (
   `UserID` int(10) unsigned NOT NULL COMMENT 'Identificador único del usuario.',
   `LanguageID` varchar(5) NOT NULL COMMENT 'Identificador único del idioma (código I18n)',
-  `FluencyLevel` enum('basico','intermedio','avanzado','nativo') DEFAULT NULL COMMENT 'Nivel de fluidez del guía en cada idioma',
+  `FluencyLevel` enum('Basic','Intermediate','Advanced','Native') DEFAULT NULL COMMENT 'Nivel de fluidez del guía en cada idioma',
   PRIMARY KEY (`UserID`,`LanguageID`) USING BTREE,
   CONSTRAINT `UsersLanguages_ibfk_1` FOREIGN KEY (`UserID`) REFERENCES `Users` (`UserID`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Guarda información sobre los idiomas que los guías hablan.';

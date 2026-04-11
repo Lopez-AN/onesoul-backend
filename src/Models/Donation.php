@@ -108,7 +108,7 @@ class Donation{
     LEFT JOIN Media AS m ON u.UserID = m.UserID
     WHERE u.UserID = d.WinnerUserID) AS Winner
     FROM DonationVouchers AS d
-    WHERE d.GuideID = ? AND d.Status <> 'canceled'
+    WHERE d.GuideID = ? AND d.Status <> 'Canceled'
     AND d.CreatedAt >= DATE_FORMAT(NOW(), '%Y-%m-01 00:00:00')
     AND d.CreatedAt < DATE_ADD(DATE_FORMAT(NOW(), '%Y-%m-01'), INTERVAL 1 MONTH)
     ORDER BY d.CreatedAt DESC
@@ -234,7 +234,7 @@ class Donation{
   }
 
   /**
-   * Crea una o varias donaciones (cupones) nuevas en estado 'draft'
+   * Crea una o varias donaciones (cupones) nuevas en estado 'Pending'
    * Genera RaffleCode y RedeemCode únicos para cada cupón
    * @param int $userID: ID del guía propietario
    * @param int $offeringID: ID del servicio asociado
@@ -278,7 +278,7 @@ class Donation{
   }
 
   /**
-   * Asigna una donación a una agencia (cambia estado de 'draft' a 'assigned')
+   * Asigna una donación a una agencia (cambia estado de 'Pending' a 'Assigned')
    * @param int $agencyID: ID de la agencia a asignar
    * @param int $voucherID: ID del voucher a asignar
    * @throws DatabaseException
@@ -288,7 +288,7 @@ class Donation{
       $this->db->beginTransaction(); # Iniciar transacción
 
       $stmt = $this->db->prepare("UPDATE DonationVouchers
-        SET AgencyID = ?, Status = 'assigned'
+        SET AgencyID = ?, Status = 'Assigned'
         WHERE VoucherID = ?");
 
       $stmt->execute([$agencyID, $voucherID]);
@@ -304,18 +304,18 @@ class Donation{
   }
 
   /**
-   * Cancela una donación existente (cambia estado a 'canceled')
+   * Cancela una donación existente (cambia estado a 'Canceled')
    * @param int $voucherID: ID del voucher a cancelar
    **/
   public function cancelDonation($voucherID){
     $stmt = $this->db->prepare("UPDATE DonationVouchers
-      SET Status = 'canceled' WHERE VoucherID = ?");
+      SET Status = 'Canceled' WHERE VoucherID = ?");
 
     $stmt->execute([$voucherID]);
   }
 
   /**
-   * Sortea N cupones aleatorios en estado 'assigned'
+   * Sortea N cupones aleatorios en estado 'Assigned'
    * Selecciona cupones de forma aleatoria del pool disponible
    * @param int $quantity: cantidad de cupones a sortear (1-1000)
    * @return array: array de cupones sorteados con sus datos
@@ -336,7 +336,7 @@ class Donation{
       LEFT JOIN Media AS m ON o.OfferingID = m.OfferingID
       WHERE o.OfferingID = d.OfferingID) AS Offering
       FROM DonationVouchers as d
-      WHERE d.Status = 'assigned'
+      WHERE d.Status = 'Assigned'
       ORDER BY RAND() LIMIT ?");
 
     $stmt->execute([$quantity]);
