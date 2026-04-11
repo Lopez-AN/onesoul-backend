@@ -5,6 +5,7 @@ namespace App\Models;
 use PDO;
 use App\Exceptions\DatabaseException;
 use DateTime;
+use App\Helpers\CategoryTreeHelper;
 
 class Booking {
   protected $db;
@@ -21,6 +22,7 @@ class Booking {
    */
   public function getBookingByID($bookingID) {
     $stmt = $this->db->prepare(
+      CategoryTreeHelper::getRootCategoryCTE(true).
       $this->_sqlMainSingle().
       "WHERE b.BookingID = ?"
     );
@@ -38,6 +40,7 @@ class Booking {
    */
   public function getBookingByPublicID($publicID) {
     $stmt = $this->db->prepare(
+      CategoryTreeHelper::getRootCategoryCTE(true).
       $this->_sqlMainSingle().
       "WHERE b.PublicID = ?"
     );
@@ -60,6 +63,7 @@ class Booking {
       " AND LastBookingEvent NOT IN ('Canceled', 'Completed', 'Rated') " : "";
 
     $stmt = $this->db->prepare(
+      CategoryTreeHelper::getRootCategoryCTE(true).
       $this->_sqlMain().
       "WHERE o.UserID = ? {$filterOpen}
       ORDER BY b.CreationDate DESC
@@ -88,6 +92,7 @@ class Booking {
       " AND LastBookingEvent NOT IN ('Canceled', 'Completed', 'Rated') " : "";
 
     $stmt = $this->db->prepare(
+      CategoryTreeHelper::getRootCategoryCTE(true).
       $this->_sqlMain().
       "WHERE b.UserID = ? {$filterOpen}
       ORDER BY b.CreationDate DESC
@@ -136,6 +141,22 @@ class Booking {
     $booking['Guide'] = @json_decode($booking['guide_info'], true);
     unset($booking['guide_info']);
 
+    $booking['Offering'] = @json_decode($booking['offering_info'], true);
+    if (!empty($booking['Offering']) && is_array($booking['Offering'])) {
+      $booking['Offering']['Category'] = [
+        "CategoryID" => $booking['Offering']['CategoryID'] ?? null,
+        "Name" => $booking['Offering']['CategoryName'] ?? null,
+      ];
+      unset($booking['Offering']['CategoryID'], $booking['Offering']['CategoryName']);
+
+      $booking['Offering']['RootCategory'] = [
+        "CategoryID" => $booking['Offering']['RootCategoryID'] ?? null,
+        "Name" => $booking['Offering']['RootCategoryName'] ?? null,
+      ];
+      unset($booking['Offering']['RootCategoryID'], $booking['Offering']['RootCategoryName']);
+    }
+    unset($booking['offering_info']);
+
     $seeker = @json_decode($booking['seeker_info'], true);
     $booking['Seeker'] = $seeker;
     unset($booking['seeker_info']);
@@ -166,6 +187,22 @@ class Booking {
     foreach ($bookings as &$e) {
       $e['Guide'] = @json_decode($e['guide_info'], true);
       unset($e['guide_info']);
+
+      $e['Offering'] = @json_decode($e['offering_info'], true);
+      if (!empty($e['Offering']) && is_array($e['Offering'])) {
+        $e['Offering']['Category'] = [
+          "CategoryID" => $e['Offering']['CategoryID'] ?? null,
+          "Name" => $e['Offering']['CategoryName'] ?? null,
+        ];
+        unset($e['Offering']['CategoryID'], $e['Offering']['CategoryName']);
+
+        $e['Offering']['RootCategory'] = [
+          "CategoryID" => $e['Offering']['RootCategoryID'] ?? null,
+          "Name" => $e['Offering']['RootCategoryName'] ?? null,
+        ];
+        unset($e['Offering']['RootCategoryID'], $e['Offering']['RootCategoryName']);
+      }
+      unset($e['offering_info']);
 
       $seeker = @json_decode($e['seeker_info'], true);
       $e['Seeker'] = $seeker;
@@ -200,7 +237,7 @@ class Booking {
   private function _sqlMain() {
     return "SELECT SQL_CALC_FOUND_ROWS b.BookingID, b.PublicID,
       b.ReviewID, b.PaymentID, b.Mode as SessionType, b.LocationID, b.CreationDate,
-      b.ScheduledDate, b.ModificationDate, b.OfferingID, o.Title AS TitleOffering,
+      b.ScheduledDate, b.ModificationDate,
       b.Currency, b.Amount, b.VoucherID, b.LastBookingEvent,
       JSON_OBJECT(
         'UserID', ug.UserID,
@@ -208,6 +245,15 @@ class Booking {
         'DisplayName', ug.DisplayName,
         'ImgURL', gm.guide_ImgURL
       ) AS guide_info,
+      JSON_OBJECT(
+        'OfferingID', o.OfferingID,
+        'Title', o.Title,
+        'ImgURL', om.offering_ImgURL,
+        'CategoryID', c.CategoryID,
+        'CategoryName', c.Name,
+        'RootCategoryID', cr.RootCategoryID,
+        'RootCategoryName', cr.RootCategoryName
+      ) AS offering_info,
       JSON_OBJECT(
         'UserID', us.UserID,
         'UserName', us.UserName,
@@ -228,6 +274,8 @@ class Booking {
       ) AS booking_events
       FROM Bookings AS b
       INNER JOIN Offerings AS o ON b.OfferingID = o.OfferingID
+      INNER JOIN Categories AS c ON c.CategoryID = o.CategoryID
+      LEFT JOIN category_root AS cr ON cr.CategoryID = o.CategoryID
       INNER JOIN Users AS ug ON o.UserID = ug.UserID
       INNER JOIN Users AS us ON b.UserID = us.UserID
       LEFT JOIN (
@@ -235,6 +283,12 @@ class Booking {
         FROM Media
         GROUP BY UserID
       ) gm ON gm.UserID = ug.UserID
+      LEFT JOIN (
+        SELECT OfferingID, MIN(URL) AS offering_ImgURL
+        FROM Media
+        WHERE MediaType = 'image'
+        GROUP BY OfferingID
+      ) om ON om.OfferingID = o.OfferingID
       LEFT JOIN (
         SELECT UserID, MIN(URL) AS seeker_ImgURL
         FROM Media

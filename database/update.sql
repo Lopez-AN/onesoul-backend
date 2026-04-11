@@ -22,3 +22,7 @@ CREATE TABLE IF NOT EXISTS `SubscriptionPaymentRejections` (
 ALTER TABLE `Referrals`
 	CHANGE COLUMN `ReferredUserID` `ReferredUserID` INT(10) UNSIGNED NOT NULL COMMENT 'Identificador del usuario referido; se llena cuando el registro se completa.' AFTER `UserID`,
 	ADD CONSTRAINT `FK_Referrals_Users` FOREIGN KEY (`ReferredUserID`) REFERENCES `Users` (`UserID`) ON UPDATE CASCADE ON DELETE CASCADE;
+
+ALTER TABLE `Bookings`
+	CHANGE COLUMN `FeedbackStatus` `FeedbackStatus` ENUM('pending','submitted','expired') NULL DEFAULT NULL COMMENT 'Estado de la reseña.' COLLATE 'utf8mb4_unicode_ci' AFTER `ModificationDate`,
+	CHANGE COLUMN `LastBookingEvent` `LastBookingEvent` ENUM('pending','rescheduled','modified','canceled','confirmed','completed','rated') NULL DEFAULT NULL COLLATE 'utf8mb4_unicode_ci' AFTER `FeedbackStatus`;

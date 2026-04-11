@@ -748,7 +748,7 @@ class BookingController {
         }
       }
 
-      $id = $booking['OfferingID'];
+      $id = $this->_getBookingOfferingID($booking);
 
       $offering = $this->offering->getOfferingById($id);
       if (!$offering) {
@@ -969,7 +969,7 @@ class BookingController {
       # Obtener info del buscador
       $seeker = $this->user->getUserById($seekerID);
       # Obtener info del servicio
-      $offering = $this->offering->getOfferingById($booking['OfferingID']);
+      $offering = $this->offering->getOfferingById($this->_getBookingOfferingID($booking));
       # Obtener info del guia
       $guide = $this->user->getUserById($guideID);
 
@@ -1106,7 +1106,7 @@ class BookingController {
       # Obtener info del buscador
       $seeker = $this->user->getUserById($seekerID);
       # Obtener info del servicio
-      $offering = $this->offering->getOfferingById($booking['OfferingID']);
+      $offering = $this->offering->getOfferingById($this->_getBookingOfferingID($booking));
       # Obtener info del guia
       $guide = $this->user->getUserById($guideID);
 
@@ -1249,7 +1249,7 @@ class BookingController {
       # Obtener info del buscador
       $seeker = $this->user->getUserById($seekerID);
       # Obtener info del servicio
-      $offering = $this->offering->getOfferingById($booking['OfferingID']);
+      $offering = $this->offering->getOfferingById($this->_getBookingOfferingID($booking));
       # Obtener info del guia
       $guide = $this->user->getUserById($guideID);
 
@@ -1420,7 +1420,7 @@ class BookingController {
 
       $seekerID = $booking['Seeker']['UserID'];
       $guideID = $this->_getBookingGuideID($booking);
-      $offeringID = $booking['OfferingID'];
+      $offeringID = $this->_getBookingOfferingID($booking);
 
       $offering = $this->offering->getOfferingById($offeringID);
       if (!$offering) {
@@ -1825,6 +1825,18 @@ class BookingController {
     }
 
     return $booking['Guide'];
+  }
+
+  private function _getBookingOfferingID($booking) {
+    if (!isset($booking['Offering'])) {
+      return $booking['OfferingID'] ?? null;
+    }
+
+    if (is_array($booking['Offering'])) {
+      return $booking['Offering']['OfferingID'] ?? null;
+    }
+
+    return $booking['Offering'];
   }
 
   /**
