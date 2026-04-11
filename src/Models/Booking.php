@@ -356,7 +356,7 @@ class Booking {
       $stmt = $this->db->prepare("INSERT INTO Bookings
         (OfferingID, PublicID, UserID, Mode, LocationID,
         CreationDate, ScheduledDate, VoucherID, Currency, Amount, LastBookingEvent)
-        VALUES (?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?, 'pending')");
+        VALUES (?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?, 'Pending')");
       $stmt->execute([
         $data['OfferingID'],
         $data['PublicID'],

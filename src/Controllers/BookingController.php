@@ -512,7 +512,7 @@ class BookingController {
             ]
           ]);
         }
-        if ($donation['Status'] === 'redeemed'){
+        if ($donation['Status'] === 'Redeemed'){
           return $response->withStatus(410)->withJson([
             "error" => [
               "code" => "COUPON_ALREADY_REDEEMED",
