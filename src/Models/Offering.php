@@ -254,7 +254,7 @@ class Offering {
     LEFT JOIN Reviews ru ON u.UserID = ru.SeekerID
     LEFT JOIN Bookings b
       ON b.OfferingID = o.OfferingID
-    AND b.LastBookingEvent IN ('completed','rated') ";
+    AND b.LastBookingEvent IN ('Completed','Rated') ";
   }
 
   /**
