@@ -52,7 +52,7 @@ class Booking {
 
   /**
    * Obtiene todas las reservas de un guía específico con paginación
-   * Permite filtrar solo reservas abiertas (no canceladas/completadas/calificadas)
+   * Permite filtrar solo reservas abiertas (excluye Canceled, GuideRated, SeekerRated y Completed)
    * @param int $guideID: ID del usuario guía
    * @param object $paginator: objeto con propiedades limit y offset para paginación
    * @param bool $onlyOpen: true para filtrar solo reservas abiertas, false para todas
@@ -81,7 +81,7 @@ class Booking {
 
   /**
    * Obtiene todas las reservas de un buscador específico con paginación
-   * Permite filtrar solo reservas abiertas (no canceladas/completadas/calificadas)
+   * Permite filtrar solo reservas abiertas (excluye Canceled, GuideRated, SeekerRated y Completed)
    * @param int $seekerID: ID del usuario buscador
    * @param object $paginator: objeto con propiedades limit y offset para paginación
    * @param bool $onlyOpen: true para filtrar solo reservas abiertas, false para todas
@@ -110,7 +110,7 @@ class Booking {
 
   /**
    * Obtiene la cantidad total de servicios completados por un guía
-   * Cuenta reservas con estado 'Rated' o 'Completed'
+   * Cuenta reservas con estado 'GuideRated', 'SeekerRated' o 'Completed'
    * @param int $guideID: ID del usuario guía
    * @return array: { CompletedBookings: int }
    */
@@ -544,19 +544,19 @@ class Booking {
   }
 
   /**
-   * Permite al seeker calificar una reserva completada
-   * Crea una reseña del servicio/offering, actualiza estado a 'Rated'
-   * y establece FeedbackStatus a 'Submitted'
-   * Usa transacciones para garantizar consistencia
-   * @param int $offeringID: ID del servicio calificado
+   * Registra una calificación de booking desde seeker o guide.
+   * Si califica una sola parte: LastBookingEvent = 'GuideRated' o 'SeekerRated'.
+   * Si ambas partes ya calificaron: LastBookingEvent = 'Completed'.
+   * @param int|null $offeringID: ID del offering (requerido para calificación del seeker)
    * @param int $bookingID: ID de la reserva a calificar
-   * @param string|null $message: comentario del seeker sobre el servicio
-   * @param int $seekerID: ID del usuario buscador
-   * @param int $guideID: ID del usuario guía
-   * @param int $rating: calificación del servicio (1-5)
-   * @param bool $fulfilled: true si el servicio cumplió expectativas
-   * @return array: datos completos de la reserva calificada
-   * @throws DatabaseException: si falla la operación o recuperación
+   * @param string|null $message: comentario opcional de la calificación
+   * @param int $seekerID: ID del seeker de la reserva
+   * @param int $guideID: ID del guide de la reserva
+   * @param int $rating: calificación (1-5)
+   * @param bool $fulfilled: true si la sesión se cumplió
+   * @param int $raterUserID: UserID de quien califica
+   * @return array: datos del booking actualizado
+   * @throws DatabaseException: si falla la operación o el rater es inválido
    */
   public function rateBooking($offeringID, $bookingID, $message, $seekerID, $guideID, $rating, $fulfilled, $raterUserID) {
     if ($raterUserID == $guideID) {
@@ -582,6 +582,12 @@ class Booking {
     return (bool)$stmt->fetchColumn();
   }
 
+  /**
+   * Ejecuta la calificación según actor y resuelve el estado final del booking.
+   * Guide -> inserta en SeekerReviews.
+   * Seeker -> inserta en Reviews y actualiza ReviewID.
+   * Estado final: GuideRated, SeekerRated o Completed.
+   */
   private function _rateBookingByActor($actor, $bookingID, $message, $seekerID, $guideID, $rating, $fulfilled, $offeringID = null) {
     try {
       $this->db->beginTransaction(); # Iniciar transacción

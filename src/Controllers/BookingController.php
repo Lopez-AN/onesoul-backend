@@ -1017,7 +1017,7 @@ class BookingController {
   /**
     * Permite calificar una reserva tanto al seeker como al guide
     * Usa una sola ruta para ambos actores y define el estado según quién califica primero
-    * Solo permite calificar desde 2 horas después de la fecha agendada
+    * Solo permite calificar desde 2 horas después de la fecha agendada y hasta 1 mes posterior
     * @param Request $request: objeto de la petición HTTP entrante con JWT y datos en body (Message, Rating, Fulfilled)
     * @param Response $response: objeto de la respuesta HTTP
     * @param array $args: argumentos de ruta, debe incluir 'BookingID'
@@ -1089,6 +1089,15 @@ class BookingController {
           "error" => [
             "code" => "FORBIDDEN",
             "desc" => "You are not authorized to review this booking."
+          ]
+        ]);
+      }
+
+      if ($this->_isRateWindowExpired($booking)) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "BOOKING_RATE_WINDOW_EXPIRED",
+            "desc" => "Rating window expired. Ratings are only allowed up to one month after scheduled time."
           ]
         ]);
       }
@@ -1539,7 +1548,38 @@ class BookingController {
       return false;
     }
 
-    return time() >= (strtotime($scheduledDate) + (2 * 60 * 60));
+    $scheduledTs = strtotime($scheduledDate);
+    if ($scheduledTs === false) {
+      return false;
+    }
+
+    $minTs = $scheduledTs + (2 * 60 * 60);
+    $maxTs = strtotime('+1 month', $scheduledTs);
+    if ($maxTs === false) {
+      return false;
+    }
+
+    $now = time();
+    return $now >= $minTs && $now <= $maxTs;
+  }
+
+  private function _isRateWindowExpired($booking): bool {
+    $scheduledDate = $booking['ScheduledDate'] ?? null;
+    if (!$scheduledDate) {
+      return false;
+    }
+
+    $scheduledTs = strtotime($scheduledDate);
+    if ($scheduledTs === false) {
+      return false;
+    }
+
+    $maxTs = strtotime('+1 month', $scheduledTs);
+    if ($maxTs === false) {
+      return false;
+    }
+
+    return time() > $maxTs;
   }
 
   /**
