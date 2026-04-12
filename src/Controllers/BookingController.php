@@ -637,61 +637,41 @@ class BookingController {
   }
 
   /**
-   * Actualiza datos de una reserva existente (mensaje, tipo de sesión, ubicación, fecha)
+   * Actualiza datos de una reserva existente (mensaje, modalidad, ubicación y/o fecha)
    * Solo el seeker, guía o administrador pueden actualizar
-   * No permite actualizar reservas canceladas, confirmadas, completadas o calificadas
+   * No permite actualizar reservas canceladas ni reservas ya calificadas/completadas
+   * Una vez iniciada la cita no permite modificar datos
    * @param Request $request: objeto de la petición HTTP entrante con JWT y datos en body (SessionType, Message, LocationID, ScheduledDate, SubDomain)
    * @param Response $response: objeto de la respuesta HTTP
-   * @param array $args: argumentos de ruta, debe incluir 'bookingID'
+   * @param array $args: argumentos de ruta, debe incluir 'BookingID'
    * @return Response: JSON con datos de la reserva actualizada o error
    * @statusCode 200: éxito - reserva actualizada correctamente
-   * @statusCode 400: parámetros inválidos, JSON inválido, contenido inapropiado, subdominio inválido, mensaje muy largo, modalidad no válida o reserva ya finalizada/cancelada
+   * @statusCode 400: parámetros inválidos, contenido inapropiado, reserva no editable o cita ya iniciada
    * @statusCode 403: usuario no autorizado para actualizar esta reserva
    * @statusCode 404: reserva u offering no encontrado
    * @statusCode 500: error interno del servidor
    **/
   public function updateBooking(Request $request, Response $response, $args) {
-    $bookingID = intval($args['BookingID']);
-    $data = $request->getParsedBody();
+    $params = $request->getParsedBody();
+    $params = is_array($params) ? $params : [];
+    $params['BookingID'] = $args['BookingID'] ?? null;
+
+    $pValidation = ParameterValidator::validate($response, 'bookings', 'update_booking', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
+    }
+
+    $params = $pValidation->values;
+    $bookingID = intval($params['BookingID']);
+
     $jwt = $request->getAttribute('jwt');
     $userID = $jwt->data->UserID;
 
-    # Verificar si el body es un array/object válido
-    if (!is_array($data) && !is_object($data)) {
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "INVALID_JSON",
-          "desc" => "Request body must be valid JSON"
-        ]
-      ]);
-    }
-
-    $message = $data['Message'] ?? null;
-    $sessionType = $data['SessionType'] ?? null;
-    $locationID = $data['LocationID'] ?? null;
-    $scheduledDate = $data['ScheduledDate'] ?? null;
-    $subDomain = $data['SubDomain'] ?? '';
-
-    if (is_null($sessionType) || !in_array($sessionType, ['in-person', 'virtual'])) {
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "INVALID_PARAMETERS",
-          "desc" => "Parameters are missing or invalid"
-        ]
-      ]);
-    }
-
-    # Validar formato de subdominio (solo letras A-Z, a-z)
-    if (!empty($subDomain)) {
-      if (!preg_match('/^[a-zA-Z]+$/', $subDomain)) {
-        return $response->withStatus(400)->withJson([
-          "error" => [
-            "code" => "INVALID_SUBDOMAIN",
-            "desc" => "Subdomain must contain only letters A-Z"
-          ]
-        ]);
-      }
-    }
+    $message = $params['Message'] ?? null;
+    $sessionType = $params['SessionType'];
+    $locationID = $params['LocationID'] ?? null;
+    $scheduledDate = $params['ScheduledDate'] ?? null;
+    $subDomain = $params['SubDomain'] ?? '';
 
     # Valida contenido con Perspective API
     if(!empty($message)){
@@ -728,7 +708,7 @@ class BookingController {
         return $response->withStatus(403)->withJson([
           "error" => [
             "code" => "FORBIDDEN",
-            "desc" => "You are not authorized to cancel this booking."
+            "desc" => "You are not authorized to update this booking."
           ]
         ]);
       }
@@ -1035,55 +1015,38 @@ class BookingController {
   }
 
   /**
-   * Permite al seeker calificar una reserva completada
-   * Solo el seeker o administrador pueden calificar
-   * Solo permite calificar reservas en estado 'Completed'
-   * @param Request $request: objeto de la petición HTTP entrante con JWT y datos en body (Message, Rating, Fulfilled)
-   * @param Response $response: objeto de la respuesta HTTP
-   * @param array $args: argumentos de ruta, debe incluir 'bookingID'
-   * @return Response: JSON con datos de la reserva calificada o error
-   * @statusCode 200: éxito - reserva calificada correctamente
-   * @statusCode 400: parámetros inválidos, rating fuera de rango (1-5), mensaje muy largo, contenido inapropiado, fulfilled no booleano o reserva no está en estado 'Completed'
-   * @statusCode 401: usuario no autorizado para calificar (no es el seeker, guía ni admin)
-   * @statusCode 404: reserva u offering no encontrado
-   * @statusCode 500: error interno del servidor
-   **/
+    * Permite calificar una reserva tanto al seeker como al guide
+    * Usa una sola ruta para ambos actores y define el estado según quién califica primero
+    * Solo permite calificar desde 2 horas después de la fecha agendada
+    * @param Request $request: objeto de la petición HTTP entrante con JWT y datos en body (Message, Rating, Fulfilled)
+    * @param Response $response: objeto de la respuesta HTTP
+    * @param array $args: argumentos de ruta, debe incluir 'BookingID'
+    * @return Response: JSON con datos de la reserva calificada o error
+    * @statusCode 200: éxito - reserva calificada correctamente
+    * @statusCode 400: parámetros inválidos, contenido inapropiado, ventana de calificación no habilitada o estado no calificable
+    * @statusCode 401: usuario no autorizado para calificar (no es seeker ni guide)
+    * @statusCode 409: el actor ya calificó esta reserva
+    * @statusCode 404: reserva u offering no encontrado
+    * @statusCode 500: error interno del servidor
+    **/
   public function rateBooking(Request $request, Response $response, $args) {
-    $data = $request->getParsedBody();
-    $bookingID = intval($args['BookingID']);
-    $message = $data['Message'] ?? null;
-    $rating = $data['Rating'] ?? null;
-    $fulfilled = $data['Fulfilled'] ?? null;
+    $params = $request->getParsedBody();
+    $params = is_array($params) ? $params : [];
+    $params['BookingID'] = $args['BookingID'] ?? null;
+
+    $pValidation = ParameterValidator::validate($response, 'bookings', 'rate_booking', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
+    }
+
+    $params = $pValidation->values;
+    $bookingID = intval($params['BookingID']);
+    $message = $params['Message'] ?? null;
+    $rating = $params['Rating'];
+    $fulfilled = $params['Fulfilled'];
 
     $jwt = $request->getAttribute('jwt');
     $userID = $jwt->data->UserID;
-
-    if (!is_bool($fulfilled)) {
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "INVALID_FULFILLED_VALUE",
-          "desc" => "The 'fulfilled' parameter must be true or false."
-        ]
-      ]);
-    }
-
-    if (empty($rating)) {
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "INVALID_PARAMETERS",
-          "desc" => "Parameters are missing or invalid"
-        ]
-      ]);
-    }
-
-    if (!in_array($data['Rating'], [1, 2, 3, 4, 5])) {
-      return $response->withStatus(400)->withJson([
-        "error" => [
-          "code" => "INVALID_RATING",
-          "desc" => "Rating must be between 1 and 5"
-        ]
-      ]);
-    }
 
     # Valida contenido con Perspective API
     if(!empty($message)){

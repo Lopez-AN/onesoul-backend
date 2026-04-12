@@ -105,18 +105,33 @@
       "regex": "~^[a-zA-Z]{1,15}+$~"
     }
   },
-  "confirm_booking": {
+  "update_booking": {
     "BookingID": {
       "required": true,
       "type": "integer",
       "min": 0,
       "max": 999999999
     },
+    "SessionType": {
+      "required": true,
+      "type": "string",
+      "regex": "~^(in-person|virtual)$~"
+    },
+    "LocationID": {
+      "required": false,
+      "type": "integer",
+      "min": 0,
+      "max": 999999999
+    },
+    "ScheduledDate": {
+      "required": false,
+      "type": "string"
+    },
     "Message": {
       "required": false,
       "type": "string",
       "min": 10,
-      "maxlength": 1200
+      "maxlength": 1000
     },
     "SubDomain": {
       "required": false,
@@ -124,7 +139,7 @@
       "regex": "~^[a-zA-Z]{1,15}+$~"
     }
   },
-  "complete_booking": {
+  "rate_booking": {
     "BookingID": {
       "required": true,
       "type": "integer",
@@ -135,7 +150,7 @@
       "required": false,
       "type": "string",
       "min": 10,
-      "maxlength": 1200
+      "maxlength": 1000
     },
     "Rating": {
       "required": true,
