@@ -41,8 +41,6 @@ return function (App $app) {
   $app->post('/bookings', [$bookingController, 'createBooking'])->add($requiredJwt);
   $app->patch('/bookings/{BookingID}', [$bookingController, 'updateBooking'])->add($requiredJwt);
   $app->post('/bookings/{BookingID}/cancel', [$bookingController, 'cancelBooking'])->add($requiredJwt);
-  $app->post('/bookings/{BookingID}/confirm', [$bookingController, 'confirmBooking'])->add($requiredJwt);
-  $app->post('/bookings/{BookingID}/complete', [$bookingController, 'completeBooking'])->add($requiredJwt);
   $app->post('/bookings/{BookingID}/rate', [$bookingController, 'rateBooking'])->add($requiredJwt);
 
   // Reviews:

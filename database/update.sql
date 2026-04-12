@@ -9,4 +9,13 @@ ALTER TABLE `UsersLanguages`
 
 DELETE FROM `DonationVouchers`;
 ALTER TABLE `DonationVouchers`
-	CHANGE COLUMN `Status` `Status` ENUM('Pending','Assigned','Redeemed','Canceled','Expired') NOT NULL DEFAULT 'Pending' COMMENT 'Estado de la donación' COLLATE 'utf8mb4_unicode_ci' AFTER `RedeemCodeMasked`;
+	CHANGE COLUMN `Status` `Status` ENUM('Pending','Assigned','Redeemed','Canceled','Expired')
+	NOT NULL DEFAULT 'Pending' COMMENT 'Estado de la donación' COLLATE 'utf8mb4_unicode_ci' AFTER `RedeemCodeMasked`;
+
+ALTER TABLE `Bookings`
+	CHANGE COLUMN `LastBookingEvent` `LastBookingEvent` ENUM('Pending','Rescheduled','Modified','Canceled','GuideRated','SeekerRated','Completed')
+	NULL DEFAULT NULL COLLATE 'utf8mb4_unicode_ci' AFTER `FeedbackStatus`;
+
+ALTER TABLE `BookingStatus`
+	CHANGE COLUMN `BookingEvent` `BookingEvent` ENUM('Pending','Rescheduled','Modified','Canceled','GuideRated','SeekerRated','Completed')
+	NULL DEFAULT NULL COMMENT 'Indica el estado del booking (creación, reprogramación, cancelación, calificación, etc.)' COLLATE 'utf8mb4_unicode_ci' AFTER `BookingEventDate`;

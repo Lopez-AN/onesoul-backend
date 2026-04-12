@@ -10,7 +10,6 @@ use App\Models\Notification;
 use App\Models\Donation;
 use App\Models\User;
 use DateTime;
-use Firebase\JWT\JWT;
 use App\Utils\ParameterValidator;
 
 require_once(ROOT . '/src/Utils/PerspectiveText.php');
@@ -35,7 +34,7 @@ class BookingController {
 
   /**
    * Obtiene los datos de una reserva específica por su ID numérico
-   * Valida que el usuario autenticado sea el cliente o el guía asociado
+   * Valida que el usuario autenticado sea el seeker o el guía asociado
    * @param Request $request: objeto de la petición HTTP entrante con JWT
    * @param Response $response: objeto de la respuesta HTTP
    * @param array $args: argumentos de ruta, debe incluir 'bookingID'
@@ -68,7 +67,7 @@ class BookingController {
       }
 
       # Validar si el user es el buscador o el guía
-      if ($booking['Seeker']['UserID'] !== $userID && $this->_getBookingGuideID($booking) !== $userID) {
+      if ($booking['Seeker']['UserID'] !== $userID && $booking['Guide']['UserID'] !== $userID) {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "FORBIDDEN",
@@ -90,7 +89,7 @@ class BookingController {
 
   /**
    * Obtiene los datos de una reserva específica por su ID público (PublicID)
-   * Valida que el usuario autenticado sea el cliente o el guía asociado
+   * Valida que el usuario autenticado sea el seeker o el guía asociado
    * @param Request $request: objeto de la petición HTTP entrante con JWT
    * @param Response $response: objeto de la respuesta HTTP
    * @param array $args: argumentos de ruta, debe incluir 'publicID'
@@ -123,7 +122,7 @@ class BookingController {
       }
 
       # Validar si el user es el buscador o el guía
-      if ($booking['Seeker']['UserID'] !== $userID && $this->_getBookingGuideID($booking) !== $userID) {
+      if ($booking['Seeker']['UserID'] !== $userID && $booking['Guide']['UserID'] !== $userID) {
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "FORBIDDEN",
@@ -198,7 +197,7 @@ class BookingController {
   }
 
   /**
-   * Obtiene todas las reservas asociadas a un buscador específico (cliente)
+   * Obtiene todas las reservas asociadas a un seeker específico
    * Solo el buscador o un administrador puede acceder a esta información
    * Soporta paginación y filtrado por estado (abierto/cerrado)
    * @param Request $request: objeto de la petición HTTP entrante con JWT y query params opcionales (status)
@@ -252,7 +251,7 @@ class BookingController {
   }
 
   /**
-   * Obtiene la cantidad de servicios completados de un guía específico (cliente)
+   * Obtiene la cantidad de servicios completados de un guía específico
    * Solo el buscador o un administrador puede acceder a esta información
    * Soporta paginación y filtrado por estado (abierto/cerrado)
    * @param Request $request: objeto de la petición HTTP entrante con JWT y query params opcionales (status)
@@ -285,7 +284,7 @@ class BookingController {
   }
 
   /**
-   * Obtiene información detallada del cliente (seeker) asociado a una reserva
+   * Obtiene información detallada del seeker asociado a una reserva
    * Retorna datos personales, de contacto, ubicación y rating del buscador
    * @param Request $request: objeto de la petición HTTP entrante con JWT
    * @param Response $response: objeto de la respuesta HTTP
@@ -639,7 +638,7 @@ class BookingController {
 
   /**
    * Actualiza datos de una reserva existente (mensaje, tipo de sesión, ubicación, fecha)
-   * Solo el cliente, guía o administrador pueden actualizar
+   * Solo el seeker, guía o administrador pueden actualizar
    * No permite actualizar reservas canceladas, confirmadas, completadas o calificadas
    * @param Request $request: objeto de la petición HTTP entrante con JWT y datos en body (SessionType, Message, LocationID, ScheduledDate, SubDomain)
    * @param Response $response: objeto de la respuesta HTTP
@@ -724,8 +723,8 @@ class BookingController {
         ]);
       }
 
-      # Validar si el user es el cliente o el guía o un administrador
-      if ($booking['Seeker']['UserID'] !== $userID && $this->_getBookingGuideID($booking) !== $userID && !$jwt->data->IsAdmin){
+      # Validar si el user es el seeker o el guía o un administrador
+      if ($booking['Seeker']['UserID'] !== $userID && $booking['Guide']['UserID'] !== $userID && !$jwt->data->IsAdmin){
         return $response->withStatus(403)->withJson([
           "error" => [
             "code" => "FORBIDDEN",
@@ -734,21 +733,30 @@ class BookingController {
         ]);
       }
 
-      # Verificar si el booking está cancelado, confirmado, completado o calificado (último evento solamente)
+      # Verificar si el booking está en estado no editable
       if (!empty($booking['Events'])) {
         $latestEvent = $booking['Events'][0];
 
-        if (in_array($latestEvent['Event'], ['Canceled', 'Confirmed', 'Completed', 'Rated'])) {
+        if (in_array($latestEvent['Event'], ['Canceled', 'GuideRated', 'SeekerRated', 'Completed'])) {
           return $response->withStatus(400)->withJson([
             "error" => [
-              "code" => "BOOKING_ALREADY_CANCELED_OR_CONFIRMED",
+              "code" => "BOOKING_ALREADY_CANCELED_OR_COMPLETED",
               "desc" => "Cannot update this booking."
             ]
           ]);
         }
       }
 
-      $id = $this->_getBookingOfferingID($booking);
+      if ($this->_isBookingStarted($booking)) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "BOOKING_ALREADY_STARTED",
+            "desc" => "Cannot modify this booking after scheduled time."
+          ]
+        ]);
+      }
+
+      $id = $booking['Offering']['OfferingID'];
 
       $offering = $this->offering->getOfferingById($id);
       if (!$offering) {
@@ -891,7 +899,7 @@ class BookingController {
 
   /**
    * Cancela una reserva existente
-   * Solo el cliente, guía o administrador pueden cancelar
+   * Solo el seeker, guía o administrador pueden cancelar
    * No permite cancelar reservas ya canceladas, completadas o calificadas
    * Genera notificaciones para guía y buscador
    * @param Request $request: objeto de la petición HTTP entrante con JWT y datos en body (Message, SubDomain)
@@ -936,9 +944,9 @@ class BookingController {
         ]);
       }
       $seekerID = $booking['Seeker']['UserID'];
-      $guideID = $this->_getBookingGuideID($booking);
+      $guideID = $booking['Guide']['UserID'];
 
-      # Validar si el user es el cliente o el guía o un administrador
+      # Validar si el user es el seeker o el guía o un administrador
       if ($seekerID !== $userID && $guideID !== $userID && !$jwt->data->IsAdmin){
         return $response->withStatus(401)->withJson([
           "error" => [
@@ -952,11 +960,11 @@ class BookingController {
       if (!empty($booking['Events'])) {
         $latestEvent = $booking['Events'][0];
 
-        if (in_array($latestEvent['Event'], ['Canceled', 'Completed', 'Rated'])) {
+        if (in_array($latestEvent['Event'], ['Canceled', 'GuideRated', 'SeekerRated', 'Completed', 'Rated'])) {
           return $response->withStatus(400)->withJson([
             "error" => [
-              "code" => "BOOKING_ALREADY_CANCELED_OR_CONFIRMED",
-              "desc" => "Cannot update this booking."
+              "code" => "BOOKING_ALREADY_CANCELED_OR_COMPLETED",
+              "desc" => "Cannot cancel this booking."
             ]
           ]);
         }
@@ -969,7 +977,7 @@ class BookingController {
       # Obtener info del buscador
       $seeker = $this->user->getUserById($seekerID);
       # Obtener info del servicio
-      $offering = $this->offering->getOfferingById($this->_getBookingOfferingID($booking));
+      $offering = $this->offering->getOfferingById($booking['Offering']['OfferingID']);
       # Obtener info del guia
       $guide = $this->user->getUserById($guideID);
 
@@ -1027,295 +1035,8 @@ class BookingController {
   }
 
   /**
-   * Confirma una reserva existente
-   * Solo el guía o administrador pueden confirmar
-   * No permite confirmar reservas ya canceladas, confirmadas, completadas o calificadas
-   * Genera notificaciones para guía y buscador
-   * @param Request $request: objeto de la petición HTTP entrante con JWT y datos en body (Message, SubDomain)
-   * @param Response $response: objeto de la respuesta HTTP
-   * @param array $args: argumentos de ruta, debe incluir 'BookingID'
-   * @return Response: JSON con datos de la reserva confirmada o error
-   * @statusCode 200: éxito - reserva confirmada correctamente
-   * @statusCode 400: contenido inapropiado o reserva ya finalizada/cancelada/confirmada
-   * @statusCode 401: usuario no autorizado para confirmar (no es el guía ni admin)
-   * @statusCode 404: reserva no encontrada
-   * @statusCode 500: error interno del servidor
-   **/
-  public function confirmBooking(Request $request, Response $response, $args) {
-    $params = $request->getParsedBody();
-    $params['BookingID'] = $args['BookingID'];
-    $jwt = $request->getAttribute('jwt');
-    $userID = $jwt->data->UserID;
-
-    # Validar parametros
-    $pValidation = ParameterValidator::validate($response, 'bookings','confirm_booking', $params);
-    if(!$pValidation->valid){
-      return $pValidation->response;
-    }
-    $params = $pValidation->values;
-
-    try {
-      # Valida contenido con Perspective API
-      if ($params['Message'] && $this->_containsInappropriateContent($params['Message'])) {
-        return $response->withStatus(400)->withJson([
-          "code" => "INAPPROPRIATE_CONTENT",
-          "desc" => "Please remove inappropriate content and try again."
-        ]);
-      }
-
-      $booking = $this->booking->getBookingByID($params['BookingID']);
-      if (!$booking) {
-        return $response->withStatus(404)->withJson([
-          "error" => [
-            "code" => "BOOKING_NOT_FOUND",
-            "desc" => "Booking not found"
-          ]
-        ]);
-      }
-      $seekerID = $booking['Seeker']['UserID'];
-      $guideID = $this->_getBookingGuideID($booking);
-
-      # Validar si es el guía o un administrador
-      if ($guideID !== $userID && !$jwt->data->IsAdmin){
-        return $response->withStatus(401)->withJson([
-          "error" => [
-            "code" => "FORBIDDEN",
-            "desc" => "You are not authorized to confirm this booking."
-          ]
-        ]);
-      }
-
-      # Verificar si el booking está cancelado, completado o calificado (último evento solamente)
-      if (!empty($booking['Events'])) {
-        $latestEvent = $booking['Events'][0];
-
-        if (in_array($latestEvent['Event'], ['Canceled', 'Confirmed', 'Completed', 'Rated'])) {
-          return $response->withStatus(400)->withJson([
-            "error" => [
-              "code" => "BOOKING_ALREADY_CANCELED_OR_CONFIRMED",
-              "desc" => "Cannot update this booking."
-            ]
-          ]);
-        }
-      }
-
-      $booking = $this->booking->confirmBooking($params['BookingID'], $params['Message'], $params['SubDomain']);
-
-      $origin = $params['SubDomain'] ? "https://{$params['SubDomain']}.onesoul.app" : "https://onesoul.app";
-
-      # Obtener info del buscador
-      $seeker = $this->user->getUserById($seekerID);
-      # Obtener info del servicio
-      $offering = $this->offering->getOfferingById($this->_getBookingOfferingID($booking));
-      # Obtener info del guia
-      $guide = $this->user->getUserById($guideID);
-
-      try{
-        # Notificación para el guia
-        $payloadGuide = [
-          "YEAR"           => date('Y'),
-          "GUIDE_NAME"    => $guide['UserName'],
-          "BOOKING_ID"     => $booking['PublicID'],
-          "BOOKING_URL"    => "{$origin}/bookings/guide",
-          "SCHEDULED"    => $booking['ScheduledDate'] ?? "A convenir",
-          "SESSION_TYPE" => $booking['SessionType'] === 'in-person' ? 'Presencial' : 'Virtual',
-          "OFFERING_ID"   => $offering['OfferingID'],
-          "OFFERING_TITLE"   => $offering['Title'],
-          'OFFERING_IMG'  => isset($offering['Media']['Images'][0]['Url'])
-            ? $offering['Media']['Images'][0]['Url'] : null,
-          "SEEKER_USERNAME"       => $seeker['UserName'],
-          "SEEKER_NAME"  => $seeker['FirstName'].' '.$seeker['LastName'],
-          "SEEKER_EMAIL" => $seeker['Email'],
-          "SEEKER_PHONE" => $seeker['Phone'] ?? '-',
-          "MESSAGE"        => $params['Message']
-        ];
-        $this->notification->createNotification(
-          $guideID,
-          "BOOKING.CONFIRMED_FOR_GUIDE",
-          $payloadGuide,
-          "BOOKING." . $booking['BookingID'] . ".CONFIRMED.GUIDE"
-        );
-        # Notificación para el buscador
-        $payloadSeeker = [
-          "YEAR"        => date('Y'),
-          "GUIDE_NAME"    => $guide['UserName'],
-          "BOOKING_ID"  => $booking['PublicID'],
-          "BOOKING_URL" => "{$origin}/bookings/seeker",
-          "SCHEDULED"    => $booking['ScheduledDate'] ?? "A convenir",
-          "SESSION_TYPE" => $booking['SessionType'] === 'in-person' ? 'Presencial' : 'Virtual',
-          "OFFERING_ID"   => $offering['OfferingID'],
-          "OFFERING_TITLE"    => $offering['Title'],
-          'OFFERING_IMG'  => isset($offering['Media']['Images'][0]['Url'])
-            ? $offering['Media']['Images'][0]['Url'] : null,
-          "SEEKER_USERNAME"    => $seeker['UserName'],
-          "MESSAGE"     => $params['Message']
-        ];
-        $this->notification->createNotification(
-          $seekerID,
-          "BOOKING.CONFIRMED_FOR_SEEKER",
-          $payloadSeeker,
-          "BOOKING." . $booking['BookingID'] . ".CONFIRMED.SEEKER"
-        );
-      }catch(\Throwable $e){}
-
-      return $response->withStatus(200)->withJson($booking);
-    } catch (\Throwable $e) {
-      return $response->withStatus(500)->withJson([
-        "error" => [
-          "code" => "INTERNAL_SERVER_ERROR",
-          "desc" => $e->getMessage()
-        ]
-      ]);
-    }
-  }
-
-  /**
-   * Marca una reserva como completada
-   * Solo el guía o administrador pueden completar
-   * Solo permite completar reservas en estado 'Confirmed'
-   * Genera notificaciones para guía y buscador
-   * @param Request $request: objeto de la petición HTTP entrante con JWT y datos en body (Message, Rating, Fulfilled, SubDomain)
-   * @param Response $response: objeto de la respuesta HTTP
-   * @param array $args: argumentos de ruta, debe incluir 'BookingID'
-   * @return Response: JSON con datos de la reserva completada o error
-   * @statusCode 200: éxito - reserva completada correctamente
-   * @statusCode 400: contenido inapropiado o reserva no está en estado 'Confirmed'
-   * @statusCode 401: usuario no autorizado para completar (no es el guía ni admin)
-   * @statusCode 404: reserva no encontrada
-   * @statusCode 500: error interno del servidor
-   **/
-  public function completeBooking(Request $request, Response $response, $args) {
-    $params = $request->getParsedBody();
-    $params['BookingID'] = $args['BookingID'];
-    $jwt = $request->getAttribute('jwt');
-    $userID = $jwt->data->UserID;
-
-    # Validar parametros
-    $pValidation = ParameterValidator::validate($response, 'bookings','complete_booking', $params);
-    if(!$pValidation->valid){
-      return $pValidation->response;
-    }
-    $params = $pValidation->values;
-
-    try {
-      # Valida contenido con Perspective API
-      if ($params['Message'] && $this->_containsInappropriateContent($params['Message'])) {
-        return $response->withStatus(400)->withJson([
-          "code" => "INAPPROPRIATE_CONTENT",
-          "desc" => "Please remove inappropriate content and try again."
-        ]);
-      }
-
-      $booking = $this->booking->getBookingByID($params['BookingID']);
-      if (!$booking) {
-        return $response->withStatus(404)->withJson([
-          "error" => [
-            "code" => "BOOKING_NOT_FOUND",
-            "desc" => "Booking not found"
-          ]
-        ]);
-      }
-      $seekerID = $booking['Seeker']['UserID'];
-      $guideID = $this->_getBookingGuideID($booking);
-
-      # Validar si es el guía o un administrador
-      if ($guideID !== $userID && !$jwt->data->IsAdmin){
-        return $response->withStatus(401)->withJson([
-          "error" => [
-            "code" => "FORBIDDEN",
-            "desc" => "You are not authorized to confirm this booking."
-          ]
-        ]);
-      }
-
-      # Verificar si el último evento del booking es distinto de 'Confirmed'
-      if (!empty($booking['Events'])) {
-        $latestEvent = $booking['Events'][0];
-
-        if ($latestEvent['Event'] !== 'Confirmed') {
-          return $response->withStatus(400)->withJson([
-            "error" => [
-              "code" => "BOOKING_NOT_CONFIRMED",
-              "desc" => "Cannot update this booking because it is not in Confirmed status."
-            ]
-          ]);
-        }
-      }
-
-      $booking = $this->booking->completeBooking($params['BookingID'], $params['Message'], $seekerID, $guideID, $params['Rating'], $params['Fulfilled']);
-
-      $origin = $params['SubDomain'] ? "https://{$params['SubDomain']}.onesoul.app" : "https://onesoul.app";
-
-      # Obtener info del buscador
-      $seeker = $this->user->getUserById($seekerID);
-      # Obtener info del servicio
-      $offering = $this->offering->getOfferingById($this->_getBookingOfferingID($booking));
-      # Obtener info del guia
-      $guide = $this->user->getUserById($guideID);
-
-      try{
-        # Notificación para el guia
-        $payloadGuide = [
-          "YEAR"           => date('Y'),
-          "GUIDE_NAME"    => $guide['UserName'],
-          "BOOKING_ID"     => $booking['PublicID'],
-          "BOOKING_URL"    => "{$origin}/bookings/guide",
-          "SCHEDULED"    => $booking['ScheduledDate'] ?? "A convenir",
-          "SESSION_TYPE" => $booking['SessionType'] === 'in-person' ? 'Presencial' : 'Virtual',
-          "OFFERING_ID"   => $offering['OfferingID'],
-          "OFFERING_TITLE"   => $offering['Title'],
-          'OFFERING_IMG'  => isset($offering['Media']['Images'][0]['Url'])
-            ? $offering['Media']['Images'][0]['Url'] : null,
-          "SEEKER_USERNAME"       => $seeker['UserName'],
-          "SEEKER_NAME"  => $seeker['FirstName'].' '.$seeker['LastName'],
-          "SEEKER_EMAIL" => $seeker['Email'],
-          "SEEKER_PHONE" => $seeker['Phone'] ?? '-',
-          "MESSAGE"        => $params['Message']
-        ];
-        $this->notification->createNotification(
-          $guideID,
-          "BOOKING.CONFIRMED_FOR_GUIDE",
-          $payloadGuide,
-          "BOOKING." . $booking['BookingID'] . ".CONFIRMED.GUIDE"
-        );
-        # Notificación para el buscador
-        $payloadSeeker = [
-          "YEAR"        => date('Y'),
-          "GUIDE_NAME"    => $guide['UserName'],
-          "BOOKING_ID"  => $booking['PublicID'],
-          "BOOKING_URL" => "{$origin}/bookings/seeker",
-          "SCHEDULED"    => $booking['ScheduledDate'] ?? "A convenir",
-          "SESSION_TYPE" => $booking['SessionType'] === 'in-person' ? 'Presencial' : 'Virtual',
-          "OFFERING_ID"   => $offering['OfferingID'],
-          "OFFERING_TITLE"    => $offering['Title'],
-          'OFFERING_IMG'  => isset($offering['Media']['Images'][0]['Url'])
-            ? $offering['Media']['Images'][0]['Url'] : null,
-          "SEEKER_USERNAME"    => $seeker['UserName'],
-          "MESSAGE"     => $params['Message']
-        ];
-        $this->notification->createNotification(
-          $seekerID,
-          "BOOKING.CONFIRMED_FOR_SEEKER",
-          $payloadSeeker,
-          "BOOKING." . $booking['BookingID'] . ".CONFIRMED.SEEKER"
-        );
-      }catch(\Throwable $e){}
-
-      return $response->withStatus(200)->withJson($booking);
-
-    } catch (\Throwable $e) {
-      return $response->withStatus(500)->withJson([
-        "error" => [
-          "code" => "INTERNAL_SERVER_ERROR",
-          "desc" => $e->getMessage()
-        ]
-      ]);
-    }
-  }
-
-  /**
-   * Permite al cliente calificar una reserva completada
-   * Solo el cliente o administrador pueden calificar
+   * Permite al seeker calificar una reserva completada
+   * Solo el seeker o administrador pueden calificar
    * Solo permite calificar reservas en estado 'Completed'
    * @param Request $request: objeto de la petición HTTP entrante con JWT y datos en body (Message, Rating, Fulfilled)
    * @param Response $response: objeto de la respuesta HTTP
@@ -1323,7 +1044,7 @@ class BookingController {
    * @return Response: JSON con datos de la reserva calificada o error
    * @statusCode 200: éxito - reserva calificada correctamente
    * @statusCode 400: parámetros inválidos, rating fuera de rango (1-5), mensaje muy largo, contenido inapropiado, fulfilled no booleano o reserva no está en estado 'Completed'
-   * @statusCode 401: usuario no autorizado para calificar (no es el cliente ni admin)
+   * @statusCode 401: usuario no autorizado para calificar (no es el seeker, guía ni admin)
    * @statusCode 404: reserva u offering no encontrado
    * @statusCode 500: error interno del servidor
    **/
@@ -1394,33 +1115,58 @@ class BookingController {
         ]);
       }
 
-    # Validar si el user es el cliente  o un administrador
-    if ($booking['Seeker']['UserID'] !== $userID && !$jwt->data->IsAdmin){
-      return $response->withStatus(401)->withJson([
-        "error" => [
-          "code" => "FORBIDDEN",
-          "desc" => "You are not authorized to review this booking."
-        ]
-      ]);
-    }
+      $seekerID = $booking['Seeker']['UserID'];
+      $guideID = $booking['Guide']['UserID'];
+      $isSeeker = $seekerID === $userID;
+      $isGuide = $guideID === $userID;
 
-      # Verificar si el último evento del booking es distinto de 'Confirmed'
-      if (!empty($booking['Events'])) {
-        $latestEvent = $booking['Events'][0];
-
-        if ($latestEvent['Event'] !== 'Completed') {
-          return $response->withStatus(400)->withJson([
-            "error" => [
-              "code" => "BOOKING_NOT_COMPLETED",
-              "desc" => "Cannot update this booking because it is not in Completed status."
-            ]
-          ]);
-        }
+      # Validar si el user es el seeker o el guía
+      if (!$isSeeker && !$isGuide){
+        return $response->withStatus(401)->withJson([
+          "error" => [
+            "code" => "FORBIDDEN",
+            "desc" => "You are not authorized to review this booking."
+          ]
+        ]);
       }
 
-      $seekerID = $booking['Seeker']['UserID'];
-      $guideID = $this->_getBookingGuideID($booking);
-      $offeringID = $this->_getBookingOfferingID($booking);
+      if (!$this->_canRateBookingNow($booking)) {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "BOOKING_NOT_RATEABLE_YET",
+            "desc" => "Booking can only be rated 2 hours after scheduled time."
+          ]
+        ]);
+      }
+
+      if ($booking['LastBookingEvent'] === 'Canceled' || $booking['LastBookingEvent'] === 'Completed') {
+        return $response->withStatus(400)->withJson([
+          "error" => [
+            "code" => "BOOKING_NOT_RATEABLE",
+            "desc" => "Booking is not rateable in its current status."
+          ]
+        ]);
+      }
+
+      if ($isGuide && $this->booking->hasGuideRating($bookingID)) {
+        return $response->withStatus(409)->withJson([
+          "error" => [
+            "code" => "BOOKING_ALREADY_RATED_BY_GUIDE",
+            "desc" => "Guide already rated this booking."
+          ]
+        ]);
+      }
+
+      if ($isSeeker && $this->booking->hasSeekerRating($bookingID)) {
+        return $response->withStatus(409)->withJson([
+          "error" => [
+            "code" => "BOOKING_ALREADY_RATED_BY_SEEKER",
+            "desc" => "Seeker already rated this booking."
+          ]
+        ]);
+      }
+
+      $offeringID = $booking['Offering']['OfferingID'];
 
       $offering = $this->offering->getOfferingById($offeringID);
       if (!$offering) {
@@ -1432,7 +1178,7 @@ class BookingController {
         ]);
       }
 
-      $booking = $this->booking->rateBooking($offeringID, $bookingID, $message, $seekerID, $guideID, $rating, $fulfilled);
+      $booking = $this->booking->rateBooking($offeringID, $bookingID, $message, $seekerID, $guideID, $rating, $fulfilled, $userID);
 
       return $response->withStatus(200)->withJson($booking);
 
@@ -1580,7 +1326,7 @@ class BookingController {
   }
 
   /**
-   * Obtiene todas las reseñas realizadas por un buscador específico (cliente)
+   * Obtiene todas las reseñas realizadas por un seeker específico
    * Permite filtrado por rango de fechas, calificación y límite de resultados
    * @param Request $request: objeto de la petición HTTP entrante con query params opcionales (from, to, rating, limit)
    * @param Response $response: objeto de la respuesta HTTP
@@ -1815,28 +1561,22 @@ class BookingController {
     }
   }
 
-  private function _getBookingGuideID($booking) {
-    if (!isset($booking['Guide'])) {
-      return null;
+  private function _isBookingStarted($booking): bool {
+    $scheduledDate = $booking['ScheduledDate'] ?? null;
+    if (!$scheduledDate) {
+      return false;
     }
 
-    if (is_array($booking['Guide'])) {
-      return $booking['Guide']['UserID'] ?? null;
-    }
-
-    return $booking['Guide'];
+    return time() >= strtotime($scheduledDate);
   }
 
-  private function _getBookingOfferingID($booking) {
-    if (!isset($booking['Offering'])) {
-      return $booking['OfferingID'] ?? null;
+  private function _canRateBookingNow($booking): bool {
+    $scheduledDate = $booking['ScheduledDate'] ?? null;
+    if (!$scheduledDate) {
+      return false;
     }
 
-    if (is_array($booking['Offering'])) {
-      return $booking['Offering']['OfferingID'] ?? null;
-    }
-
-    return $booking['Offering'];
+    return time() >= (strtotime($scheduledDate) + (2 * 60 * 60));
   }
 
   /**

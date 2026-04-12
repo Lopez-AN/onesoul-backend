@@ -60,7 +60,7 @@ class Booking {
    */
   public function getBookingsByGuide($guideID, $paginator, $onlyOpen) {
     $filterOpen = $onlyOpen ?
-      " AND LastBookingEvent NOT IN ('Canceled', 'Completed', 'Rated') " : "";
+      " AND LastBookingEvent NOT IN ('Canceled', 'GuideRated', 'SeekerRated', 'Completed') " : "";
 
     $stmt = $this->db->prepare(
       CategoryTreeHelper::getRootCategoryCTE(true).
@@ -89,7 +89,7 @@ class Booking {
    */
   public function getBookingsBySeeker($seekerID, $paginator, $onlyOpen) {
     $filterOpen = $onlyOpen ?
-      " AND LastBookingEvent NOT IN ('Canceled', 'Completed', 'Rated') " : "";
+      " AND LastBookingEvent NOT IN ('Canceled', 'GuideRated', 'SeekerRated', 'Completed') " : "";
 
     $stmt = $this->db->prepare(
       CategoryTreeHelper::getRootCategoryCTE(true).
@@ -119,7 +119,7 @@ class Booking {
       FROM Bookings as b
       INNER JOIN Offerings as o
         ON b.OfferingID = o.OfferingID
-      WHERE b.LastBookingEvent IN ('Rated','Completed')
+      WHERE b.LastBookingEvent IN ('GuideRated','SeekerRated','Completed')
       AND o.UserID = ?");
     $stmt->execute([$guideID]);
     return $stmt->fetch(PDO::FETCH_ASSOC);
@@ -305,7 +305,7 @@ class Booking {
    */
   public function countBookingsByGuide($guideID, $onlyOpen) {
     $filterOpen = $onlyOpen ?
-      " AND LastBookingEvent NOT IN ('Canceled', 'Completed', 'Rated') " : "";
+      " AND LastBookingEvent NOT IN ('Canceled', 'GuideRated', 'SeekerRated', 'Completed') " : "";
 
     $stmt = $this->db->prepare("SELECT COUNT(*) AS found
       FROM Bookings AS b
@@ -326,7 +326,7 @@ class Booking {
    */
   public function countBookingsBySeeker($seekerID, $onlyOpen) {
     $filterOpen = $onlyOpen ?
-      " AND LastBookingEvent NOT IN ('Canceled', 'Completed', 'Rated') " : "";
+      " AND LastBookingEvent NOT IN ('Canceled', 'GuideRated', 'SeekerRated', 'Completed') " : "";
 
     $stmt = $this->db->prepare("SELECT COUNT(*) AS found
       FROM Bookings AS b
@@ -394,7 +394,7 @@ class Booking {
 
       $this->db->commit(); # Confirmo transacción
       return $booking;
-    } catch (\PDOException $e) {
+    } catch (\Throwable $e) {
       $this->db->rollBack(); # Revierto en caso de error
       throw new DatabaseException($e->getMessage());
     }
@@ -458,30 +458,51 @@ class Booking {
     try {
       $this->db->beginTransaction(); # Iniciar transacción
 
-      if (strpos($scheduledDate, 'T') !== false && strpos($scheduledDate, 'Z') !== false) {
+      $stmt = $this->db->prepare("SELECT Mode, LocationID, ScheduledDate
+        FROM Bookings
+        WHERE BookingID = ? FOR UPDATE");
+      $stmt->execute([$bookingID]);
+      $current = $stmt->fetch(PDO::FETCH_ASSOC);
+      if (!$current) {
+        throw new DatabaseException('Booking not found');
+      }
+
+      $newScheduledDate = $scheduledDate;
+
+      if (is_string($scheduledDate) && strpos($scheduledDate, 'T') !== false && strpos($scheduledDate, 'Z') !== false) {
         $datetime = DateTime::createFromFormat('Y-m-d\TH:i:s.u\Z', $scheduledDate);
         if ($datetime) {
-          $scheduledDate = $datetime->format('Y-m-d H:i:s');
+          $newScheduledDate = $datetime->format('Y-m-d H:i:s');
         }
       }
 
-      # Compara y actualiza SessionType
+      if (empty($newScheduledDate)) {
+        $newScheduledDate = $current['ScheduledDate'];
+      }
+
+      $oldScheduledDate = $current['ScheduledDate'];
+      $isRescheduled = !empty($newScheduledDate) && !empty($oldScheduledDate)
+        ? strtotime($newScheduledDate) !== strtotime($oldScheduledDate)
+        : (string)$newScheduledDate !== (string)$oldScheduledDate;
+
+      $event = $isRescheduled ? 'Rescheduled' : 'Modified';
+
       $stmt = $this->db->prepare("UPDATE Bookings
-        SET Mode = ?, ModificationDate = NOW(),
-        LastBookingEvent = 'Modified'
+        SET Mode = ?, LocationID = ?, ScheduledDate = ?, ModificationDate = NOW(),
+        LastBookingEvent = ?
         WHERE BookingID = ?");
-      $stmt->execute([$sessionType, $bookingID]);
+      $stmt->execute([$sessionType, $locationID, $newScheduledDate, $event, $bookingID]);
 
       $stmt = $this->db->prepare("INSERT INTO BookingStatus (BookingID, BookingEvent, ScheduledDate, Message)
         VALUES (?, ?, ?, ?)");
-      $stmt->execute([$bookingID, 'Modified', $scheduledDate, $message]);
+      $stmt->execute([$bookingID, $event, $newScheduledDate, $message]);
 
       $booking = $this->getBookingByID($bookingID) ?:
         throw new DatabaseException("Failed to retrieve the updated booking");
 
       $this->db->commit(); # Confirmo transacción
       return $booking;
-    } catch (\PDOException $e) {
+    } catch (\Throwable $e) {
       $this->db->rollBack(); # Revierto en caso de error
       throw new DatabaseException($e->getMessage());
     }
@@ -523,94 +544,6 @@ class Booking {
   }
 
   /**
-   * Confirma una reserva existente
-   * Actualiza estado a 'Confirmed' y crea evento correspondiente
-   * Usa transacciones para garantizar consistencia
-   * @param int $bookingID: ID de la reserva a confirmar
-   * @param string|null $message: mensaje de confirmación del guía
-   * @param string $subDomain: subdominio de la agencia
-   * @return array: datos completos de la reserva confirmada
-   * @throws DatabaseException: si falla la confirmación o recuperación
-   */
-  public function confirmBooking($bookingID, $message, $subDomain) {
-    try {
-      $this->db->beginTransaction(); # Iniciar transacción
-
-      $stmt = $this->db->prepare("UPDATE Bookings
-        SET ModificationDate = NOW(),
-        LastBookingEvent = 'Confirmed'
-        WHERE BookingID = ?");
-      $stmt->execute([$bookingID]);
-
-      $stmt = $this->db->prepare("INSERT INTO BookingStatus (BookingID, BookingEvent, Message)
-        VALUES (?, 'Confirmed', ?)");
-      $stmt->execute([$bookingID, $message]);
-
-      $booking = $this->getBookingByID($bookingID) ?:
-        throw new DatabaseException("Failed to retrieve the updated booking");
-
-      $this->db->commit(); # Confirmo transacción
-      return $booking;
-    } catch (\PDOException $e) {
-      $this->db->rollBack(); # Revierto en caso de error
-      throw new DatabaseException($e->getMessage());
-    }
-  }
-
-  /**
-   * Marca una reserva como completada
-   * Crea una reseña del guía sobre el seeker, actualiza estado a 'Completed'
-   * y establece FeedbackStatus a 'Pending' (esperando calificación del seeker)
-   * Usa transacciones para garantizar consistencia
-   * @param int $bookingID: ID de la reserva a completar
-   * @param string|null $message: comentario del guía sobre la sesión
-   * @param int $seekerID: ID del usuario buscador
-   * @param int $guideID: ID del usuario guía
-   * @param int $rating: calificación del seeker por el guía (1-5)
-   * @param bool $fulfilled: true si la sesión se cumplió, false si no asistió
-   * @return array: datos completos de la reserva completada
-   * @throws DatabaseException: si falla la operación o recuperación
-   */
-  public function completeBooking($bookingID, $message, $seekerID, $guideID, $rating, $fulfilled) {
-    try {
-      $this->db->beginTransaction(); # Iniciar transacción
-
-     # Determinar estado a insertar según Fulfilled
-      $fulfilled = $fulfilled ? 0 : 1;
-
-      $stmt = $this->db->prepare("INSERT INTO SeekerReviews (SeekerID, GuideID, BookingID, Fulfilled, ReviewText, Rating)
-        VALUES (:seekerID, :guideID, :bookingID, :fulfilled, :message, :rating)");
-      $stmt->execute([
-        ':seekerID' => $seekerID,
-        ':guideID' => $guideID,
-        ':bookingID' => $bookingID,
-        ':fulfilled' => $fulfilled,
-        ':message' => $message,
-        ':rating' => $rating
-      ]);
-
-      $stmt = $this->db->prepare("INSERT INTO BookingStatus (BookingID, BookingEvent, Message)
-        VALUES (?, 'Completed', ?)");
-      $stmt->execute([$bookingID, $message]);
-
-      $stmt = $this->db->prepare("UPDATE Bookings
-        SET ModificationDate = NOW(), FeedbackStatus = 'Pending',
-        LastBookingEvent = 'Completed'
-        WHERE BookingID = ?");
-      $stmt->execute([$bookingID]);
-
-      $booking = $this->getBookingByID($bookingID) ?:
-        throw new DatabaseException("Failed to retrieve the updated booking");
-
-      $this->db->commit(); # Confirmo transacción
-      return $booking;
-    } catch (\PDOException $e) {
-      $this->db->rollBack(); # Revierto en caso de error
-      throw new DatabaseException($e->getMessage());
-    }
-  }
-
-  /**
    * Permite al seeker calificar una reserva completada
    * Crea una reseña del servicio/offering, actualiza estado a 'Rated'
    * y establece FeedbackStatus a 'Submitted'
@@ -625,39 +558,100 @@ class Booking {
    * @return array: datos completos de la reserva calificada
    * @throws DatabaseException: si falla la operación o recuperación
    */
-  public function rateBooking($offeringID, $bookingID, $message, $seekerID, $guideID, $rating, $fulfilled) {
+  public function rateBooking($offeringID, $bookingID, $message, $seekerID, $guideID, $rating, $fulfilled, $raterUserID) {
+    if ($raterUserID == $guideID) {
+      return $this->_rateBookingByActor('Guide', $bookingID, $message, $seekerID, $guideID, $rating, $fulfilled, null);
+    }
+
+    if ($raterUserID == $seekerID) {
+      return $this->_rateBookingByActor('Seeker', $bookingID, $message, $seekerID, $guideID, $rating, $fulfilled, $offeringID);
+    }
+
+    throw new DatabaseException('Invalid booking rater');
+  }
+
+  public function hasGuideRating($bookingID): bool {
+    $stmt = $this->db->prepare("SELECT 1 FROM SeekerReviews WHERE BookingID = ? LIMIT 1");
+    $stmt->execute([$bookingID]);
+    return (bool)$stmt->fetchColumn();
+  }
+
+  public function hasSeekerRating($bookingID): bool {
+    $stmt = $this->db->prepare("SELECT 1 FROM Reviews WHERE BookingID = ? LIMIT 1");
+    $stmt->execute([$bookingID]);
+    return (bool)$stmt->fetchColumn();
+  }
+
+  private function _rateBookingByActor($actor, $bookingID, $message, $seekerID, $guideID, $rating, $fulfilled, $offeringID = null) {
     try {
       $this->db->beginTransaction(); # Iniciar transacción
 
-      # Determinar estado a insertar según Fulfilled
-      $fulfilled = $fulfilled ? 0 : 1;
-
-      $stmt = $this->db->prepare("INSERT INTO Reviews (OfferingID, SeekerID, GuideID, BookingID, Fulfilled, ReviewText, Rating, ReviewType)
-        VALUES (:offeringID, :seekerID, :guideID, :bookingID, :fulfilled, :message, :rating, 'service')");
-      $stmt->execute([
-        ':offeringID' => $offeringID,
-        ':seekerID' => $seekerID,
-        ':guideID' => $guideID,
-        ':bookingID' => $bookingID,
-        ':fulfilled' => $fulfilled,
-        ':message' => $message,
-        ':rating' => $rating
-      ]);
-
-      $reviewID = $this->db->lastInsertId();
-      if (!$reviewID) {
-        throw new DatabaseException("Failed to retrieve the inserted review");
+      $stmt = $this->db->prepare("SELECT BookingID FROM Bookings WHERE BookingID = ? FOR UPDATE");
+      $stmt->execute([$bookingID]);
+      if (!$stmt->fetch(PDO::FETCH_ASSOC)) {
+        throw new DatabaseException('Booking not found');
       }
 
+      $fulfilled = $fulfilled ? 0 : 1;
+
+      $hasGuideRating = $this->hasGuideRating($bookingID);
+      $hasSeekerRating = $this->hasSeekerRating($bookingID);
+
+      if ($actor === 'Guide') {
+        if ($hasGuideRating) {
+          throw new DatabaseException('Guide already rated this booking');
+        }
+
+        $stmt = $this->db->prepare("INSERT INTO SeekerReviews (SeekerID, GuideID, BookingID, Fulfilled, ReviewText, Rating)
+          VALUES (:seekerID, :guideID, :bookingID, :fulfilled, :message, :rating)");
+        $stmt->execute([
+          ':seekerID' => $seekerID,
+          ':guideID' => $guideID,
+          ':bookingID' => $bookingID,
+          ':fulfilled' => $fulfilled,
+          ':message' => $message,
+          ':rating' => $rating
+        ]);
+
+        $event = $hasSeekerRating ? 'Completed' : 'GuideRated';
+      } else {
+        if ($hasSeekerRating) {
+          throw new DatabaseException('Seeker already rated this booking');
+        }
+
+        $stmt = $this->db->prepare("INSERT INTO Reviews (OfferingID, SeekerID, GuideID, BookingID, Fulfilled, ReviewText, Rating, ReviewType)
+          VALUES (:offeringID, :seekerID, :guideID, :bookingID, :fulfilled, :message, :rating, 'service')");
+        $stmt->execute([
+          ':offeringID' => $offeringID,
+          ':seekerID' => $seekerID,
+          ':guideID' => $guideID,
+          ':bookingID' => $bookingID,
+          ':fulfilled' => $fulfilled,
+          ':message' => $message,
+          ':rating' => $rating
+        ]);
+
+        $reviewID = $this->db->lastInsertId();
+        if (!$reviewID) {
+          throw new DatabaseException('Failed to retrieve the inserted review');
+        }
+
+        $stmt = $this->db->prepare("UPDATE Bookings SET ReviewID = ? WHERE BookingID = ?");
+        $stmt->execute([$reviewID, $bookingID]);
+
+        $event = $hasGuideRating ? 'Completed' : 'SeekerRated';
+      }
+
+      $feedbackStatus = $event === 'Completed' ? 'Submitted' : 'Pending';
+
       $stmt = $this->db->prepare("UPDATE Bookings
-        SET ModificationDate = NOW(), FeedbackStatus = 'Submitted', ReviewID = ?,
-        LastBookingEvent = 'Rated'
+        SET ModificationDate = NOW(), FeedbackStatus = ?, LastBookingEvent = ?
         WHERE BookingID = ?");
-      $stmt->execute([$reviewID, $bookingID]);
+      $stmt->execute([$feedbackStatus, $event, $bookingID]);
 
       $stmt = $this->db->prepare("INSERT INTO BookingStatus (BookingID, BookingEvent, Message)
-        VALUES (?, 'Rated', ?)");
-      $stmt->execute([$bookingID, $message]);
+        VALUES (?, ?, ?)");
+      $stmt->execute([$bookingID, $event, $message]);
 
       $booking = $this->getBookingByID($bookingID) ?:
         throw new DatabaseException("Failed to retrieve the updated booking");
