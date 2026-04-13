@@ -138,6 +138,9 @@ class Booking {
       return false;
     }
 
+    $booking['RescheduleUrl'] = $booking['RescheduleUrl'] ?? null;
+    $booking['CancelUrl'] = $booking['CancelUrl'] ?? null;
+
     $booking['Guide'] = @json_decode($booking['guide_info'], true);
     unset($booking['guide_info']);
 
@@ -185,6 +188,9 @@ class Booking {
    **/
   private function _getBookingsGenericMulti($bookings, $total){
     foreach ($bookings as &$e) {
+      $e['RescheduleUrl'] = $e['RescheduleUrl'] ?? null;
+      $e['CancelUrl'] = $e['CancelUrl'] ?? null;
+
       $e['Guide'] = @json_decode($e['guide_info'], true);
       unset($e['guide_info']);
 
@@ -239,6 +245,22 @@ class Booking {
       b.ReviewID, b.PaymentID, b.Mode as SessionType, b.LocationID, b.CreationDate,
       b.ScheduledDate, b.ModificationDate,
       b.Currency, b.Amount, b.VoucherID, b.LastBookingEvent,
+      (
+        SELECT cw.RescheduleUrl
+        FROM CalWebhooks cw
+        WHERE cw.BookingID = b.BookingID
+          AND cw.Event IN ('BOOKING_CREATED', 'BOOKING_RESCHEDULED')
+        ORDER BY cw.CreatedAt DESC
+        LIMIT 1
+      ) AS RescheduleUrl,
+      (
+        SELECT cw.CancelUrl
+        FROM CalWebhooks cw
+        WHERE cw.BookingID = b.BookingID
+          AND cw.Event IN ('BOOKING_CREATED', 'BOOKING_RESCHEDULED')
+        ORDER BY cw.CreatedAt DESC
+        LIMIT 1
+      ) AS CancelUrl,
       JSON_OBJECT(
         'UserID', ug.UserID,
         'UserName', ug.UserName,
