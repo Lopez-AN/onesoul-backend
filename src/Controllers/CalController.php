@@ -179,28 +179,27 @@ class CalController{
       $secret = $GLOBALS['config']['cal']['secret'];
 
       $headers = [
-        "Content-Type: application/x-www-form-urlencoded"
+        'Content-Type: application/json'
       ];
 
-      $postData = http_build_query([
-        'code'         => $code,
-        'client_id'   => $clientId,
-        'client_secret'   => $secret,
-        'grant_type' =>  'authorization_code',
+      $postData = json_encode([
+        'code' => $code,
+        'client_id' => $clientId,
+        'client_secret' => $secret,
+        'grant_type' => 'authorization_code',
         'redirect_uri' => $GLOBALS['config']['base_url']."/cal/callback"
       ]);
 
-      $result = $this->_calRequest($response, "POST", "app", "/api/auth/oauth/token", $headers, $postData);
+      $result = $this->_calRequest($response, 'POST', 'api', '/v2/auth/oauth2/token', $headers, $postData);
       if(!$result->valid){
         return $response->withHeader('Location', $redirect)->withStatus(302);
       }
 
-      $refreshToken = $result->response->refresh_token;
-      $result = $this -> _refreshCalUserToken($response, $refreshToken);
-      if(!$result->valid){
+      $accessToken = $result->response->access_token ?? null;
+      $refreshToken = $result->response->refresh_token ?? null;
+      if(empty($accessToken) || empty($refreshToken)){
         return $response->withHeader('Location', $redirect)->withStatus(302);
       }
-      $accessToken = $result->access_token;
 
       # 3) Actualizar metadatos Cal.com
       # --------------------------------------------
@@ -765,22 +764,24 @@ class CalController{
       $secret = $GLOBALS['config']['cal']['secret'];
 
       $headers = [
-        "Authorization: Bearer $refreshToken"
+        'Content-Type: application/json'
       ];
 
-      $postData = http_build_query([
-        'client_id'   => $clientId,
-        'client_secret'   => $secret,
-        'grant_type' =>  'refresh_token'
+      $postData = json_encode([
+        'client_id' => $clientId,
+        'client_secret' => $secret,
+        'grant_type' => 'refresh_token',
+        'refresh_token' => $refreshToken
       ]);
 
-      $result = $this->_calRequest($response, "POST", "app", "/api/auth/oauth/refreshToken", $headers, $postData);
+      $result = $this->_calRequest($response, 'POST', 'api', '/v2/auth/oauth2/token', $headers, $postData);
       if(!$result->valid){
         return $result;
       }
 
-      # Grabo los nuevos tokens
-      $this->cal->updateCalUserTokens($calUserID, $result->response->access_token, $result->response->refresh_token);
+      # Grabo los nuevos tokens (si cal no rota refresh, conservo el actual)
+      $newRefreshToken = $result->response->refresh_token ?? $refreshToken;
+      $this->cal->updateCalUserTokens($calUserID, $result->response->access_token, $newRefreshToken);
       return (object)[
         "valid" => true,
         "access_token" => $result->response->access_token
