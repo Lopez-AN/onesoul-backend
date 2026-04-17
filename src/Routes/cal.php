@@ -33,6 +33,7 @@ return function (App $app) {
   $app->get('/cal/callback', [$calController, 'callback']);
   $app->get('/cal/user/{UserID}', [$calController, 'checkUser']);
   $app->get('/cal/schedule/uuid/{AssocUUID}', [$calController, 'getScheduleByAssocUUID'])->add($requiredJwt);
+  $app->post('/cal/schedule/uuid/{AssocUUID}/intent', [$calController, 'registerScheduleIntent'])->add($requiredJwt);
   $app->get('/cal/availability/{UserID}', [$calController, 'getAvailability']);
   $app->patch('/cal/availability/{UserID}', [$calController, 'updateAvailability'])->add($requiredJwt);
   $app->post('/cal/webhook', [$calController, 'handleWebhook']);

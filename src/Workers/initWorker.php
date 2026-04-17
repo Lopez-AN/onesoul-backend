@@ -10,6 +10,8 @@ if (php_sapi_name() !== 'cli') {
 
 require ROOT.'/vendor/autoload.php';
 
+use Predis\Client as RedisClient;
+
 # Definir zona horaria
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 
@@ -26,4 +28,16 @@ try {
   $pdo = Database::getInstance()->getConnection();
 } catch (PDOException $e) {
   die("❌ Cannot connect to MySQL: " . $e->getMessage() . "\n");
+}
+
+# Conexión Redis (opcional para locks de workers)
+try {
+  $redis = new RedisClient([
+    'scheme' => 'tcp',
+    'host' => 'localhost',
+    'port' => 6379,
+  ]);
+} catch (\Throwable $e) {
+  $redis = null;
+  print("⚠️ Cannot connect to Redis: {$e->getMessage()}\n");
 }

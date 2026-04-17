@@ -12,6 +12,8 @@ use App\Utils\ParameterValidator;
 
 class CalController{
 
+  private const SCHEDULE_INTENT_TTL = 300;
+
   protected $cal;
   protected $user;
   protected $offering;
@@ -397,6 +399,37 @@ class CalController{
   }
 
   /**
+   * Registra una intención de reserva por AssocUUID para polling de webhook
+   * @param Request $request
+   * @param Response $response
+   * @param array $args
+   * @return Response
+   */
+  public function registerScheduleIntent(Request $request, Response $response, array $args) {
+    $params['AssocUUID'] = $args['AssocUUID'];
+    $jwt = $request->getAttribute('jwt');
+
+    $pValidation = ParameterValidator::validate($response, 'cal', 'register_schedule_intent', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
+    }
+    $params = $pValidation->values;
+
+    $key = "cal:schedule:intent:{$params['AssocUUID']}";
+    $payload = json_encode([
+      'UserID' => $jwt->data->UserID,
+      'CreatedAt' => time()
+    ]);
+
+    $this->redis->setex($key, self::SCHEDULE_INTENT_TTL, $payload);
+
+    return $response->withStatus(202)->withJson([
+      'Status' => 'PENDING',
+      'AssocUUID' => $params['AssocUUID']
+    ]);
+  }
+
+  /**
    * Obtiene un schedule por UUID
    * @param Request $request: objeto de la petición HTTP
    * @param Response $response: objeto de la respuesta HTTP
@@ -420,10 +453,34 @@ class CalController{
     try{
       $schedule = $this->cal->getScheduleByAssocUUID($params['AssocUUID']);
       if(!$schedule){
-        return $response->withStatus(404)->withJson([
-          "error" => [
-            "code" => "SCHEDULE_NOT_FOUND",
-            "desc" => "No schedule was found with provided UUID"
+        $intentRaw = $this->redis->get("cal:schedule:intent:{$params['AssocUUID']}");
+        $confirmed = $this->redis->get("cal:schedule:confirmed:{$params['AssocUUID']}");
+
+        if($intentRaw || $confirmed){
+          if($intentRaw){
+            $intent = @json_decode($intentRaw, true);
+            if(!empty($intent['UserID']) && intval($intent['UserID']) !== intval($userID)){
+              return $response->withStatus(403)->withJson([
+                'error' => [
+                  'code' => 'FORBIDDEN',
+                  'desc' => 'You are not authorized to view this schedule.'
+                ]
+              ]);
+            }
+          }
+
+          return $response->withStatus(202)->withJson([
+            'Status' => 'PENDING',
+            'AssocUUID' => $params['AssocUUID']
+          ]);
+        }
+
+        return $response->withStatus(410)->withJson([
+          'Status' => 'EXPIRED',
+          'AssocUUID' => $params['AssocUUID'],
+          'error' => [
+            'code' => 'SCHEDULE_EXPIRED',
+            'desc' => 'Schedule intent expired or booking was not created'
           ]
         ]);
       }
@@ -437,7 +494,16 @@ class CalController{
         ]);
       }
 
-      return $response->withJson($schedule);
+      $this->redis->del([
+        "cal:schedule:intent:{$params['AssocUUID']}",
+        "cal:schedule:confirmed:{$params['AssocUUID']}"
+      ]);
+
+      return $response->withJson([
+        'Status' => 'CONFIRMED',
+        'AssocUUID' => $params['AssocUUID'],
+        'Schedule' => $schedule
+      ]);
     } catch (\Throwable $e) {
       return $response->withStatus(500)->withJson([
         "error" => [
@@ -638,6 +704,15 @@ class CalController{
 
           $this->cal->bookingCreated($payloadJson->createdAt, $metadata->SeekerID,
             $guideID, $metadata->OfferingID, $metadata->AssocUUID, $payloadJson->payload);
+
+          $intentRaw = $this->redis->get("cal:schedule:intent:{$metadata->AssocUUID}");
+          if($intentRaw){
+            $this->redis->setex(
+              "cal:schedule:confirmed:{$metadata->AssocUUID}",
+              self::SCHEDULE_INTENT_TTL,
+              '1'
+            );
+          }
         break;
       }
       return $response->withStatus(200);

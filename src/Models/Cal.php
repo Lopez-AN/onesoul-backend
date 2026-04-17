@@ -166,6 +166,36 @@ class Cal {
   }
 
   /**
+   * Obtiene webhooks de booking creados que siguen sin Booking asociado
+   * y ya superaron una ventana de tiempo definida.
+   * @param int $olderThanMinutes
+   * @param int $limit
+   * @return array
+   */
+  public function getStaleUnlinkedWebhookBookings($olderThanMinutes = 5, $limit = 100){
+    $olderThanMinutes = max(1, intval($olderThanMinutes));
+    $limit = max(1, intval($limit));
+
+    $stmt = $this->db->prepare("SELECT * FROM CalWebhooks
+      WHERE Event = 'BOOKING_CREATED'
+        AND BookingID IS NULL
+        AND CreatedAt <= DATE_SUB(NOW(), INTERVAL $olderThanMinutes MINUTE)
+      ORDER BY CreatedAt ASC
+      LIMIT $limit");
+    $stmt->execute();
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+  }
+
+  /**
+   * Elimina un webhook de cal.com por UID.
+   * @param string $uid
+   */
+  public function deleteWebhookByUid($uid){
+    $stmt = $this->db->prepare("DELETE FROM CalWebhooks WHERE Uid = ?");
+    $stmt->execute([$uid]);
+  }
+
+  /**
    * Convierte fecha ISO 8601 de Cal.com a formato MySQL DATETIME
    * Transforma "2025-08-31T18:31:58.000000Z" a "2025-08-31 18:31:58.000000"
    * y aplica el desplazamiento de zona horaria
