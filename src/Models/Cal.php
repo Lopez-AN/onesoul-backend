@@ -143,6 +143,18 @@ class Cal {
   }
 
   /**
+   * Obtiene los datos de un usuario Cal.com por su ID de Cal
+   * @param int $calUserID ID del usuario en Cal.com
+   * @return array|null Datos del usuario Cal.com o null si no existe
+   */
+  public function getCalUserByCalID($calUserID){
+    $stmt = $this->db->prepare("SELECT * FROM CalConnections
+      WHERE CalUserID = ?");
+    $stmt->execute([$calUserID]);
+    return $stmt->fetch(PDO::FETCH_ASSOC);
+  }
+
+  /**
    * Obtiene un schedule por UUID
    * @param $uuid identificador asociador del schedule
    */

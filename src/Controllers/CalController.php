@@ -316,17 +316,17 @@ class CalController{
       $calUserID = $user['CalUserID'];
       $slug = $user['Slug'];
       $timeZone = $user['TimeZone'];
-      $url = $user['SchedulingUrl'];
+      $schedulingUrl = $user['SchedulingUrl'];
 
       $accessToken = $user['AccessToken'];
       $refreshToken = $user['RefreshToken'];
 
       # 1) HEAD público (sin OAuth)
-      $result = $this->_httpHead($url);
+      $result = $this->_httpHead($schedulingUrl);
       if ($result->http_code === 200) {
         return $response->withJson(["Status" => "LINKED", "CalData" => [
           "CalUserID" => $calUserID,
-          "Url"      => $url,
+          "Url"      => $schedulingUrl,
           "UserName" => $slug,
           "TimeZone" => $timeZone
         ]]);
@@ -352,6 +352,9 @@ class CalController{
       $result = $this -> _refreshCalUserToken($response, $refreshToken, $accessToken);
       # Si no se puede consultar al usuario por token lo doy de baja ya que esta inaccesible
       if(!$result->valid){
+        if (($result->error_code ?? '') === 'CAL_TOKEN_REFRESH_IN_PROGRESS') {
+          return $response->withJson(["Status" => "API_ERROR", "Error" => "Token refresh in progress"]);
+        }
         $this->cal->deleteCalUser($calUserID);
         return $response->withJson(["Status" => "UNLINKED"]);
       }
@@ -465,20 +468,7 @@ class CalController{
     $params = $pValidation->values;
 
     try{
-      $user = $this->cal->getCalUser($params['UserID']);
-      if(!$user){
-        return $response->withStatus(404)->withJson([
-          "error" => [
-            "code" => "CAL_USER_NOT_FOUND",
-            "desc" => "No user associated with the specified id was found."
-          ]
-        ]);
-      }
-      $accessToken = $user['AccessToken'];
-      $refreshToken = $user['RefreshToken'];
-
-      # Refresco el token
-      $result = $this -> _refreshCalUserToken($response, $refreshToken, $accessToken);
+      $result = $this->_getValidAccessTokenByUserID($response, $params['UserID']);
       if(!$result->valid){
         return $result->response;
       }
@@ -554,20 +544,7 @@ class CalController{
     }
 
     try{
-      $user = $this->cal->getCalUser($params['UserID']);
-      if(!$user){
-        return $response->withStatus(404)->withJson([
-          "error" => [
-            "code" => "AUTH_TOKEN_REFRESH_FAILED",
-            "desc" => "Failed to refresh access token"
-          ]
-        ]);
-      }
-      $accessToken = $user['AccessToken'];
-      $refreshToken = $user['RefreshToken'];
-
-      # Refresco el token
-      $result = $this -> _refreshCalUserToken($response, $refreshToken, $accessToken);
+      $result = $this->_getValidAccessTokenByUserID($response, $params['UserID']);
       if(!$result->valid){
         return $result->response;
       }
@@ -763,30 +740,73 @@ class CalController{
       $clientId = $GLOBALS['config']['cal']['client_id'];
       $secret = $GLOBALS['config']['cal']['secret'];
 
-      $headers = [
-        'Content-Type: application/json'
-      ];
-
-      $postData = json_encode([
-        'client_id' => $clientId,
-        'client_secret' => $secret,
-        'grant_type' => 'refresh_token',
-        'refresh_token' => $refreshToken
-      ]);
-
-      $result = $this->_calRequest($response, 'POST', 'api', '/v2/auth/oauth2/token', $headers, $postData);
-      if(!$result->valid){
-        return $result;
+      # Evito condiciones de carrera: un solo refresh por usuario a la vez
+      $lockKey = "cal:refresh_lock:$calUserID";
+      $lockAcquired = $this->redis->set($lockKey, '1', 'EX', 20, 'NX') === 'OK';
+      if (!$lockAcquired) {
+        return (object)[
+          'valid' => false,
+          'error_code' => 'CAL_TOKEN_REFRESH_IN_PROGRESS',
+          'response' => $response->withStatus(409)->withJson([
+            'error' => [
+              'code' => 'CAL_TOKEN_REFRESH_IN_PROGRESS',
+              'desc' => 'Token refresh is already in progress for this user'
+            ]
+          ])
+        ];
       }
 
-      # Grabo los nuevos tokens (si cal no rota refresh, conservo el actual)
-      $newRefreshToken = $result->response->refresh_token ?? $refreshToken;
-      $this->cal->updateCalUserTokens($calUserID, $result->response->access_token, $newRefreshToken);
+      try {
+        # Releo token desde base por si fue rotado en una request previa
+        $calUser = $this->cal->getCalUserByCalID($calUserID);
+        if ($calUser && !empty($calUser['RefreshToken'])) {
+          $refreshToken = $calUser['RefreshToken'];
+        }
+
+        $headers = [
+          'Content-Type: application/json'
+        ];
+
+        $postData = json_encode([
+          'client_id' => $clientId,
+          'client_secret' => $secret,
+          'grant_type' => 'refresh_token',
+          'refresh_token' => $refreshToken
+        ]);
+
+        $result = $this->_calRequest($response, 'POST', 'api', '/v2/auth/oauth2/token', $headers, $postData);
+        if(!$result->valid){
+          return $result;
+        }
+
+        # Grabo los nuevos tokens (si cal no rota refresh, conservo el actual)
+        $newRefreshToken = $result->response->refresh_token ?? $refreshToken;
+        $this->cal->updateCalUserTokens($calUserID, $result->response->access_token, $newRefreshToken);
+        return (object)[
+          "valid" => true,
+          "access_token" => $result->response->access_token
+        ];
+      } finally {
+        $this->redis->del([$lockKey]);
+      }
+    }
+  }
+
+  private function _getValidAccessTokenByUserID($response, $userID) {
+    $user = $this->cal->getCalUser($userID);
+    if(!$user){
       return (object)[
-        "valid" => true,
-        "access_token" => $result->response->access_token
+        'valid' => false,
+        'response' => $response->withStatus(404)->withJson([
+          'error' => [
+            'code' => 'CAL_USER_NOT_FOUND',
+            'desc' => 'No user associated with the specified id was found.'
+          ]
+        ])
       ];
     }
+
+    return $this->_refreshCalUserToken($response, $user['RefreshToken'], $user['AccessToken']);
   }
 
   /**
@@ -834,7 +854,7 @@ class CalController{
     if(empty($availability)){
       return (object) [
         "valid" => false,
-        "response" => $response->withStatus($httpCode)->withJson([
+        "response" => $response->withStatus(500)->withJson([
           "error" => [
             "code" => "CAL_SCHEDULE_ERROR",
             "desc" => "Error retrieving cal.com user schedule named 'OneSoul'"
