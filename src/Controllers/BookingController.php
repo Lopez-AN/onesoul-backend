@@ -300,6 +300,7 @@ class BookingController {
 
     $jwt = $request->getAttribute('jwt');
     $userID = $jwt->data->UserID;
+    $isAdmin = $jwt->data->IsAdmin;
 
     $pValidation = ParameterValidator::validate($response, 'bookings','get_seeker_info', $params);
     if(!$pValidation->valid){
@@ -314,6 +315,17 @@ class BookingController {
           "error" => [
             "code" => "BOOKING_NOT_FOUND",
             "desc" => "Booking not found"
+          ]
+        ]);
+      }
+
+      $isBookingSeeker = (int)$booking['Seeker']['UserID'] === (int)$userID;
+      $isBookingGuide = (int)$booking['Guide']['UserID'] === (int)$userID;
+      if (!$isBookingSeeker && !$isBookingGuide && !$isAdmin) {
+        return $response->withStatus(403)->withJson([
+          "error" => [
+            "code" => "FORBIDDEN",
+            "desc" => "You are not authorized to access this booking information"
           ]
         ]);
       }
@@ -345,6 +357,95 @@ class BookingController {
         "State" => $seeker['Locations'][0]['State'],
         "City" => $seeker['Locations'][0]['City'],
         "Cp" => $seeker['Locations'][0]['Cp']
+      ];
+
+      return $response->withStatus(200)->withJson($info);
+    } catch (\Throwable $e) {
+      return $response->withStatus(500)->withJson([
+        "error" => [
+          "code" => "INTERNAL_SERVER_ERROR",
+          "desc" => $e->getMessage()
+        ]
+      ]);
+    }
+  }
+
+  /**
+   * Obtiene información detallada del guía asociado a una reserva
+   * Retorna datos personales, de contacto, ubicación y rating del guía
+   * @param Request $request: objeto de la petición HTTP entrante con JWT
+   * @param Response $response: objeto de la respuesta HTTP
+   * @param array $args: argumentos de ruta, debe incluir 'BookingID'
+   * @return Response: JSON con información del guía o error
+   * @statusCode 200: éxito - información del guía obtenida correctamente
+   * @statusCode 400: parámetros inválidos (BookingID)
+   * @statusCode 404: reserva no encontrada o usuario asociado no encontrado
+   * @statusCode 500: error interno del servidor
+   **/
+  public function getGuideInfo(Request $request, Response $response, $args) {
+    $params['BookingID'] = $args['BookingID'];
+
+    $jwt = $request->getAttribute('jwt');
+    $userID = $jwt->data->UserID;
+    $isAdmin = $jwt->data->IsAdmin;
+
+    $pValidation = ParameterValidator::validate($response, 'bookings','get_guide_info', $params);
+    if(!$pValidation->valid){
+      return $pValidation->response;
+    }
+    $params = $pValidation->values;
+
+    try {
+      $booking = $this->booking->getBookingByID($params['BookingID']);
+      if (!$booking) {
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "BOOKING_NOT_FOUND",
+            "desc" => "Booking not found"
+          ]
+        ]);
+      }
+
+      $isBookingSeeker = (int)$booking['Seeker']['UserID'] === (int)$userID;
+      $isBookingGuide = (int)$booking['Guide']['UserID'] === (int)$userID;
+      if (!$isBookingSeeker && !$isBookingGuide && !$isAdmin) {
+        return $response->withStatus(403)->withJson([
+          "error" => [
+            "code" => "FORBIDDEN",
+            "desc" => "You are not authorized to access this booking information"
+          ]
+        ]);
+      }
+
+      $guide = $this->user->getUserById($booking['Guide']['UserID']);
+      if(!$guide){
+        return $response->withStatus(404)->withJson([
+          "error" => [
+            "code" => "USER_NOT_FOUND",
+            "desc" => "Guide associated with the booking not found"
+          ]
+        ]);
+      }
+
+      $location = $guide['Locations'][0] ?? [];
+
+      $info = [
+        "UserID" => $guide['UserID'],
+        "FirstName" => $guide['FirstName'],
+        "LastName" => $guide['LastName'],
+        "UserName" => $guide['UserName'],
+        "DisplayName" => $guide['DisplayName'],
+        "RegistrationDate" => $guide['RegistrationDate'],
+        "ShortDescription" => $guide['ShortDescription'],
+        "ImgURL" => $guide['ImgURL'],
+        "Rating" => $guide['Rating'],
+        "TotalReviews" => $guide['TotalReviews'],
+        "Email" => $guide['Email'],
+        "Phone" => $guide['Phone'],
+        "CountryCode" => $location['CountryCode'] ?? null,
+        "State" => $location['State'] ?? null,
+        "City" => $location['City'] ?? null,
+        "Cp" => $location['Cp'] ?? null
       ];
 
       return $response->withStatus(200)->withJson($info);

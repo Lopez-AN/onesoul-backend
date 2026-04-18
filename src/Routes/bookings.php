@@ -38,6 +38,7 @@ return function (App $app) {
   $app->get('/bookings/completed/{GuideID}', [$bookingController, 'getGuideCompletedBookings']);
   $app->get('/bookings/seeker/{SeekerID}', [$bookingController, 'getBookingsBySeeker'])->add($requiredJwt);
   $app->get('/bookings/seeker/info/{BookingID}', [$bookingController, 'getSeekerInfo'])->add($requiredJwt);
+  $app->get('/bookings/guide/info/{BookingID}', [$bookingController, 'getGuideInfo'])->add($requiredJwt);
   $app->post('/bookings', [$bookingController, 'createBooking'])->add($requiredJwt);
   $app->patch('/bookings/{BookingID}', [$bookingController, 'updateBooking'])->add($requiredJwt);
   $app->post('/bookings/{BookingID}/cancel', [$bookingController, 'cancelBooking'])->add($requiredJwt);
