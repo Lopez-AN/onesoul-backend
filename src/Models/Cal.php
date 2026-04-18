@@ -49,9 +49,9 @@ class Cal {
    */
   public function updateCalUserTokens($calUserID, $accessToken, $refreshToken){
     $stmt = $this->db->prepare("UPDATE CalConnections
-      SET AccessToken = ?, RefreshToken = ?
+      SET AccessToken = ?, RefreshToken = ?, Refreshed = ?
       WHERE CalUserID = ?");
-    $stmt->execute([$accessToken, $refreshToken, $calUserID]);
+    $stmt->execute([$accessToken, $refreshToken, date('YmdHis'), $calUserID]);
   }
 
   /**

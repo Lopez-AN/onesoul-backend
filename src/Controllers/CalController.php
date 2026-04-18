@@ -2,6 +2,7 @@
 
 namespace App\Controllers;
 
+use Throwable;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use App\Models\Cal;
@@ -817,8 +818,8 @@ class CalController{
 
       # Evito condiciones de carrera: un solo refresh por usuario a la vez
       $lockKey = "cal:refresh_lock:$calUserID";
-      $lockAcquired = $this->redis->set($lockKey, '1', 'EX', 20, 'NX') === 'OK';
-      if (!$lockAcquired) {
+
+      if($this->redis->get($lockKey)){
         return (object)[
           'valid' => false,
           'error_code' => 'CAL_TOKEN_REFRESH_IN_PROGRESS',
@@ -830,6 +831,8 @@ class CalController{
           ])
         ];
       }
+
+      $this->redis->setex($lockKey, 60, '1');
 
       try {
         # Releo token desde base por si fue rotado en una request previa
@@ -851,18 +854,29 @@ class CalController{
 
         $result = $this->_calRequest($response, 'POST', 'api', '/v2/auth/oauth2/token', $headers, $postData);
         if(!$result->valid){
+          $this->redis->del($lockKey);
           return $result;
         }
 
         # Grabo los nuevos tokens (si cal no rota refresh, conservo el actual)
         $newRefreshToken = $result->response->refresh_token ?? $refreshToken;
         $this->cal->updateCalUserTokens($calUserID, $result->response->access_token, $newRefreshToken);
+        $this->redis->del($lockKey);
         return (object)[
           "valid" => true,
           "access_token" => $result->response->access_token
         ];
-      } finally {
-        $this->redis->del([$lockKey]);
+      } catch(Throwable $e) {
+        $this->redis->del($lockKey);
+        return (object)[
+          "valid" => false,
+          "response" => $response->withStatus(401)->withJson([
+            "error" => [
+              "code" => "INTERNAL_SERVER_ERROR",
+              "desc" => $e->getMessage()
+            ]
+          ])
+        ];
       }
     }
   }

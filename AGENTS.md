@@ -37,6 +37,7 @@ Favor existing repo patterns over generic framework defaults.
 - Handle expected failure branches explicitly (404/403/409/etc).
 - Avoid silent catches; if fallback is intentional, make it explicit.
 - Avoid changing endpoint contracts unless requested.
+- When validating numeric values, avoid truthy/falsy checks (`if (!$value)`) if `0` is valid; use explicit null/undefined checks.
 
 ## 6) Workers and Concurrency
 - Worker bootstrapping should go through `src/Workers/initWorker.php`.

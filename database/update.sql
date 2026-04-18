@@ -19,3 +19,6 @@ ALTER TABLE `Bookings`
 ALTER TABLE `BookingStatus`
 	CHANGE COLUMN `BookingEvent` `BookingEvent` ENUM('Pending','Rescheduled','Modified','Canceled','GuideRated','SeekerRated','Completed')
 	NULL DEFAULT NULL COMMENT 'Indica el estado del booking (creación, reprogramación, cancelación, calificación, etc.)' COLLATE 'utf8mb4_unicode_ci' AFTER `BookingEventDate`;
+
+ALTER TABLE `CalConnections`
+	ADD COLUMN `Refreshed` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP() AFTER `Webhook`;
