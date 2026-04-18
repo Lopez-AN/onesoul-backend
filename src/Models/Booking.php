@@ -288,7 +288,42 @@ class Booking {
             'EventDate', s.BookingEventDate,
             'Event', s.BookingEvent,
             'ScheduledDate', s.ScheduledDate,
-            'Message', s.Message
+            'Message', s.Message,
+            'EventActor', CASE
+              WHEN s.BookingEvent = 'GuideRated' THEN 'Guide'
+              WHEN s.BookingEvent = 'SeekerRated' THEN 'Seeker'
+              WHEN s.BookingEvent IN ('Completed', 'Rated') THEN CASE
+                WHEN EXISTS (
+                  SELECT 1
+                  FROM BookingStatus bs2
+                  WHERE bs2.BookingID = s.BookingID
+                    AND bs2.BookingEvent = 'SeekerRated'
+                    AND bs2.BookingEventDate < s.BookingEventDate
+                ) THEN 'Guide'
+                WHEN EXISTS (
+                  SELECT 1
+                  FROM BookingStatus bs2
+                  WHERE bs2.BookingID = s.BookingID
+                    AND bs2.BookingEvent = 'GuideRated'
+                    AND bs2.BookingEventDate < s.BookingEventDate
+                ) THEN 'Seeker'
+                ELSE NULL
+              END
+              WHEN s.BookingEvent = 'Confirmed' THEN 'Guide'
+              ELSE 'Seeker'
+            END,
+            'GuideRating', (
+              SELECT sr.Rating
+              FROM SeekerReviews sr
+              WHERE sr.BookingID = s.BookingID
+              LIMIT 1
+            ),
+            'SeekerRating', (
+              SELECT r.Rating
+              FROM Reviews r
+              WHERE r.BookingID = s.BookingID
+              LIMIT 1
+            )
           )
         )
         FROM BookingStatus as s
