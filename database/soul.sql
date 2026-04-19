@@ -167,6 +167,7 @@ CREATE TABLE IF NOT EXISTS `CalConnections` (
   `AccessToken` text NOT NULL,
   `RefreshToken` text NOT NULL,
   `Webhook` char(40) DEFAULT NULL,
+  `Refreshed` timestamp NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`CalUserID`) USING BTREE,
   UNIQUE KEY `UK_CAL_CONNECTIONS` (`UserID`) USING BTREE,
   CONSTRAINT `FK_CAL_CONNECTIONS` FOREIGN KEY (`UserID`) REFERENCES `Users` (`UserID`) ON DELETE CASCADE ON UPDATE CASCADE
