@@ -491,6 +491,12 @@ class Offering {
       ]);
       $offeringID = $this->db->lastInsertId();
 
+      $this->_syncOfferingLocations(
+        $offeringID,
+        $data['UserID'],
+        $data['SessionType'] ?? null
+      );
+
       # Traigo el offering insertado
       $offering = $this->getOfferingById($offeringID) ?:
         throw new DatabaseException("Failed to retrieve the created offering");
@@ -586,6 +592,19 @@ class Offering {
         $this->_updateOfferingFaqs($offeringID, $data['Faqs']);
       }
 
+      if (array_key_exists('SessionType', $data)) {
+        $offeringOwner = $this->getOfferingById($offeringID);
+        if (!$offeringOwner) {
+          throw new DatabaseException('Failed to retrieve offering owner while syncing locations');
+        }
+
+        $this->_syncOfferingLocations(
+          $offeringID,
+          $offeringOwner['UserID'],
+          $data['SessionType']
+        );
+      }
+
       $offering = $this->getOfferingById($offeringID) ?:
         throw new DatabaseException("Failed to retrieve the updated offering");
 
@@ -595,6 +614,32 @@ class Offering {
       $this->db->rollBack(); # Revierto en caso de error
       throw new DatabaseException($e->getMessage());
     }
+  }
+
+  /**
+   * Sincroniza ubicaciones de una publicación según su tipo de sesión
+   *
+   * Limpia todas las ubicaciones existentes de la publicación y, si el tipo de
+   * sesión admite presencial, vuelve a cargar las ubicaciones activas del guía.
+   *
+   * @param int $offeringID: ID de la publicación
+   * @param int $userID: ID del guía propietario
+   * @param string|null $sessionType: tipo de sesión ('in-person', 'both', 'virtual', etc.)
+   * @return void
+   */
+  private function _syncOfferingLocations($offeringID, $userID, $sessionType): void {
+    $stmt = $this->db->prepare('DELETE FROM OfferingsLocations WHERE OfferingID = ?');
+    $stmt->execute([$offeringID]);
+
+    if ($sessionType !== 'in-person' && $sessionType !== 'both') {
+      return;
+    }
+
+    $stmt = $this->db->prepare("INSERT INTO OfferingsLocations (UserID, LocationID, OfferingID)
+      SELECT ul.UserID, ul.LocationID, ?
+      FROM UsersLocations ul
+      WHERE ul.UserID = ? AND ul.IsActive = 1");
+    $stmt->execute([$offeringID, $userID]);
   }
 
   /**

@@ -57,6 +57,11 @@ Do:
 - Reuse existing models/controllers/services before adding new layers.
 - Keep schema-sensitive changes aligned with `database/*.sql` when applicable.
 
+## 9) Naming and PHPDoc
+- Every new function/method must include a PHPDoc block (`/** ... */`) with at least purpose, params and return.
+- Private methods must use leading underscore naming (e.g. `_buildPayload`, `_validateOwner`).
+- Keep doc comments concise and aligned with existing backend style.
+
 Do not:
 - Introduce new frameworks/infrastructure unless requested.
 - Perform broad refactors unrelated to the task.
