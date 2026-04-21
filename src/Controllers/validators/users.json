@@ -33,7 +33,7 @@
     "UserName": {
       "required": true,
       "type": "string",
-      "regex": "~^[a-zA-Z0-9_]{1,15}$~"
+      "regex": "~^[a-zA-Z0-9_-]{1,15}$~"
     }
   },
   "get_user_by_referral_code": {
