@@ -1172,7 +1172,7 @@ class Booking {
    */
   public function getLocation($offeringID, $locationID){
     $stmt = $this->db->prepare("SELECT LocationID
-      FROM OfferingLocations
+      FROM OfferingsLocations
       WHERE OfferingID = ? AND LocationID = ?");
     $stmt->execute([$offeringID, $locationID]);
     return $stmt->fetch(PDO::FETCH_ASSOC);
