@@ -529,7 +529,7 @@ class AuthController{
           ]);
         }
       # USUARIO PROPORCIONO CODIGO MFA
-      } elseif (!empty($mfaCode)) {
+      } elseif ($mfaCode !== null && $mfaCode !== '') {
         $validation = $this->_mfaCheck($response, $user['UserID'], $mfaCode, $user['MfaSecret'], $user['FailedLoginAttempts'], $user['LockedUntil']);
         if(!$validation->valid){
           return $validation->response;
@@ -2122,7 +2122,8 @@ class AuthController{
 
       # Chequeo el codigo contra el secret
       $g2fa = new \PragmaRX\Google2FA\Google2FA();
-      if(!$g2fa -> verifyKey($params['Secret'], $params['Code'])){
+      $window = 1;
+      if(!$g2fa -> verifyKey($params['Secret'], $params['Code'], $window)){
         return $response->withStatus(401)->withJson([
           "error" => [
             "code" => "INVALID_MFA_CODE",
@@ -2248,8 +2249,9 @@ class AuthController{
   private function _mfaCheck($response, $userID, $code, $secret, $failedLoginAttempt, $lockedUntil){
     try{
       $g2fa = new \PragmaRX\Google2FA\Google2FA();
+      $window = 1;
 
-      if (!$g2fa->verifyKey($secret, $code)) {
+      if (!$g2fa->verifyKey($secret, $code, $window)) {
         # Incrementar intentos fallidos y actualizar bloqueo si es necesario
         $failedAttempts = $failedLoginAttempt + 1;
         $lockTime = $this->auth->calculateLockTime($failedAttempts);
