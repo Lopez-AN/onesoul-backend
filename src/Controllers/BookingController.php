@@ -549,26 +549,26 @@ class BookingController {
       }
 
       if ($params['SessionType'] === 'in-person') {
-        // if (!$locationID) {
-        //   return $response->withStatus(400)->withJson([
-        //     "error" => [
-        //       "code" => "INVALID_LOCATION",
-        //       "desc" => "LocationID is required for in-person services."
-        //     ]
-        //   ]);
-        // }
+        if (!array_key_exists('LocationID', $params) || $params['LocationID'] === null) {
+          return $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "INVALID_LOCATION",
+              "desc" => "LocationID is required for in-person services."
+            ]
+          ]);
+        }
 
-        // --> REWORK PENDIENTE
-        // # Validar que el LocationID exista en offeringLocations
-        // $location = $this->booking->getLocation($offeringID, $locationID);
-        // if (!$location) {
-        //   return $response->withStatus(400)->withJson([
-        //     "error" => [
-        //       "code" => "INVALID_LOCATION",
-        //       "desc" => "Provided location ID does not belong to the associated offering or does not exist"
-        //     ]
-        //   ]);
-        // }
+        $location = $this->booking->getLocation($params['OfferingID'], $params['LocationID']);
+        if (!$location) {
+          return $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "INVALID_LOCATION",
+              "desc" => "Provided location ID does not belong to the associated offering or does not exist"
+            ]
+          ]);
+        }
+      } else {
+        $params['LocationID'] = null;
       }
 
       # Obtengo el guia
@@ -861,29 +861,27 @@ class BookingController {
 
       # VALIDAR: LocationID en caso de ser presencial
       if ($sessionType === 'in-person') {
-        // if (!$locationID) {
-        //   return $response->withStatus(400)->withJson([
-        //     "error" => [
-        //       "code" => "INVALID_LOCATION",
-        //       "desc" => "LocationID is required for in-person services."
-        //     ]
-        //   ]);
-        // }
+        if ($locationID === null) {
+          return $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "INVALID_LOCATION",
+              "desc" => "LocationID is required for in-person services."
+            ]
+          ]);
+        }
 
-        # Validar que el LocationID exista en offeringLocations
-        // $location = $this->booking->getLocation($id, $locationID);
+        $location = $this->booking->getLocation($id, $locationID);
 
-        // if (!$location) {
-          // return $response->withStatus(400)->withJson([
-          //   "error" => [
-          //     "code" => "INVALID_LOCATION",
-          //     "desc" => "Invalid LocationID."
-          //   ]
-          // ]);
-        // }
+        if (!$location) {
+          return $response->withStatus(400)->withJson([
+            "error" => [
+              "code" => "INVALID_LOCATION",
+              "desc" => "Invalid LocationID."
+            ]
+          ]);
+        }
       } else {
-        # Si no es presencial, LocationID puede ser NULL
-        // $locationID = null;
+        $locationID = null;
       }
 
       if (!in_array($sessionType, ['in-person', 'virtual'])) {
